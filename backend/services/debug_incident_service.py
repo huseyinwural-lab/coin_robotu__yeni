@@ -167,6 +167,7 @@ def maybe_auto_create_incident_from_audit(
             "entity_type": audit_entry.entity_type,
             "entity_id": audit_entry.entity_id,
             "source": "auto_from_critical_audit",
+            "correlation_id": correlation_id,
         },
     )
     db.add(incident)
@@ -199,6 +200,9 @@ def create_manual_incident(
         source_event_id=str(source_event_id or "manual"),
     )
 
+    details_payload = dict(details or {})
+    details_payload["correlation_id"] = str(linked_correlation_id)
+
     incident = DebugIncident(
         incident_id=str(uuid.uuid4()),
         title=str(title or "Manual Incident"),
@@ -215,7 +219,7 @@ def create_manual_incident(
         occurrence_count=1,
         last_seen_at=now,
         created_by=created_by,
-        details=details or {},
+        details=details_payload,
     )
     db.add(incident)
     db.commit()

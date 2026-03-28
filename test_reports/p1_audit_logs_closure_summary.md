@@ -12,7 +12,7 @@ Overall: PASS
   - details: {'missing': []}
 - PASS — audit_logs_ui_flow_and_anomaly
   - details: {'missing': []}
-- PASS — performance_summary_present
-  - details: {'path': '/app/test_reports/summary.md'}
 - PASS — perf_summary_present
   - details: {'path': '/app/test_reports/perf_summary.md'}
+- PASS — p1_smoke_present
+  - details: {'path': '/app/test_reports/p1_smoke.json'}

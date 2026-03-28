@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { Background, Controls, MiniMap, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+import { useLocation, useNavigate } from "react-router-dom";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +20,8 @@ const severityClass = {
 const LIFECYCLE_ORDER = ["request", "intent", "decision", "risk", "order", "execution", "fill"];
 
 export const AuditLogsPage = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [filters, setFilters] = useState({
     q: "",
     payload_query: "",
@@ -64,23 +68,24 @@ export const AuditLogsPage = () => {
     }
   }, []);
 
-  const fetchSummaries = useCallback(async (cursor = null) => {
+  const fetchSummaries = useCallback(async (cursor = null, overrides = null) => {
+    const activeFilters = overrides || filters;
     setLoading(true);
     try {
       const { data } = await apiClient.get("/audit-logs/trading-lifecycle", {
         params: {
           limit: 150,
           cursor: cursor || undefined,
-          q: filters.q || undefined,
-          payload_query: filters.payload_query || undefined,
-          severity: filters.severity || undefined,
-          strategy_id: filters.strategy_id || undefined,
-          symbol: filters.symbol || undefined,
-          user_id: filters.user_id || undefined,
-          event_type: filters.event_type || undefined,
-          environment: filters.environment || undefined,
-          start_time: filters.start_time || undefined,
-          end_time: filters.end_time || undefined,
+          q: activeFilters.q || undefined,
+          payload_query: activeFilters.payload_query || undefined,
+          severity: activeFilters.severity || undefined,
+          strategy_id: activeFilters.strategy_id || undefined,
+          symbol: activeFilters.symbol || undefined,
+          user_id: activeFilters.user_id || undefined,
+          event_type: activeFilters.event_type || undefined,
+          environment: activeFilters.environment || undefined,
+          start_time: activeFilters.start_time || undefined,
+          end_time: activeFilters.end_time || undefined,
           include_test_events: showTestEvents,
           archive_mode: archiveMode,
         },
@@ -127,6 +132,14 @@ export const AuditLogsPage = () => {
     fetchSavedQueries();
   }, [fetchSavedQueries, fetchSummaries]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const correlationId = params.get("correlation_id");
+    if (correlationId && correlationId !== selectedCorrelation) {
+      openLifecycle(correlationId);
+    }
+  }, [location.search, openLifecycle, selectedCorrelation]);
+
   const fetchIncidents = useCallback(async (correlationId) => {
     if (!correlationId) {
       setIncidents([]);
@@ -139,6 +152,20 @@ export const AuditLogsPage = () => {
       setIncidents(data?.items || []);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Incident listesi alınamadı");
+    }
+  }, []);
+
+  const fetchExplainForCorrelation = useCallback(async (correlationId) => {
+    if (!correlationId) return;
+    setDetailLoading(true);
+    try {
+      const { data } = await apiClient.post("/audit-logs/explain", { correlation_id: correlationId });
+      setFailureExplanation(data || null);
+      setRootCauseBreakdown(data?.root_cause_breakdown || null);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Explain failure alınamadı");
+    } finally {
+      setDetailLoading(false);
     }
   }, []);
 
@@ -157,27 +184,19 @@ export const AuditLogsPage = () => {
       setDetail(data);
       setRootCauseBreakdown(data?.root_cause_breakdown || null);
       fetchIncidents(correlationId);
+      await fetchExplainForCorrelation(correlationId);
     } catch (error) {
       setDetail(null);
       toast.error(error?.response?.data?.detail || "Lifecycle detayı alınamadı");
     } finally {
       setDetailLoading(false);
     }
-  }, [fetchIncidents]);
+  }, [fetchExplainForCorrelation, fetchIncidents]);
 
-  const explainFailure = useCallback(async () => {
+  const explainFailure = useCallback(() => {
     if (!selectedCorrelation) return;
-    setDetailLoading(true);
-    try {
-      const { data } = await apiClient.post("/audit-logs/explain", { correlation_id: selectedCorrelation });
-      setFailureExplanation(data || null);
-      setRootCauseBreakdown(data?.root_cause_breakdown || null);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Explain failure alınamadı");
-    } finally {
-      setDetailLoading(false);
-    }
-  }, [selectedCorrelation]);
+    return fetchExplainForCorrelation(selectedCorrelation);
+  }, [fetchExplainForCorrelation, selectedCorrelation]);
 
   useEffect(() => {
     if (!selectedCorrelation && items.length > 0) {
@@ -205,8 +224,8 @@ export const AuditLogsPage = () => {
     const selected = savedQueries.find((item) => item.id === savedId);
     if (!selected) return;
     const params = selected.params || {};
-    setFilters((prev) => ({
-      ...prev,
+    const nextFilters = {
+      ...filters,
       ...params,
       q: String(params.q || ""),
       payload_query: String(params.payload_query || ""),
@@ -218,20 +237,24 @@ export const AuditLogsPage = () => {
       environment: String(params.environment || ""),
       start_time: String(params.start_time || ""),
       end_time: String(params.end_time || ""),
-    }));
+    };
+    setFilters(nextFilters);
+    fetchSummaries(null, nextFilters);
     toast.success(`Saved query uygulandı: ${selected.name}`);
-  }, [savedQueries]);
+  }, [fetchSummaries, filters, savedQueries]);
 
-  const createIncident = useCallback(async () => {
-    if (!selectedCorrelation) return;
+  const createIncident = useCallback(async (correlationId = null, rcaData = null) => {
+    const targetCorrelation = correlationId || selectedCorrelation;
+    if (!targetCorrelation) return;
     try {
+      const resolvedRca = rcaData || failureExplanation || {};
       const payload = {
-        title: `Lifecycle Incident ${selectedCorrelation.slice(0, 10)}`,
+        title: `Lifecycle Incident ${targetCorrelation.slice(0, 10)}`,
         severity: "CRITICAL",
         tags: ["manual", "debug"],
-        linked_correlation_id: selectedCorrelation,
+        linked_correlation_id: targetCorrelation,
         source_event_id: detail?.chain?.break_step?.event_id || null,
-        root_cause: failureExplanation?.root_cause || rootCauseBreakdown?.root_cause || null,
+        root_cause: resolvedRca?.root_cause || rootCauseBreakdown?.root_cause || null,
         cluster_id: rootCauseBreakdown?.cluster_id || null,
         details: {
           pattern_tag: rootCauseBreakdown?.pattern_tag || null,
@@ -240,11 +263,11 @@ export const AuditLogsPage = () => {
       };
       await apiClient.post("/audit-logs/incidents", payload);
       toast.success("Incident oluşturuldu");
-      fetchIncidents(selectedCorrelation);
+      fetchIncidents(targetCorrelation);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Incident oluşturulamadı");
     }
-  }, [detail?.chain?.break_step?.event_id, detail?.chain?.missing_critical_stages, failureExplanation?.root_cause, fetchIncidents, rootCauseBreakdown?.cluster_id, rootCauseBreakdown?.pattern_tag, rootCauseBreakdown?.root_cause, selectedCorrelation]);
+  }, [detail?.chain?.break_step?.event_id, detail?.chain?.missing_critical_stages, failureExplanation, fetchIncidents, rootCauseBreakdown?.cluster_id, rootCauseBreakdown?.pattern_tag, rootCauseBreakdown?.root_cause, selectedCorrelation]);
 
   const closeIncident = useCallback(async (incidentId) => {
     try {
@@ -260,6 +283,14 @@ export const AuditLogsPage = () => {
     const url = `${FRONTEND_BACKEND_URL}/api/audit-logs/incidents/${encodeURIComponent(incidentId)}/bundle`;
     window.open(url, "_blank", "noopener,noreferrer");
   }, []);
+
+  const openIncidentLifecycle = useCallback((correlationId) => {
+    if (!correlationId) {
+      toast.error("Correlation bulunamadı");
+      return;
+    }
+    navigate(`/admin/audit-logs?correlation_id=${encodeURIComponent(correlationId)}`);
+  }, [navigate]);
 
   const loadMore = useCallback(() => {
     if (!hasMore || !nextCursor || loading) return;
@@ -354,13 +385,18 @@ export const AuditLogsPage = () => {
   const hasRca = Boolean(failureExplanation || rootCauseBreakdown);
   const hasIncident = incidents.length > 0;
 
-  const exportLatestIncident = useCallback(() => {
-    if (!incidents.length) {
+  const exportBundleByCorrelation = useCallback(() => {
+    if (!selectedCorrelation) {
+      toast.error("Önce correlation seçin");
+      return;
+    }
+    const matchingIncident = incidents.find((item) => item.linked_correlation_id === selectedCorrelation) || incidents[0];
+    if (!matchingIncident) {
       toast.error("Önce incident oluşturun");
       return;
     }
-    exportIncidentBundle(incidents[0].incident_id);
-  }, [exportIncidentBundle, incidents]);
+    exportIncidentBundle(matchingIncident.incident_id);
+  }, [exportIncidentBundle, incidents, selectedCorrelation]);
 
   const events = detail?.events || detail?.chain?.events || [];
   const renderedItems = items.slice(0, visibleCount);
@@ -499,7 +535,7 @@ export const AuditLogsPage = () => {
               size="sm"
               className="mt-2 w-full"
               variant="outline"
-              onClick={createIncident}
+              onClick={() => createIncident(selectedCorrelation, failureExplanation)}
               disabled={!hasRca || detailLoading}
               data-testid="audit-debug-flow-incident-button"
             >
@@ -513,7 +549,7 @@ export const AuditLogsPage = () => {
               size="sm"
               className="mt-2 w-full"
               variant="secondary"
-              onClick={exportLatestIncident}
+              onClick={exportBundleByCorrelation}
               disabled={!hasIncident}
               data-testid="audit-debug-flow-export-button"
             >
@@ -947,6 +983,14 @@ export const AuditLogsPage = () => {
                       data-testid={`audit-incident-export-button-${idx}`}
                     >
                       Export Bundle
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openIncidentLifecycle(incident.linked_correlation_id || incident.details?.correlation_id)}
+                      data-testid={`audit-incident-open-lifecycle-button-${idx}`}
+                    >
+                      Open Lifecycle
                     </Button>
                     <Button
                       size="sm"

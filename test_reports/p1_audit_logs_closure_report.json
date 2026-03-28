@@ -36,17 +36,17 @@
       }
     },
     {
-      "name": "performance_summary_present",
-      "passed": true,
-      "details": {
-        "path": "/app/test_reports/summary.md"
-      }
-    },
-    {
       "name": "perf_summary_present",
       "passed": true,
       "details": {
         "path": "/app/test_reports/perf_summary.md"
+      }
+    },
+    {
+      "name": "p1_smoke_present",
+      "passed": true,
+      "details": {
+        "path": "/app/test_reports/p1_smoke.json"
       }
     }
   ],

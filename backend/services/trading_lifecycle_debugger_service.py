@@ -366,6 +366,31 @@ def _derive_pattern_tag(*, event_type: str, reason_codes: list[str], root_cause:
     return "unknown_pattern"
 
 
+def get_anomaly_reasons(events: list[dict]) -> list[str]:
+    reasons: list[str] = []
+    stage_presence = {stage: 0 for stage in LIFECYCLE_ORDER}
+    orphan_count = 0
+    for event in events:
+        stage = str(event.get("lifecycle_stage") or "")
+        if stage in stage_presence:
+            stage_presence[stage] += 1
+        if event.get("is_orphan") or str(event.get("relation_status") or "") == "orphan":
+            orphan_count += 1
+
+    missing_stages = [stage for stage, count in stage_presence.items() if count == 0]
+    if len(events) >= 40:
+        reasons.append("event_volume_spike")
+    if len(missing_stages) >= 3:
+        reasons.append("critical_stage_gap")
+    if orphan_count >= 2:
+        reasons.append("orphan_spike")
+    return reasons
+
+
+def detect_anomaly(events: list[dict]) -> bool:
+    return len(get_anomaly_reasons(events)) > 0
+
+
 def _build_root_cause_breakdown(graph: dict, explanation: dict) -> dict:
     events = list(graph.get("events") or [])
     broken_step = explanation.get("broken_step") or {}
@@ -389,14 +414,8 @@ def _build_root_cause_breakdown(graph: dict, explanation: dict) -> dict:
     if not contributing_factors:
         contributing_factors.append("insufficient_context")
 
-    anomaly_reasons: list[str] = []
-    if len(events) >= 40:
-        anomaly_reasons.append("event_volume_spike")
-    if len(missing_stages) >= 3:
-        anomaly_reasons.append("critical_stage_gap")
-    if orphan_count >= 2:
-        anomaly_reasons.append("orphan_spike")
-    anomaly_detected = len(anomaly_reasons) > 0
+    anomaly_reasons = get_anomaly_reasons(events)
+    anomaly_detected = detect_anomaly(events)
 
     critical_blockers = []
     for code in reason_codes:
@@ -423,7 +442,7 @@ def _build_root_cause_breakdown(graph: dict, explanation: dict) -> dict:
     else:
         confidence = "low"
 
-    return {
+    rca_result = {
         "failure_type": pattern_tag,
         "root_cause": root_cause,
         "contributing_factors": contributing_factors,
@@ -442,6 +461,9 @@ def _build_root_cause_breakdown(graph: dict, explanation: dict) -> dict:
         "reason_codes": reason_codes,
         "critical_blockers": sorted(set(critical_blockers)),
     }
+    assert "anomaly_detected" in rca_result
+    assert "anomaly_reasons" in rca_result
+    return rca_result
 
 
 def _encode_cursor(timestamp: datetime, marker: str) -> str:

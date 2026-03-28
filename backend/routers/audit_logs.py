@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import String, cast
+from sqlalchemy import String, cast, func
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -117,6 +117,10 @@ def _build_timeline_query(
     severity: str | None,
     entity_type: str | None,
     actor_user_id: str | None,
+    strategy_id: str | None,
+    symbol: str | None,
+    event_type: str | None,
+    environment: str | None,
     request_id: str | None,
     session_id: str | None,
     q: str | None,
@@ -132,6 +136,17 @@ def _build_timeline_query(
         query = query.filter(AuditLog.entity_type.ilike(f"%{entity_type.strip()}%"))
     if actor_user_id:
         query = query.filter(AuditLog.actor_user_id == actor_user_id.strip())
+    if strategy_id:
+        query = query.filter(func.coalesce(AuditLog.details.op("->>")("strategy_id"), "") == strategy_id.strip())
+    if symbol:
+        query = query.filter(func.upper(func.coalesce(AuditLog.details.op("->>")("symbol"), "")) == symbol.strip().upper())
+    if event_type:
+        query = query.filter(
+            AuditLog.action.ilike(f"%{event_type.strip()}%")
+            | (func.coalesce(AuditLog.details.op("->>")("event_type"), "") == event_type.strip())
+        )
+    if environment:
+        query = query.filter(AuditLog.environment == environment.strip().lower())
 
     details_text = cast(AuditLog.details, String)
     if request_id:
@@ -286,6 +301,14 @@ def _build_replay_steps(rows: list[AuditLog]) -> tuple[list[dict], Counter]:
     return steps, root_cause_counter
 
 
+def _build_replay_input(events: list[dict], correlation_id: str | None) -> dict:
+    return {
+        "correlation_id": correlation_id or "",
+        "replay_mode": "isolated",
+        "events": events or [],
+    }
+
+
 def _resolve_export_window(
     *,
     window_days: int | None,
@@ -384,6 +407,10 @@ def audit_logs_timeline(
     severity: str | None = Query(default=None),
     entity_type: str | None = Query(default=None),
     actor_user_id: str | None = Query(default=None),
+    strategy_id: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
     request_id: str | None = Query(default=None),
     session_id: str | None = Query(default=None),
     q: str | None = Query(default=None),
@@ -399,6 +426,10 @@ def audit_logs_timeline(
         severity=severity,
         entity_type=entity_type,
         actor_user_id=actor_user_id,
+        strategy_id=strategy_id,
+        symbol=symbol,
+        event_type=event_type,
+        environment=environment,
         request_id=request_id,
         session_id=session_id,
         q=q,
@@ -734,6 +765,15 @@ def export_incident_bundle(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident_not_found")
 
     bundle_payload = build_incident_debug_bundle(db, incident=row)
+    lifecycle_payload = bundle_payload.get("lifecycle") or {}
+    lifecycle_events = lifecycle_payload.get("events") or lifecycle_payload.get("chain", {}).get("events") or []
+    correlation_id = (
+        bundle_payload.get("incident", {}).get("linked_correlation_id")
+        or lifecycle_payload.get("correlation_id")
+        or ""
+    )
+    bundle_payload["replay_input"] = _build_replay_input(lifecycle_events, correlation_id)
+    assert "replay_input" in bundle_payload
     payload_bytes = json.dumps(bundle_payload, ensure_ascii=False, indent=2).encode("utf-8")
     filename = f"debug_bundle_{incident_id}.json"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
