@@ -1,251 +1,111 @@
 <analysis>### original_problem_statement
-The user provided a massive **P0 + P1 + P2 FINAL KAPANIŞ (Closure) GÖREV EMRİ** to finalize the Trading Lifecycle Debugger. The goal was to upgrade the system from a simple log viewer to a full distributed tracing and observability platform. 
-Key requirements included:
-1. **P0:** Canonical backend endpoints (no duplicates), deterministic replay, explicit missing stage / broken chain indicators (no silent failures), and a repo-deploy commit hash sync guard.
-2. **P1:** Advanced GIN-indexed query engine (ms precision), saved queries, RCA (Root Cause Analysis) clustering, Prometheus metrics/Grafana dashboards, and Incident management generation.
-3. **P2:** ReactFlow DAG graph visualization, append-only Immutable Logs, Hash-chain based tamper detection, and multi-environment awareness.
-*Crucial Final Requirement:* The user explicitly stated the task is only closed when there is visible, tracked kanıt (evidence/test reports) pushed to the repository.
+The user initially requested the strict finalization (P0, P1, P2 mandates) of the Trading Lifecycle Debugger system, demanding strict evidence generation and repository sync. After successfully completing this, the user pivoted entirely to a new module: **EXECUTION SAFETY CORE**. The new mandate requires building a Live Execution Safety Gate with Bybit Testnet integration, a strict state machine for trading intents, Runtime Quarantine/DLQ in PostgreSQL, and proof artifact generation stored in AWS S3. 
+
+**PRODUCT REQUIREMENTS (EXECUTION SAFETY CORE - P0):**
+- Pre-trade execution safety gate (READY / DEGRADED / BLOCKED).
+- Hard blockers enforced regardless of readiness score (e.g., testnet disabled, stale market data).
+- Intent lifecycle state machine (CREATED -> SUBMITTED -> ACKED -> FILLED -> FAILED, etc.).
+- Stuck intent detection (state timeouts).
+- Runtime Quarantine / DLQ pipeline (retry limits, poison message handling) using PostgreSQL + Cache.
+- Proof artifact production saved to Object Storage (AWS S3).
 
 **User's preferred language**: Turkish (INSTRUCT NEXT AGENT: KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.)
 
-**what currently exists?**
-The backend, frontend, and database migrations for all P0, P1, and P2 mandates are fully implemented and functionally working. The app uses React Flow for DAG visualization, PostgreSQL triggers for immutability, and hash-chaining for trace integrity. Automated tests (Frontend, Backend, and a custom python audit script) yield a 100% pass rate. However, the generated audit reports and test scripts are failing to be tracked by Git because of an overly restrictive and bloated  file, causing the user to reject the final closure.
+**what currently exists?** 
+The previous Trading Lifecycle Debugger is fully complete, featuring strict canonical endpoints, UI single-flow integration (Lifecycle -> RCA -> Incident -> Export), and test reports. For the new Execution Safety Core, boilerplate files exist (, ), and the agent has just acquired Bybit Testnet and AWS S3 credentials from the user to begin implementation. *Note: The deployment preview is returning 502 Bad Gateway because the backend uses PostgreSQL, which the Emergent preview environment does not support natively, but the user explicitly refused to switch to MongoDB.*
 
 **Last working item**:
-    - Last item agent was working: Cleaning up the  file. The agent discovered the file has 460 lines of highly repetitive rules (repeating  hundreds of times) which is likely blocking the test evidence () from being tracked by git.
+    - Last item agent was working: Planning and codebase exploration for the Execution Safety Core (P0). The agent successfully retrieved the Bybit Testnet and AWS S3 integration playbooks and was inspecting existing readiness code.
     - Status: IN PROGRESS
     - Agent Testing Done: N
-    - Which testing method agent to use? manual testing by bash (using On branch main
-Changes to be committed:
-  (use "git restore --staged <file>..." to unstage)
-	modified:   .emergent/emergent.yml
-	modified:   .emergent/summary.txt
-	modified:   .gitignore
-	modified:   backend/config/risk_engine_config.json
-	new file:   backend/docs/trading_lifecycle_event_schema.md
-	new file:   backend/migrations/versions/20260328_0094_operational_debugging_acceleration_layer.py
-	new file:   backend/migrations/versions/20260328_0095_audit_immutability_hash_chain_and_environment.py
-	new file:   backend/migrations/versions/20260328_0096_query_engine_expression_indexes.py
-	modified:   backend/model_domains/audit_reporting_system_config.py
-	modified:   backend/models.py
-	modified:   backend/routers/audit.py
-	modified:   backend/routers/audit_logs.py
-	modified:   backend/schemas.py
-	new file:   backend/scripts/benchmark_lifecycle_query_seeded.py
-	new file:   backend/scripts/profile_lifecycle_runtime_slo.py
-	modified:   backend/server.py
-	new file:   backend/services/audit_integrity_service.py
-	modified:   backend/services/audit_service.py
-	new file:   backend/services/debug_incident_service.py
-	new file:   backend/services/lifecycle_query_service.py
-	modified:   backend/services/observability_service.py
-	new file:   backend/services/trading_lifecycle_debugger_service.py
-	new file:   backend/tests/test_trading_lifecycle_debugger_p0.py
-	new file:   backend_final_gap_closure_retest.py
-	new file:   backend_focused_gap_closure_retest.py
-	new file:   backend_p0_final_closure_simple_test.py
-	new file:   backend_p0_final_closure_validation_test.py
-	new file:   backend_p0_final_closure_validation_test_fixed.py
-	new file:   backend_p0_final_validation_test.py
-	new file:   backend_p0_final_validation_updated_test.py
-	new file:   backend_p0_p1_final_closure_comprehensive_test.py
-	new file:   backend_p0_p1_final_closure_retest.py
-	new file:   backend_p0_p1_final_closure_retest_corrected.py
-	new file:   backend_p0_p1_final_closure_retest_final.py
-	new file:   backend_p0_p1_final_closure_test.py
-	new file:   backend_p0_p1_p2_final_closure_validation.py
-	new file:   backend_p0_p1_p2_focused_validation.py
-	new file:   backend_p1_operational_speed_final.py
-	new file:   backend_p1_operational_speed_validation.py
-	new file:   backend_p1_operational_speed_validation_enhanced.py
-	new file:   backend_p2_faz_ab_validation_test.py
-	new file:   backend_p2_faz_ab_validation_updated_test.py
-	new file:   backend_trading_lifecycle_debugger_validation.py
-	new file:   backend_trading_lifecycle_debugger_validation_fixed.py
-	new file:   debug_auth.py
-	new file:   decision
-	new file:   execution
-	new file:   fill
-	new file:   final_gap_closure_retest_results.json
-	new file:   focused_gap_closure_retest_results.json
-	modified:   frontend/package.json
-	modified:   frontend/src/pages/AdminLoginPage.jsx
-	modified:   frontend/src/pages/AuditLogsPage.jsx
-	new file:   frontend_audit_logs_validation.py
-	new file:   frontend_trading_lifecycle_smoke_test.py
-	new file:   frontend_trading_lifecycle_smoke_test_simple.py
-	new file:   google-chrome-stable_current_amd64.deb
-	new file:   intent
-	modified:   memory/PRD.md
-	new file:   observability/grafana/dashboards/trading-lifecycle-debugger.json
-	new file:   observability/prometheus/trading_lifecycle_alert_rules.yml
-	new file:   order
-	new file:   risk
-	modified:   test_result.md
-
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-	modified:   artifacts/faz8_canary_run.log
-	modified:   frontend/yarn.lock and )
+    - Which testing method agent to use? manual testing by python -c / backend unit tests (Preview is broken due to Postgres requirement).
     - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-  - Issue 1: Test evidence files blocked from repository (P0 Priority)
-     - Attempted fixes: The agent viewed the  file and identified the bloat, but the session ended before modifications could be applied.
-     - Next debug checklist: Check and clean . Explicitly whitelist  and  if necessary. Run On branch main
-Changes to be committed:
-  (use "git restore --staged <file>..." to unstage)
-	modified:   .emergent/emergent.yml
-	modified:   .emergent/summary.txt
-	modified:   .gitignore
-	modified:   backend/config/risk_engine_config.json
-	new file:   backend/docs/trading_lifecycle_event_schema.md
-	new file:   backend/migrations/versions/20260328_0094_operational_debugging_acceleration_layer.py
-	new file:   backend/migrations/versions/20260328_0095_audit_immutability_hash_chain_and_environment.py
-	new file:   backend/migrations/versions/20260328_0096_query_engine_expression_indexes.py
-	modified:   backend/model_domains/audit_reporting_system_config.py
-	modified:   backend/models.py
-	modified:   backend/routers/audit.py
-	modified:   backend/routers/audit_logs.py
-	modified:   backend/schemas.py
-	new file:   backend/scripts/benchmark_lifecycle_query_seeded.py
-	new file:   backend/scripts/profile_lifecycle_runtime_slo.py
-	modified:   backend/server.py
-	new file:   backend/services/audit_integrity_service.py
-	modified:   backend/services/audit_service.py
-	new file:   backend/services/debug_incident_service.py
-	new file:   backend/services/lifecycle_query_service.py
-	modified:   backend/services/observability_service.py
-	new file:   backend/services/trading_lifecycle_debugger_service.py
-	new file:   backend/tests/test_trading_lifecycle_debugger_p0.py
-	new file:   backend_final_gap_closure_retest.py
-	new file:   backend_focused_gap_closure_retest.py
-	new file:   backend_p0_final_closure_simple_test.py
-	new file:   backend_p0_final_closure_validation_test.py
-	new file:   backend_p0_final_closure_validation_test_fixed.py
-	new file:   backend_p0_final_validation_test.py
-	new file:   backend_p0_final_validation_updated_test.py
-	new file:   backend_p0_p1_final_closure_comprehensive_test.py
-	new file:   backend_p0_p1_final_closure_retest.py
-	new file:   backend_p0_p1_final_closure_retest_corrected.py
-	new file:   backend_p0_p1_final_closure_retest_final.py
-	new file:   backend_p0_p1_final_closure_test.py
-	new file:   backend_p0_p1_p2_final_closure_validation.py
-	new file:   backend_p0_p1_p2_focused_validation.py
-	new file:   backend_p1_operational_speed_final.py
-	new file:   backend_p1_operational_speed_validation.py
-	new file:   backend_p1_operational_speed_validation_enhanced.py
-	new file:   backend_p2_faz_ab_validation_test.py
-	new file:   backend_p2_faz_ab_validation_updated_test.py
-	new file:   backend_trading_lifecycle_debugger_validation.py
-	new file:   backend_trading_lifecycle_debugger_validation_fixed.py
-	new file:   debug_auth.py
-	new file:   decision
-	new file:   execution
-	new file:   fill
-	new file:   final_gap_closure_retest_results.json
-	new file:   focused_gap_closure_retest_results.json
-	modified:   frontend/package.json
-	modified:   frontend/src/pages/AdminLoginPage.jsx
-	modified:   frontend/src/pages/AuditLogsPage.jsx
-	new file:   frontend_audit_logs_validation.py
-	new file:   frontend_trading_lifecycle_smoke_test.py
-	new file:   frontend_trading_lifecycle_smoke_test_simple.py
-	new file:   google-chrome-stable_current_amd64.deb
-	new file:   intent
-	modified:   memory/PRD.md
-	new file:   observability/grafana/dashboards/trading-lifecycle-debugger.json
-	new file:   observability/prometheus/trading_lifecycle_alert_rules.yml
-	new file:   order
-	new file:   risk
-	modified:   test_result.md
-
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-	modified:   artifacts/faz8_canary_run.log
-	modified:   frontend/yarn.lock to ensure  is tracked.
-     - Why fix this issue and what will be achieved with the fix? The user explicitly refuses to accept the task closure unless there is tangible proof (test reports) saved in the git repository.
-     - Status: IN PROGRESS
-     - Is recurring issue? N
-     - Should Test frontend/backend/both after fix? backend (via bash git commands)
-     - Blocked on other issue: None
+  - Issue 1: Preview Environment 502 Bad Gateway (PostgreSQL limitation)
+     - Attempted fixes: Agent asked support. Support confirmed Emergent managed preview only supports MongoDB. User explicitly stated: sistemde mongo ve SQLite olamayacak PostgreSQL olarak çözmek gerek.
+     - Next debug checklist: Cannot fix the preview. The agent must rely on static linting (), direct script execution (), and ensuring the code is fully production-ready for the user's external deployment.
+     - Why fix this issue and what will be achieved with the fix? N/A - working around platform limitations.
+     - Status: BLOCKED
+     - Is recurring issue? Y
+     - Should Test frontend/backend/both after fix? NA
+     - Blocked on other issue: Platform Limitation
 
 **In progress Task List**:
-  - Task 1: Final Gap Closure - Repository Evidence Push
-     - Where to resume: 
-     - What will be achieved with this? Allows the platform to commit the final audit reports, satisfying the user's hard requirement for documented proof of completion.
-     - Status: IN PROGRESS
-     - Should Test frontend/backend/both after fix? backend (bash)
-     - Blocked on something:  rules
+  - Task 1: Execution Safety Core (P0) - Bybit & S3 Integration
+     - Where to resume: Implement Bybit Testnet order flow, the Pre-trade safety gate (), and AWS S3 artifact upload.
+     - What will be achieved with this? Establishes the hard execution gate preventing unsafe trades and stores proof in S3.
+     - Status: NOT STARTED (Planning completed)
+     - Should Test frontend/backend/both after fix? backend
+     - Blocked on something: None
 
 **Upcoming and Future Tasks**
-    Upcoming Tasks:
-    - P1: Fix UI Login form flakiness (resolve intermittent  on auth requests due to UI component timing).
-    - P2: Add a tek satır kök neden özeti + aksiyon önerisi (single-line root cause summary + action suggestion) sticky panel to the top of the AuditLogs graph.
+    Upcoming Tasks (P0 Priority):
+    - Implement Pre-trade execution safety gate state machine (READY/DEGRADED/BLOCKED).
+    - Implement Intent lifecycle state machine.
+    - Implement Stuck intent detection (timeout-based).
+    - Build Runtime quarantine / DLQ pipeline (retry limits, manual resolve) using Postgres + Cache.
+    - Integrate AWS S3 for proof artifact snapshot uploads.
+    - Integrate Bybit Testnet for actual execution validation.
     
-    Future Tasks:
-    - Full ML-driven anomaly prediction layer.
-    - Automated remediation (runbook execution).
-    - Cross-system federated tracing.
+    Future Tasks (P1 Priority - DO NOT START UNTIL P0 IS DONE):
+    - Batch stuck recovery actions (bulk retry/cancel/reconcile).
+    - Deepen Order reconciliation (duplicate/missing/ghost fill detection).
+    - Historical gate failure trend analysis.
+    - Manual intervention audit trail implementation.
 
 **Completed work in this session**
-- P0 Canonical endpoints and trace validation logic (missing stages/broken chain explicit UI). (DONE)
-- P0 Repo-Deploy hash sync guard (Blocks replay if commit hashes mismatch). (DONE)
-- P1 Advanced GIN Query Engine, full-text search, and Saved Queries. (DONE)
-- P1 Auto RCA clustering and Incident Management creation from events. (DONE)
-- P2 ReactFlow DAG visualization implementation in . (DONE)
-- P2 Immutable DB triggers and  trace tamper detection. (DONE)
-- Generated  with 100% pass rate. (DONE)
+- Resolved GitHub Push Blocker (Removed 122MB  file blocking ) (DONE)
+- Removed duplicate alias endpoints to enforce a single canonical surface for Audit Logs (DONE)
+- Enforced single UI flow in  (Lifecycle -> RCA -> Incident -> Export) (DONE)
+- Added / to RCA and  to Export bundles (DONE)
+- Generated final performance proof files () (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-   - Issue 1: Intermittent Login Form Flakiness
-     - Debug checklist: Review  and . The frontend testing agent frequently reports  when the login form is submitted via the UI, though backend auth works perfectly.
-     - Why to solve this issue and what will be achieved with this? Eliminates test flakiness and improves admin user experience.
-     - Should Test frontend/backend/both after fix: frontend
+   - Issue 1: Preview Environment 502 Bad Gateway
+     - Debug checklist: Acknowledge that  uses PostgreSQL via , which crashes the local preview.
+     - Why to solve this issue and what will be achieved with this? Cannot be solved inside the preview. Must use isolated testing.
+     - Should Test frontend/backend/both after fix: NA
      - Is recurring issue? Y
 
 **Known issue recurrence from previous fork**
-  - Issue recurrence in previous fork: Backend 502 connection timeouts during complex query operations.
+  - Issue recurrence in previous fork: 100MB file limit blocking GitHub push.
   - Recurrence count: 1
-  - Status: RESOLVED (Fixed via query optimization and removing incorrect JSON filter casting).
+  - Status: RESOLVED (File added to ).
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Trading Lifecycle Debugger**: A DAG-based tracing system using  and .
-- **Integrity Enforcement**: Uses strict append-only rules at both the DB and App level. Every write generates a hash signature  to detect tampering.
-- **Fail-Safe / Strict Mode**: Missing stages or broken causal chains are explicitly flagged in the API contract and highlighted in red on the React Flow UI. No silent failures allowed.
-- **Repo-Deploy Sync Guard**: A runtime check that compares the deployed commit hash with the environment. If mismatched, sensitive debug operations (like replay) are hard-blocked.
+- **Execution Safety Gate**: A hard stop mechanism before sending trades to exchanges. Fails closed (BLOCK) on missing data.
+- **DLQ (Dead Letter Queue) / Quarantine**: Failed events are stored in Postgres with retry counters for manual or automated replay.
+- **Immutable Artifacts**: State snapshots of decisions and risks pushed to AWS S3.
 
 **key DB schema**
-  - : {id, correlation_id, parent_event_id, action, severity, details, created_at, environment, hash_signature, is_test_event}
+  - 
+  -  (Needs state machine fields: CREATED, SUBMITTED, ACKED, etc.)
 
 **changes in tech stack**
-  - Added  to the frontend for interactive DAG graph visualizations.
+  - Added AWS S3 () integration for artifact storage.
+  - Added Bybit REST API integration.
 
 **All files of reference**
-1.  (Needs cleanup to allow tracking of evidence files).
-2.  (Crucial evidence file user wants saved to repo).
-3.  (Houses the new strict P0 canonical endpoints).
-4.  (Contains the React Flow UI and debug tools).
-5.  (Houses the tamper detection verification logic).
+1.  (Target for safety gate logic)
+2.  (Target for blocking logic)
+3.  (Needs  for S3)
 
 **Areas that need refactoring**:
--  is bloated with over 400 lines of repetitive  entries. Needs immediate cleanup.
+- The safety gate logic needs to be centralized into  as per user instructions.
 
 **key api endpoints**
--  (Primary canonical list)
--  (Detail with DAG data)
--  (RCA engine)
--  (Hash-chain tamper validation)
+-  (To be implemented/refined)
+-  (To be implemented)
 
 **Critical Info for New Agent**
-- **Sessiz Hata (Silent Error) Policy:** The user enforces a zero-tolerance policy for missing data. If a lifecycle is incomplete, the API *must* return  and the UI *must* show it.
-- **Kanıt (Evidence) Requirement:** The user is currently stuck because they believe you did not complete the task. The code works perfectly, but the generated test reports () are being blocked by . You **must** fix the gitignore and assure the user that the evidence is safely tracked in the repo.
-- **Language:** Strictly Turkish.
+- **LANGUAGE REQUIREMENT**: The user communicates entirely in Turkish. You **MUST** respond in Turkish.
+- **502 ERROR PARADOX**: The live preview will not work because the platform forces MongoDB, but the user forces PostgreSQL. **DO NOT attempt to migrate to MongoDB.** Write robust code, lint it strictly, and use isolated python scripts or pytest if you need to verify logic. Warn the user that UI screenshots aren't possible right now due to the DB requirement.
+- **NEW MANDATE RULES**: The user chose: 1) Real Bybit Testnet, 2)  as the UI center, 3) Quarantine in Postgres + Cache, 4) Artifacts in AWS S3, 5) Strictly finish P0 before touching P1.
+- **KEYS ACQUIRED**: Do NOT ask the user for keys again. They are provided below.
 
 **documents and test reports created in this job**
   - 
@@ -253,31 +113,41 @@ Changes not staged for commit:
   - 
 
 **Last 10 User Messages and any pending HUMAN messages** 
-1. (User) Issued P2 mandate for Graph UI, Immutability, Hash chains.
-2. (Agent) Implemented P2 features, migrated DB, added React Flow.
-3. (User) Issued a massive strict P0+P1+P2 Final Closure mandate. Demanded canonical endpoints, strict schemas, repo-deploy sync, and strict evidence.
-4. (Agent) Completed all remaining gaps. Ran full custom audits resulting in 100% pass rates.
-5. (User) Asked Check if you fully implemented my mandate?
-6. (Agent) Confirmed yes, pointing to the 100% passed audit reports.
-7. (User) Pointed out that the agent actually failed because the reports cannot be saved to the repository. Instructed the agent to check the  file and apply an exception so the closure can be finalized. *(LATEST PENDING INSTRUCTION - Fix .gitignore to track test reports)*.
+1. (User) Asked agent to fix P1 single flow in UI.
+2. (Agent) Implemented the flow.
+3. (User) Noticed 502 error, stated: No Mongo/SQLite, must be PostgreSQL. Find the cause of 502.
+4. (Agent) Clarified Emergent preview doesn't support Postgres.
+5. (User) Ignored the infrastructure limitation and issued a massive new mandate: EXECUTION SAFETY CORE (P0 & P1).
+6. (Agent) Asked for architecture choices regarding the new mandate.
+7. (User) Selected: Bybit Testnet,  UI, Postgres DLQ, S3 Artifacts, P0 first.
+8. (Agent) Read playbooks, asked for Bybit and S3 keys.
+9. (User) Provided Bybit Keys.
+10. (User) Provided AWS S3 Keys. *(LATEST PENDING INSTRUCTION - Implement the P0 Execution Safety Core using these keys)*
 
 **Project Health Check:**
-- App Code: STABLE / PRODUCTION READY
-- Version Control: BROKEN (Bloated  blocking test evidence files).
+- App Code: Broken (502 due to PostgreSQL vs Platform mismatch)
 
 **3rd Party Integrations** 
 - OpenAI GPT-4o — uses Emergent LLM Key
-- Stripe (Payments) — requires User API Key
+- Bybit (Testnet) — requires User API Key (Provided)
+- AWS S3 (Storage) — requires User API Key (Provided)
 
 **Testing status**
-  - Testing agent used after significant changes: YES (Extensively used, both Frontend and Backend)
-  - Troubleshoot agent used after agent stuck in loop: YES (Support agent called to clarify why user was rejecting closure)
-  - Test files created: , custom audit JSONs.
-  - Known regressions: Frontend login component flakiness ( on UI click).
+  - Testing agent used after significant changes: YES (But blocked by 502)
+  - Troubleshoot agent used after agent stuck in loop: YES (Clarified Postgres issue)
+  - Test files created: 
+  - Known regressions: Preview environment is inaccessible.
 
 **Credentials to test flow:**
-- Email: 
-- Password: 
+**BYBIT TESTNET:**
+API Key: 
+API Secret: 
+
+**AWS S3:**
+Bucket: 
+Region: 
+Access Key: 
+Secret Key: 
 
 **What agent forgot to execute**
-The agent successfully implemented all required code logic and generated the required test reports to prove it. However, the agent forgot to verify if those test reports were actually being tracked by Git. Because of a bloated , they were ignored, leading the user to reject the completion of the task.</analysis>
+The agent just gathered the required credentials and explored the files before the session ended. The actual implementation of the P0 Execution Safety Core has not started.</analysis>
