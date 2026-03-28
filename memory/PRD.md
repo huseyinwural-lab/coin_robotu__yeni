@@ -51,6 +51,12 @@
 - Bybit Testnet bu runtime’dan HTTP 403 dönüyor (`BYBIT_CONNECTIVITY_FAIL`) — dış ağ/erişim kısıtı.
 - Preview URL halen 502 dönebiliyor (PostgreSQL/preview kısıtı).
 
+### 2026-03-28 Kapanış Notu (Bu tur)
+- Kullanıcı yeni Bybit testnet anahtarları verdi; tekrar denendi.
+- Sonuç: tüm Bybit API domainlerinde public endpointler dahil HTTP 403 (anahtar bağımsız erişim blokajı).
+- S3 tarafı güncel secret ile doğrulandı: `artifact.status = S3_UPLOADED`.
+- Kullanıcı Bybit proxy/erişim bilgisini daha sonra paylaşacağını belirtti; bu tur Bybit canlı doğrulama burada durduruldu.
+
 ### Öncelikli kalan işler
 - P0 devam: Bybit ve S3 gerçek ortam doğrulaması (credential/network izinleriyle) ve artifact’in `S3_UPLOADED` seviyesine çıkarılması.
 - P1 beklemede: batch stuck recovery, advanced reconciliation, trend analitikleri.
