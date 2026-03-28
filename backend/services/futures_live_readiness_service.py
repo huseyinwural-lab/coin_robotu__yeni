@@ -276,7 +276,10 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
         "exchange_readiness": validator.get("exchange_readiness") or {},
         "symbol_readiness": validator.get("symbol_readiness") or {},
         "strategy_readiness": validator.get("strategy_readiness") or {},
+        "readiness_matrix": validator.get("readiness_matrix") or {},
         "latency_metrics": validator.get("latency_metrics") or {},
+        "latency_config": validator.get("latency_config") or {},
+        "timeout_policy": validator.get("timeout_policy") or {},
         "degraded": validator.get("degraded", True),
         "data_freshness": validator.get("data_freshness") or {},
         "execution_mode": validator.get("execution_mode"),
@@ -322,7 +325,10 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
                 "warnings": payload.get("warnings"),
                 "unknowns": payload.get("unknowns"),
                 "exchange_readiness": payload.get("exchange_readiness"),
+                "readiness_matrix": payload.get("readiness_matrix"),
                 "latency_metrics": payload.get("latency_metrics"),
+                "latency_config": payload.get("latency_config"),
+                "timeout_policy": payload.get("timeout_policy"),
             },
         )
         db.commit()

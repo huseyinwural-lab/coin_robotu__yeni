@@ -119,15 +119,25 @@ def test_validator_blocks_when_execution_mocked():
     assert "EXECUTION_TEST_MOCKED" in reasons
 
 
-def test_validator_ready_with_funding_unknown():
+def test_validator_blocks_when_funding_missing_or_stale():
     context = _base_context()
+    context["trading_state"]["position_count"] = 1
+    context["symbols"] = ["BTCUSDT"]
     context["trading_state"]["funding_available"] = False
     context["trading_state"]["funding_count"] = 0
+    context["trading_state"]["funding_fresh"] = False
+    context["trading_state"]["funding_by_symbol"] = {
+        "BTCUSDT": {
+            "state": "FAIL",
+            "reason_code": "FUNDING_DATA_STALE",
+            "freshness_sec": 999,
+        }
+    }
     result = run_go_live_validator(context)
     funding_step = next((step for step in result.get("steps", []) if step.get("step_key") == "funding_status"), None)
     assert funding_step is not None
-    assert funding_step.get("blocking") is False
-    assert funding_step.get("status") == "UNKNOWN"
+    assert funding_step.get("blocking") is True
+    assert funding_step.get("status") == "FAIL"
 
     blocking_reasons = [item.get("reason_code") for item in result.get("blocking_failures", [])]
-    assert "FUNDING_DATA_MISSING" not in blocking_reasons
+    assert any(code in {"FUNDING_DATA_STALE", "FUNDING_DATA_MISSING"} for code in blocking_reasons)

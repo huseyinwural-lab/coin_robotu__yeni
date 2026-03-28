@@ -15,6 +15,7 @@ from services.prod_config_remediation_service import (
     validate_prod_config_updates,
 )
 from services.pipeline.runtime import pipeline_runtime
+from services.readiness_history_service import build_readiness_audit_details
 
 router = APIRouter(prefix="/admin/system", tags=["admin_system_readiness"])
 
@@ -30,7 +31,7 @@ def system_live_readiness(refresh: bool = False, current_admin: User = Depends(r
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         severity="warning" if payload.get("readiness_state") != "READY" else "info",
-        details={"readiness_score": payload.get("readiness_score", 0.0), "readiness_state": payload.get("readiness_state")},
+        details=build_readiness_audit_details(payload),
     )
     return payload
 
@@ -46,7 +47,7 @@ def system_readiness_score(refresh: bool = False, current_admin: User = Depends(
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         severity="warning" if payload.get("readiness_state") != "READY" else "info",
-        details={"readiness_score": payload.get("readiness_score", 0.0), "readiness_state": payload.get("readiness_state")},
+        details=build_readiness_audit_details(payload),
     )
     return payload
 

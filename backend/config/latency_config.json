@@ -1,0 +1,18 @@
+{
+  "round_trip": {
+    "warn": 500,
+    "block": 1500
+  },
+  "order_execution": {
+    "warn": 1000,
+    "block": 3000
+  },
+  "tick_to_trade": {
+    "warn": 750,
+    "block": 2000
+  },
+  "percentiles": {
+    "p95_multiplier": 1.15,
+    "p99_multiplier": 1.35
+  }
+}

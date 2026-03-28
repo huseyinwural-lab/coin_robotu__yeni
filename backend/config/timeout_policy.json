@@ -1,0 +1,6 @@
+{
+  "exchange_call": 3.0,
+  "order_execution": 5.0,
+  "market_data": 2.0,
+  "strategy_heartbeat_stale_sec": 90
+}
