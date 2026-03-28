@@ -1,3 +1,75 @@
+## 2026-03-28 — SON GÖREV EMRİ (P2 Operasyonel Kapanış + Ortam Stabilizasyonu)
+
+### 1) Readiness maintenance cron aktivasyonu (KAPATILDI)
+- Scheduler loop eklendi ve startup’a bağlandı:
+  - `backend/services/readiness_maintenance_scheduler_service.py`
+  - `backend/server.py` startup/shutdown task yönetimi
+- Çıktılar:
+  - `/app/artifacts/readiness_maintenance_status.json`
+  - `/app/artifacts/readiness_maintenance_cron.log`
+- Başarısız run alarmı:
+  - audit action: `READINESS_HISTORY_MAINTENANCE_SCHEDULED_FAIL`
+  - reason_code + retry bilgisi status/log’a yazılıyor.
+- Schedule tanımı repo’ya eklendi:
+  - `deploy/cron/readiness-maintenance-cron.yaml`
+
+### 2) Admin login operasyonel akış kapanışı (KAPATILDI)
+- Kanonik admin giriş yolu `/admin/login` normalleştirildi.
+- User panelde admin denemesinde self-healing:
+  - `UserLoginPage` yanlış panel tespiti + CTA + otomatik `/admin/login` yönlendirme
+  - admin shortcut butonu eklendi
+- `AdminLoginPage` query email prefill + role bazlı yönlendirme normalize edildi.
+
+### 3) Bybit / venue stabilizasyon smoke doğrulaması (KAPATILDI)
+- Venue checklist ve reason-code akışı validator tarafında güçlendirildi.
+- Bybit environment-policy mapping + auth probe + deterministic state üretimi doğrulandı.
+- Bybit key yoksa altyapı hazır, reason-code deterministik (placeholder/fallback yerine açıklanabilir state).
+
+### 4) Operasyonel smoke test paketi (KAPATILDI)
+- Yeni smoke CLI:
+  - `backend/cli/ops_smoke_readiness.py`
+- Tek komut wrapper:
+  - `scripts/run_readiness_smoke.sh` (local/preview/ops)
+- Kapsam:
+  - admin login smoke
+  - live-readiness
+  - history
+  - execution-readiness
+  - maintenance trigger
+  - bybit matrix smoke
+  - runbook mapping smoke
+
+### 5) Ops dokümantasyonu (KAPATILDI)
+- `observability/readiness_ops_runbook.md` eklendi:
+  - admin giriş yolu
+  - dashboard amacı
+  - history endpoint içeriği
+  - maintenance cron etkisi
+  - blocker reason-code / runbook
+  - cron failure müdahalesi
+  - UNKNOWN/fallback operasyon adımları
+
+### 6) Kapanış doğrulama raporu (KAPATILDI)
+- Yeni closure report CLI:
+  - `backend/cli/readiness_closure_report.py`
+- Yerel doğrulama PASS:
+  - `/app/test_reports/readiness_closure_report_local.json`
+  - scheduler_running=true, retention_applied=true, open_blockers=[]
+- Preview ortamında dalgalı timeout/502 gözlemi rapora işlendi (ortam kararlılığı konusu).
+
+### Ek teknik kapanış notları
+- `ExecutionReadinessResponse` şemasına `execution_proof` ve `mocked_paths` eklendi.
+- History maintenance endpointleri genişletildi:
+  - `GET /api/admin/futures/readiness/history/policy`
+  - `POST /api/admin/futures/readiness/history/maintenance`
+  - `GET /api/admin/futures/readiness/history/maintenance/status`
+
+### Son doğrulama
+- Test agent: `/app/test_reports/iteration_171.json`
+  - P2 operational closure smoke PASS (local/preview koşullu)
+- Yerel smoke wrapper: `/app/test_reports/readiness_ops_smoke_local_latest.json` → PASS
+- Closure report local: `/app/test_reports/readiness_closure_report_local.json` → PASS
+
 ## 2026-03-28 — Kalan İşler (FAZ A / FAZ B) Uygulama Tur'u
 
 ### FAZ A — P1 operasyonel kapanış güncellemeleri
