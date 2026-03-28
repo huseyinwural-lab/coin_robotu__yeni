@@ -1,3 +1,40 @@
+## 2026-03-28 — P0 Readiness Contract Stabilization (Hard Green)
+
+### Kapsam (kullanıcı onaylı P0)
+- Sadece P0 hedefi uygulandı: readiness kontratı sabitlendi, backend readiness testleri yeşile çekildi.
+- P1/P2 kapsamları bu iterasyonda bilinçli olarak ERTELENDİ (history endpoint, latency threshold genişletmesi, UI panel, granular readiness, capital/exposure genişletmesi).
+
+### Yapılan kritik düzeltmeler
+- `go_live_validator.py`
+  - `_build_state_path` çıktısı ile validator path tüketimi hizalandı (dict/list + state normalize).
+  - SQLAlchemy query sıralama hatası giderildi (`filter` -> `order_by` -> `limit`).
+  - Strategy engine adımı kullanıcı kararına uygun şekilde kanonik heartbeat gelene kadar **zorunlu UNKNOWN** bırakıldı.
+- `execution_readiness_service` ve `futures_live_readiness_service` kontratları validator çıktısıyla uyumlu şekilde doğrulandı (nested source + legacy projection alanları korunuyor).
+
+### Test refactor ve kapsam
+- Güncellendi:
+  - `backend/tests/test_go_live_validator_p0.py`
+  - `backend/tests/test_go_live_validator_p1.py`
+  - `backend/tests/test_p58_live_readiness_comprehensive.py`
+  - readiness odaklı env-bağımlı test dosyalarında güvenli skip davranışı
+- Yeni invariant testleri eklendi:
+  - `backend/tests/test_p0_readiness_invariants.py`
+  - `backend/tests/test_readiness_endpoints_direct.py`
+
+### Doğrulama sonucu
+- Readiness ilişkili backend suite:
+  - **43 passed, 18 skipped, 0 failed**
+- Testing agent raporu:
+  - `/app/test_reports/iteration_168.json`
+  - P0 invariantleri doğrulandı: veri eksikse READY yok, blocking fail -> execution_allowed=false, UNKNOWN fail-open üretmiyor, strategy engine UNKNOWN/BLOCKED korunuyor.
+
+### Kalan öncelikler (değişmedi)
+- **P1**: Readiness history endpoint/store
+- **P1**: Latency/performance threshold genişletmesi
+- **P2**: Readiness layer UI paneli
+- **P2**: Symbol/strategy granular readiness
+- **P2**: Safety layer (capital guard/exposure) genişletmesi
+
 ## 2026-03-27 — P0+P1 Futures Live Readiness Full Core Completeness
 
 ### Core kapsam genişletmesi
