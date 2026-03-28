@@ -73,6 +73,7 @@ from routers import (
     risk_policies,
     symbol_selector,
     admin_execution,
+    execution_readiness_core,
     user_approvals,
     admin_onboarding,
     user_execution,
@@ -397,6 +398,7 @@ api_router.include_router(admin_phase3.router)
 api_router.include_router(admin_strategy_risk_capital.router)
 api_router.include_router(admin_strategy_observability.router)
 api_router.include_router(admin_execution.router)
+api_router.include_router(execution_readiness_core.router)
 api_router.include_router(admin_emergency.router)
 api_router.include_router(admin_action_center.router)
 api_router.include_router(admin_phase9_meta.router)

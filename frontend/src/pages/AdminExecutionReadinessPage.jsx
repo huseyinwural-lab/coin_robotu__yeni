@@ -42,6 +42,9 @@ export const AdminExecutionReadinessPage = () => {
   const [exportScope, setExportScope] = useState("full");
   const [exportDateFrom, setExportDateFrom] = useState("");
   const [exportDateTo, setExportDateTo] = useState("");
+  const [safetyGate, setSafetyGate] = useState(null);
+  const [intentLifecycle, setIntentLifecycle] = useState(null);
+  const [runtimeQuarantine, setRuntimeQuarantine] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const previousFailCountRef = useRef(0);
@@ -67,6 +70,9 @@ export const AdminExecutionReadinessPage = () => {
         { data: comparePayload },
         { data: analyticsPayload },
         { data: timelinePayload },
+        { data: safetyGatePayload },
+        { data: intentLifecyclePayload },
+        { data: quarantinePayload },
       ] = await Promise.all([
         apiClient.get(`/phase4/admin/production-gate?refresh_checks=${refreshChecks ? "true" : "false"}`),
         apiClient.get("/admin/execution-readiness"),
@@ -75,6 +81,9 @@ export const AdminExecutionReadinessPage = () => {
         apiClient.get("/phase4/admin/production-gate/checks/compare?limit=300"),
         apiClient.get("/phase4/admin/production-gate/override-analytics"),
         apiClient.get("/phase4/admin/production-gate/timeline?limit=400"),
+        apiClient.get(`/execution-readiness/gate?force_refresh=${refreshChecks ? "true" : "false"}`),
+        apiClient.get("/execution-readiness/intents?limit=120&auto_quarantine_stuck=true"),
+        apiClient.get("/execution-readiness/quarantine?limit=200"),
       ]);
       setGate(gateData);
       setReadiness(readinessData);
@@ -83,6 +92,9 @@ export const AdminExecutionReadinessPage = () => {
       setCompareData(comparePayload);
       setOverrideAnalytics(analyticsPayload);
       setTimelineData(timelinePayload);
+      setSafetyGate(safetyGatePayload || null);
+      setIntentLifecycle(intentLifecyclePayload || null);
+      setRuntimeQuarantine(quarantinePayload || null);
 
       const flappingConfig = historyData?.flapping_config || {};
       if (flappingConfig.window_sec) setFlappingWindowSec(Number(flappingConfig.window_sec));
@@ -136,6 +148,15 @@ export const AdminExecutionReadinessPage = () => {
         const { data } = await apiClient.patch(`/phase4/admin/production-gate/checklist/${itemKey}`, { checked });
         return data;
       }, "Checklist güncellendi");
+    },
+    [runAction]
+  );
+
+  const handleSafetyQuarantineAction = useCallback(
+    async (eventId, action) => {
+      await runAction(async () => {
+        await apiClient.post(`/execution-readiness/quarantine/${eventId}/${action}`);
+      }, `Quarantine ${action} tamamlandı`);
     },
     [runAction]
   );
@@ -311,6 +332,11 @@ export const AdminExecutionReadinessPage = () => {
   }, [timelineData?.items, timelineFilter]);
 
   const reasonDistribution = useMemo(() => overrideAnalytics?.reason_distribution || {}, [overrideAnalytics?.reason_distribution]);
+  const topStuckIntents = useMemo(
+    () => (intentLifecycle?.items || []).filter((item) => item.is_stuck).slice(0, 6),
+    [intentLifecycle?.items]
+  );
+  const topQuarantineItems = useMemo(() => (runtimeQuarantine?.items || []).slice(0, 6), [runtimeQuarantine?.items]);
 
   const reasonPieStyle = useMemo(() => {
     const entries = Object.entries(reasonDistribution);
@@ -448,6 +474,110 @@ export const AdminExecutionReadinessPage = () => {
           <p className="mt-1 text-lg font-semibold text-white" data-testid="admin-production-gate-readiness-mode">mode: {readiness?.mode || "-"}</p>
           <p className="mt-1 text-sm text-slate-300" data-testid="admin-production-gate-readiness-final">final_status: {readiness?.final_status || "-"}</p>
         </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3" data-testid="execution-safety-core-overview-grid">
+        <article className="rounded-lg border border-emerald-700/40 bg-slate-900 p-4" data-testid="execution-safety-gate-card">
+          <div className="flex items-center justify-between gap-2" data-testid="execution-safety-gate-card-header">
+            <h2 className="text-base font-semibold text-emerald-200" data-testid="execution-safety-gate-title">Execution Safety Gate (P0)</h2>
+            <Button
+              variant="outline"
+              onClick={() => load(true)}
+              disabled={loading || actionLoading}
+              data-testid="execution-safety-gate-refresh-button"
+            >
+              Force Refresh
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-gate-state-value">
+            gate_state: {safetyGate?.gate_state || "-"}
+          </p>
+          <p className="mt-1 text-xs text-slate-300" data-testid="execution-safety-gate-readiness-score-value">
+            readiness_score: {safetyGate?.readiness_score ?? "-"}
+          </p>
+          <p className="mt-1 text-xs text-slate-300" data-testid="execution-safety-gate-execution-allowed-value">
+            execution_allowed: {safetyGate?.execution_allowed ? "true" : "false"}
+          </p>
+          <p className="mt-1 text-xs text-slate-300" data-testid="execution-safety-gate-bybit-smoke-status">
+            bybit_order_smoke: {safetyGate?.bybit_order_smoke?.status || "-"} ({safetyGate?.bybit_order_smoke?.reason_code || "-"})
+          </p>
+          <div className="mt-3 rounded border border-slate-700 bg-slate-950 p-2" data-testid="execution-safety-gate-hard-blockers-panel">
+            <p className="text-xs font-semibold text-rose-200" data-testid="execution-safety-gate-hard-blockers-title">hard_blockers</p>
+            {(safetyGate?.hard_blockers || []).map((code, index) => (
+              <p key={`${code}-${index}`} className="text-xs text-rose-100" data-testid={`execution-safety-gate-hard-blocker-${index}`}>• {code}</p>
+            ))}
+            {(safetyGate?.hard_blockers || []).length === 0 && (
+              <p className="text-xs text-slate-400" data-testid="execution-safety-gate-hard-blockers-empty">-</p>
+            )}
+          </div>
+          <div className="mt-3 rounded border border-slate-700 bg-slate-950 p-2" data-testid="execution-safety-gate-artifact-panel">
+            <p className="text-xs text-slate-200" data-testid="execution-safety-gate-artifact-status">artifact_status: {safetyGate?.artifact?.status || "-"}</p>
+            <p className="text-xs text-slate-400" data-testid="execution-safety-gate-artifact-local-path">local_path: {safetyGate?.artifact?.local_path || "-"}</p>
+            <p className="text-xs text-slate-400" data-testid="execution-safety-gate-artifact-s3-uri">s3_uri: {safetyGate?.artifact?.s3_uri || "-"}</p>
+          </div>
+        </article>
+
+        <article className="rounded-lg border border-cyan-700/40 bg-slate-900 p-4" data-testid="execution-safety-intent-lifecycle-card">
+          <h2 className="text-base font-semibold text-cyan-200" data-testid="execution-safety-intent-lifecycle-title">Intent State Machine</h2>
+          <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-intent-total">total: {intentLifecycle?.total ?? 0}</p>
+          <p className="mt-1 text-xs text-slate-300" data-testid="execution-safety-intent-stuck-count">stuck_count: {intentLifecycle?.stuck_count ?? 0}</p>
+          <div className="mt-3 rounded border border-slate-700 bg-slate-950 p-2" data-testid="execution-safety-intent-state-counts-panel">
+            {Object.entries(intentLifecycle?.state_counts || {}).map(([state, count]) => (
+              <p key={state} className="text-xs text-slate-300" data-testid={`execution-safety-intent-state-count-${state.toLowerCase()}`}>
+                {state}: {count}
+              </p>
+            ))}
+            {Object.keys(intentLifecycle?.state_counts || {}).length === 0 && (
+              <p className="text-xs text-slate-400" data-testid="execution-safety-intent-state-counts-empty">-</p>
+            )}
+          </div>
+          <div className="mt-3 space-y-2" data-testid="execution-safety-intent-stuck-list">
+            {topStuckIntents.map((intentItem, index) => (
+              <div key={intentItem.intent_id} className="rounded border border-amber-700/40 bg-amber-950/20 p-2" data-testid={`execution-safety-intent-stuck-item-${index}`}>
+                <p className="text-xs text-amber-100" data-testid={`execution-safety-intent-stuck-id-${index}`}>intent_id: {intentItem.intent_id}</p>
+                <p className="text-xs text-amber-100" data-testid={`execution-safety-intent-stuck-state-${index}`}>state: {intentItem.state}</p>
+                <p className="text-xs text-amber-100" data-testid={`execution-safety-intent-stuck-age-${index}`}>age_seconds: {intentItem.age_seconds}</p>
+              </div>
+            ))}
+            {topStuckIntents.length === 0 && (
+              <p className="text-xs text-slate-400" data-testid="execution-safety-intent-stuck-empty">stuck intent yok</p>
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-lg border border-red-700/40 bg-slate-900 p-4" data-testid="execution-safety-quarantine-card">
+          <h2 className="text-base font-semibold text-red-200" data-testid="execution-safety-quarantine-title">Runtime Quarantine / DLQ</h2>
+          <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-quarantine-total">total: {runtimeQuarantine?.total ?? 0}</p>
+          <p className="mt-1 text-xs text-slate-300" data-testid="execution-safety-quarantine-redis-state">
+            redis_available: {runtimeQuarantine?.queue_metrics?.redis_available ? "true" : "false"}
+          </p>
+          <p className="mt-1 text-xs text-slate-300" data-testid="execution-safety-quarantine-queue-size">
+            runtime_quarantine_queue: {runtimeQuarantine?.queue_metrics?.runtime_quarantine_queue ?? 0}
+          </p>
+          <div className="mt-3 space-y-2" data-testid="execution-safety-quarantine-items-list">
+            {topQuarantineItems.map((row, index) => (
+              <div key={row.id} className="rounded border border-slate-700 bg-slate-950 p-2" data-testid={`execution-safety-quarantine-item-${index}`}>
+                <p className="text-xs text-slate-200" data-testid={`execution-safety-quarantine-item-entity-${index}`}>{row.entity_type} / {row.event_type}</p>
+                <p className="text-xs text-slate-300" data-testid={`execution-safety-quarantine-item-status-${index}`}>status: {row.status}</p>
+                <p className="text-xs text-slate-300" data-testid={`execution-safety-quarantine-item-retry-${index}`}>retry: {row.retry_count}/{row.max_retry}</p>
+                <div className="mt-2 flex flex-wrap gap-2" data-testid={`execution-safety-quarantine-item-actions-${index}`}>
+                  <Button size="sm" className="bg-emerald-500 text-black hover:bg-emerald-600" onClick={() => handleSafetyQuarantineAction(row.id, "replay")} data-testid={`execution-safety-quarantine-item-replay-${index}`}>
+                    Replay
+                  </Button>
+                  <Button size="sm" variant="outline" className="border-slate-500 text-slate-200" onClick={() => handleSafetyQuarantineAction(row.id, "dismiss")} data-testid={`execution-safety-quarantine-item-dismiss-${index}`}>
+                    Dismiss
+                  </Button>
+                  <Button size="sm" variant="outline" className="border-red-500 text-red-300" onClick={() => handleSafetyQuarantineAction(row.id, "mark_failed")} data-testid={`execution-safety-quarantine-item-mark-failed-${index}`}>
+                    Mark Failed
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {topQuarantineItems.length === 0 && (
+              <p className="text-xs text-slate-400" data-testid="execution-safety-quarantine-items-empty">quarantine kaydı yok</p>
+            )}
+          </div>
+        </article>
       </div>
 
       {deployBlocked && (
