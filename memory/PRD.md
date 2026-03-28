@@ -1,3 +1,18 @@
+## 2026-03-28 — P1 AuditLogs Tek Akış Kapanışı (RCA/Incident/Export)
+
+### Yapılanlar
+- /admin/audit-logs için Lifecycle → RCA → Incident → Export tek akış paneli eklendi; lifecycle seçimi RCA’yı otomatik tetikliyor.
+- RCA contract: anomaly_detected + anomaly_reasons her zaman dönüyor (detect_anomaly/get_anomaly_reasons).
+- Incident export bundle: replay_input + rca_summary + metadata zorunlu eklendi; export endpointi replay_input assert ediyor.
+- Incident ↔ lifecycle çift yön bağlantı: incident detayından audit-logs?correlation_id yönlendirmesi.
+- Query filtering genişletmesi: timeline query’de strategy_id/symbol/event_type/environment filtreleri destekli.
+- Performans kanıtı: test_reports/perf_summary.md (latency + query süresi + tek cümle yorum) üretildi.
+- Smoke kanıtı: test_reports/p1_smoke.json üretildi.
+
+### Test Durumu
+- Preview ortamı 502 verdiği için canlı testler çalışmadı (health ve UI smoke başarısız).
+- Kod düzeyi doğrulama raporu güncellendi: test_reports/p1_audit_logs_closure_report.json + p1_audit_logs_closure_summary.md
+
 ## 2026-03-28 — P0 Kanıt Takibi + P1 Login Flakiness + P2 Root Cause Sticky Panel
 
 ### Yapılanlar
