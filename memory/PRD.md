@@ -21,6 +21,23 @@
   - `AdminExecutionReadinessPage.jsx` header’a `Incident Paketi Export` butonu eklendi (JSON download)
   - `AdminRuntimeQuarantinePage.jsx` yeni `/execution-readiness/quarantine` endpointlerine geçirildi.
 
+### 2026-03-28 Ek Güncelleme (P0/P1 ilerleme)
+- Auth flakiness iyileştirmesi:
+  - Backend `deps.py` içinde device binding artık `device_id` cookie yoksa `X-Session-Device` header fallback ile doğrulanıyor.
+  - Backend `auth_session_security_service.py` login sırasında `X-Session-Device` header değerini geçerli device id olarak kabul ediyor.
+  - Frontend `api.js` tüm isteklerde kalıcı `X-Session-Device` header gönderiyor.
+- Incident export genişletildi:
+  - `runbook_recommendations` ve `quarantine_replay_plan` alanları eklendi.
+- P1 operasyon endpointleri eklendi:
+  - `POST /api/execution-readiness/intents/stuck/batch-recover`
+  - `GET /api/execution-readiness/reconciliation/summary`
+  - `GET /api/execution-readiness/gate/trends`
+  - `GET /api/execution-readiness/interventions/audit-trail`
+- S3 doğrulama düzeltildi:
+  - Güncel secret ile gate artifact upload artık `S3_UPLOADED` dönüyor (`s3://huseyin-deneme/...`).
+- Stuck intent operasyonel smoke çalıştırıldı:
+  - Quarantine üzerinden replay/dismiss/mark_failed akışı uçtan uca doğrulandı.
+
 ### Bu tur test/doğrulama
 - Testing Agent raporu: `/app/test_reports/iteration_172.json`
   - Service-level backend testleri PASS (23/23)
@@ -31,8 +48,7 @@
   - Preview sayfası "not responding" (502 sınıfı ortam limiti) durumunu gösterdi.
 
 ### Bilinen ortam/integrasyon limitleri (kod dışı)
-- Bybit Testnet bu runtime’dan HTTP 403 dönüyor (`BYBIT_CONNECTIVITY_FAIL`).
-- S3 upload denemesinde `SignatureDoesNotMatch` alınıyor; artifact LOCAL_ONLY fallback ile saklanıyor.
+- Bybit Testnet bu runtime’dan HTTP 403 dönüyor (`BYBIT_CONNECTIVITY_FAIL`) — dış ağ/erişim kısıtı.
 - Preview URL halen 502 dönebiliyor (PostgreSQL/preview kısıtı).
 
 ### Öncelikli kalan işler
