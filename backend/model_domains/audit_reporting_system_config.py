@@ -20,8 +20,48 @@ class AuditLog(Base):
     entity_type: Mapped[str] = mapped_column(String(50))
     entity_id: Mapped[str] = mapped_column(String(120))
     severity: Mapped[str] = mapped_column(String(20), default="info")
+    environment: Mapped[str] = mapped_column(String(20), default="prod", index=True)
+    is_test_event: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    previous_event_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    event_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    signature_version: Mapped[str] = mapped_column(String(20), default="v1")
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class LifecycleSavedQuery(Base):
+    __tablename__ = "lifecycle_saved_queries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120), index=True)
+    params: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class DebugIncident(Base):
+    __tablename__ = "debug_incidents"
+
+    incident_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    title: Mapped[str] = mapped_column(String(220), default="Untitled Incident")
+    severity: Mapped[str] = mapped_column(String(20), default="CRITICAL", index=True)
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    linked_correlation_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    source_event_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    fingerprint: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    cluster_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    root_cause: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    auto_created: Mapped[bool] = mapped_column(Boolean, default=False)
+    dedupe_window_seconds: Mapped[int] = mapped_column(Integer, default=300)
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=1)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class ExecutionEvent(Base):
     __tablename__ = "execution_events"

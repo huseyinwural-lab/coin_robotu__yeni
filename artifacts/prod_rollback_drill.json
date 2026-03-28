@@ -1,0 +1,15 @@
+{
+  "phase": "FAZ_D0_TASK_7",
+  "status": "PASS",
+  "generated_at": "2026-03-21T12:53:06.755561+00:00",
+  "current_sha": "801b8ea5c601",
+  "before_health_code": 200,
+  "after_health_code": 200,
+  "deploy_status": "PASS",
+  "rollback_status": "PASS",
+  "rollback_time_seconds": 0,
+  "has_recent_rolled_back_entry": true,
+  "migration_rollback_note": "DB migration rollback bu drill kapsamında gerekmiyor; backward-compatible migration disiplini korunmalı.",
+  "deploy_output_excerpt": "[INFO] version=release-801b8ea5c601\n[INFO] image_tag=app:release-801b8ea5c601\n[INFO] backend_url=https://identity-control-1.preview.emergentagent.com\n[OK] requested_version_deployed=release-801b8ea5c601\n[OK] deployed_image_tag=app:release-801b8ea5c601",
+  "rollback_output_excerpt": "[INFO] version=release-cb17392bffe4\n[INFO] image_tag=app:release-cb17392bffe4\n[INFO] backend_url=https://identity-control-1.preview.emergentagent.com\n[OK] requested_version_deployed=release-cb17392bffe4\n[OK] deployed_image_tag=app:release-cb17392bffe4\n[OK] previous_version=release-cb17392bffe4\n[OK] rollback_time_seconds=0"
+}

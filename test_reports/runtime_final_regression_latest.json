@@ -1,0 +1,479 @@
+{
+  "status": "PASS",
+  "started_at": "2026-03-26T07:40:47.958195+00:00",
+  "finished_at": "2026-03-26T07:41:02.396920+00:00",
+  "checks": {
+    "execution": true,
+    "reconciliation": true,
+    "kill_switch": true,
+    "timeline": true,
+    "alert": true
+  },
+  "canary_result": {
+    "status": "PASS",
+    "started_at": "2026-03-26T07:40:47.958198+00:00",
+    "finished_at": "2026-03-26T07:40:59.509070+00:00",
+    "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+    "symbol": "BTCUSDT",
+    "size": 0.0001,
+    "steps": {
+      "strategy": true,
+      "risk": true,
+      "queue": true,
+      "execution": true,
+      "exchange": true,
+      "order_update": true,
+      "pnl": true,
+      "alert": true,
+      "timeline": true,
+      "snapshot": true
+    },
+    "submit_result": {
+      "status": "enqueued",
+      "execution_job_id": "759418ed-46e7-410a-94ce-3fb8cb33cdc6",
+      "idempotency_key": "canary-run-1774510848519",
+      "queue_payload": {
+        "execution_job_id": "759418ed-46e7-410a-94ce-3fb8cb33cdc6",
+        "idempotency_key": "canary-run-1774510848519",
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "size": 0.0001,
+        "strategy_name": "ema_rsi",
+        "created_at": "2026-03-26T07:40:48.630404+00:00",
+        "enqueued_at": "2026-03-26T07:40:49.075371+00:00",
+        "retry_count": 0
+      },
+      "state": "CREATED"
+    },
+    "worker_result": {
+      "status": "processed",
+      "execution_job_id": "759418ed-46e7-410a-94ce-3fb8cb33cdc6",
+      "order_id": "16b4b730-94bb-43f0-ba86-415a41405f7a",
+      "state": "SENT",
+      "external_order_id": "12994578941"
+    },
+    "reconciliation": {
+      "status": "ok",
+      "checked_orders": 10,
+      "mismatches": 1,
+      "corrected": 1,
+      "issues": [
+        {
+          "order_id": "16b4b730-94bb-43f0-ba86-415a41405f7a",
+          "issue": "state_mismatch_corrected",
+          "previous_state": "SENT",
+          "exchange_state": "FILLED"
+        },
+        {
+          "order_id": "a7c343cd-dbdc-4142-9aa4-4b81247354a5",
+          "issue": "status_fetch_failed",
+          "error": "could not convert string to float: 'SIM-RECON-TEST-bba90547-0e18-4091-a820-f927618a6097'"
+        },
+        {
+          "order_id": "4f91b5ef-11eb-4ddb-91f0-97d48a8116d1",
+          "issue": "status_fetch_failed",
+          "error": "could not convert string to float: 'SIM-RECON-TEST-574ff5d5-b976-48a6-b685-8a7c2ed22dd9'"
+        },
+        {
+          "order_id": "5c6b1370-0986-444f-a41c-774d0d7676a4",
+          "issue": "status_fetch_failed",
+          "error": "could not convert string to float: 'SIM-RECON-TEST-ab2c90e1-0f52-4662-9bc1-6500c872e243'"
+        },
+        {
+          "order_id": "860e3193-b750-4949-bbc1-ed0ff3ec3251",
+          "issue": "status_fetch_failed",
+          "error": "could not convert string to float: 'SIM-RECON-TEST-7cc4f99e-ae4a-4ed7-b5c0-6f423327ed1b'"
+        },
+        {
+          "order_id": "e665a16a-7105-44bc-bece-11c3e6898280",
+          "issue": "status_fetch_failed",
+          "error": "could not convert string to float: 'SIM-RECON-TEST-abc650a6-9216-475f-95b8-36d7fed33dcf'"
+        },
+        {
+          "order_id": "42c756f4-c558-4445-be0b-5b185d35d19a",
+          "issue": "status_fetch_failed",
+          "error": "could not convert string to float: 'SIM-RECON-TEST-2c59bae7-4876-47ba-880f-fa800539a1d7'"
+        },
+        {
+          "order_id": "06536ebd-fe01-4884-a8c7-5bf4fc8fe89a",
+          "issue": "status_fetch_failed",
+          "error": "could not convert string to float: 'SIM-RECON-TEST-6b288723-4617-42c1-b85b-3961c0dd069e'"
+        },
+        {
+          "order_id": "5e8105a6-5682-4a6d-98b5-89255f632db2",
+          "issue": "status_fetch_failed",
+          "error": "could not convert string to float: 'SIM-RECON-TEST-3702340a-efad-421e-a65f-ab1861c97c43'"
+        },
+        {
+          "order_id": "ea451c72-e244-44d7-b493-270c284edd18",
+          "issue": "status_fetch_failed",
+          "error": "could not convert string to float: 'SIM-RECON-TEST-66bc6e07-9c3a-4184-b9a7-cb79cb9010a3'"
+        }
+      ],
+      "timestamp": "2026-03-26T07:40:54.619939+00:00"
+    },
+    "pnl_summary": {
+      "scope": "admin_all",
+      "requester_user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+      "open_positions": 9,
+      "realized_pnl": -3940.336243,
+      "unrealized_pnl": -2065.0,
+      "fees": 10.21479852,
+      "funding": 0.0,
+      "net_pnl": -6015.55104152,
+      "by_symbol": {
+        "BTCUSDT": 2123.01645848,
+        "ETHUSDT": -3268.6675,
+        "LTCUSDT": -4869.9
+      },
+      "by_user": {
+        "941ed803-8aae-4015-8482-79c9d089c898": -6015.55104152
+      },
+      "updated_at": "2026-03-26T07:40:57.843004+00:00"
+    },
+    "runtime_alert_count": 10,
+    "timeline_event_count": 12,
+    "timeline_events": [
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": null,
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "SELL",
+        "state": "CREATED",
+        "previous_state": null,
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:29.606562+00:00",
+        "meta": {
+          "filled_qty": 0,
+          "remaining_qty": 0.002,
+          "reject_reason": null
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": null,
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "SELL",
+        "state": "CREATED",
+        "previous_state": null,
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:29.606562+00:00",
+        "meta": {
+          "filled_qty": 0,
+          "remaining_qty": 0.002,
+          "reject_reason": null
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": "0b543ee6-9526-4bbe-ad6e-d969013c931f",
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "SELL",
+        "state": "SENT",
+        "previous_state": "CREATED",
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:32.309853+00:00",
+        "meta": {
+          "filled_qty": 0.0,
+          "remaining_qty": 0.002,
+          "reject_reason": null,
+          "fail_reason": null,
+          "queue_wait_ms": 1899,
+          "execution_ms": 691,
+          "total_ms": 2590
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": "0b543ee6-9526-4bbe-ad6e-d969013c931f",
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "SELL",
+        "state": "SENT",
+        "previous_state": "CREATED",
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:32.309853+00:00",
+        "meta": {
+          "filled_qty": 0.0,
+          "remaining_qty": 0.002,
+          "reject_reason": null,
+          "fail_reason": null,
+          "queue_wait_ms": 1899,
+          "execution_ms": 691,
+          "total_ms": 2590
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": null,
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "state": "CREATED",
+        "previous_state": null,
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:35.637123+00:00",
+        "meta": {
+          "filled_qty": 0,
+          "remaining_qty": 0.0001,
+          "reject_reason": null
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": null,
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "state": "CREATED",
+        "previous_state": null,
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:35.637123+00:00",
+        "meta": {
+          "filled_qty": 0,
+          "remaining_qty": 0.0001,
+          "reject_reason": null
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": "54067786-8239-4a57-bfda-c47eae315c03",
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "state": "SENT",
+        "previous_state": "CREATED",
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:38.183271+00:00",
+        "meta": {
+          "filled_qty": 0.0,
+          "remaining_qty": 0.0001,
+          "reject_reason": null,
+          "fail_reason": null,
+          "queue_wait_ms": 1774,
+          "execution_ms": 659,
+          "total_ms": 2433
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": "54067786-8239-4a57-bfda-c47eae315c03",
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "state": "SENT",
+        "previous_state": "CREATED",
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:38.183271+00:00",
+        "meta": {
+          "filled_qty": 0.0,
+          "remaining_qty": 0.0001,
+          "reject_reason": null,
+          "fail_reason": null,
+          "queue_wait_ms": 1774,
+          "execution_ms": 659,
+          "total_ms": 2433
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": null,
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "state": "CREATED",
+        "previous_state": null,
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:49.074945+00:00",
+        "meta": {
+          "filled_qty": 0,
+          "remaining_qty": 0.0001,
+          "reject_reason": null
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": null,
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "state": "CREATED",
+        "previous_state": null,
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:49.074945+00:00",
+        "meta": {
+          "filled_qty": 0,
+          "remaining_qty": 0.0001,
+          "reject_reason": null
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": "16b4b730-94bb-43f0-ba86-415a41405f7a",
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "state": "SENT",
+        "previous_state": "CREATED",
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:51.737574+00:00",
+        "meta": {
+          "filled_qty": 0.0,
+          "remaining_qty": 0.0001,
+          "reject_reason": null,
+          "fail_reason": null,
+          "queue_wait_ms": 1884,
+          "execution_ms": 665,
+          "total_ms": 2549
+        }
+      },
+      {
+        "event_type": "execution_state_changed",
+        "severity": "INFO",
+        "order_id": "16b4b730-94bb-43f0-ba86-415a41405f7a",
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+        "symbol": "BTCUSDT",
+        "side": "BUY",
+        "state": "SENT",
+        "previous_state": "CREATED",
+        "source": "execution_engine",
+        "timestamp": "2026-03-26T07:40:51.737574+00:00",
+        "meta": {
+          "filled_qty": 0.0,
+          "remaining_qty": 0.0001,
+          "reject_reason": null,
+          "fail_reason": null,
+          "queue_wait_ms": 1884,
+          "execution_ms": 665,
+          "total_ms": 2549
+        }
+      }
+    ],
+    "db_state": {
+      "execution_job_id": "759418ed-46e7-410a-94ce-3fb8cb33cdc6",
+      "execution_job_state": "FILLED",
+      "order_id": "16b4b730-94bb-43f0-ba86-415a41405f7a",
+      "order_state": "FILLED",
+      "external_order_id": "12994578941"
+    },
+    "smoke": {
+      "run_status": "PASS",
+      "summary": "daily_smoke:PASS",
+      "explained": false,
+      "completed_at": "2026-03-26T07:39:46.163663+00:00"
+    },
+    "artifact_path": "/app/test_reports/canary_run_latest.json"
+  },
+  "reconciliation": {
+    "status": "ok",
+    "checked_orders": 9,
+    "mismatches": 0,
+    "corrected": 0,
+    "issues": [
+      {
+        "order_id": "a7c343cd-dbdc-4142-9aa4-4b81247354a5",
+        "issue": "status_fetch_failed",
+        "error": "could not convert string to float: 'SIM-RECON-TEST-bba90547-0e18-4091-a820-f927618a6097'"
+      },
+      {
+        "order_id": "4f91b5ef-11eb-4ddb-91f0-97d48a8116d1",
+        "issue": "status_fetch_failed",
+        "error": "could not convert string to float: 'SIM-RECON-TEST-574ff5d5-b976-48a6-b685-8a7c2ed22dd9'"
+      },
+      {
+        "order_id": "5c6b1370-0986-444f-a41c-774d0d7676a4",
+        "issue": "status_fetch_failed",
+        "error": "could not convert string to float: 'SIM-RECON-TEST-ab2c90e1-0f52-4662-9bc1-6500c872e243'"
+      },
+      {
+        "order_id": "860e3193-b750-4949-bbc1-ed0ff3ec3251",
+        "issue": "status_fetch_failed",
+        "error": "could not convert string to float: 'SIM-RECON-TEST-7cc4f99e-ae4a-4ed7-b5c0-6f423327ed1b'"
+      },
+      {
+        "order_id": "e665a16a-7105-44bc-bece-11c3e6898280",
+        "issue": "status_fetch_failed",
+        "error": "could not convert string to float: 'SIM-RECON-TEST-abc650a6-9216-475f-95b8-36d7fed33dcf'"
+      },
+      {
+        "order_id": "42c756f4-c558-4445-be0b-5b185d35d19a",
+        "issue": "status_fetch_failed",
+        "error": "could not convert string to float: 'SIM-RECON-TEST-2c59bae7-4876-47ba-880f-fa800539a1d7'"
+      },
+      {
+        "order_id": "06536ebd-fe01-4884-a8c7-5bf4fc8fe89a",
+        "issue": "status_fetch_failed",
+        "error": "could not convert string to float: 'SIM-RECON-TEST-6b288723-4617-42c1-b85b-3961c0dd069e'"
+      },
+      {
+        "order_id": "5e8105a6-5682-4a6d-98b5-89255f632db2",
+        "issue": "status_fetch_failed",
+        "error": "could not convert string to float: 'SIM-RECON-TEST-3702340a-efad-421e-a65f-ab1861c97c43'"
+      },
+      {
+        "order_id": "ea451c72-e244-44d7-b493-270c284edd18",
+        "issue": "status_fetch_failed",
+        "error": "could not convert string to float: 'SIM-RECON-TEST-66bc6e07-9c3a-4184-b9a7-cb79cb9010a3'"
+      }
+    ],
+    "timestamp": "2026-03-26T07:40:59.731575+00:00"
+  },
+  "kill_switch_verification": {
+    "status": "PASS",
+    "started_at": "2026-03-26T07:41:00.063264+00:00",
+    "finished_at": "2026-03-26T07:41:00.063372+00:00",
+    "activate_state": {
+      "active": true,
+      "source": "go_live_checklist",
+      "reason": "force_fail_scenario",
+      "metadata": {
+        "user_id": "941ed803-8aae-4015-8482-79c9d089c898"
+      },
+      "updated_at": "2026-03-26T07:41:00.063271+00:00"
+    },
+    "blocked_result": {
+      "status": "rejected",
+      "execution_job_id": null,
+      "idempotency_key": null,
+      "state": "FAILED",
+      "risk": {
+        "allowed": false,
+        "reject_reason": "kill_switch_active",
+        "details": {
+          "active": true,
+          "source": "go_live_checklist",
+          "reason": "force_fail_scenario",
+          "metadata": {
+            "user_id": "941ed803-8aae-4015-8482-79c9d089c898"
+          },
+          "updated_at": "2026-03-26T07:41:00.063271+00:00"
+        }
+      }
+    },
+    "deactivate_state": {
+      "active": false,
+      "source": "go_live_checklist",
+      "reason": "rollback_validation_done",
+      "updated_at": "2026-03-26T07:41:00.063341+00:00"
+    },
+    "artifact_path": "/app/test_reports/kill_switch_verification_latest.json"
+  },
+  "alert_count": 20,
+  "timeline_event_count": 12,
+  "generated_at": "2026-03-26T07:41:02.396927+00:00"
+}

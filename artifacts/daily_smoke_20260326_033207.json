@@ -1,0 +1,329 @@
+{
+  "started_at": "2026-03-26T03:32:07.813264+00:00",
+  "completed_at": "2026-03-26T03:33:27.653369+00:00",
+  "overall_status": "PASS",
+  "steps": {
+    "ingest": {
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "user_id": "806b1103-1d49-4d23-8c9a-1f3186fcdbe0",
+        "user_email": "huseyinwural@gmail.com",
+        "environment": "testnet",
+        "market_types": [
+          "futures"
+        ],
+        "symbols": [],
+        "time_window": {
+          "start_ts": null,
+          "end_ts": null
+        },
+        "fetched": 292,
+        "inserted": 292,
+        "duplicate": 0,
+        "market_summary": {
+          "futures": {
+            "fetched": 292,
+            "inserted": 292,
+            "duplicate": 0,
+            "rate_limit_hits": 0,
+            "low_weight_mode": false,
+            "processed_symbols": [
+              null
+            ]
+          }
+        },
+        "revenue_sync": {
+          "processed": 292,
+          "inserted": 584,
+          "duplicate": 0
+        },
+        "source": "rest",
+        "generated_at": "2026-03-26T03:33:08.833037+00:00"
+      },
+      "latency_ms": 36516
+    },
+    "pnl": {
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "user_id": "806b1103-1d49-4d23-8c9a-1f3186fcdbe0",
+        "user_email": "huseyinwural@gmail.com",
+        "environment": "testnet",
+        "trade_count": 292,
+        "realized": {
+          "gross_usd": -45.63094896,
+          "net_usd": -62.13111167
+        },
+        "unrealized": {
+          "gross_usd": -57.52552529,
+          "net_usd": -57.52552529
+        },
+        "fee_breakdown": {
+          "trading_fee_usd": 15.02740895,
+          "commission_usd": 15.02740895,
+          "funding_usd": -1.47275376
+        },
+        "net_total_usd": -119.65663696,
+        "record_id": "4c28aced-540f-444b-a081-dcca695a5508",
+        "as_of": "2026-03-26T03:33:10.942523+00:00"
+      },
+      "latency_ms": 2789
+    },
+    "reconciliation": {
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "log_id": "7f2711ce-ae8b-4dc7-bf87-23b0c46477c1",
+        "user_id": "806b1103-1d49-4d23-8c9a-1f3186fcdbe0",
+        "user_email": "huseyinwural@gmail.com",
+        "environment": "testnet",
+        "markets": [
+          "futures"
+        ],
+        "internal_trade_count": 292,
+        "exchange_trade_count": 100,
+        "missing_trade_count": 0,
+        "duplicate_trade_count": 0,
+        "balance_drift_usd": 4993.99416646,
+        "position_drift_usd": 6078.08391196,
+        "pnl_drift_usd": 17.40870241,
+        "drift_tolerance_usd": 0.13689285,
+        "drift_tolerance_pct": 0.3,
+        "drift_within_tolerance": false,
+        "freshness_seconds": 6,
+        "missing_data_alert": false,
+        "created_at": "2026-03-26T03:33:14.048102+00:00"
+      },
+      "latency_ms": 3106
+    },
+    "revenue": {
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "environment": "testnet",
+        "applied_filters": {
+          "start_date": null,
+          "end_date": null,
+          "user_id": null,
+          "user_email": null,
+          "symbol": null,
+          "top_limit": 10
+        },
+        "total_revenue_usd": 17.43884197,
+        "today_revenue_usd": 14.48718743,
+        "top_users": [
+          {
+            "user_id": "806b1103-1d49-4d23-8c9a-1f3186fcdbe0",
+            "email": "huseyinwural@gmail.com",
+            "revenue_usd": 17.43884197
+          }
+        ],
+        "top_symbols": [
+          {
+            "symbol": "BTCUSDT",
+            "revenue_usd": 14.48718743
+          },
+          {
+            "symbol": "ETHUSDT",
+            "revenue_usd": 1.9999905
+          },
+          {
+            "symbol": "DOGEUSDT",
+            "revenue_usd": 0.45478226
+          },
+          {
+            "symbol": "ADAUSDT",
+            "revenue_usd": 0.23679
+          },
+          {
+            "symbol": "LTCUSDT",
+            "revenue_usd": 0.1760242
+          },
+          {
+            "symbol": "SOLUSDT",
+            "revenue_usd": 0.08406758
+          }
+        ],
+        "daily_revenue": [
+          {
+            "date": "2026-03-20",
+            "total_revenue_usd": 1.69297681,
+            "fee_revenue_usd": 1.52828251,
+            "pnl_share_revenue_usd": 0.1646943
+          },
+          {
+            "date": "2026-03-21",
+            "total_revenue_usd": 0.60571107,
+            "fee_revenue_usd": 0.12671907,
+            "pnl_share_revenue_usd": 0.478992
+          },
+          {
+            "date": "2026-03-22",
+            "total_revenue_usd": 0.43216666,
+            "fee_revenue_usd": 0.009,
+            "pnl_share_revenue_usd": 0.42316666
+          },
+          {
+            "date": "2026-03-25",
+            "total_revenue_usd": 0.2208,
+            "fee_revenue_usd": 0.0108,
+            "pnl_share_revenue_usd": 0.21
+          },
+          {
+            "date": "2026-03-26",
+            "total_revenue_usd": 14.48718743,
+            "fee_revenue_usd": 13.35260737,
+            "pnl_share_revenue_usd": 1.13458006
+          }
+        ],
+        "generated_at": "2026-03-26T03:33:15.950226+00:00"
+      },
+      "latency_ms": 1220
+    },
+    "snapshot_compare": {
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "snapshot_type": "daily",
+        "environment": "testnet",
+        "base_snapshot": {
+          "id": "02457674-3dd3-43dc-98db-e4d8b5df76ed",
+          "snapshot_date": "2026-03-25T00:00:00+00:00"
+        },
+        "target_snapshot": {
+          "id": "ea1cce41-84b3-4c3f-a084-e5dc09a44c8e",
+          "snapshot_date": "2026-03-26T00:00:00+00:00"
+        },
+        "delta": {
+          "kpis": [
+            {
+              "metric": "arppu_usd",
+              "from": 17.43884197,
+              "to": 17.43884197,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "arpu_usd",
+              "from": 17.43884197,
+              "to": 17.43884197,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "avg_ltv_usd",
+              "from": 17.43884197,
+              "to": 17.43884197,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "churn_rate_pct",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "churned_users",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "paying_users",
+              "from": 1.0,
+              "to": 1.0,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "today_revenue_usd",
+              "from": 14.48718743,
+              "to": 14.48718743,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "total_revenue_usd",
+              "from": 17.43884197,
+              "to": 17.43884197,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "total_users",
+              "from": 1.0,
+              "to": 1.0,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            }
+          ],
+          "top_users": [
+            {
+              "user_id": "806b1103-1d49-4d23-8c9a-1f3186fcdbe0",
+              "email": "huseyinwural@gmail.com",
+              "from_revenue_usd": 17.43884197,
+              "to_revenue_usd": 17.43884197,
+              "delta_revenue_usd": 0.0,
+              "from_rank": 1,
+              "to_rank": 1,
+              "rank_change": 0
+            }
+          ],
+          "segments": [
+            {
+              "segment": "churn_risk",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "high_value",
+              "from_users": 1,
+              "to_users": 1,
+              "delta_users": 0,
+              "from_revenue_usd": 17.43884197,
+              "to_revenue_usd": 17.43884197,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "loss_heavy_users",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "low_activity_low_revenue",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "profitable_but_inactive",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            }
+          ]
+        },
+        "generated_at": "2026-03-26T03:33:27.541850+00:00"
+      },
+      "latency_ms": 11590
+    }
+  }
+}

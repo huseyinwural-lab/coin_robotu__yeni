@@ -1,0 +1,92 @@
+{
+  "generated_at": "2026-03-28T13:07:05.874953+00:00",
+  "title": "p0_p1_final_closure_report",
+  "p0": {
+    "canonical_endpoints_primary": true,
+    "lifecycle_chain_validation": true,
+    "explain_minimum_contract": true,
+    "ui_lifecycle_debugger": true,
+    "replay_deterministic_isolated": true,
+    "repo_deploy_guard_hard_fail": true
+  },
+  "p1": {
+    "advanced_filtering": true,
+    "full_text_search_indexed": true,
+    "saved_query": true,
+    "rca_automation": true,
+    "metrics_dashboard_alerts": true,
+    "pagination_virtual_scroll": true,
+    "incident_management": true,
+    "performance_benchmark": {
+      "seeded": {
+        "type": "seeded_benchmark",
+        "rows_seeded": 1000000,
+        "samples_ms": [
+          1217.12,
+          127.92,
+          124.08,
+          128.96,
+          147.66
+        ],
+        "p50_ms": 128.96,
+        "p95_ms": 1217.12,
+        "target_ms": 2000,
+        "meets_target": true,
+        "generated_at": "2026-03-28T13:06:34.772895+00:00",
+        "total_runtime_ms": 169334.27
+      },
+      "runtime": {
+        "type": "runtime_profile",
+        "generated_at": "2026-03-28T13:06:55.024971+00:00",
+        "sample_correlation_id": "52d47be0-ed39-44b6-b278-22cee3221b9e",
+        "list_lifecycle": {
+          "samples_ms": [
+            2100.02,
+            382.76,
+            284.89,
+            286.63,
+            284.8,
+            290.14,
+            295.36,
+            291.43,
+            286.13,
+            243.89,
+            279.74,
+            317.8,
+            290.71,
+            287.82,
+            287.77,
+            296.68,
+            363.4,
+            251.01,
+            298.14,
+            287.67
+          ],
+          "p50_ms": 290.14,
+          "p95_ms": 382.76,
+          "avg_ms": 385.34
+        },
+        "lifecycle_detail": {
+          "samples_ms": [
+            145.19,
+            138.44,
+            138.83,
+            137.0,
+            138.68,
+            136.95,
+            136.61,
+            136.9,
+            136.82,
+            136.86
+          ],
+          "p50_ms": 136.95,
+          "p95_ms": 145.19,
+          "avg_ms": 138.23
+        },
+        "slo_target_ms": 2000,
+        "slo_pass": true
+      }
+    }
+  },
+  "overall_pass": true
+}

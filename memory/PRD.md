@@ -1,3 +1,325 @@
+## 2026-03-28 — P0 Kanıt Takibi + P1 Login Flakiness + P2 Root Cause Sticky Panel
+
+### Yapılanlar
+- .gitignore sadeleştirildi; test_reports/ ve artifacts/ repo tarafından izlenebilir şekilde açıklandı.
+- AdminLoginPage: submit yarışları azaltıldı (submitting guard, retry sadeleştirme, ERR_ABORTED retry); MFA doğrulama/OTP resend double-submit koruması eklendi.
+- AuditLogs grafiği üstüne tek satır kök neden özeti + aksiyon önerisi sticky panel eklendi.
+- Auth testing playbook /app/auth_testing.md olarak kaydedildi.
+
+### Test
+- Playwright screenshot denemesi başarısız: preview ortamı yanıt vermedi.
+- curl /api/health denemesi başarısız: preview ortamı yanıt vermedi.
+
+## 2026-03-28 — FINAL EXECUTION AUDIT (P0+P1+P2 Birebir Uygulama Kontrolü)
+
+### Bu turda kapatılan son gap’ler
+- `timeline` deprecated durumu body seviyesinde kesinleştirildi:
+  - `deprecated: true`
+  - `primary_endpoint: /api/audit-logs/trading-lifecycle`
+- Explain tarafında `broken_step` explicit `unknown` fallback’i garanti edildi.
+- RCA çıktısına anomaly threshold sinyalleri eklendi:
+  - `anomaly_detected`, `anomaly_reasons`
+- Verify trace çıktısına `compromised` alanı eklendi (tamper ile eşlenik).
+- Query servisinde JSON filter operatör uyumsuzluğu giderildi (`->>` üzerinden); `trading-lifecycle/search` 500 hatası kapatıldı.
+
+### Final audit kanıt dosyaları (repo içi)
+- `test_reports/p0_p1_p2_final_gap_closure_audit.json` → **overall_pass=true**
+- `test_reports/deprecated_endpoints_list.json`
+- Önceki benchmark/SLO raporları korunuyor:
+  - `test_reports/p1_seeded_benchmark_report.json`
+  - `test_reports/p1_runtime_profile_report.json`
+
+### Final bağımsız doğrulama
+- `deep_testing_backend_v2`: P0/P1/P2 final doğrulama PASS
+- `auto_frontend_testing_agent`: final smoke **6/6 PASS**
+- `pytest tests/test_trading_lifecycle_debugger_p0.py`: PASS
+
+## 2026-03-28 — P0 FINAL Closure Re-Validation (Narrow Scope)
+
+### Kapsam
+- Sadece P0 kriterleri için yeniden doğrulama yapıldı (P1/P2 kapsamına girilmedi).
+
+### Doğrulanan P0 maddeleri
+- Canonical endpoint seti aktif:
+  - `GET /api/audit-logs/trading-lifecycle`
+  - `GET /api/audit-logs/lifecycle/{correlation_id}`
+  - `POST /api/audit-logs/explain`
+- Zorunlu contract alanları doğrulandı:
+  - `correlation_id`, `events`, `trace_incomplete`, `missing_critical_stages`, `broken_chain`
+- Explain minimum alanları doğrulandı:
+  - `broken_step`, `root_cause`, `missing_stages`, `upstream_event`, `downstream_impact`, `confidence`, `insufficient_data`
+- Lifecycle zincir kırıkları/missing stage sessiz geçmeden görünür
+- Replay minimum koşulları doğrulandı (deterministic/isolated/no external side-effect)
+- Repo↔deploy consistency guard endpointi aktif
+- `/admin/audit-logs` UI lifecycle debugger akışı doğrulandı
+
+### Sonuç
+- Bağımsız P0 doğrulama sonucu: **7/7 PASS (100%)**
+- Kritik blocker yok.
+
+## 2026-03-28 — FINAL GAP CLOSURE (P0+P1+P2) Son Eksiklerin Kapanışı
+
+### Uygulanan son gap kapatmaları
+- **Archive toggle** (UI + API):
+  - Frontend: `audit-archive-mode-toggle` eklendi
+  - Backend: `archive_mode` + `archive_cutoff_days` parametreleri `trading-lifecycle` ve `trading-lifecycle/search` endpointlerine eklendi
+  - Hot/cold görünüm ayrımı aktif
+- **Verify trace canonical yolu**:
+  - Yeni endpoint: `GET /api/audit/verify-trace?correlation_id=...&environment=...`
+  - Mevcut integrity doğrulama servisinin canonical audit yolu üzerinden erişimi sağlandı
+
+### Final doğrulama
+- `deep_testing_backend_v2` gap-closure retest: **5/5 PASS (100%)**
+- `auto_frontend_testing_agent` final smoke: **6/6 PASS (100%)**
+- P0/P1/P2 checklist satırları bu turda tekrar doğrulandı; kritik blocker yok.
+
+## 2026-03-28 — P0 + P1 FINAL Hard Completion (Production Closure)
+
+### Kullanıcı onayıyla tamamlanan final aksiyonlar
+- Performans kanıtı formatı: **Her ikisi**
+  - Seeded benchmark script + ölçüm raporu
+  - Mevcut veri runtime profile + SLO raporu
+- Legacy endpoint stratejisi: **kalsın ama deprecated**
+  - Canonical endpointler primary
+
+### P0 Final Closure (Hard)
+- Canonical primary endpoint seti aktif ve doğrulandı:
+  - `GET /api/audit-logs/trading-lifecycle`
+  - `GET /api/audit-logs/lifecycle/{correlation_id}`
+  - `POST /api/audit-logs/explain`
+- Contract zorunlu alanları lifecycle/explain yanıtlarında garanti:
+  - `correlation_id`, `events`, `trace_incomplete`, `missing_critical_stages`, `broken_chain`
+- Explain minimum contract doğrulandı:
+  - `broken_step`, `root_cause`, `missing_stages`, `upstream_event`, `downstream_impact`, `confidence`, `insufficient_data`
+- Replay minimum gerçek mod doğrulandı:
+  - `replay_mode=isolated`, `deterministic_order=true`, `external_calls_disabled=true`, `side_effects_blocked=true`
+- Repo↔deploy hard-fail guard aktif:
+  - `GET /api/audit-logs/consistency/repo-deploy`
+  - mismatch durumunda explain/replay bloklama (409)
+- Legacy endpointler deprecated işaretlendi (primary endpoint bilgisi response’a eklendi).
+
+### P1 Final Closure (Hard)
+- Advanced Query Engine:
+  - strategy/symbol/user/event_type/severity/environment filtreleri
+  - ms-precision time range
+  - full-text search (`to_tsvector/plainto_tsquery`)
+  - saved query CRUD
+  - cursor pagination + virtualized render UI
+- RCA otomasyonu:
+  - `failure_type`, `root_cause`, `pattern_id`, `cluster_id`, `confidence`
+  - pattern/cluster üretimi + explain enrich
+- Observability:
+  - metrics: `event_processing_latency`, `trade_execution_latency`, `failure_rate`, `success_rate`, `throughput`, `replay_duration`
+  - dashboard + alert rules repo’da mevcut
+- Incident management:
+  - create/list/status/bundle akışları
+  - lifecycle bağlantısı doğrulandı
+
+### Performans ve SLO kanıt dosyaları
+- `test_reports/p1_seeded_benchmark_report.json`
+  - 1,000,000 seeded event
+  - p95: **1217.12ms** (< 2000ms hedef) ✅
+- `test_reports/p1_runtime_profile_report.json`
+  - list p95: **382.76ms**
+  - detail p95: **145.19ms**
+  - SLO PASS ✅
+- `test_reports/p0_p1_final_closure_report.json` üretildi.
+
+### Ek güvenlik kapanışı
+- API security headers eklendi ve doğrulandı:
+  - `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Strict-Transport-Security`, `Content-Security-Policy`
+
+### Final test sonucu
+- `deep_testing_backend_v2` final retest: **7/7 PASS (100%)**
+- `auto_frontend_testing_agent` final smoke: **PASS (100%)**
+
+## 2026-03-28 — P2 (İş Paketi 12-15) Faz-A/B Uygulaması
+
+### Onaylanan teknik kararlar
+- Graph: **ReactFlow** interaktif DAG
+- Immutable enforcement: **DB trigger/policy + uygulama guard**
+- Hash-chain: **her write anında signature üretimi + verify endpoint**
+- Teslim: **2 faz**
+
+### Faz-A (UX / Debugging Ergonomisi) — Uygulananlar
+- `/admin/audit-logs` sayfasına graph-first yaklaşım eklendi:
+  - `Graph View (Primary)` ve `Event List (Secondary)` modları
+  - DAG node-edge görünümü (ReactFlow)
+  - Error path renkleme (broken/upstream/normal görselleştirmesi)
+- Event detay ergonomisi:
+  - Expandable JSON payload (`Expand JSON`)
+  - Kopyalama araçları:
+    - Copy full trace
+    - Copy correlation chain
+    - Copy event JSON
+    - Copy replay input
+- Multi-environment UX:
+  - Environment select (`prod/staging/test/canary`) zorunlu filtre
+  - `test eventleri göster` toggle
+  - Cross-environment comparison butonu ve paneli
+
+### Faz-B (Security / Immutable / Integrity) — Uygulananlar
+- `audit_logs` append-only enforcement:
+  - DB trigger ile **UPDATE/DELETE hard-block** (`audit_logs is append-only`)
+- Hash-chain alanları eklendi (`audit_logs`):
+  - `environment`, `is_test_event`, `previous_event_hash`, `event_hash`, `signature_version`
+- Write-time signature:
+  - `create_audit_log` içinde event hash zinciri üretimi aktif
+- Integrity verification:
+  - `GET /api/audit-logs/verify-integrity/{correlation_id}`
+  - `tampered`, `mismatch_count`, `events_checked` döndürür
+  - mismatch durumunda tamper alert üretimi (system alert)
+
+### Yeni/Genişletilen endpointler (P2)
+- `GET /api/audit-logs/lifecycle/compare/{correlation_id}`
+- `GET /api/audit-logs/verify-integrity/{correlation_id}`
+- Lifecycle list/search endpointlerinde `include_test_events` davranışı
+
+### Migrasyonlar
+- `20260328_0095_audit_immutability_hash_chain_and_environment.py`
+  - audit log kolonları + indexler
+  - append-only trigger/fonksiyon
+
+### Doğrulama
+- Manuel API doğrulama: lifecycle env filtreleme, compare, verify-integrity PASS
+- Append-only doğrulama: update denemesi trigger ile engellendi (PASS)
+- UI smoke: graph/copy tools/integrity butonu/lifecycle detay PASS
+- Bağımsız test ajanları: backend doğrulama PASS, frontend smoke retest PASS
+
+### Bilinen Not
+- Otomasyon ajanında login form için zaman zaman `ERR_ABORTED` flakiness gözlenebiliyor; token doğrulama sonrası audit logs akışı fonksiyonel.
+
+## 2026-03-28 — P0 FINAL Kapanış (Gap Closure & Consistency Enforcement)
+
+### Canonical endpoint standardizasyonu (tek doğru yüzey)
+- Primary endpoint seti doğrulandı ve aktif:
+  - `GET /api/audit-logs/trading-lifecycle?limit=20`
+  - `GET /api/audit-logs/lifecycle/{correlation_id}`
+  - `POST /api/audit-logs/explain`
+- Endpoint tanımları `backend/routers/audit_logs.py` içinde tutuldu; UI canonical endpointleri kullanacak şekilde güncellendi.
+
+### Zorunlu canonical response alanları (P0)
+- Lifecycle ve explain akışında aşağıdaki alanlar garanti altına alındı:
+  - `correlation_id`
+  - `events`
+  - `trace_incomplete`
+  - `missing_critical_stages`
+  - `broken_chain`
+- `trace_incomplete` ve `missing_critical_stages` her zaman dönüyor (boş liste dahil).
+- Silent fail yok: kırık zincir `broken_chain=true` olarak açık işaretleniyor.
+
+### Correlation zinciri doğrulama
+- Zorunlu stage seti (`request,intent,decision,risk,order,execution,fill`) kontrolü aktif.
+- Parent-child kopukluk/orphan durumları zincir bozukluğuna yansıtılıyor.
+
+### Explain engine minimum doğru çıktı
+- `POST /api/audit-logs/explain` çıktısında alanlar garanti:
+  - `broken_step`, `root_cause`, `missing_stages`, `upstream_event`, `downstream_impact`, `confidence`, `insufficient_data`
+- Ek olarak canonical lifecycle alanları aynı response içinde mevcut.
+
+### Replay minimum P0 (deterministik + side-effect safe)
+- Replay çıktısında garanti:
+  - `replay_mode: "isolated"`
+  - `external_calls_disabled: true`
+  - `deterministic_order: true`
+  - `side_effects_blocked: true`
+
+### Repo ↔ Deploy consistency hard-fail guard
+- Yeni guard endpointi: `GET /api/audit-logs/consistency/repo-deploy`
+- `repo_commit_hash`, `deploy_commit_hash`, `is_match` döner.
+- Onaylanan kural uygulandı: replay/explain öncesi guard kontrolü var; mismatch durumunda **hard-fail (409)**.
+
+### UI kapanış doğrulaması
+- `/admin/audit-logs` akışı canonical lifecycle endpointlerine bağlı.
+- Correlation seçimi sonrası UI’da görünür:
+  - broken chain indicator
+  - missing stages list
+  - lifecycle step list
+  - Explain Failure paneli
+
+### Test/Doğrulama
+- Manuel API testleri: canonical lifecycle/explain/replay/consistency PASS
+- Pytest: `tests/test_trading_lifecycle_debugger_p0.py` PASS (deterministic replay + broken_chain assertleri dahil)
+- Frontend smoke screenshot PASS (lifecycle seçimi + explain tetikleme)
+- Bağımsız test ajanı doğrulaması: PASS
+
+## 2026-03-28 — P1 Operational Debugging Acceleration Layer (Faz-1 + Faz-2)
+
+### Kullanıcı onaylı kararlar
+- Query altyapısı: **PostgreSQL GIN + trigram**
+- Observability kapsamı: **`/metrics` + dashboard JSON + alert rule dosyaları**
+- Incident auto-create: **CRITICAL + duplicate suppression + correlation/fingerprint + cooldown**
+- Teslim stratejisi: **2 fazlı (Faz-1 temel kontratlar, Faz-2 observability/scale)**
+
+### Faz-1 (tamamlandı)
+- Gelişmiş Query/Filtering API (`/api/audit-logs/trading-lifecycle`):
+  - `strategy_id`, `symbol`, `user_id`, `event_type`, `severity`, `environment`, `start_time`, `end_time`, `payload_query`, `cursor`
+  - Deterministik sıralama + cursor tabanlı sayfalama (`has_more`, `next_cursor`)
+  - `query_latency_ms` geri dönüşü
+- Full-text arama için trigram index migrasyonu eklendi (`ix_audit_logs_details_trgm`).
+- Saved Queries:
+  - `GET/POST/DELETE /api/audit-logs/saved-queries`
+- RCA zenginleştirme:
+  - `root_cause_breakdown`, `pattern_tag`, `cluster_id`, `critical_blockers`, `reason_codes`
+  - `GET /api/audit-logs/lifecycle/{correlation_id}` ve `POST /api/audit-logs/explain` içinde görünür
+- Incident Management:
+  - Manuel incident oluşturma/listeme/durum güncelleme/bundle export
+  - `POST /incidents`, `GET /incidents`, `PATCH /incidents/{id}/status`, `GET /incidents/{id}/bundle`
+  - CRITICAL auto-create akışı `create_audit_log` üzerinden aktif
+  - Duplicate suppression + cooldown doğrulandı (occurrence_count artışı)
+
+### Faz-2 (tamamlandı)
+- Metrics endpoint genişletildi (`/api/metrics`):
+  - `event_processing_latency`
+  - `trade_execution_latency`
+  - `failure_rate`
+  - `success_rate`
+  - `replay_duration`
+- Repo observability artefaktları eklendi:
+  - `observability/grafana/dashboards/trading-lifecycle-debugger.json`
+  - `observability/prometheus/trading_lifecycle_alert_rules.yml`
+- Frontend tarafında lazy render + load more + filtre panel genişletmesi + saved query + incident panel eklendi.
+
+### Veri modeli ve migrasyon
+- Yeni tablolar:
+  - `lifecycle_saved_queries`
+  - `debug_incidents`
+- Yeni migrasyon: `20260328_0094_operational_debugging_acceleration_layer.py`
+
+### Doğrulama
+- Manuel API doğrulama: query/saved query/incident/metrics uçları başarılı
+- Auto-incident dedupe kontrolü başarılı (`occurrence_count` artışı)
+- Frontend smoke: `/admin/audit-logs` ekranı yeni kontrollerle çalışıyor
+- Bağımsız hızlı test ajanı sonucu: **7/7 PASS**
+
+## 2026-03-28 — P0 Trading Lifecycle Debugger Backend Stabilizasyonu (Bu Tur)
+
+### Kapsam (kullanıcı onayıyla)
+- Öncelik sadece backend ayağa kaldırma + hızlı doğrulama.
+- Frontend bu turda sadece tek smoke akışıyla doğrulandı.
+
+### Yapılanlar
+- `backend/routers/audit_logs.py` içinde geriye uyumlu alias endpointleri eklendi:
+  - `GET /api/audit-logs/lifecycle/{correlation_id}`
+  - `POST /api/audit-logs/explain`
+- Alias endpointler mevcut `trading-lifecycle` akışıyla aynı lifecycle zincirini döndürecek şekilde bağlandı.
+- `trace_incomplete` ve `missing_critical_stages` alanlarının response’ta görünürlüğü doğrulandı (sessiz hata yok).
+
+### Doğrulama (hızlı test kapsamı)
+- Manuel API doğrulaması (preview URL):
+  - `GET /api/health` → 200
+  - `GET /api/audit-logs/trading-lifecycle?limit=20` → 200
+  - `GET /api/audit-logs/lifecycle/{correlation_id}` → 200
+  - `POST /api/audit-logs/explain` → 200
+- Frontend smoke:
+  - `/admin/login` giriş başarılı
+  - `/admin/audit-logs` açıldı
+  - `data-testid="audit-logs-page"` görünür doğrulandı.
+
+### Durum
+- P0 backend stabilizasyon hedefi bu tur için sağlandı.
+- P1 reason-code bazlı Explain Failure zenginleştirme beklemede.
+
 ## 2026-03-28 — SON GÖREV EMRİ (P2 Operasyonel Kapanış + Ortam Stabilizasyonu)
 
 ### 1) Readiness maintenance cron aktivasyonu (KAPATILDI)

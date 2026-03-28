@@ -1,0 +1,12 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0 -- /root/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /app/backend
+plugins: anyio-4.12.1
+collecting ... collected 3 items
+
+tests/test_production_gate_p2_analytics.py::test_p2_history_compare_and_flapping PASSED [ 33%]
+tests/test_production_gate_p2_analytics.py::test_p2_override_analytics_timeline_and_risk PASSED [ 66%]
+tests/test_production_gate_p2_analytics.py::test_p2_export_v2_contains_history_analytics_timeline_and_risk PASSED [100%]
+
+============================== 3 passed in 3.24s ===============================

@@ -1,0 +1,31 @@
+{
+  "phase": "FAZ_D0_TASK_8",
+  "status": "PASS",
+  "generated_at": "2026-03-21T12:53:06.793152+00:00",
+  "release_type": "redeploy",
+  "history_count": 16,
+  "state_cleaned": false,
+  "before_state": {
+    "CURRENT_VERSION": "release-cb17392bffe4",
+    "CURRENT_VERSION_SHA": "cb17392bffe4",
+    "CURRENT_IMAGE_TAG": "app:release-cb17392bffe4",
+    "CURRENT_STATUS": "deployed",
+    "UPDATED_AT": "2026-03-21T12:53:06Z"
+  },
+  "after_state": {
+    "CURRENT_VERSION": "release-cb17392bffe4",
+    "CURRENT_VERSION_SHA": "cb17392bffe4",
+    "CURRENT_IMAGE_TAG": "app:release-cb17392bffe4",
+    "CURRENT_STATUS": "deployed",
+    "UPDATED_AT": "2026-03-21T12:53:06Z"
+  },
+  "latest_history_entry": {
+    "version": "release-cb17392bffe4",
+    "image_tag": "app:release-cb17392bffe4",
+    "status": "rolled_back",
+    "timestamp": "2026-03-21T12:53:06.620665+00:00",
+    "source": "rollback",
+    "rollback_time_seconds": 0,
+    "recorded_at": "2026-03-21T12:53:06.620674+00:00"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-03-28T13:47:19.693061",
+  "success": false,
+  "results": [
+    {
+      "test": "Admin Authentication",
+      "status": "PASS",
+      "details": "Token obtained (601 chars)",
+      "timestamp": "2026-03-28T13:47:10.174845"
+    },
+    {
+      "test": "P0 Canonical Lifecycle Endpoint",
+      "status": "FAIL",
+      "details": "Missing required fields: ['chains']",
+      "timestamp": "2026-03-28T13:47:12.501342"
+    },
+    {
+      "test": "P1 Query Filters",
+      "status": "FAIL",
+      "details": "HTTP 500",
+      "timestamp": "2026-03-28T13:47:13.690509"
+    },
+    {
+      "test": "Archive Mode Behavior",
+      "status": "PASS",
+      "details": "archive_mode=true: 0 chains, archive_mode=false: 0 chains",
+      "timestamp": "2026-03-28T13:47:17.467011"
+    },
+    {
+      "test": "Verify Endpoint",
+      "status": "FAIL",
+      "details": "No chains available for testing",
+      "timestamp": "2026-03-28T13:47:19.637784"
+    },
+    {
+      "test": "Frontend Audit Logs Indicators",
+      "status": "PARTIAL",
+      "details": "Found: [], Missing: ['archive_toggle', 'graph_indicator', 'copy_indicator', 'explain_indicator', 'lifecycle_indicator']",
+      "timestamp": "2026-03-28T13:47:19.692907"
+    }
+  ]
+}

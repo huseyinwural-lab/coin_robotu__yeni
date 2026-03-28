@@ -1,0 +1,17 @@
+{
+  "phase": "C1",
+  "loop_count": 12,
+  "max_error_rate": 0.066667,
+  "max_order_fail_rate": 0.0,
+  "max_reject_rate": 0.0,
+  "max_latency_ms_p95": 3295.63,
+  "max_pnl_drift": 0.0,
+  "crash_count": 0,
+  "error_5xx_count": 0,
+  "reject_count": 0,
+  "reject_anomaly_count": 0,
+  "latency_spike_count": 0,
+  "health_http": 200,
+  "ready_http": 200,
+  "timestamp": "2026-03-20T19:54:50.090295+00:00"
+}

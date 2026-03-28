@@ -16,6 +16,7 @@ from services.artifact_service import (
     verify_artifact,
 )
 from services.audit_service import create_audit_log
+from services.audit_integrity_service import verify_trace_integrity
 
 
 router = APIRouter(prefix="/audit", tags=["audit"])
@@ -120,3 +121,29 @@ def download_artifact(artifact_id: str, current_admin: User = Depends(require_ad
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="artifact_file_missing")
 
     return FileResponse(path=str(path), filename=entry["filename"], media_type="application/json")
+
+
+@router.get("/verify-trace")
+def verify_audit_trace_integrity(
+    correlation_id: str = Query(..., min_length=1),
+    environment: str | None = Query(default=None),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    result = verify_trace_integrity(db, correlation_id=correlation_id, environment=environment)
+    create_audit_log(
+        db,
+        action="audit_trace_verify",
+        entity_type="audit_trace",
+        entity_id=correlation_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning" if result.get("tampered") else "info",
+        details={
+            "correlation_id": correlation_id,
+            "environment": environment,
+            "tampered": result.get("tampered"),
+            "mismatch_count": result.get("mismatch_count"),
+        },
+    )
+    return result

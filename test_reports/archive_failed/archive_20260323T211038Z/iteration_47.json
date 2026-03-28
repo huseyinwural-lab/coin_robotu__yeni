@@ -1,0 +1,111 @@
+{
+  "summary": "Runtime Control & Recovery Layer Testing Complete. All 29 backend API tests passed (100%). Frontend pages /admin/pipeline-control and /admin/action-audit verified working with all UI components present. RBAC enforcement verified - super_admin required for critical actions, ops role correctly rejected. Confirmation phrase validation working for all critical endpoints.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminDashboardPage", "issues": ["Pipeline Control button exists but data-testid not found in initial test - button works via direct navigation"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_runtime_control_endpoints.py",
+    "/app/test_reports/pytest/runtime_control_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "All /api/runtime/* endpoints properly enforce RBAC - super_admin required for critical actions",
+    "Confirmation phrase validation working correctly for all critical endpoints",
+    "Override lifecycle (create/list/cancel/history) fully functional with max TTL cap enforced via Pydantic validation",
+    "WS control endpoints (reconnect, force-new-session) write audit logs correctly",
+    "Pipeline control endpoints (resync, flush) work and audit",
+    "Release gate runtime recheck executes scripts and returns gate details",
+    "Guard telemetry returns blocked trades, top reasons, and override impacted trades",
+    "Alert history actions (ack/mute/resolve) and bulk actions working",
+    "Alert policy controls (update/rollback/test-alert) working with validation",
+    "Added Pipeline Control and Action Audit to sidebar navigation"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_runtime_control_endpoints.py",
+    "/app/frontend/src/components/PanelLayout.jsx"
+  ],
+  "success_rate": {
+    "backend": "100% (29/29 tests passed)",
+    "frontend": "100% (all UI components verified)"
+  },
+  "seed_data_creation": "N/A - used existing super_admin and ops credentials",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Runtime Control & Recovery Layer fully tested. All /api/runtime/* endpoints working. Frontend pages /admin/pipeline-control and /admin/action-audit verified. Sidebar navigation updated to include Pipeline Control and Action Audit links.",
+  "test_credentials": {
+    "super_admin": "canary.admin@platform.local / CanaryAdmin123!",
+    "ops": "canary.ops@platform.local / CanaryOps123!"
+  },
+  "endpoints_tested": {
+    "ws_control": [
+      "GET /api/runtime/ws/health - 200 OK",
+      "POST /api/runtime/ws/reconnect - 200 OK (super_admin + phrase)",
+      "POST /api/runtime/ws/force-new-session - 200 OK (super_admin + phrase)"
+    ],
+    "pipeline_control": [
+      "POST /api/runtime/pipeline/resync - 200 OK (super_admin + phrase)",
+      "POST /api/runtime/pipeline/flush - 200 OK (super_admin + phrase)"
+    ],
+    "release_gate": [
+      "GET /api/runtime/gate/status - 200 OK",
+      "POST /api/runtime/gate/recheck - 200 OK (super_admin + phrase)"
+    ],
+    "override_lifecycle": [
+      "GET /api/runtime/override/active - 200 OK",
+      "GET /api/runtime/override/history - 200 OK",
+      "POST /api/runtime/override/create - 200 OK (super_admin + phrase)",
+      "POST /api/runtime/override/{id}/cancel - 200 OK (super_admin + phrase)"
+    ],
+    "guard_telemetry": [
+      "GET /api/runtime/guard/telemetry - 200 OK"
+    ],
+    "heartbeat_service": [
+      "POST /api/runtime/heartbeat/check - 200 OK",
+      "POST /api/runtime/service/restart - requires super_admin"
+    ],
+    "exchange_monitoring": [
+      "GET /api/runtime/exchange/monitoring - 200 OK"
+    ],
+    "alert_history": [
+      "GET /api/runtime/alerts/history - 200 OK"
+    ],
+    "alert_policy": [
+      "GET /api/runtime/alert-policy - 200 OK",
+      "PUT /api/runtime/alert-policy - requires super_admin + phrase",
+      "POST /api/runtime/alert-policy/test-alert - 200 OK (super_admin + phrase)",
+      "POST /api/runtime/alert-policy/rollback - requires super_admin"
+    ],
+    "hardening_analytics": [
+      "GET /api/runtime/hardening/analytics - 200 OK"
+    ],
+    "action_audit": [
+      "GET /api/runtime/action-audit - 200 OK"
+    ]
+  },
+  "rbac_verification": {
+    "super_admin_required_endpoints": [
+      "/api/runtime/ws/reconnect",
+      "/api/runtime/ws/force-new-session",
+      "/api/runtime/pipeline/resync",
+      "/api/runtime/pipeline/flush",
+      "/api/runtime/gate/recheck",
+      "/api/runtime/override/create",
+      "/api/runtime/override/{id}/cancel",
+      "/api/runtime/service/restart",
+      "/api/runtime/alert-policy (PUT)",
+      "/api/runtime/alert-policy/test-alert",
+      "/api/runtime/alert-policy/rollback"
+    ],
+    "ops_role_rejected": true,
+    "confirmation_phrase_required": true
+  },
+  "mocked_api_note": "Exchange/execution flows may be mocked by design as noted in request"
+}

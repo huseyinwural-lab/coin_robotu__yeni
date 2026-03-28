@@ -1,0 +1,10 @@
+{
+  "status": "ok",
+  "generated_at": "2026-03-24T00:35:31.396603+00:00",
+  "cross_check_consistent": true,
+  "flapping_non_low_rows": 56,
+  "compare_items_gte3": 6,
+  "compare_improvements": 1,
+  "timeline_uuid_items": 216,
+  "manifest_artifact_count": 17
+}

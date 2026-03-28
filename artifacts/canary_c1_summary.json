@@ -1,0 +1,21 @@
+{
+  "phase": "C1",
+  "canary_rollout_test": "PASS",
+  "symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT"
+  ],
+  "capital_usdt": 150,
+  "max_positions": 2,
+  "duration_minutes": 61,
+  "crash_count": 0,
+  "error_5xx_count": 0,
+  "reject_anomaly": false,
+  "latency_spike": false,
+  "kill_switch_start_test": "PASS",
+  "kill_switch_end_test": "PASS",
+  "health_check": "PASS",
+  "ready_check": "PASS",
+  "timestamp": "2026-03-20T19:54:50.087839+00:00"
+}

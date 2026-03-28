@@ -1,0 +1,57 @@
+{
+  "generated_at": "2026-03-28T09:57:33.392634+00:00",
+  "base_url": "https://futures-health-check.preview.emergentagent.com",
+  "admin_login_smoke": {
+    "name": "admin_login_smoke",
+    "status": "FAIL",
+    "detail": {
+      "status_code": 599,
+      "has_token": false,
+      "payload": {
+        "error": "HTTPSConnectionPool(host='futures-health-check.preview.emergentagent.com', port=443): Read timed out. (read timeout=25)"
+      }
+    }
+  },
+  "readiness_endpoint_smoke": null,
+  "history_maintenance_cron_status": {
+    "status": "success",
+    "trigger": "bootstrap_manual",
+    "started_at": "2026-03-28T09:53:03.526664+00:00",
+    "finished_at": "2026-03-28T09:53:04.754524+00:00",
+    "last_success_at": "2026-03-28T09:53:04.754528+00:00",
+    "retry_in_seconds": null,
+    "reason_code": null,
+    "result": {
+      "policy": {
+        "details_retention_days": 30,
+        "aggregate_retention_days": 90,
+        "cleanup_batch_size": 1000
+      },
+      "dry_run": false,
+      "detail_cutoff": "2026-02-26T09:53:03.526682+00:00",
+      "aggregate_cutoff": "2025-12-28T09:53:03.526682+00:00",
+      "deleted_detail_rows": 0,
+      "deleted_aggregate_rows": 0,
+      "daily_summary_rows_upserted": 0,
+      "maintenance_generated_at": "2026-03-28T09:53:03.526682+00:00"
+    }
+  },
+  "bybit_venue_smoke": null,
+  "execution_proof_status": null,
+  "open_blockers": [
+    {
+      "name": "admin_login_smoke",
+      "status": "FAIL",
+      "detail": {
+        "status_code": 599,
+        "has_token": false,
+        "payload": {
+          "error": "HTTPSConnectionPool(host='futures-health-check.preview.emergentagent.com', port=443): Read timed out. (read timeout=25)"
+        }
+      }
+    }
+  ],
+  "scheduler_running": true,
+  "retention_applied": true,
+  "overall": "FAIL"
+}

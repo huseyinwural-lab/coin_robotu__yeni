@@ -1,0 +1,42 @@
+groups:
+  - name: trading-lifecycle-debugger-p1
+    rules:
+      - alert: TradingLifecycleFailureRateHigh
+        expr: failure_rate > 0.12
+        for: 3m
+        labels:
+          severity: critical
+          component: trading-lifecycle-debugger
+        annotations:
+          summary: "Failure rate kritik eşik üstünde"
+          description: "failure_rate {{ $value }} ile 3 dakikadır 0.12 üstünde."
+
+      - alert: TradingLifecycleExecutionLatencyHigh
+        expr: trade_execution_latency > 1500
+        for: 5m
+        labels:
+          severity: warning
+          component: trading-lifecycle-debugger
+        annotations:
+          summary: "Trade execution latency yüksek"
+          description: "trade_execution_latency {{ $value }} ms ile eşik üstünde."
+
+      - alert: TradingLifecycleReplayDurationSpike
+        expr: replay_duration > 2000
+        for: 5m
+        labels:
+          severity: warning
+          component: trading-lifecycle-debugger
+        annotations:
+          summary: "Replay duration anomali"
+          description: "replay_duration {{ $value }} ms ile beklenen üstünde."
+
+      - alert: TradingLifecycleQueuePressure
+        expr: observability_queue_size > 50
+        for: 2m
+        labels:
+          severity: critical
+          component: trading-lifecycle-debugger
+        annotations:
+          summary: "Queue pressure tespit edildi"
+          description: "observability_queue_size {{ $value }} ile kapasite baskısı var."

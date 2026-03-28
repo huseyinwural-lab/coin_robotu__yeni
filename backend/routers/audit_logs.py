@@ -2,11 +2,14 @@ import io
 import json
 import zipfile
 import csv
+import os
+import subprocess
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import String, cast
 from sqlalchemy.orm import Session
 
@@ -16,8 +19,86 @@ from models import AuditLog, User
 from schemas import AuditLogResponse, AuditTimelineItemResponse, AuditTimelineResponse
 from services.audit_service import create_audit_log
 from services.audit_retention_service import prune_audit_logs_with_policy
+from services.audit_integrity_service import compare_correlation_across_environments, verify_trace_integrity
+from services.debug_incident_service import (
+    build_incident_debug_bundle,
+    close_incident,
+    create_manual_incident,
+    get_incident,
+    list_incidents,
+    serialize_incident,
+)
+from services.lifecycle_query_service import (
+    create_saved_query,
+    delete_saved_query,
+    list_saved_queries,
+    search_lifecycle_events,
+)
+from services.trading_lifecycle_debugger_service import get_lifecycle_chain, list_lifecycle_summaries, replay_lifecycle
 
 router = APIRouter(prefix="/audit-logs", tags=["audit_logs"])
+
+
+class LifecycleExplainRequest(BaseModel):
+    correlation_id: str = Field(min_length=1, max_length=255)
+
+
+class SavedQueryCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    params: dict = Field(default_factory=dict)
+
+
+class IncidentCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=220)
+    severity: str = Field(default="CRITICAL")
+    tags: list[str] = Field(default_factory=list)
+    linked_correlation_id: str = Field(min_length=1, max_length=120)
+    source_event_id: str | None = Field(default=None, max_length=120)
+    root_cause: str | None = Field(default=None, max_length=160)
+    cluster_id: str | None = Field(default=None, max_length=80)
+    details: dict = Field(default_factory=dict)
+
+
+class IncidentStatusRequest(BaseModel):
+    status: str = Field(min_length=1, max_length=20)
+
+
+def _current_repo_commit_hash() -> str:
+    try:
+        return (
+            subprocess.check_output(["git", "-C", "/app", "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL)
+            .strip()
+        )
+    except Exception:
+        return "unknown"
+
+
+def _repo_deploy_consistency() -> dict:
+    repo_hash = _current_repo_commit_hash()
+    deploy_hash = (
+        os.environ.get("DEPLOY_COMMIT_HASH")
+        or os.environ.get("PREVIEW_DEPLOY_COMMIT_HASH")
+        or repo_hash
+    )
+    return {
+        "repo_commit_hash": repo_hash,
+        "deploy_commit_hash": deploy_hash,
+        "is_match": bool(repo_hash and deploy_hash and repo_hash == deploy_hash),
+    }
+
+
+def _enforce_repo_deploy_consistency() -> dict:
+    status_payload = _repo_deploy_consistency()
+    if not status_payload["is_match"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "repo_deploy_mismatch",
+                "repo_commit_hash": status_payload["repo_commit_hash"],
+                "deploy_commit_hash": status_payload["deploy_commit_hash"],
+            },
+        )
+    return status_payload
 
 
 def _parse_iso_datetime(value: str | None, *, detail_code: str) -> datetime | None:
@@ -219,6 +300,71 @@ def _resolve_export_window(
     return (now - timedelta(days=window_days)).isoformat(), now.isoformat()
 
 
+def _build_lifecycle_explain_payload(db: Session, correlation_id: str, *, limit: int = 1200) -> dict:
+    payload = get_lifecycle_chain(db, correlation_id, limit=limit)
+    chain = payload.get("chain") or {}
+    events = payload.get("events") or chain.get("events") or []
+    explain = payload.get("explain_failure") or {}
+
+    broken_step_payload = explain.get("broken_step") or {}
+    broken_step = (
+        broken_step_payload.get("stage")
+        or broken_step_payload.get("event_type")
+        or (events[-1].get("lifecycle_stage") if events else None)
+        or "unknown"
+    )
+    root_cause = explain.get("root_cause") or "insufficient_context"
+    missing_stages = list(chain.get("missing_critical_stages") or payload.get("missing_critical_stages") or [])
+    upstream_event = (explain.get("upstream_cause") or {}).get("event_type") or (explain.get("upstream_cause") or {}).get("event_id")
+    downstream_impact = explain.get("downstream_impact") or []
+
+    insufficient_data = len(events) == 0 or (root_cause in {"insufficient_context", "unknown"} and not broken_step)
+    if insufficient_data:
+        confidence = "low"
+    elif missing_stages:
+        confidence = "medium"
+    else:
+        confidence = "high"
+
+    return {
+        "correlation_id": correlation_id,
+        "events": events,
+        "trace_incomplete": bool(chain.get("trace_incomplete") or payload.get("trace_incomplete")),
+        "missing_critical_stages": missing_stages,
+        "broken_chain": bool(chain.get("broken_chain") or payload.get("broken_chain") or missing_stages),
+        "broken_step": broken_step,
+        "root_cause": root_cause,
+        "missing_stages": missing_stages,
+        "upstream_event": upstream_event,
+        "downstream_impact": downstream_impact,
+        "confidence": confidence,
+        "insufficient_data": insufficient_data,
+        "schema_version": payload.get("schema_version"),
+        "explain_failure": explain,
+        "root_cause_breakdown": payload.get("root_cause_breakdown") or {},
+        "cluster_id": payload.get("cluster_id"),
+        "pattern_tag": payload.get("pattern_tag"),
+        "critical_blockers": payload.get("critical_blockers") or [],
+    }
+
+
+def _build_canonical_lifecycle_payload(payload: dict) -> dict:
+    chain = payload.get("chain") or {}
+    events = payload.get("events") or chain.get("events") or []
+    missing_stages = list(chain.get("missing_critical_stages") or payload.get("missing_critical_stages") or [])
+    broken_chain = bool(chain.get("broken_chain") or payload.get("broken_chain") or missing_stages)
+    canonical = {
+        "correlation_id": payload.get("correlation_id"),
+        "events": events,
+        "trace_incomplete": bool(chain.get("trace_incomplete") or payload.get("trace_incomplete") or missing_stages),
+        "missing_critical_stages": missing_stages,
+        "broken_chain": broken_chain,
+    }
+    merged = dict(payload)
+    merged.update(canonical)
+    return merged
+
+
 @router.get("", response_model=list[AuditLogResponse])
 def list_audit_logs(
     _: User = Depends(require_admin),
@@ -230,6 +376,7 @@ def list_audit_logs(
 
 @router.get("/timeline", response_model=AuditTimelineResponse)
 def audit_logs_timeline(
+    response: Response,
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
     limit: int = Query(default=200, ge=20, le=500),
@@ -243,6 +390,9 @@ def audit_logs_timeline(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
 ):
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "2026-12-31"
+    response.headers["Link"] = '</api/audit-logs/trading-lifecycle>; rel="successor-version"'
     query = _build_timeline_query(
         db,
         action=action,
@@ -276,7 +426,345 @@ def audit_logs_timeline(
         )
         for row in rows
     ]
-    return AuditTimelineResponse(total=len(items), items=items)
+    return AuditTimelineResponse(
+        total=len(items),
+        items=items,
+        deprecated=True,
+        primary_endpoint="/api/audit-logs/trading-lifecycle",
+    )
+
+
+@router.get("/trading-lifecycle")
+def trading_lifecycle_index(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=100, ge=20, le=500),
+    q: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    strategy_id: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    user_id: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+    start_time: str | None = Query(default=None),
+    end_time: str | None = Query(default=None),
+    payload_query: str | None = Query(default=None),
+    cursor: str | None = Query(default=None),
+    include_test_events: bool = Query(default=False),
+    archive_mode: bool = Query(default=False),
+    archive_cutoff_days: int = Query(default=7, ge=1, le=365),
+):
+    return list_lifecycle_summaries(
+        db,
+        limit=limit,
+        q=q,
+        severity=severity,
+        strategy_id=strategy_id,
+        symbol=symbol,
+        user_id=user_id,
+        event_type=event_type,
+        environment=environment,
+        start_time=start_time,
+        end_time=end_time,
+        payload_query=payload_query,
+        cursor=cursor,
+        include_test_events=include_test_events,
+        archive_mode=archive_mode,
+        archive_cutoff_days=archive_cutoff_days,
+    )
+
+
+@router.get("/trading-lifecycle/search")
+def trading_lifecycle_search(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    page_size: int = Query(default=100, ge=20, le=300),
+    cursor: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    payload_query: str | None = Query(default=None),
+    severity: str | None = Query(default=None),
+    strategy_id: str | None = Query(default=None),
+    symbol: str | None = Query(default=None),
+    user_id: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    environment: str | None = Query(default=None),
+    start_time: str | None = Query(default=None),
+    end_time: str | None = Query(default=None),
+    include_test_events: bool = Query(default=False),
+    archive_mode: bool = Query(default=False),
+    archive_cutoff_days: int = Query(default=7, ge=1, le=365),
+):
+    return search_lifecycle_events(
+        db,
+        page_size=page_size,
+        cursor=cursor,
+        q=q,
+        payload_query=payload_query,
+        severity=severity,
+        strategy_id=strategy_id,
+        symbol=symbol,
+        user_id=user_id,
+        event_type=event_type,
+        environment=environment,
+        start_time=start_time,
+        end_time=end_time,
+        include_test_events=include_test_events,
+        archive_mode=archive_mode,
+        archive_cutoff_days=archive_cutoff_days,
+    )
+
+
+@router.get("/saved-queries")
+def get_saved_queries(
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    return {"items": list_saved_queries(db, user_id=current_admin.id, limit=limit)}
+
+
+@router.post("/saved-queries")
+def save_query(
+    request: SavedQueryCreateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    saved = create_saved_query(db, user_id=current_admin.id, name=request.name, params=request.params)
+    return {"saved_query": saved}
+
+
+@router.delete("/saved-queries/{query_id}")
+def remove_saved_query(
+    query_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    deleted = delete_saved_query(db, user_id=current_admin.id, query_id=query_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="saved_query_not_found")
+    return {"deleted": True, "query_id": query_id}
+
+
+@router.get("/trading-lifecycle/{correlation_id}")
+def trading_lifecycle_detail(
+    correlation_id: str,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=800, ge=50, le=3000),
+):
+    payload = get_lifecycle_chain(db, correlation_id, limit=limit)
+    payload = _build_canonical_lifecycle_payload(payload)
+    payload["deprecated_endpoint"] = True
+    payload["primary_endpoint"] = "/api/audit-logs/lifecycle/{correlation_id}"
+    return payload
+
+
+@router.get("/lifecycle/{correlation_id}")
+def lifecycle_detail(
+    correlation_id: str,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=800, ge=50, le=3000),
+    environment: str | None = Query(default=None),
+):
+    payload = get_lifecycle_chain(db, correlation_id, limit=limit, environment=environment)
+    return _build_canonical_lifecycle_payload(payload)
+
+
+@router.get("/trading-lifecycle/{correlation_id}/explain")
+def trading_lifecycle_explain_failure(
+    correlation_id: str,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _enforce_repo_deploy_consistency()
+    payload = _build_lifecycle_explain_payload(db, correlation_id, limit=1200)
+    payload["deprecated_endpoint"] = True
+    payload["primary_endpoint"] = "/api/audit-logs/explain"
+    return payload
+
+
+@router.post("/explain")
+def lifecycle_explain(
+    request: LifecycleExplainRequest,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _enforce_repo_deploy_consistency()
+    return _build_lifecycle_explain_payload(db, request.correlation_id, limit=1200)
+
+
+@router.get("/lifecycle/compare/{correlation_id}")
+def lifecycle_compare_by_environment(
+    correlation_id: str,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environments: str | None = Query(default="prod,staging"),
+    limit: int = Query(default=1200, ge=50, le=3000),
+):
+    selected_environments = [item.strip().lower() for item in str(environments or "").split(",") if item.strip()]
+    return compare_correlation_across_environments(
+        db,
+        correlation_id=correlation_id,
+        environments=selected_environments,
+        limit=limit,
+    )
+
+
+@router.get("/verify-integrity/{correlation_id}")
+def verify_lifecycle_integrity(
+    correlation_id: str,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    environment: str | None = Query(default=None),
+):
+    return verify_trace_integrity(db, correlation_id=correlation_id, environment=environment)
+
+
+@router.post("/trading-lifecycle/{correlation_id}/replay")
+def trading_lifecycle_replay(
+    correlation_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    snapshot_id: str | None = Query(default=None),
+):
+    consistency = _enforce_repo_deploy_consistency()
+    chain_payload = get_lifecycle_chain(db, correlation_id, limit=2000)
+    replay_payload = replay_lifecycle(chain_payload, snapshot_id=snapshot_id, run_by=current_admin.id)
+    replay_payload["repo_deploy_consistency"] = consistency
+    create_audit_log(
+        db,
+        action="TRADING_LIFECYCLE_REPLAY",
+        entity_type="trading_lifecycle",
+        entity_id=correlation_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning" if replay_payload.get("result") == "FAILED" else "info",
+        details={
+            "snapshot_id": replay_payload.get("snapshot_id"),
+            "result": replay_payload.get("result"),
+            "step_count": replay_payload.get("step_count"),
+            "break_step": replay_payload.get("break_step"),
+            "side_effects_blocked": True,
+        },
+    )
+    return replay_payload
+
+
+@router.get("/consistency/repo-deploy")
+def repo_deploy_consistency_status(_: User = Depends(require_admin)):
+    return _repo_deploy_consistency()
+
+
+@router.post("/incidents")
+def create_incident(
+    request: IncidentCreateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    incident = create_manual_incident(
+        db,
+        title=request.title,
+        severity=request.severity,
+        tags=request.tags,
+        linked_correlation_id=request.linked_correlation_id,
+        source_event_id=request.source_event_id,
+        root_cause=request.root_cause,
+        cluster_id=request.cluster_id,
+        created_by=current_admin.id,
+        details=request.details,
+    )
+    create_audit_log(
+        db,
+        action="DEBUG_INCIDENT_CREATED",
+        entity_type="debug_incident",
+        entity_id=incident.incident_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="info",
+        details={
+            "linked_correlation_id": incident.linked_correlation_id,
+            "auto_created": False,
+            "status": incident.status,
+        },
+    )
+    return {"incident": serialize_incident(incident)}
+
+
+@router.get("/incidents")
+def get_incidents(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=200),
+    status_filter: str | None = Query(default=None, alias="status"),
+    severity: str | None = Query(default=None),
+    linked_correlation_id: str | None = Query(default=None),
+):
+    rows = list_incidents(
+        db,
+        limit=limit,
+        status=status_filter,
+        severity=severity,
+        linked_correlation_id=linked_correlation_id,
+    )
+    return {"items": [serialize_incident(row) for row in rows]}
+
+
+@router.get("/incidents/{incident_id}")
+def get_incident_detail(
+    incident_id: str,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = get_incident(db, incident_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident_not_found")
+    lifecycle = {}
+    if row.linked_correlation_id:
+        lifecycle = get_lifecycle_chain(db, row.linked_correlation_id, limit=1200)
+    return {"incident": serialize_incident(row), "lifecycle": lifecycle}
+
+
+@router.patch("/incidents/{incident_id}/status")
+def update_incident_status(
+    incident_id: str,
+    request: IncidentStatusRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = get_incident(db, incident_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident_not_found")
+
+    normalized_status = str(request.status or "").strip().lower()
+    if normalized_status == "closed":
+        row = close_incident(db, incident=row, closed_by=current_admin.id)
+    elif normalized_status in {"open", "in_progress"}:
+        row.status = normalized_status
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_incident_status")
+
+    return {"incident": serialize_incident(row)}
+
+
+@router.get("/incidents/{incident_id}/bundle")
+def export_incident_bundle(
+    incident_id: str,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    row = get_incident(db, incident_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="incident_not_found")
+
+    bundle_payload = build_incident_debug_bundle(db, incident=row)
+    payload_bytes = json.dumps(bundle_payload, ensure_ascii=False, indent=2).encode("utf-8")
+    filename = f"debug_bundle_{incident_id}.json"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(iter([payload_bytes]), media_type="application/json", headers=headers)
 
 
 @router.post("/admin/retention/prune")

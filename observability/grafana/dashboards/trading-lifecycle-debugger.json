@@ -1,0 +1,52 @@
+{
+  "id": null,
+  "uid": "trading-lifecycle-debugger-v1",
+  "title": "Trading Lifecycle Debugger - P1 Operational Dashboard",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Failure vs Success Rate",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "failure_rate" },
+        { "refId": "B", "expr": "success_rate" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Event Processing Latency (ms)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "event_processing_latency" },
+        { "refId": "B", "expr": "trade_execution_latency" },
+        { "refId": "C", "expr": "replay_duration" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue Size / Throughput",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "observability_queue_size" },
+        { "refId": "B", "expr": "throughput" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Operational Error Ratio",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "observability_error_rate_ratio" },
+        { "refId": "B", "expr": "observability_error_rate_5xx_ratio" }
+      ]
+    }
+  ]
+}

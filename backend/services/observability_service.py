@@ -109,6 +109,7 @@ def collect_observability_snapshot(db: Session, *, minutes: int = OBSERVABILITY_
         latency_by_category[category] = _percentile(category_durations, 95)
 
     queue_size = _pending_queue_size(db)
+    throughput = round(len(rows) / max(minutes, 1), 4)
     error_rate = (errors_total / total) if total else 0.0
     error_rate_5xx = (errors_5xx / total) if total else 0.0
     error_rate_4xx = (errors_4xx / total) if total else 0.0
@@ -125,6 +126,12 @@ def collect_observability_snapshot(db: Session, *, minutes: int = OBSERVABILITY_
         "latency_ms_p95": round(latency_p95, 2),
         "latency_ms_avg": round(latency_avg, 2),
         "latency_ms_p95_by_category": {k: round(v, 2) for k, v in latency_by_category.items()},
+        "event_processing_latency": round(latency_by_category.get("queue_processing", 0.0), 2),
+        "trade_execution_latency": round(latency_by_category.get("execution_intent_submit", 0.0), 2),
+        "replay_duration": round(max(latency_by_category.get("other", 0.0), latency_avg), 2),
+        "failure_rate": round(error_rate, 6),
+        "success_rate": round(max(0.0, 1 - error_rate), 6),
+        "throughput": throughput,
         "queue_size": queue_size,
         "thresholds": {
             "error_rate": ERROR_RATE_THRESHOLD,
@@ -136,6 +143,18 @@ def collect_observability_snapshot(db: Session, *, minutes: int = OBSERVABILITY_
 
 def build_metrics_exposition(snapshot: dict) -> str:
     lines = [
+        "# TYPE event_processing_latency gauge",
+        f"event_processing_latency{{window=\"{snapshot['window_minutes']}m\"}} {snapshot.get('event_processing_latency', 0)}",
+        "# TYPE trade_execution_latency gauge",
+        f"trade_execution_latency{{window=\"{snapshot['window_minutes']}m\"}} {snapshot.get('trade_execution_latency', 0)}",
+        "# TYPE failure_rate gauge",
+        f"failure_rate{{window=\"{snapshot['window_minutes']}m\"}} {snapshot.get('failure_rate', snapshot['error_rate'])}",
+        "# TYPE success_rate gauge",
+        f"success_rate{{window=\"{snapshot['window_minutes']}m\"}} {snapshot.get('success_rate', 0)}",
+        "# TYPE replay_duration gauge",
+        f"replay_duration{{window=\"{snapshot['window_minutes']}m\"}} {snapshot.get('replay_duration', 0)}",
+        "# TYPE throughput gauge",
+        f"throughput{{window=\"{snapshot['window_minutes']}m\"}} {snapshot.get('throughput', 0)}",
         "# TYPE observability_error_rate_ratio gauge",
         f"observability_error_rate_ratio{{window=\"{snapshot['window_minutes']}m\"}} {snapshot['error_rate']}",
         "# TYPE observability_error_rate_4xx_ratio gauge",

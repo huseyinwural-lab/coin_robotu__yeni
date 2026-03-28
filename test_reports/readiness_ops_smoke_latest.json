@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-03-28T09:54:15.833731+00:00",
+  "base_url": "https://futures-health-check.preview.emergentagent.com",
+  "overall": "FAIL",
+  "passed": 0,
+  "failed": 1,
+  "checks": [
+    {
+      "name": "admin_login_smoke",
+      "status": "FAIL",
+      "detail": {
+        "status_code": 599,
+        "has_token": false,
+        "payload": {
+          "error": "HTTPSConnectionPool(host='futures-health-check.preview.emergentagent.com', port=443): Read timed out. (read timeout=25)"
+        }
+      }
+    }
+  ]
+}

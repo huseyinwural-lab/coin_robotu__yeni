@@ -1,0 +1,38 @@
+{
+  "phase": "FAZ_D0_TASK_1",
+  "status": "FAIL",
+  "generated_at": "2026-03-27T20:38:28.039816+00:00",
+  "checks": [
+    {
+      "key": "DATABASE_URL",
+      "is_set": true,
+      "contains_localhost": false,
+      "contains_container_local": true,
+      "resolved_source": "process_env",
+      "value_preview": "postgresql+psycopg2://postgres.wpaejjyirhblphihxnli:iY9yPPYAe4dL...",
+      "status": "FAIL"
+    },
+    {
+      "key": "REDIS_URL",
+      "is_set": true,
+      "contains_localhost": true,
+      "contains_container_local": false,
+      "resolved_source": "process_env",
+      "value_preview": "redis://localhost:6379/0",
+      "status": "FAIL"
+    },
+    {
+      "key": "REACT_APP_BACKEND_URL",
+      "is_set": true,
+      "contains_localhost": false,
+      "contains_container_local": false,
+      "resolved_source": "frontend/.env",
+      "value_preview": "https://governance-builder.preview.emergentagent.com",
+      "status": "PASS"
+    }
+  ],
+  "notes": [
+    "Production runtime değerlerinde localhost/container-local host kalmamalı.",
+    "Bu rapor sadece çözümlenen env değerlerine göre deterministik kontrol üretir."
+  ]
+}

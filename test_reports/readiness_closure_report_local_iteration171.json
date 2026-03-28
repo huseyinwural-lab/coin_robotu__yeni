@@ -1,0 +1,85 @@
+{
+  "generated_at": "2026-03-28T10:20:50.218965+00:00",
+  "base_url": "http://127.0.0.1:8001",
+  "admin_login_smoke": {
+    "name": "admin_login_smoke",
+    "status": "PASS",
+    "detail": {
+      "status_code": 200,
+      "has_token": true,
+      "payload": null
+    }
+  },
+  "readiness_endpoint_smoke": {
+    "name": "live_readiness_endpoint_smoke",
+    "status": "PASS",
+    "detail": {
+      "status_code": 200,
+      "keys": [
+        "active_universe_count",
+        "adapter_credential_summary",
+        "alerts",
+        "audit_events",
+        "balance_integrity",
+        "balance_integrity_state",
+        "blocking_failures",
+        "by_layer",
+        "cluster_bias_distribution",
+        "data_freshness",
+        "data_quality_config",
+        "degraded",
+        "exchange_latency",
+        "exchange_latency_state",
+        "exchange_readiness",
+        "execution_allowed",
+        "execution_mode",
+        "execution_proof",
+        "generated_at",
+        "go_live_allowed"
+      ]
+    }
+  },
+  "history_maintenance_cron_status": {
+    "status": "success",
+    "trigger": "scheduler",
+    "started_at": "2026-03-28T10:17:26.524650+00:00",
+    "finished_at": "2026-03-28T10:17:27.634908+00:00",
+    "last_success_at": "2026-03-28T10:17:27.634913+00:00",
+    "retry_in_seconds": null,
+    "reason_code": null,
+    "result": {
+      "policy": {
+        "details_retention_days": 30,
+        "aggregate_retention_days": 90,
+        "cleanup_batch_size": 1000
+      },
+      "dry_run": false,
+      "detail_cutoff": "2026-02-26T10:17:26.524680+00:00",
+      "aggregate_cutoff": "2025-12-28T10:17:26.524680+00:00",
+      "deleted_detail_rows": 0,
+      "deleted_aggregate_rows": 0,
+      "daily_summary_rows_upserted": 0,
+      "maintenance_generated_at": "2026-03-28T10:17:26.524680+00:00"
+    }
+  },
+  "bybit_venue_smoke": {
+    "name": "bybit_venue_readiness_smoke",
+    "status": "PASS",
+    "detail": {
+      "state": "BLOCKED"
+    }
+  },
+  "execution_proof_status": {
+    "name": "execution_readiness_smoke",
+    "status": "PASS",
+    "detail": {
+      "status_code": 200,
+      "proof_status": "MOCKED_ONLY",
+      "mocked_paths": true
+    }
+  },
+  "open_blockers": [],
+  "scheduler_running": true,
+  "retention_applied": true,
+  "overall": "PASS"
+}

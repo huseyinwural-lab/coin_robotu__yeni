@@ -1,0 +1,75 @@
+{
+  "summary": "Admin Strategy Observability (Signal Control + Explainability) testing complete. Backend: 21/21 tests passed after fixing audit_log parameter issues. Frontend: Page loads correctly with all required UI components visible. Role-based access control working (super_admin has execute/apply/override permissions).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Strategy Observability", "issues": ["No signals data to test full flow - database is empty"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_strategy_observability_api.py",
+    "/app/test_reports/pytest/pytest_strategy_observability.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fixed: create_audit_log() calls in admin_strategy_observability.py were passing invalid parameters (reason, before_payload, after_payload) - moved to details dict",
+    "Fixed: audit-log endpoint was accessing row.reason which doesn't exist on AuditLog model - changed to (row.details or {}).get('reason')",
+    "Execute Selected button correctly disabled when no simulation has been run (selectedMatchSimulation check working)",
+    "Bulk Execute Confirm button correctly disabled when no preview token exists",
+    "Role badges correctly show super_admin permissions"
+  ],
+  "updated_files": [
+    "/app/backend/routers/admin_strategy_observability.py",
+    "/app/backend/tests/test_admin_strategy_observability_api.py"
+  ],
+  "success_rate": {
+    "backend": "100% (21/21 tests passed)",
+    "frontend": "100% (all UI components render correctly)"
+  },
+  "seed_data_creation": "No seed data created - database has no strategy observability events",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PostgreSQL and Redis were not running initially - had to install and start them. Backend API endpoints all working. Frontend UI renders correctly with all data-testid attributes present. No signals data in database to test full execute flow.",
+  "verified_features": {
+    "admin_login": "PASS - /admin/login works with super_admin credentials",
+    "page_load": "PASS - /admin/strategy/observability loads correctly",
+    "role_badges": "PASS - Shows 'role: super_admin' and 'super_admin: execute/apply/override'",
+    "top_signals_control_layer": "PASS - Table and buttons render correctly",
+    "score_tuning_control": "PASS - Threshold, factor weights, preview, apply config all present",
+    "manual_score_override": "PASS - Signal select, delta input, apply override button present",
+    "auto_tuning_toggle": "PASS - Switch and reason input present",
+    "rejection_analytics": "PASS - Drilldown panel present",
+    "audit_log_panel": "PASS - Panel renders correctly",
+    "risk_capital_status": "PASS - Panel renders correctly",
+    "execute_button_disabled_without_simulation": "PASS - Button correctly disabled",
+    "bulk_execute_confirm_disabled_without_preview": "PASS - Button correctly disabled",
+    "backend_api_top_signals": "PASS - GET /api/admin/strategy/top-signals returns 200",
+    "backend_api_score_config": "PASS - GET/PUT /api/admin/strategy/score-config returns 200",
+    "backend_api_score_preview": "PASS - POST /api/admin/strategy/score-preview returns 200",
+    "backend_api_rejection_analytics": "PASS - GET /api/admin/strategy/rejection-analytics returns 200",
+    "backend_api_audit_log": "PASS - GET /api/admin/strategy/audit-log returns 200",
+    "backend_api_bulk_simulate": "PASS - POST /api/admin/strategy/top-signals/bulk-simulate returns 200",
+    "backend_api_bulk_execute_preview": "PASS - POST /api/admin/strategy/top-signals/bulk-execute (mode=preview) returns 200",
+    "backend_api_auto_tuning_toggle": "PASS - POST /api/admin/strategy/score-auto-tuning/toggle returns 200",
+    "backend_api_apply_score_config": "PASS - PUT /api/admin/strategy/score-config returns 200",
+    "unauthorized_access_blocked": "PASS - Endpoints return 401 without auth"
+  },
+  "bugs_fixed": [
+    {
+      "file": "/app/backend/routers/admin_strategy_observability.py",
+      "issue": "create_audit_log() calls passing invalid parameters (reason, before_payload, after_payload)",
+      "fix": "Moved these parameters into the details dict"
+    },
+    {
+      "file": "/app/backend/routers/admin_strategy_observability.py",
+      "issue": "audit-log endpoint accessing row.reason which doesn't exist on AuditLog model",
+      "fix": "Changed to (row.details or {}).get('reason')"
+    }
+  ],
+  "mocked_api_note": "Slack webhook delivery and Binance Futures execution are MOCKED as per original design"
+}

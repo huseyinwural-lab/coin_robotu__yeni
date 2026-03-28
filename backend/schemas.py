@@ -417,6 +417,8 @@ class AuditTimelineItemResponse(BaseModel):
 class AuditTimelineResponse(BaseModel):
     total: int
     items: list[AuditTimelineItemResponse]
+    deprecated: bool = False
+    primary_endpoint: str | None = None
 
 
 class MockOrderRequest(BaseModel):

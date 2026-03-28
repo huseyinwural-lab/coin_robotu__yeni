@@ -1,0 +1,81 @@
+{
+  "phase": "FAZ_D0_TASK_5",
+  "status": "PASS",
+  "generated_at": "2026-03-21T12:53:04.825114+00:00",
+  "base_url": "https://identity-control-1.preview.emergentagent.com",
+  "checks": [
+    {
+      "name": "health",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    },
+    {
+      "name": "ready",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    },
+    {
+      "name": "admin_login",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    },
+    {
+      "name": "user_login",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    },
+    {
+      "name": "scanner_overview",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    },
+    {
+      "name": "scanner_runtime",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    },
+    {
+      "name": "anomaly_event",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    },
+    {
+      "name": "anomaly_timeline",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    },
+    {
+      "name": "alert_policy",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    }
+  ],
+  "error_5xx_count": 0
+}

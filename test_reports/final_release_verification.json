@@ -1,0 +1,30 @@
+{
+  "run_at_utc": "2026-03-23T21:12:08.076750+00:00",
+  "base": "https://identity-control-1.preview.emergentagent.com",
+  "alert_scenario": {
+    "queue_status": 200,
+    "reject_status": 200,
+    "summary_status": 200,
+    "alerts_status": 200,
+    "types": [
+      "execution_queue_backlog",
+      "execution_queue_high_risk_spike",
+      "execution_reject_spike"
+    ]
+  },
+  "alert_read_ack": {
+    "id": "e6aebb5e-8406-48df-9bc6-f0a3c7ac0e7c",
+    "read_status": 200,
+    "ack_status": 200
+  },
+  "flag_off": {
+    "approve_status": 200,
+    "approve_state": "RELEASED"
+  },
+  "flag_on": {
+    "approve_status": 200,
+    "approve_state": "APPROVED",
+    "execute_status": 200,
+    "execute_state": "RELEASED"
+  }
+}

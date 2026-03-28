@@ -53,7 +53,7 @@ export const AdminLoginPage = () => {
       return;
     }
 
-    if (loading || !user || !storedToken) {
+    if (loading || submitting || mfaState?.mfaRequired || !user || !storedToken) {
       return;
     }
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
@@ -62,13 +62,42 @@ export const AdminLoginPage = () => {
       return;
     }
     navigate("/user/dashboard", { replace: true });
-  }, [loading, logout, navigate, user]);
+  }, [loading, logout, mfaState?.mfaRequired, navigate, submitting, user]);
 
   const onSubmit = async (event) => {
     event.preventDefault();
+    if (submitting) {
+      return;
+    }
+    const storedToken = localStorage.getItem("token");
+    if (storedToken && user) {
+      const adminRoles = new Set(["super_admin", "admin", "ops"]);
+      navigate(adminRoles.has(user.role) ? "/admin/dashboard" : "/user/dashboard", { replace: true });
+      return;
+    }
     setSubmitting(true);
     try {
-      const result = await login({ ...form, panel: "admin" });
+      const attemptLogin = async () => login({ ...form, panel: "admin" });
+
+      let result;
+      try {
+        result = await attemptLogin();
+      } catch (firstError) {
+        const code = String(firstError?.code || "").toUpperCase();
+        const message = String(firstError?.message || "").toLowerCase();
+        const retryableAbort =
+          code === "ERR_CANCELED" ||
+          code === "ERR_ABORTED" ||
+          message.includes("aborted") ||
+          message.includes("canceled") ||
+          message.includes("network error");
+        if (!retryableAbort) {
+          throw firstError;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        result = await attemptLogin();
+      }
+
       if (result?.mfaRequired) {
         setMfaState(result);
         setMfaCode("");
@@ -87,7 +116,7 @@ export const AdminLoginPage = () => {
   };
 
   const onVerifyMfa = async (overrideMethod = null, overrideCode = null) => {
-    if (!mfaState?.challengeToken) {
+    if (!mfaState?.challengeToken || submitting) {
       return;
     }
     setSubmitting(true);
@@ -113,7 +142,7 @@ export const AdminLoginPage = () => {
   };
 
   const onResendEmailOtp = async () => {
-    if (!mfaState?.challengeToken) return;
+    if (!mfaState?.challengeToken || submitting) return;
     setSubmitting(true);
     try {
       const { data } = await apiClient.post("/mfa/challenge/resend", { challenge_token: mfaState.challengeToken });

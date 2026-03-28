@@ -1,0 +1,86 @@
+{
+  "generated_at": "2026-03-28T09:59:40.673667+00:00",
+  "base_url": "http://127.0.0.1:8001",
+  "overall": "PASS",
+  "passed": 7,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "admin_login_smoke",
+      "status": "PASS",
+      "detail": {
+        "status_code": 200,
+        "has_token": true,
+        "payload": null
+      }
+    },
+    {
+      "name": "live_readiness_endpoint_smoke",
+      "status": "PASS",
+      "detail": {
+        "status_code": 200,
+        "keys": [
+          "active_universe_count",
+          "adapter_credential_summary",
+          "alerts",
+          "audit_events",
+          "balance_integrity",
+          "balance_integrity_state",
+          "blocking_failures",
+          "by_layer",
+          "cluster_bias_distribution",
+          "data_freshness",
+          "data_quality_config",
+          "degraded",
+          "exchange_latency",
+          "exchange_latency_state",
+          "exchange_readiness",
+          "execution_allowed",
+          "execution_mode",
+          "execution_proof",
+          "generated_at",
+          "go_live_allowed"
+        ]
+      }
+    },
+    {
+      "name": "history_endpoint_smoke",
+      "status": "PASS",
+      "detail": {
+        "status_code": 200,
+        "has_runbook_mapping": true
+      }
+    },
+    {
+      "name": "execution_readiness_smoke",
+      "status": "PASS",
+      "detail": {
+        "status_code": 200,
+        "proof_status": "MOCKED_ONLY",
+        "mocked_paths": true
+      }
+    },
+    {
+      "name": "maintenance_trigger_smoke",
+      "status": "PASS",
+      "detail": {
+        "status_code": 200,
+        "dry_run": true
+      }
+    },
+    {
+      "name": "bybit_venue_readiness_smoke",
+      "status": "PASS",
+      "detail": {
+        "state": "BLOCKED"
+      }
+    },
+    {
+      "name": "runbook_mapping_smoke",
+      "status": "PASS",
+      "detail": {
+        "mapping_size": 17
+      }
+    }
+  ]
+}

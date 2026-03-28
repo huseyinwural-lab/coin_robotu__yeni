@@ -1,0 +1,77 @@
+{
+  "phase": "FAZ_D0_EXECUTION",
+  "steps": [
+    {
+      "step": "task1_prod_env_resolution",
+      "command": "/app/scripts/prod_env_resolution_report.sh",
+      "exit_code": 0,
+      "stdout_tail": "{\"status\": \"FAIL\", \"artifact\": \"/app/artifacts/prod_env_resolution_report.json\"}\n",
+      "stderr_tail": "",
+      "status": "PASS"
+    },
+    {
+      "step": "task2_secret_readiness",
+      "command": "/app/scripts/prod_secret_readiness_check.sh",
+      "exit_code": 1,
+      "stdout_tail": "{\"status\": \"FAIL\", \"artifact\": \"/app/artifacts/prod_secret_readiness_report.json\"}\n",
+      "stderr_tail": "",
+      "status": "FAIL"
+    },
+    {
+      "step": "task3_preflight",
+      "command": "/app/scripts/preflight_prod_env_check.sh",
+      "exit_code": 1,
+      "stdout_tail": "{\"status\": \"FAIL\", \"artifact\": \"/app/artifacts/prod_preflight_check.json\"}\n",
+      "stderr_tail": "",
+      "status": "FAIL"
+    },
+    {
+      "step": "task5_prod_like_smoke",
+      "command": "/app/scripts/prod_like_smoke.sh",
+      "exit_code": 0,
+      "stdout_tail": "2026-03-21T12:53:03Z INFO: prod-like smoke başladı base_url=https://identity-control-1.preview.emergentagent.com\n{\"status\": \"PASS\", \"error_5xx_count\": 0}\n",
+      "stderr_tail": "",
+      "status": "PASS"
+    },
+    {
+      "step": "task6_kill_switch_dry_run",
+      "command": "/app/scripts/prod_kill_switch_dry_run.sh",
+      "exit_code": 0,
+      "stdout_tail": "{\"status\": \"PASS\", \"state_ok\": true}\n",
+      "stderr_tail": "",
+      "status": "PASS"
+    },
+    {
+      "step": "task7_rollback_drill",
+      "command": "/app/scripts/prod_rollback_drill.sh",
+      "exit_code": 0,
+      "stdout_tail": "{\"status\": \"PASS\", \"rollback_time_seconds\": 0}\n",
+      "stderr_tail": "",
+      "status": "PASS"
+    },
+    {
+      "step": "task8_release_type_state",
+      "command": "/app/scripts/release_type_and_state_report.sh",
+      "exit_code": 0,
+      "stdout_tail": "{\"release_type\": \"redeploy\", \"state_cleaned\": false}\n",
+      "stderr_tail": "",
+      "status": "PASS"
+    },
+    {
+      "step": "task9_migration_integrity",
+      "command": "/app/scripts/final_migration_integrity_check.sh",
+      "exit_code": 0,
+      "stdout_tail": "{\"status\": \"PASS\", \"missing_tables\": []}\n",
+      "stderr_tail": "",
+      "status": "PASS"
+    },
+    {
+      "step": "task10_final_gate",
+      "command": "/app/scripts/final_release_gate_report.sh",
+      "exit_code": 1,
+      "stdout_tail": "{\"final_decision\": \"NO_GO\", \"blocking_count\": 2}\n",
+      "stderr_tail": "",
+      "status": "FAIL"
+    }
+  ]
+}

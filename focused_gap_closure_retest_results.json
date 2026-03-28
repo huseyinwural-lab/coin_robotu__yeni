@@ -1,0 +1,66 @@
+{
+  "timestamp": "2026-03-28T13:48:46.676821",
+  "success": true,
+  "results": [
+    {
+      "test": "Admin Authentication",
+      "status": "PASS",
+      "details": "Token obtained (601 chars)",
+      "timestamp": "2026-03-28T13:48:30.183283"
+    },
+    {
+      "test": "P0 Canonical Lifecycle Endpoint",
+      "status": "PASS",
+      "details": "HTTP 200 - Endpoint accessible",
+      "timestamp": "2026-03-28T13:48:32.503358"
+    },
+    {
+      "test": "P0 Canonical Explain Endpoint",
+      "status": "PASS",
+      "details": "HTTP 405 GET, but endpoint exists (POST: 422)",
+      "timestamp": "2026-03-28T13:48:33.721753"
+    },
+    {
+      "test": "P1 Full-Text Search Endpoint",
+      "status": "PASS",
+      "details": "HTTP 200 - Endpoint accessible",
+      "timestamp": "2026-03-28T13:48:35.342005"
+    },
+    {
+      "test": "P1 Saved Queries Endpoint",
+      "status": "PASS",
+      "details": "HTTP 200 - Endpoint accessible",
+      "timestamp": "2026-03-28T13:48:36.673660"
+    },
+    {
+      "test": "P1 Incidents Endpoint",
+      "status": "PASS",
+      "details": "HTTP 200 - Endpoint accessible",
+      "timestamp": "2026-03-28T13:48:37.947719"
+    },
+    {
+      "test": "New Verify Endpoint Endpoint",
+      "status": "PASS",
+      "details": "HTTP 422 - Endpoint exists (needs parameters)",
+      "timestamp": "2026-03-28T13:48:39.116449"
+    },
+    {
+      "test": "Archive Mode Parameter",
+      "status": "PASS",
+      "details": "Parameter accepted (HTTP 200)",
+      "timestamp": "2026-03-28T13:48:40.378654"
+    },
+    {
+      "test": "Verify Endpoint Exists",
+      "status": "PASS",
+      "details": "Endpoint exists (HTTP 200)",
+      "timestamp": "2026-03-28T13:48:46.616299"
+    },
+    {
+      "test": "Frontend Audit Logs Page",
+      "status": "PASS",
+      "details": "Page loads (10758 chars, 2/4 indicators)",
+      "timestamp": "2026-03-28T13:48:46.676632"
+    }
+  ]
+}

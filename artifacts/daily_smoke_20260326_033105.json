@@ -1,0 +1,186 @@
+{
+  "started_at": "2026-03-26T03:31:05.444318+00:00",
+  "completed_at": "2026-03-26T03:31:43.523573+00:00",
+  "overall_status": "FAIL",
+  "steps": {
+    "ingest": {
+      "status": "FAIL",
+      "detail": {
+        "error": "http_error:POST:/api/admin/commercial/p0/ingestion/rest-run:400:{\"detail\":\"binance_request_failed:401:-2015:Invalid API-key, IP, or permissions for action, request ip: 35.184.53.215\"}",
+        "step": "ingest"
+      },
+      "latency_ms": 1215
+    },
+    "pnl": {
+      "status": "FAIL",
+      "detail": {
+        "error": "http_error:GET:/api/admin/commercial/p0/pnl/latest:400:{\"detail\":\"binance_request_failed:401:-2015:Invalid API-key, IP, or permissions for action, request ip: 35.184.53.215\"}",
+        "step": "pnl"
+      },
+      "latency_ms": 1306
+    },
+    "reconciliation": {
+      "status": "FAIL",
+      "detail": {
+        "error": "http_error:POST:/api/admin/commercial/p0/reconciliation/run:400:{\"detail\":\"binance_request_failed:401:-2015:Invalid API-key, IP, or permissions for action, request ip: 35.184.53.215\"}",
+        "step": "reconciliation"
+      },
+      "latency_ms": 1425
+    },
+    "revenue": {
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "environment": "testnet",
+        "applied_filters": {
+          "start_date": null,
+          "end_date": null,
+          "user_id": null,
+          "user_email": null,
+          "symbol": null,
+          "top_limit": 10
+        },
+        "total_revenue_usd": 0.0,
+        "today_revenue_usd": 0.0,
+        "top_users": [],
+        "top_symbols": [],
+        "daily_revenue": [],
+        "generated_at": "2026-03-26T03:31:34.647343+00:00"
+      },
+      "latency_ms": 782
+    },
+    "snapshot_compare": {
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "snapshot_type": "daily",
+        "environment": "testnet",
+        "base_snapshot": {
+          "id": "02457674-3dd3-43dc-98db-e4d8b5df76ed",
+          "snapshot_date": "2026-03-25T00:00:00+00:00"
+        },
+        "target_snapshot": {
+          "id": "ea1cce41-84b3-4c3f-a084-e5dc09a44c8e",
+          "snapshot_date": "2026-03-26T00:00:00+00:00"
+        },
+        "delta": {
+          "kpis": [
+            {
+              "metric": "arppu_usd",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "arpu_usd",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "avg_ltv_usd",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "churn_rate_pct",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "churned_users",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "paying_users",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "today_revenue_usd",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "total_revenue_usd",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "total_users",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            }
+          ],
+          "top_users": [],
+          "segments": [
+            {
+              "segment": "churn_risk",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "high_value",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "loss_heavy_users",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "low_activity_low_revenue",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "profitable_but_inactive",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            }
+          ]
+        },
+        "generated_at": "2026-03-26T03:31:43.411361+00:00"
+      },
+      "latency_ms": 8764
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "schema_path": "/app/config.schema.json",
+  "sample_config_path": "/app/config/app.runtime.example.json",
+  "errors": []
+}

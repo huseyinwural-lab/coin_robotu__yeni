@@ -1,0 +1,215 @@
+{
+  "started_at": "2026-03-26T03:28:13.467807+00:00",
+  "completed_at": "2026-03-26T03:28:49.671026+00:00",
+  "overall_status": "FAIL",
+  "steps": {
+    "ingest": {
+      "status": "FAIL",
+      "detail": {
+        "error": "http_error:POST:/api/admin/commercial/p0/ingestion/rest-run:400:{\"detail\":\"credential_not_found\"}",
+        "step": "ingest"
+      },
+      "latency_ms": 1022
+    },
+    "pnl": {
+      "status": "FAIL",
+      "detail": {
+        "error": "http_error:GET:/api/admin/commercial/p0/pnl/latest:404:{\"detail\":\"target_user_not_found\"}",
+        "step": "pnl"
+      },
+      "latency_ms": 553
+    },
+    "reconciliation": {
+      "status": "FAIL",
+      "detail": {
+        "error": "http_error:POST:/api/admin/commercial/p0/reconciliation/run:422:{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\"],\"msg\":\"Field required\",\"input\":null,\"url\":\"https://errors.pydantic.dev/2.12/v/missing\"}]}",
+        "step": "reconciliation"
+      },
+      "latency_ms": 559
+    },
+    "revenue": {
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "environment": "live",
+        "applied_filters": {
+          "start_date": null,
+          "end_date": null,
+          "user_id": null,
+          "user_email": null,
+          "symbol": null,
+          "top_limit": 10
+        },
+        "total_revenue_usd": 1.1,
+        "today_revenue_usd": 0.0,
+        "top_users": [
+          {
+            "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+            "email": "canary.admin@platform.local",
+            "revenue_usd": 1.1
+          }
+        ],
+        "top_symbols": [
+          {
+            "symbol": "BTCUSDT",
+            "revenue_usd": 1.1
+          }
+        ],
+        "daily_revenue": [
+          {
+            "date": "2026-03-25",
+            "total_revenue_usd": 1.1,
+            "fee_revenue_usd": 0.1,
+            "pnl_share_revenue_usd": 1.0
+          }
+        ],
+        "generated_at": "2026-03-26T03:28:40.804100+00:00"
+      },
+      "latency_ms": 775
+    },
+    "snapshot_compare": {
+      "status": "PASS",
+      "detail": {
+        "status": "ok",
+        "snapshot_type": "daily",
+        "environment": "live",
+        "base_snapshot": {
+          "id": "81c676d0-6ed4-4ae9-a946-d4b4b07c37bc",
+          "snapshot_date": "2026-03-25T00:00:00+00:00"
+        },
+        "target_snapshot": {
+          "id": "24572d97-ce5a-46cf-8921-8fc668c87afb",
+          "snapshot_date": "2026-03-26T00:00:00+00:00"
+        },
+        "delta": {
+          "kpis": [
+            {
+              "metric": "arppu_usd",
+              "from": 1.1,
+              "to": 1.1,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "arpu_usd",
+              "from": 1.1,
+              "to": 1.1,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "avg_ltv_usd",
+              "from": 1.1,
+              "to": 1.1,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "churn_rate_pct",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "churned_users",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "paying_users",
+              "from": 1.0,
+              "to": 1.0,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "today_revenue_usd",
+              "from": 0.0,
+              "to": 0.0,
+              "delta": 0.0,
+              "delta_pct": null
+            },
+            {
+              "metric": "total_revenue_usd",
+              "from": 1.1,
+              "to": 1.1,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            },
+            {
+              "metric": "total_users",
+              "from": 1.0,
+              "to": 1.0,
+              "delta": 0.0,
+              "delta_pct": 0.0
+            }
+          ],
+          "top_users": [
+            {
+              "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+              "email": "canary.admin@platform.local",
+              "from_revenue_usd": 1.1,
+              "to_revenue_usd": 1.1,
+              "delta_revenue_usd": 0.0,
+              "from_rank": 1,
+              "to_rank": 1,
+              "rank_change": 0
+            }
+          ],
+          "segments": [
+            {
+              "segment": "churn_risk",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "high_value",
+              "from_users": 1,
+              "to_users": 1,
+              "delta_users": 0,
+              "from_revenue_usd": 1.1,
+              "to_revenue_usd": 1.1,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "loss_heavy_users",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "low_activity_low_revenue",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            },
+            {
+              "segment": "profitable_but_inactive",
+              "from_users": 0,
+              "to_users": 0,
+              "delta_users": 0,
+              "from_revenue_usd": 0.0,
+              "to_revenue_usd": 0.0,
+              "delta_revenue_usd": 0.0
+            }
+          ]
+        },
+        "generated_at": "2026-03-26T03:28:49.559855+00:00"
+      },
+      "latency_ms": 8755
+    }
+  }
+}

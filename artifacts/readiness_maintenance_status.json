@@ -1,0 +1,23 @@
+{
+  "status": "success",
+  "trigger": "scheduler",
+  "started_at": "2026-03-28T14:37:53.080385+00:00",
+  "finished_at": "2026-03-28T14:37:54.213593+00:00",
+  "last_success_at": "2026-03-28T14:37:54.213597+00:00",
+  "retry_in_seconds": null,
+  "reason_code": null,
+  "result": {
+    "policy": {
+      "details_retention_days": 30,
+      "aggregate_retention_days": 90,
+      "cleanup_batch_size": 1000
+    },
+    "dry_run": false,
+    "detail_cutoff": "2026-02-26T14:37:53.080417+00:00",
+    "aggregate_cutoff": "2025-12-28T14:37:53.080417+00:00",
+    "deleted_detail_rows": 0,
+    "deleted_aggregate_rows": 0,
+    "daily_summary_rows_upserted": 0,
+    "maintenance_generated_at": "2026-03-28T14:37:53.080417+00:00"
+  }
+}

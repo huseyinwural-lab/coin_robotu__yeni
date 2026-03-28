@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-03-28T14:38:22.718752+00:00",
+  "base_url": "https://failure-explainer.preview.emergentagent.com",
+  "checks": {
+    "health_200": true,
+    "admin_login_ok": true,
+    "canonical_list_200": true,
+    "canonical_list_required_fields": true,
+    "canonical_detail_200": true,
+    "canonical_detail_required_fields": true,
+    "explain_200": true,
+    "explain_required_fields": true,
+    "explain_non_empty": true,
+    "replay_200": true,
+    "replay_deterministic_flags": true,
+    "consistency_endpoint_200": true,
+    "consistency_fields": true,
+    "timeline_deprecated_body": true,
+    "query_search_200": true,
+    "query_search_has_cursor_fields": true,
+    "saved_query_create": true,
+    "incident_create": true,
+    "verify_trace_endpoint": true,
+    "cross_env_compare": true,
+    "archive_toggle_api": true,
+    "metrics_required": true,
+    "dashboard_file_exists": true,
+    "alert_rules_file_exists": true
+  },
+  "evidence": {
+    "list_query_latency_ms": 832.31,
+    "query_search_latency_ms": 159.32
+  },
+  "errors": [],
+  "summary": {
+    "p0_pass": true,
+    "p1_pass": true,
+    "p2_pass": true,
+    "overall_pass": true
+  }
+}

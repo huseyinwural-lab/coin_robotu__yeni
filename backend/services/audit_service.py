@@ -1,10 +1,15 @@
+import hashlib
+import json
+import os
 from enum import Enum
 from datetime import datetime, timezone
 
+from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session
 
 from core.observability.request_context import get_request_context
 from models import AuditLog
+from services.debug_incident_service import maybe_auto_create_incident_from_audit
 
 
 GUARD_EVENT_TYPES = {
@@ -12,6 +17,42 @@ GUARD_EVENT_TYPES = {
     "EXECUTION_ALLOWED",
     "EXECUTION_OVERRIDE_ENABLED",
 }
+
+ALLOWED_ENVIRONMENTS = {"prod", "staging", "test", "canary"}
+
+
+def _extract_correlation_id(entity_id: str, details: dict) -> str:
+    for candidate in [
+        details.get("correlation_id"),
+        details.get("trace_id"),
+        details.get("request_id"),
+        entity_id,
+    ]:
+        value = str(candidate or "").strip()
+        if value:
+            return value
+    return str(entity_id or "unknown")
+
+
+def _normalize_environment(details: dict) -> tuple[str, bool]:
+    raw = str(details.get("environment") or os.environ.get("APP_ENVIRONMENT") or "prod").strip().lower()
+    aliases = {
+        "production": "prod",
+        "live": "prod",
+        "dev": "staging",
+        "development": "staging",
+        "qa": "test",
+    }
+    normalized = aliases.get(raw, raw)
+    if normalized not in ALLOWED_ENVIRONMENTS:
+        normalized = "test"
+    is_test_event = bool(details.get("is_test_event", normalized in {"test", "canary"}))
+    return normalized, is_test_event
+
+
+def _compute_event_hash(previous_hash: str, payload: dict) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(f"{previous_hash}|{canonical}".encode("utf-8")).hexdigest()
 
 
 def create_audit_log(
@@ -35,6 +76,38 @@ def create_audit_log(
         "route": request_context.get("route"),
         "method": request_context.get("method"),
     }
+    environment, is_test_event = _normalize_environment(merged_details)
+    correlation_id = _extract_correlation_id(entity_id, merged_details)
+    merged_details["environment"] = environment
+    merged_details["correlation_id"] = correlation_id
+    merged_details["is_test_event"] = bool(is_test_event)
+
+    previous_entry = (
+        db.query(AuditLog)
+        .filter(
+            or_(
+                AuditLog.entity_id == correlation_id,
+                cast(AuditLog.details, String).ilike(f"%{correlation_id}%"),
+            )
+        )
+        .order_by(AuditLog.created_at.desc())
+        .first()
+    )
+    previous_hash = str(previous_entry.event_hash or "GENESIS") if previous_entry else "GENESIS"
+    created_at = datetime.now(timezone.utc)
+    signature_payload = {
+        "action": resolved_action,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "severity": str(severity).upper(),
+        "environment": environment,
+        "is_test_event": bool(is_test_event),
+        "correlation_id": correlation_id,
+        "details": merged_details,
+        "created_at": created_at.isoformat(),
+    }
+    event_hash = _compute_event_hash(previous_hash, signature_payload)
+
     audit_entry = AuditLog(
         actor_user_id=actor_user_id,
         actor_role=actor_role,
@@ -42,12 +115,22 @@ def create_audit_log(
         entity_type=entity_type,
         entity_id=entity_id,
         severity=severity,
+        environment=environment,
+        is_test_event=bool(is_test_event),
+        previous_event_hash=previous_hash,
+        event_hash=event_hash,
+        signature_version="v1",
         details=merged_details,
+        created_at=created_at,
     )
     db.add(audit_entry)
     if commit:
         db.commit()
         db.refresh(audit_entry)
+        try:
+            maybe_auto_create_incident_from_audit(db, audit_entry=audit_entry)
+        except Exception:
+            db.rollback()
     return audit_entry
 
 

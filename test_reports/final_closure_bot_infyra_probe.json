@@ -1,0 +1,22 @@
+{
+  "base_url": "https://bot.infyra.de",
+  "checks": {
+    "health_live_status_code": 200,
+    "login_10x_all_200": false,
+    "login_10x_status_codes": [
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404,
+      404
+    ],
+    "runtime_endpoints_reachable": false
+  },
+  "reason": "Domain responds on /api/health/live but auth/runtime endpoints return 404 (not matching expected app routes).",
+  "next_required": "Provide production URL that serves /api/auth/login and /api/runtime/* routes."
+}
