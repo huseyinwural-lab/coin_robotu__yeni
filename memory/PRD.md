@@ -1,3 +1,61 @@
+## 2026-03-28 — Kalan İşler (FAZ A / FAZ B) Uygulama Tur'u
+
+### FAZ A — P1 operasyonel kapanış güncellemeleri
+- **Bybit / 2. venue stabilizasyonu**
+  - `go_live_validator` içinde `venue_config_checklist` eklendi (testnet/live credential mapping + environment mapping + policy flag).
+  - Bybit auth probe + ticker probe birleşik değerlendiriliyor; venue-specific reason code seti genişletildi.
+  - Exchange matrix fallback/placeholder davranışı azaltıldı; deterministik PASS/FAIL/UNKNOWN üretimi güçlendirildi.
+- **Execution proof ayrımı (mocked vs real)**
+  - `execution_proof` alanı eklendi: `real_metric_count`, `mocked_metric_count`, `submit_mocked`, `cancel_mocked`, `has_mocked_paths`, `proof_status`.
+  - Mocked path’ler ayrı kategoride (`MOCKED_ONLY`) görünür; gerçek proof yoksa `EXECUTION_PROOF_ONLY_MOCKED` ile bloklanır.
+- **Funding & Liquidation operasyonel freshness / coverage**
+  - Yeni config: `backend/config/readiness_data_quality_config.json`
+  - Funding freshness config-driven hale getirildi.
+  - Liquidation risk için spesifik reason code’lar + input coverage metriği eklendi:
+    - `LIQUIDATION_MAINT_MARGIN_MISSING`
+    - `LIQUIDATION_MARK_PRICE_MISSING`
+    - `LIQUIDATION_PRICE_UNAVAILABLE`
+    - `LIQUIDATION_INPUT_COVERAGE_LOW`
+- **Strategy engine SLA sertleşmesi**
+  - `strategy_restart_grace_period_sec` timeout policy’ye bağlandı.
+  - Restart grace-period, stale heartbeat, idle-no-output ayrımları reason-code seviyesinde netleştirildi.
+  - Producer standardizasyonu için heartbeat payload parse + producer kontrolü eklendi.
+
+### FAZ B — P2 production işletilebilirlik güncellemeleri
+- **History retention + cleanup + cron akışı**
+  - Yeni servis: `backend/services/readiness_history_maintenance_service.py`
+  - Endpointler:
+    - `GET /api/admin/futures/readiness/history/policy`
+    - `POST /api/admin/futures/readiness/history/maintenance`
+  - Daily ops cron hattına bağlandı: `backend/cli/daily_ops_automation.py`
+- **History analytics genişletmesi**
+  - `readiness_history_service` artık filter + pagination + incident correlation destekliyor:
+    - `days`, `exchange`, `strategy`, `symbol`
+    - `page`, `page_size`
+    - `incident_correlation_id`
+  - `runbook_mapping` ve blocker/reason için remediation eşlemesi response’a eklendi.
+- **Config-driven policy governance**
+  - Yeni configler:
+    - `backend/config/exposure_policy.json`
+    - `backend/config/readiness_runbook_mapping.json`
+  - Yeni servis: `backend/services/readiness_policy_service.py`
+  - Endpointler:
+    - `GET /api/admin/futures/readiness/policy`
+    - `PUT /api/admin/futures/readiness/policy`
+  - Policy değişimleri audit log’a yazılıyor (`READINESS_POLICY_UPDATED`).
+- **UI operatörleştirme genişletmesi**
+  - `AdminFuturesLiveReadinessPage` filtreler (exchange/symbol/strategy/degraded), trend bar ve runbook mapping ile güçlendirildi.
+  - Yeni frontend mapping: `frontend/src/lib/readinessRunbookMap.js`
+
+### Test ve doğrulama
+- Readiness geniş suite: **67 passed, 18 skipped, 0 failed**
+- Iteration 170 test agent doğrulaması: `/app/test_reports/iteration_170.json`
+  - Yeni P1/P2 kalan feature’lar API + unit seviyede doğrulandı.
+  - Ek test seti: **46/46 passed** (`test_p1p2_readiness_ops_iteration170.py`, `test_p1p2_readiness_api_endpoints.py`).
+
+### Operasyonel not
+- Admin login flow testlerinde `/admin/login` paneli kullanılmalı; kullanıcı login paneli admin için yanlış panel hatası döndürebilir.
+
 ## 2026-03-28 — P1 + P2 Production Hardening Closure (Master Görev Emri)
 
 ### Tamamlanan P1 Kritik Doğrulamalar
