@@ -1,3 +1,42 @@
+## 2026-03-28 — Execution Safety Core (P0) İlk Uygulama
+
+### Uygulanan P0 kapsamı
+- Yeni backend çekirdeği eklendi: `backend/services/execution_safety_core_service.py`
+  - Pre-trade Safety Gate: `READY / DEGRADED / BLOCKED`
+  - Hard blocker zorlaması (testnet disabled, market/proof kalite fail, Bybit order smoke fail vb.)
+  - Bybit Testnet order smoke (create+cancel) entegrasyonu
+  - Intent state machine snapshot: `CREATED -> SUBMITTED -> ACKED -> FILLED/FAILED/CANCELLED/QUARANTINED`
+  - Stuck intent timeout tespiti + otomatik quarantine upsert (Postgres `failed_events`)
+  - Runtime Quarantine/DLQ snapshot + action servisleri (replay/dismiss/mark_failed)
+  - Proof artifact üretimi (imzalı local artifact + S3 upload denemesi)
+- Yeni API router eklendi: `backend/routers/execution_readiness_core.py`
+  - `GET /api/execution-readiness/gate`
+  - `GET /api/execution-readiness/intents`
+  - `GET /api/execution-readiness/quarantine`
+  - `POST /api/execution-readiness/quarantine/{event_id}/{action}`
+- Router `server.py` içine bağlandı.
+- Frontend güncellendi:
+  - `AdminExecutionReadinessPage.jsx` içine Execution Safety Core overview kartları (gate, intents, quarantine)
+  - `AdminRuntimeQuarantinePage.jsx` yeni `/execution-readiness/quarantine` endpointlerine geçirildi.
+
+### Bu tur test/doğrulama
+- Testing Agent raporu: `/app/test_reports/iteration_172.json`
+  - Service-level backend testleri PASS (23/23)
+- Local self-test:
+  - `get_execution_safety_gate`, `get_execution_intent_state_machine_snapshot`, `get_runtime_quarantine_snapshot` fonksiyonları çalıştı.
+  - InMemoryRedis için `llen` metodu eklendi; queue metricleri artık doğru sayılıyor.
+- Screenshot smoke:
+  - Preview sayfası "not responding" (502 sınıfı ortam limiti) durumunu gösterdi.
+
+### Bilinen ortam/integrasyon limitleri (kod dışı)
+- Bybit Testnet bu runtime’dan HTTP 403 dönüyor (`BYBIT_CONNECTIVITY_FAIL`).
+- S3 upload denemesinde `SignatureDoesNotMatch` alınıyor; artifact LOCAL_ONLY fallback ile saklanıyor.
+- Preview URL halen 502 dönebiliyor (PostgreSQL/preview kısıtı).
+
+### Öncelikli kalan işler
+- P0 devam: Bybit ve S3 gerçek ortam doğrulaması (credential/network izinleriyle) ve artifact’in `S3_UPLOADED` seviyesine çıkarılması.
+- P1 beklemede: batch stuck recovery, advanced reconciliation, trend analitikleri.
+
 ## 2026-03-28 — P1 AuditLogs Tek Akış Kapanışı (RCA/Incident/Export)
 
 ### Yapılanlar

@@ -110,6 +110,11 @@ class InMemoryRedis:
             return []
         return values[normalized_start : normalized_end + 1]
 
+    def llen(self, key: str):
+        if self._is_expired(key):
+            return 0
+        return len(self._lists.get(key, []))
+
     def brpoplpush(self, source: str, destination: str, timeout: int = 0):
         _ = timeout
         if self._is_expired(source):
