@@ -41,3 +41,7 @@ admin_token.txt
 # --- Large binaries ---
 *.deb
 google-chrome-stable_current_amd64.deb
+-e 
+# Environment files
+*.env
+*.env.*
