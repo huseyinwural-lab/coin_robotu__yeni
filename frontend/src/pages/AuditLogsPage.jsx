@@ -553,7 +553,7 @@ export const AuditLogsPage = () => {
               disabled={!hasIncident}
               data-testid="audit-debug-flow-export-button"
             >
-              Export Bundle
+              Export Debug Bundle
             </Button>
           </div>
         </div>
@@ -987,7 +987,7 @@ export const AuditLogsPage = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => openIncidentLifecycle(incident.linked_correlation_id || incident.details?.correlation_id)}
+                      onClick={() => openIncidentLifecycle(incident.correlation_id || incident.linked_correlation_id || incident.details?.correlation_id)}
                       data-testid={`audit-incident-open-lifecycle-button-${idx}`}
                     >
                       Open Lifecycle

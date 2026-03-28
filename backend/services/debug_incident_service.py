@@ -66,6 +66,7 @@ def serialize_incident(row: DebugIncident) -> dict:
         "severity": row.severity,
         "tags": row.tags or [],
         "linked_correlation_id": row.linked_correlation_id,
+        "correlation_id": row.linked_correlation_id,
         "source_event_id": row.source_event_id,
         "status": row.status,
         "auto_created": bool(row.auto_created),
