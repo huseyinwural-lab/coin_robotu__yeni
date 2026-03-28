@@ -350,6 +350,18 @@ export const AuditLogsPage = () => {
     [items],
   );
 
+  const hasLifecycle = Boolean(selectedCorrelation && detail);
+  const hasRca = Boolean(failureExplanation || rootCauseBreakdown);
+  const hasIncident = incidents.length > 0;
+
+  const exportLatestIncident = useCallback(() => {
+    if (!incidents.length) {
+      toast.error("Önce incident oluşturun");
+      return;
+    }
+    exportIncidentBundle(incidents[0].incident_id);
+  }, [exportIncidentBundle, incidents]);
+
   const events = detail?.events || detail?.chain?.events || [];
   const renderedItems = items.slice(0, visibleCount);
   const graphData = useMemo(() => {
@@ -452,6 +464,64 @@ export const AuditLogsPage = () => {
           <span data-testid="audit-logs-meta-query-latency">query_latency_ms: {queryLatencyMs ?? "-"}</span>
         </div>
       </header>
+
+      <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4" data-testid="audit-debug-flow-panel">
+        <div className="flex flex-wrap items-start justify-between gap-2" data-testid="audit-debug-flow-header">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400" data-testid="audit-debug-flow-title">Lifecycle → RCA → Incident → Export</p>
+            <p className="text-sm text-slate-300" data-testid="audit-debug-flow-subtitle">Tek ekranda debug ve aksiyon akışı.</p>
+          </div>
+          <p className="text-xs text-slate-400" data-testid="audit-debug-flow-selected">correlation: {selectedCorrelation || "seçilmedi"}</p>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-4" data-testid="audit-debug-flow-steps">
+          <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3" data-testid="audit-debug-flow-step-lifecycle">
+            <p className="text-xs uppercase text-slate-400" data-testid="audit-debug-flow-lifecycle-label">1) Lifecycle</p>
+            <p className="text-sm text-slate-100" data-testid="audit-debug-flow-lifecycle-status">status: {hasLifecycle ? "READY" : "WAITING"}</p>
+            <p className="text-xs text-slate-400" data-testid="audit-debug-flow-lifecycle-hint">Correlation seçildiğinde otomatik yüklenir.</p>
+          </div>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3" data-testid="audit-debug-flow-step-rca">
+            <p className="text-xs uppercase text-slate-400" data-testid="audit-debug-flow-rca-label">2) RCA</p>
+            <p className="text-sm text-slate-100" data-testid="audit-debug-flow-rca-status">status: {hasRca ? "READY" : "WAITING"}</p>
+            <Button
+              size="sm"
+              className="mt-2 w-full"
+              onClick={explainFailure}
+              disabled={!selectedCorrelation || detailLoading}
+              data-testid="audit-debug-flow-rca-button"
+            >
+              Explain / RCA
+            </Button>
+          </div>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3" data-testid="audit-debug-flow-step-incident">
+            <p className="text-xs uppercase text-slate-400" data-testid="audit-debug-flow-incident-label">3) Incident</p>
+            <p className="text-sm text-slate-100" data-testid="audit-debug-flow-incident-status">status: {hasIncident ? "READY" : "WAITING"}</p>
+            <Button
+              size="sm"
+              className="mt-2 w-full"
+              variant="outline"
+              onClick={createIncident}
+              disabled={!hasRca || detailLoading}
+              data-testid="audit-debug-flow-incident-button"
+            >
+              Incident Oluştur
+            </Button>
+          </div>
+          <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3" data-testid="audit-debug-flow-step-export">
+            <p className="text-xs uppercase text-slate-400" data-testid="audit-debug-flow-export-label">4) Export</p>
+            <p className="text-sm text-slate-100" data-testid="audit-debug-flow-export-status">status: {hasIncident ? "READY" : "WAITING"}</p>
+            <Button
+              size="sm"
+              className="mt-2 w-full"
+              variant="secondary"
+              onClick={exportLatestIncident}
+              disabled={!hasIncident}
+              data-testid="audit-debug-flow-export-button"
+            >
+              Export Bundle
+            </Button>
+          </div>
+        </div>
+      </div>
 
       <div className="grid gap-3 md:grid-cols-5" data-testid="audit-logs-filter-grid">
         <div className="relative">

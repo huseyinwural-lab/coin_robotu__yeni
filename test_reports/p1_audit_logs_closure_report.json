@@ -29,10 +29,17 @@
       }
     },
     {
-      "name": "audit_logs_ui_anomaly_and_export",
+      "name": "audit_logs_ui_flow_and_anomaly",
       "passed": true,
       "details": {
         "missing": []
+      }
+    },
+    {
+      "name": "performance_summary_present",
+      "passed": true,
+      "details": {
+        "path": "/app/test_reports/summary.md"
       }
     }
   ],

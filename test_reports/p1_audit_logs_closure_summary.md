@@ -10,5 +10,7 @@ Overall: PASS
   - details: {'missing': []}
 - PASS — incident_bundle_fields_present
   - details: {'missing': []}
-- PASS — audit_logs_ui_anomaly_and_export
+- PASS — audit_logs_ui_flow_and_anomaly
   - details: {'missing': []}
+- PASS — performance_summary_present
+  - details: {'path': '/app/test_reports/summary.md'}
