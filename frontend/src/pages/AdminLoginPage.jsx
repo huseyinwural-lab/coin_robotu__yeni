@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { apiClient } from "@/lib/api";
 
 export const AdminLoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, verifyMfaChallenge, user, loading, logout } = useAuth();
   const [form, setForm] = useState({ email: "", password: "" });
   const [submitting, setSubmitting] = useState(false);
@@ -38,6 +39,14 @@ export const AdminLoginPage = () => {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const email = params.get("email");
+    if (email) {
+      setForm((prev) => ({ ...prev, email }));
+    }
+  }, [location.search]);
+
+  useEffect(() => {
     const storedToken = localStorage.getItem("token");
     if (!storedToken && user) {
       logout();
@@ -50,7 +59,9 @@ export const AdminLoginPage = () => {
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
     if (adminRoles.has(user.role)) {
       navigate("/admin/dashboard", { replace: true });
+      return;
     }
+    navigate("/user/dashboard", { replace: true });
   }, [loading, logout, navigate, user]);
 
   const onSubmit = async (event) => {

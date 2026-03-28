@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: readiness-maintenance-nightly
+  labels:
+    app: futures-health-check
+    component: readiness-maintenance
+spec:
+  schedule: "15 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: readiness-maintenance
+              image: futures-health-check:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: READINESS_MAINTENANCE_SCHEDULER_ENABLED
+                  value: "1"
+              command:
+                - /bin/bash
+                - -lc
+                - |
+                  cd /app && \
+                  python backend/cli/daily_ops_automation.py --gate-file /app/test_reports/release_gate_latest.json

@@ -8,6 +8,7 @@ from services.audit_service import create_audit_log
 from services.futures_live_readiness_service import get_futures_live_readiness, get_futures_readiness_score
 from services.pipeline.runtime import pipeline_runtime
 from services.readiness_history_maintenance_service import get_readiness_retention_policy, run_readiness_history_maintenance
+from services.readiness_maintenance_scheduler_service import read_readiness_maintenance_status
 from services.readiness_history_service import build_readiness_audit_details, get_readiness_history
 from services.readiness_policy_service import get_readiness_policy, update_readiness_policy
 
@@ -104,6 +105,12 @@ def futures_readiness_history_maintenance(
         details=result,
     )
     return result
+
+
+@router.get("/readiness/history/maintenance/status")
+def futures_readiness_history_maintenance_status(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return read_readiness_maintenance_status()
 
 
 @router.get("/readiness/policy")

@@ -1,5 +1,5 @@
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -10,7 +10,7 @@ import { apiClient } from "@/lib/api";
 
 export const UserLoginPage = () => {
   const navigate = useNavigate();
-  const { login, verifyMfaChallenge, register } = useAuth();
+  const { login, verifyMfaChallenge, register, user, loading } = useAuth();
   const [mode, setMode] = useState("login");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -26,6 +26,7 @@ export const UserLoginPage = () => {
   const [mfaState, setMfaState] = useState(null);
   const [mfaCode, setMfaCode] = useState("");
   const [selectedMfaMethod, setSelectedMfaMethod] = useState("totp");
+  const [panelHint, setPanelHint] = useState("");
   const mfaMethods = Array.isArray(mfaState?.methods) ? mfaState.methods : [];
 
   const getErrorMessage = (error, fallback) => {
@@ -44,6 +45,16 @@ export const UserLoginPage = () => {
     const backupLike = normalized.includes("-") || /[A-Za-z]/.test(normalized);
     return backupLike ? "backup_code" : "totp";
   };
+
+  useEffect(() => {
+    if (loading || !user) {
+      return;
+    }
+    const adminRoles = new Set(["super_admin", "admin", "ops"]);
+    if (adminRoles.has(user.role)) {
+      navigate("/admin/dashboard", { replace: true });
+    }
+  }, [loading, navigate, user]);
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -64,6 +75,7 @@ export const UserLoginPage = () => {
         toast.success("Talebiniz alındı. Admin onayı sonrası giriş yapabilirsiniz.");
         setMode("login");
       } else {
+        setPanelHint("");
         const loginResult = await login({ email: form.email, password: form.password, panel: "user" });
         if (loginResult?.mfaRequired) {
           setMfaState(loginResult);
@@ -77,7 +89,16 @@ export const UserLoginPage = () => {
         navigate("/user/dashboard");
       }
     } catch (error) {
-      toast.error(getErrorMessage(error, "İşlem başarısız"));
+      const message = getErrorMessage(error, "İşlem başarısız");
+      if (String(message || "").toLowerCase().includes("yanlış giriş paneli")) {
+        setPanelHint("admin");
+        toast.error("Bu hesap admin paneline ait. /admin/login ekranına yönlendiriliyorsunuz.");
+        setTimeout(() => {
+          navigate(`/admin/login?email=${encodeURIComponent(form.email || "")}`);
+        }, 900);
+      } else {
+        toast.error(message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -127,7 +148,31 @@ export const UserLoginPage = () => {
         <header className="text-center" data-testid="user-login-header">
           <h1 className="text-3xl font-black text-slate-900" data-testid="user-login-title">{mode === "register" ? "Hesap Aç" : "Giriş Yap"}</h1>
           <p className="mt-2 text-base text-slate-600" data-testid="user-login-subtitle">Hesabınıza güvenli şekilde erişin.</p>
+          <button
+            type="button"
+            className="mt-3 text-sm font-semibold text-blue-700 underline"
+            onClick={() => navigate(`/admin/login?email=${encodeURIComponent(form.email || "")}`)}
+            data-testid="user-login-admin-shortcut-button"
+          >
+            Admin girişi için buraya git → /admin/login
+          </button>
         </header>
+
+        {panelHint === "admin" && (
+          <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800" data-testid="user-login-wrong-panel-cta">
+            Bu hesap admin paneline ait. Doğru giriş yolu: <span className="font-semibold">/admin/login</span>
+            <div className="mt-2">
+              <button
+                type="button"
+                className="font-semibold underline"
+                onClick={() => navigate(`/admin/login?email=${encodeURIComponent(form.email || "")}`)}
+                data-testid="user-login-wrong-panel-go-admin-button"
+              >
+                Admin paneline git
+              </button>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={onSubmit} className="mx-auto mt-7 max-w-xl space-y-4" data-testid="user-login-form">
           {mode === "register" && (

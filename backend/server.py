@@ -111,6 +111,7 @@ from services.weekly_report_service import run_weekly_report_loop
 from services.db_backup_scheduler_service import run_backup_scheduler_loop
 from services.commercial_export_scheduler_service import run_commercial_export_scheduler_loop
 from services.venue_sanity_scheduler_service import run_venue_sanity_scheduler_loop
+from services.readiness_maintenance_scheduler_service import run_readiness_maintenance_scheduler_loop
 from services.commercial_preview_smoke_service import (
     run_commercial_preview_http_gate_once,
     run_commercial_preview_smoke_gate,
@@ -142,6 +143,7 @@ backup_scheduler_task: asyncio.Task | None = None
 commercial_export_scheduler_task: asyncio.Task | None = None
 preview_smoke_gate_task: asyncio.Task | None = None
 venue_sanity_scheduler_task: asyncio.Task | None = None
+readiness_maintenance_scheduler_task: asyncio.Task | None = None
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
 STARTUP_RUNTIME_STATE = {
     "database_url_valid": False,
@@ -618,7 +620,7 @@ async def startup_event():
         STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
         logger.warning("PIPELINE_RUNTIME_SKIPPED_DATABASE_NOT_READY")
 
-    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task
     if STARTUP_RUNTIME_STATE["database_ready"]:
         from db import SessionLocal
 
@@ -628,6 +630,7 @@ async def startup_event():
         commercial_export_scheduler_task = asyncio.create_task(run_commercial_export_scheduler_loop())
         preview_smoke_gate_task = asyncio.create_task(_run_preview_smoke_gate_job())
         venue_sanity_scheduler_task = asyncio.create_task(run_venue_sanity_scheduler_loop(SessionLocal))
+        readiness_maintenance_scheduler_task = asyncio.create_task(run_readiness_maintenance_scheduler_loop(SessionLocal))
         STARTUP_RUNTIME_STATE["background_loops_started"] = True
     else:
         STARTUP_RUNTIME_STATE["background_loops_started"] = False
@@ -647,7 +650,7 @@ async def startup_event():
 async def shutdown_event():
     if STARTUP_RUNTIME_STATE.get("pipeline_runtime_ok"):
         await pipeline_runtime.stop()
-    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task
     if weekly_report_task:
         weekly_report_task.cancel()
     if exchange_health_task:
@@ -660,6 +663,8 @@ async def shutdown_event():
         preview_smoke_gate_task.cancel()
     if venue_sanity_scheduler_task:
         venue_sanity_scheduler_task.cancel()
+    if readiness_maintenance_scheduler_task:
+        readiness_maintenance_scheduler_task.cancel()
 
 
 app = create_socket_app(fastapi_app)
