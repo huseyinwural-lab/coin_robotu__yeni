@@ -191,6 +191,20 @@ class BinanceFuturesTestnetAdapter:
     def account_probe(self, api_key: str, api_secret: str) -> tuple[dict, int, dict]:
         return self._signed_get(api_key, api_secret, "/fapi/v2/account", {})
 
+    def position_risk(self, api_key: str, api_secret: str, symbol: str | None = None) -> tuple[dict, int, dict]:
+        params = {"symbol": symbol} if symbol else {}
+        return self._signed_get(api_key, api_secret, "/fapi/v2/positionRisk", params)
+
+    def reduce_only_test(self, api_key: str, api_secret: str, symbol: str = "BTCUSDT") -> tuple[dict, int, dict]:
+        params = {
+            "symbol": symbol,
+            "side": "BUY",
+            "type": "MARKET",
+            "quantity": 0.001,
+            "reduceOnly": "true",
+        }
+        return self._signed_post(api_key, api_secret, "/fapi/v1/order", params)
+
     def account_probe_spot(self, api_key: str, api_secret: str) -> tuple[dict, int, dict]:
         return self._signed_get_spot(api_key, api_secret, "/api/v3/account", {})
 

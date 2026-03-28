@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from services.audit_service import create_audit_log
 from services.pipeline.cache_store import get_json
 from core.live.balance_integrity_guard import validate_balance_integrity
 from core.live.exchange_latency_guard import evaluate_exchange_latency
@@ -182,6 +183,7 @@ def _engine_balance(db: Session, cache, user_id: str) -> dict:
 
 def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool = False) -> dict:
     cache_key = f"futures:live-readiness:{user_id}"
+    cached = None
     if cache and not refresh:
         cached = _safe_json(cache.get(cache_key), None)
         if isinstance(cached, dict) and cached.get("go_live_validator"):
@@ -271,6 +273,10 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
         "blocking_failures": validator.get("blocking_failures") or [],
         "warnings": validator.get("warnings") or [],
         "unknowns": validator.get("unknowns") or [],
+        "exchange_readiness": validator.get("exchange_readiness") or {},
+        "symbol_readiness": validator.get("symbol_readiness") or {},
+        "strategy_readiness": validator.get("strategy_readiness") or {},
+        "latency_metrics": validator.get("latency_metrics") or {},
         "degraded": validator.get("degraded", True),
         "data_freshness": validator.get("data_freshness") or {},
         "execution_mode": validator.get("execution_mode"),
@@ -299,6 +305,27 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
         "legacy_readiness_state": score_payload.get("readiness_state", "BLOCKED"),
         "go_live_validator": validator,
     }
+
+    if refresh or cached is None:
+        create_audit_log(
+            db,
+            action="GO_LIVE_VALIDATOR_RUN",
+            entity_type="futures_live_readiness",
+            entity_id=str(user_id),
+            actor_user_id=user_id,
+            actor_role="system",
+            severity="info" if payload.get("readiness_state") == "READY" else "warning",
+            details={
+                "readiness_state": payload.get("readiness_state"),
+                "scores": payload.get("scores"),
+                "blocking_failures": payload.get("blocking_failures"),
+                "warnings": payload.get("warnings"),
+                "unknowns": payload.get("unknowns"),
+                "exchange_readiness": payload.get("exchange_readiness"),
+                "latency_metrics": payload.get("latency_metrics"),
+            },
+        )
+        db.commit()
 
     if cache:
         cache.set(cache_key, json.dumps(payload))

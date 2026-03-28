@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
-from models import User
+from models import AuditLog, User
 from services.audit_service import create_audit_log
 from services.futures_live_readiness_service import get_futures_live_readiness, get_futures_readiness_score
 from services.pipeline.runtime import pipeline_runtime
@@ -25,6 +25,33 @@ def futures_live_readiness(refresh: bool = False, current_admin: User = Depends(
         details={"readiness_score": payload.get("readiness_score", 0.0), "readiness_state": payload.get("readiness_state")},
     )
     return payload
+
+
+@router.get("/live-readiness/history")
+def futures_live_readiness_history(
+    limit: int = Query(default=50, ge=1, le=200),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == "GO_LIVE_VALIDATOR_RUN")
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    items = [
+        {
+            "id": row.id,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "actor_user_id": row.actor_user_id,
+            "action": row.action,
+            "severity": row.severity,
+            "details": row.details,
+        }
+        for row in rows
+    ]
+    return {"count": len(items), "items": items}
 
 
 @router.get("/readiness-score")

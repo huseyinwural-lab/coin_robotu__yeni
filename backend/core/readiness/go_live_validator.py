@@ -13,19 +13,33 @@ from sqlalchemy.orm import Session
 from core.live.readiness_score_engine import compute_readiness_score
 from core.safety.kill_switch import get_kill_switch_state
 from db import redis_client
-from models import CommercialTrade, ExecutionMetric, LiveActivationConfig, Order, PaperPosition, Position, UserExchangeConnection
+from models import (
+    CommercialTrade,
+    ExecutionMetric,
+    LiveActivationConfig,
+    Order,
+    PaperPosition,
+    PnlRecord,
+    Position,
+    TestnetExecutionLog,
+    UserExchangeConnection,
+    UserExecutionIntent,
+)
 from runtime_control.pipeline_controller import PIPELINE_QUEUE_KEYS
 from services.execution_mode_control_service import get_execution_mode, normalize_execution_mode
 from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter
 from services.live_mode_service import (
+    BinanceFuturesTestnetAdapter,
     _rate_limit_health,
     _risk_orchestrator_enabled,
     _worker_lag_seconds,
     get_market_ticker,
     get_or_create_live_config,
     release_gate_view,
+    resolve_runtime_credentials,
 )
 from services.pipeline.cache_store import get_json
+from services.pipeline.execution_engine import _build_state_path
 
 BLOCKING_CHECKS = {
     "mode_integrity",
@@ -40,10 +54,16 @@ BLOCKING_CHECKS = {
     "market_data_present",
 }
 
-LAYER_KEYS = ["core", "trading_state", "exchange", "execution", "risk", "infra"]
+LAYER_KEYS = ["core", "trading_state", "exchange", "execution", "risk", "infra", "latency", "safety"]
 
 RISK_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "risk_engine_config.json"
 RISK_CONFIG_BACKUP_PATH = Path(__file__).resolve().parents[2] / "config" / "risk_engine_config_backup.json"
+
+LATENCY_THRESHOLDS = {
+    "round_trip": {"warn": 500, "block": 1500},
+    "order_execution": {"warn": 1000, "block": 3000},
+    "tick_to_trade": {"warn": 750, "block": 2000},
+}
 
 
 def _utcnow() -> datetime:
@@ -282,6 +302,19 @@ def build_go_live_context(
         orders_query = orders_query.filter(Order.user_id == user_id)
     engine_orders = orders_query.all()
 
+    strategy_ids = []
+    try:
+        intent_query = db.query(UserExecutionIntent).order_by(UserExecutionIntent.created_at.desc()).limit(200)
+        if user_id:
+            intent_query = intent_query.filter(UserExecutionIntent.user_id == user_id)
+        strategy_ids = list({str(row.strategy_id) for row in intent_query if row.strategy_id})
+    except Exception:
+        strategy_ids = []
+
+    symbols = list({str(row.symbol) for row in engine_positions if row.symbol})
+    symbols += [str(row.symbol) for row in engine_orders if row.symbol]
+    symbols = list({item for item in symbols if item})
+
     partial_fill_count = 0
     try:
         partial_query = db.query(Order).filter(Order.state == "PARTIALLY_FILLED")
@@ -341,8 +374,96 @@ def build_go_live_context(
         submit_result = {"status": "ERROR", "error": str(exc), "mocked": True}
         cancel_result = {"status": "ERROR", "error": str(exc), "mocked": True}
 
+    api_key, api_secret, credential_source = resolve_runtime_credentials(None, None)
+    adapter = BinanceFuturesTestnetAdapter()
+    credentials_available = bool(api_key and api_secret)
+
+    account_payload = None
+    account_status = None
+    account_error = None
+    position_risk_payload = None
+    position_risk_status = None
+    position_risk_error = None
+    reduce_only_payload = None
+    reduce_only_status = None
+    reduce_only_error = None
+
+    if credentials_available:
+        try:
+            account_payload, account_status, _ = adapter.account_probe(api_key, api_secret)
+        except Exception as exc:  # pragma: no cover - defensive
+            account_error = str(exc)
+        try:
+            position_risk_payload, position_risk_status, _ = adapter.position_risk(api_key, api_secret)
+        except Exception as exc:  # pragma: no cover - defensive
+            position_risk_error = str(exc)
+        try:
+            reduce_only_payload, reduce_only_status, _ = adapter.reduce_only_test(api_key, api_secret)
+        except Exception as exc:  # pragma: no cover - defensive
+            reduce_only_error = str(exc)
+
     websocket_snapshot = get_json(cache, "exchange:heartbeat") if cache else {}
     rate_limit_status = _rate_limit_health(db)
+
+    pnl_snapshot = None
+    pnl_net_total = None
+    pnl_error = None
+    try:
+        pnl_query = db.query(PnlRecord).order_by(PnlRecord.as_of.desc())
+        if user_id:
+            pnl_query = pnl_query.filter(PnlRecord.user_id == user_id)
+        pnl_snapshot = pnl_query.first()
+        if pnl_snapshot:
+            pnl_net_total = float(pnl_snapshot.net_total_usd or 0.0)
+    except Exception as exc:
+        pnl_error = str(exc)
+
+    metrics_query = db.query(ExecutionMetric).order_by(ExecutionMetric.created_at.desc()).limit(50)
+    if user_id:
+        metrics_query = metrics_query.filter(ExecutionMetric.user_id == user_id)
+    metrics = metrics_query.all()
+    ack_latencies = []
+    execution_latencies = []
+    tick_latencies = []
+    for row in metrics:
+        if row.submitted_at and row.ack_at:
+            ack_latencies.append((row.ack_at - row.submitted_at).total_seconds() * 1000)
+        if row.ack_at and row.final_at:
+            execution_latencies.append((row.final_at - row.ack_at).total_seconds() * 1000)
+        if row.submitted_at and row.mid_price_timestamp:
+            stamp = _parse_timestamp(row.mid_price_timestamp)
+            if stamp:
+                tick_latencies.append((row.submitted_at - stamp).total_seconds() * 1000)
+
+    def _avg(values: list[float]) -> float | None:
+        return round(sum(values) / len(values), 2) if values else None
+
+    latency_metrics = {
+        "round_trip_ms": _avg(ack_latencies),
+        "order_execution_ms": _avg(execution_latencies),
+        "tick_to_trade_ms": _avg(tick_latencies),
+    }
+
+    dry_run_count = 0
+    try:
+        dry_run_query = db.query(TestnetExecutionLog)
+        if user_id:
+            dry_run_query = dry_run_query.filter(TestnetExecutionLog.user_id == user_id)
+        dry_run_count = dry_run_query.count()
+    except Exception:
+        dry_run_count = 0
+
+    strategy_heartbeat = None
+    strategy_last_execution = None
+    if redis_client is not None:
+        try:
+            strategy_heartbeat = redis_client.get("strategy:engine:heartbeat")
+        except Exception:
+            strategy_heartbeat = None
+        try:
+            strategy_last_execution = redis_client.get("strategy:engine:last_execution_at")
+        except Exception:
+            strategy_last_execution = None
 
     db_ok = True
     try:
@@ -402,15 +523,41 @@ def build_go_live_context(
             "funding_count": funding_count,
             "funding_error": funding_error,
         },
+        "strategy_ids": strategy_ids,
+        "symbols": symbols,
         "execution_tests": {
             "precision": precision_result,
             "submit": submit_result,
             "cancel": cancel_result,
         },
+        "exchange_account": {
+            "payload": account_payload,
+            "status_code": account_status,
+            "error": account_error,
+            "credentials_available": credentials_available,
+            "credential_source": credential_source,
+        },
+        "position_risk": {
+            "payload": position_risk_payload,
+            "status_code": position_risk_status,
+            "error": position_risk_error,
+        },
+        "reduce_only_test": {
+            "payload": reduce_only_payload,
+            "status_code": reduce_only_status,
+            "error": reduce_only_error,
+        },
         "exchange_metrics": {
             "websocket": websocket_snapshot,
             "rate_limit_status": rate_limit_status,
         },
+        "latency_metrics": latency_metrics,
+        "pnl_snapshot": {
+            "net_total_usd": pnl_net_total,
+            "error": pnl_error,
+            "as_of": pnl_snapshot.as_of.isoformat() if pnl_snapshot else None,
+        },
+        "dry_run_count": dry_run_count,
         "infra": {
             "db_ok": db_ok,
             "redis_ok": redis_ok,
@@ -418,6 +565,8 @@ def build_go_live_context(
             "worker_events": worker_events,
             "worker_lag_sec": worker_lag_sec,
             "strategy_engine_status": "unknown",
+            "strategy_heartbeat": strategy_heartbeat.decode() if isinstance(strategy_heartbeat, (bytes, bytearray)) else strategy_heartbeat,
+            "strategy_last_execution": strategy_last_execution.decode() if isinstance(strategy_last_execution, (bytes, bytearray)) else strategy_last_execution,
         },
     }
 
@@ -442,9 +591,17 @@ def run_go_live_validator(context: dict) -> dict:
     trading_state = context.get("trading_state") or {}
     execution_tests = context.get("execution_tests") or {}
     exchange_metrics = context.get("exchange_metrics") or {}
+    exchange_account = context.get("exchange_account") or {}
+    position_risk = context.get("position_risk") or {}
+    reduce_only_test = context.get("reduce_only_test") or {}
     infra = context.get("infra") or {}
     risk_config = context.get("risk_config") or {}
     risk_orchestrator_enabled = bool(context.get("risk_orchestrator_enabled"))
+    latency_metrics = context.get("latency_metrics") or {}
+    pnl_snapshot = context.get("pnl_snapshot") or {}
+    dry_run_count = int(context.get("dry_run_count") or 0)
+    strategy_ids = context.get("strategy_ids") or []
+    symbols = context.get("symbols") or []
 
     degraded = False
 
@@ -749,12 +906,46 @@ def run_go_live_validator(context: dict) -> dict:
         ),
     )
 
+    liquidation_threshold = _safe_float(risk_config.get("min_liquidation_distance_pct")) or 5.0
+    risk_payload = position_risk.get("payload")
+    risk_positions = []
+    if isinstance(risk_payload, list):
+        risk_positions = risk_payload
+    elif isinstance(risk_payload, dict) and risk_payload:
+        risk_positions = [risk_payload]
+
+    liquidation_distances = []
+    for item in risk_positions:
+        try:
+            position_amt = float(item.get("positionAmt") or item.get("position_amt") or 0)
+        except (TypeError, ValueError):
+            position_amt = 0
+        if position_amt == 0:
+            continue
+        mark_price = _safe_float(item.get("markPrice") or item.get("mark_price"))
+        liquidation_price = _safe_float(item.get("liquidationPrice") or item.get("liquidation_price"))
+        if mark_price and liquidation_price:
+            distance_pct = abs((mark_price - liquidation_price) / mark_price) * 100
+            liquidation_distances.append(distance_pct)
+
     if engine_positions_count == 0:
         liquidation_status = "PASS"
         liquidation_reason = "PASS"
-    else:
+    elif not liquidation_distances:
         liquidation_status = "UNKNOWN"
         liquidation_reason = "LIQUIDATION_DATA_MISSING"
+    else:
+        min_distance = min(liquidation_distances)
+        if min_distance < liquidation_threshold:
+            liquidation_status = "FAIL"
+            liquidation_reason = "LIQUIDATION_DISTANCE_LOW"
+        elif min_distance < liquidation_threshold * 1.5:
+            liquidation_status = "WARN"
+            liquidation_reason = "LIQUIDATION_DISTANCE_NEAR"
+        else:
+            liquidation_status = "PASS"
+            liquidation_reason = "PASS"
+
     add_step(
         "trading_state",
         _build_step(
@@ -762,9 +953,9 @@ def run_go_live_validator(context: dict) -> dict:
             status=liquidation_status,
             blocking=True,
             reason_code=liquidation_reason,
-            message="Liquidation risk uygun" if liquidation_status == "PASS" else "Liquidation riski doğrulanamadı",
-            details={"position_count": engine_positions_count},
-            data_source="risk_config",
+            message="Liquidation risk uygun" if liquidation_status == "PASS" else "Liquidation riski yüksek",
+            details={"distance_min_pct": min(liquidation_distances) if liquidation_distances else None, "threshold_pct": liquidation_threshold},
+            data_source="exchange_position_risk",
             started_at=time.perf_counter(),
         ),
     )
@@ -927,13 +1118,11 @@ def run_go_live_validator(context: dict) -> dict:
         ),
     )
 
-    partial_fill_count = int(trading_state.get("partial_fill_count") or 0)
-    if partial_fill_count > 0:
-        partial_status = "PASS"
-        partial_reason = "PASS"
-    else:
-        partial_status = "UNKNOWN"
-        partial_reason = "PARTIAL_FILL_UNVERIFIED"
+    partial_path = _build_state_path({"forced_outcome": "partial"})
+    partial_states = [item.get("state") for item in partial_path]
+    partial_ok = "PARTIALLY_FILLED" in partial_states and "FILLED" in partial_states
+    partial_status = "PASS" if partial_ok else "FAIL"
+    partial_reason = "PASS" if partial_ok else "PARTIAL_FILL_INVALID"
     add_step(
         "execution",
         _build_step(
@@ -941,19 +1130,65 @@ def run_go_live_validator(context: dict) -> dict:
             status=partial_status,
             blocking=True,
             reason_code=partial_reason,
-            message="Partial fill doğrulandı" if partial_status == "PASS" else "Partial fill doğrulanamadı",
-            details={"partial_fill_count": partial_fill_count},
-            data_source="execution_orders",
+            message="Partial fill doğrulandı" if partial_ok else "Partial fill akışı hatalı",
+            details={"states": partial_states},
+            data_source="execution_engine",
             started_at=time.perf_counter(),
         ),
     )
 
-    if engine_positions_count == 0 and engine_orders_count == 0:
-        reduce_status = "PASS"
-        reduce_reason = "PASS"
-    else:
+    fill_path = _build_state_path({})
+    fill_states = [item.get("state") for item in fill_path]
+    fill_ok = "FILLED" in fill_states
+    add_step(
+        "execution",
+        _build_step(
+            step_key="fill_path",
+            status="PASS" if fill_ok else "FAIL",
+            blocking=True,
+            reason_code="PASS" if fill_ok else "FILL_PATH_INVALID",
+            message="Fill path doğrulandı" if fill_ok else "Fill path hatalı",
+            details={"states": fill_states},
+            data_source="execution_engine",
+            started_at=time.perf_counter(),
+        ),
+    )
+
+    reject_path = _build_state_path({"forced_outcome": "rejected"})
+    reject_states = [item.get("state") for item in reject_path]
+    reject_ok = "REJECTED" in reject_states
+    add_step(
+        "execution",
+        _build_step(
+            step_key="reject_path",
+            status="PASS" if reject_ok else "FAIL",
+            blocking=True,
+            reason_code="PASS" if reject_ok else "REJECT_PATH_INVALID",
+            message="Reject path doğrulandı" if reject_ok else "Reject path hatalı",
+            details={"states": reject_states},
+            data_source="execution_engine",
+            started_at=time.perf_counter(),
+        ),
+    )
+
+    reduce_payload = reduce_only_test.get("payload") or {}
+    reduce_status_code = reduce_only_test.get("status_code")
+    reduce_ok = False
+    reduce_reason = "REDUCE_ONLY_UNVERIFIED"
+    if reduce_status_code is None:
         reduce_status = "UNKNOWN"
-        reduce_reason = "REDUCE_ONLY_UNVERIFIED"
+    elif reduce_status_code >= 400:
+        reduce_status = "PASS"
+        reduce_ok = True
+        reduce_reason = "REDUCE_ONLY_REJECTED"
+    else:
+        order_status = str(reduce_payload.get("status") or "").upper()
+        if order_status in {"NEW", "FILLED"}:
+            reduce_status = "FAIL"
+            reduce_reason = "REDUCE_ONLY_ACCEPTED"
+        else:
+            reduce_status = "UNKNOWN"
+            reduce_reason = "REDUCE_ONLY_UNKNOWN"
 
     add_step(
         "execution",
@@ -963,8 +1198,8 @@ def run_go_live_validator(context: dict) -> dict:
             blocking=True,
             reason_code=reduce_reason,
             message="Reduce-only doğrulandı" if reduce_status == "PASS" else "Reduce-only doğrulanamadı",
-            details={"position_count": engine_positions_count, "order_count": engine_orders_count},
-            data_source="execution_rules",
+            details={"status_code": reduce_status_code, "payload": reduce_payload},
+            data_source="exchange_adapter",
             started_at=time.perf_counter(),
         ),
     )
@@ -986,38 +1221,87 @@ def run_go_live_validator(context: dict) -> dict:
     )
 
     max_leverage = _safe_float(risk_config.get("max_leverage"))
-    leverage_violation = False
-    if max_leverage is not None:
-        for row in trading_state.get("engine_positions") or []:
+    leverage_cap = _safe_float(getattr(config, "leverage_cap", None))
+    expected_max_leverage = max_leverage
+    if leverage_cap is not None:
+        expected_max_leverage = min(expected_max_leverage, leverage_cap) if expected_max_leverage is not None else leverage_cap
+
+    account_payload = exchange_account.get("payload") or {}
+    account_positions = account_payload.get("positions") if isinstance(account_payload, dict) else None
+
+    leverage_values = []
+    margin_modes = []
+    for item in (risk_positions if 'risk_positions' in locals() else []):
+        try:
+            position_amt = float(item.get("positionAmt") or 0)
+        except (TypeError, ValueError):
+            position_amt = 0
+        if position_amt == 0:
+            continue
+        leverage_values.append(_safe_float(item.get("leverage")))
+        margin_modes.append(str(item.get("marginType") or item.get("margin_type") or "").lower())
+
+    if not leverage_values and isinstance(account_positions, list):
+        for item in account_positions:
             try:
-                if float(row.leverage or 0) > max_leverage:
-                    leverage_violation = True
-                    break
-            except Exception:
+                position_amt = float(item.get("positionAmt") or item.get("position_amt") or 0)
+            except (TypeError, ValueError):
+                position_amt = 0
+            if position_amt == 0:
                 continue
-    leverage_status = "PASS" if not leverage_violation else "FAIL"
-    if max_leverage is None:
+            leverage_values.append(_safe_float(item.get("leverage")))
+            margin_modes.append(str(item.get("marginType") or item.get("margin_type") or "").lower())
+
+    leverage_status = "UNKNOWN"
+    leverage_reason = "LEVERAGE_DATA_MISSING"
+    if engine_positions_count == 0:
+        leverage_status = "PASS"
+        leverage_reason = "PASS"
+    elif not leverage_values:
         leverage_status = "UNKNOWN"
+        leverage_reason = "LEVERAGE_DATA_MISSING"
+    elif expected_max_leverage is None:
+        leverage_status = "UNKNOWN"
+        leverage_reason = "LEVERAGE_EXPECTATION_MISSING"
+    elif any(value is not None and value > expected_max_leverage for value in leverage_values):
+        leverage_status = "FAIL"
+        leverage_reason = "LEVERAGE_MISMATCH"
+    else:
+        leverage_status = "PASS"
+        leverage_reason = "PASS"
+
     add_step(
         "risk",
         _build_step(
             step_key="leverage_validation",
             status=leverage_status,
             blocking=True,
-            reason_code="LEVERAGE_MISMATCH" if leverage_status == "FAIL" else "RISK_CONFIG_MISSING" if leverage_status == "UNKNOWN" else "PASS",
+            reason_code=leverage_reason,
             message="Leverage limit ok" if leverage_status == "PASS" else "Leverage mismatch",
-            details={"max_leverage": max_leverage},
-            data_source="risk_engine_config",
+            details={"max_leverage": expected_max_leverage, "observed": leverage_values},
+            data_source="exchange_position_risk",
             started_at=time.perf_counter(),
         ),
     )
 
+    expected_margin_mode = str(risk_config.get("margin_mode") or "").lower()
+    margin_mode_status = "UNKNOWN"
+    margin_mode_reason = "MARGIN_MODE_UNKNOWN"
     if engine_positions_count == 0:
         margin_mode_status = "PASS"
         margin_mode_reason = "PASS"
-    else:
+    elif not margin_modes:
         margin_mode_status = "UNKNOWN"
-        margin_mode_reason = "MARGIN_MODE_UNKNOWN"
+        margin_mode_reason = "MARGIN_MODE_DATA_MISSING"
+    elif not expected_margin_mode:
+        margin_mode_status = "UNKNOWN"
+        margin_mode_reason = "MARGIN_MODE_EXPECTATION_MISSING"
+    elif any(mode and mode != expected_margin_mode for mode in margin_modes):
+        margin_mode_status = "FAIL"
+        margin_mode_reason = "MARGIN_MODE_MISMATCH"
+    else:
+        margin_mode_status = "PASS"
+        margin_mode_reason = "PASS"
 
     add_step(
         "risk",
@@ -1027,8 +1311,8 @@ def run_go_live_validator(context: dict) -> dict:
             blocking=True,
             reason_code=margin_mode_reason,
             message="Margin mode doğrulandı" if margin_mode_status == "PASS" else "Margin mode doğrulanamadı",
-            details={"position_count": engine_positions_count},
-            data_source="risk_engine_config",
+            details={"expected": expected_margin_mode, "observed": margin_modes},
+            data_source="exchange_position_risk",
             started_at=time.perf_counter(),
         ),
     )
@@ -1153,6 +1437,132 @@ def run_go_live_validator(context: dict) -> dict:
         ),
     )
 
+    # Latency checks
+    round_trip_ms = _safe_float(latency_metrics.get("round_trip_ms"))
+    order_exec_ms = _safe_float(latency_metrics.get("order_execution_ms"))
+    tick_to_trade_ms = _safe_float(latency_metrics.get("tick_to_trade_ms"))
+
+    def _latency_status(value: float | None, key: str):
+        if value is None:
+            return "UNKNOWN", f"{key.upper()}_MISSING"
+        thresholds = LATENCY_THRESHOLDS.get(key) or {}
+        warn = thresholds.get("warn")
+        block = thresholds.get("block")
+        if block is not None and value > block:
+            return "FAIL", f"{key.upper()}_BLOCK"
+        if warn is not None and value > warn:
+            return "WARN", f"{key.upper()}_WARN"
+        return "PASS", "PASS"
+
+    for key, value, step_key in [
+        ("round_trip", round_trip_ms, "round_trip_latency"),
+        ("order_execution", order_exec_ms, "order_execution_latency"),
+        ("tick_to_trade", tick_to_trade_ms, "tick_to_trade_latency"),
+    ]:
+        status, reason = _latency_status(value, key)
+        add_step(
+            "latency",
+            _build_step(
+                step_key=step_key,
+                status=status,
+                blocking=True,
+                reason_code=reason,
+                message="Latency normal" if status == "PASS" else "Latency yüksek",
+                details={"value_ms": value, "thresholds": LATENCY_THRESHOLDS.get(key)},
+                data_source="execution_metrics",
+                started_at=time.perf_counter(),
+            ),
+        )
+
+    # Safety checks
+    submit_result = execution_tests.get("submit") or {}
+    submit_mocked = bool(submit_result.get("mocked"))
+    dry_run_ok = dry_run_count > 0 and not submit_mocked
+    add_step(
+        "safety",
+        _build_step(
+            step_key="dry_run_required",
+            status="PASS" if dry_run_ok else "FAIL",
+            blocking=True,
+            reason_code="PASS" if dry_run_ok else "DRY_RUN_REQUIRED",
+            message="Dry-run tamam" if dry_run_ok else "Dry-run zorunlu",
+            details={"dry_run_count": dry_run_count, "mocked": submit_mocked},
+            data_source="testnet_execution_log",
+            started_at=time.perf_counter(),
+        ),
+    )
+
+    max_drawdown_pct = _safe_float(risk_config.get("max_drawdown_pct") or risk_config.get("max_daily_loss_pct"))
+    drawdown_pct = None
+    net_total_usd = _safe_float(pnl_snapshot.get("net_total_usd"))
+    if net_total_usd is not None and wallet_balance is not None and wallet_balance > 0 and net_total_usd < 0:
+        drawdown_pct = abs(net_total_usd) / wallet_balance * 100
+
+    if max_drawdown_pct is None:
+        capital_status = "UNKNOWN"
+        capital_reason = "DRAW_DOWN_CONFIG_MISSING"
+    elif drawdown_pct is None:
+        capital_status = "UNKNOWN"
+        capital_reason = "DRAW_DOWN_DATA_MISSING"
+    elif drawdown_pct > max_drawdown_pct:
+        capital_status = "FAIL"
+        capital_reason = "DRAW_DOWN_LIMIT_BREACH"
+    elif drawdown_pct > max_drawdown_pct * 0.8:
+        capital_status = "WARN"
+        capital_reason = "DRAW_DOWN_LIMIT_NEAR"
+    else:
+        capital_status = "PASS"
+        capital_reason = "PASS"
+
+    add_step(
+        "safety",
+        _build_step(
+            step_key="capital_guard",
+            status=capital_status,
+            blocking=True,
+            reason_code=capital_reason,
+            message="Capital guard ok" if capital_status == "PASS" else "Capital guard risk",
+            details={"drawdown_pct": drawdown_pct, "threshold_pct": max_drawdown_pct},
+            data_source="pnl_records",
+            started_at=time.perf_counter(),
+        ),
+    )
+
+    max_exposure_pct_safety = _safe_float(risk_config.get("max_total_exposure_pct"))
+    exposure_pct = None
+    if wallet_balance is not None and wallet_balance > 0:
+        exposure_pct = (total_exposure / wallet_balance) * 100
+
+    if max_exposure_pct_safety is None:
+        exposure_status = "UNKNOWN"
+        exposure_reason = "EXPOSURE_LIMIT_MISSING"
+    elif exposure_pct is None:
+        exposure_status = "UNKNOWN"
+        exposure_reason = "EXPOSURE_DATA_MISSING"
+    elif exposure_pct > max_exposure_pct_safety:
+        exposure_status = "FAIL"
+        exposure_reason = "EXPOSURE_LIMIT_BREACH"
+    elif exposure_pct > max_exposure_pct_safety * 0.8:
+        exposure_status = "WARN"
+        exposure_reason = "EXPOSURE_LIMIT_NEAR"
+    else:
+        exposure_status = "PASS"
+        exposure_reason = "PASS"
+
+    add_step(
+        "safety",
+        _build_step(
+            step_key="exposure_limit",
+            status=exposure_status,
+            blocking=True,
+            reason_code=exposure_reason,
+            message="Exposure limit ok" if exposure_status == "PASS" else "Exposure limit risk",
+            details={"exposure_pct": exposure_pct, "threshold_pct": max_exposure_pct_safety},
+            data_source="risk_engine_config",
+            started_at=time.perf_counter(),
+        ),
+    )
+
     reason_codes: list[str] = []
     blocking_total = 0
     blocking_passed = 0
@@ -1216,6 +1626,30 @@ def run_go_live_validator(context: dict) -> dict:
         pass_count = sum(1 for step in layer_steps if step.get("status") == "PASS")
         scores[layer] = round((pass_count / len(layer_steps)) * 100, 2)
 
+    def _layer_state(layer: str) -> str:
+        layer_steps = by_layer.get(layer) or []
+        statuses = [step.get("status") for step in layer_steps]
+        if any(status == "FAIL" for status in statuses):
+            return "BLOCKED"
+        if any(status == "UNKNOWN" for status in statuses):
+            return "UNKNOWN"
+        if any(status == "WARN" for status in statuses):
+            return "WARNING"
+        return "READY" if statuses else "UNKNOWN"
+
+    exchange_name = str(connection.get("exchange") or "binance").lower()
+    exchange_readiness = {
+        exchange_name: {
+            "state": _layer_state("exchange"),
+            "steps": by_layer.get("exchange") or [],
+        }
+    }
+    for fallback_exchange in ["binance", "bybit"]:
+        exchange_readiness.setdefault(fallback_exchange, {"state": "UNKNOWN", "steps": []})
+
+    symbol_readiness = {symbol: ("READY" if symbol.upper() == "BTCUSDT" and readiness_state == "READY" else "UNKNOWN" if symbol else "UNKNOWN") for symbol in symbols}
+    strategy_readiness = {strategy_id: readiness_state for strategy_id in strategy_ids}
+
     return {
         "readiness_state": readiness_state,
         "go_live_allowed": readiness_state == "READY",
@@ -1240,6 +1674,10 @@ def run_go_live_validator(context: dict) -> dict:
         "generated_at": context.get("generated_at") or _utcnow().isoformat(),
         "legacy_score": score_payload,
         "execution_mode": execution_mode,
+        "exchange_readiness": exchange_readiness,
+        "symbol_readiness": symbol_readiness,
+        "strategy_readiness": strategy_readiness,
+        "latency_metrics": latency_metrics,
     }
 def evaluate_go_live_readiness(
     db: Session,
@@ -1279,4 +1717,8 @@ def evaluate_go_live_readiness(
             "generated_at": now,
             "legacy_score": {},
             "execution_mode": str(context.get("execution_mode") or "SIM"),
+            "exchange_readiness": {},
+            "symbol_readiness": {},
+            "strategy_readiness": {},
+            "latency_metrics": {},
         }

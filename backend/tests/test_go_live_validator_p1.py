@@ -75,7 +75,15 @@ def _base_context():
             "submit": {"status": "SUBMITTED", "mocked": False},
             "cancel": {"status": "CANCELLED", "mocked": False},
         },
+        "exchange_account": {"payload": {"positions": []}, "status_code": 200},
+        "position_risk": {"payload": [], "status_code": 200},
+        "reduce_only_test": {"payload": {"status": "REJECTED"}, "status_code": 400},
         "exchange_metrics": {"websocket": {"age_sec": 5}, "rate_limit_status": "ok"},
+        "latency_metrics": {"round_trip_ms": 120, "order_execution_ms": 200, "tick_to_trade_ms": 100},
+        "pnl_snapshot": {"net_total_usd": 0, "as_of": "2099-01-01T00:00:00+00:00"},
+        "dry_run_count": 2,
+        "strategy_ids": ["alpha"],
+        "symbols": ["BTCUSDT"],
         "infra": {
             "db_ok": True,
             "redis_ok": True,
@@ -94,7 +102,7 @@ def test_validator_output_has_layers():
     assert "blocking_failures" in result
     assert "warnings" in result
     assert "unknowns" in result
-    for key in ["core", "trading_state", "exchange", "execution", "risk", "infra"]:
+    for key in ["core", "trading_state", "exchange", "execution", "risk", "infra", "latency", "safety"]:
         assert key in result["scores"]
         assert key in result["by_layer"]
 

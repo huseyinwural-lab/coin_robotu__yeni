@@ -51,6 +51,13 @@ def test_live_readiness_endpoint_contract(admin_headers):
         assert field in payload
 
 
+def test_live_readiness_history_endpoint(admin_headers):
+    response = requests.get(f"{BASE_URL}/api/admin/futures/live-readiness/history", headers=admin_headers, timeout=20)
+    assert response.status_code == 200
+    payload = response.json()
+    assert "items" in payload
+
+
 def test_readiness_score_endpoint_contract(admin_headers):
     response = requests.get(f"{BASE_URL}/api/admin/futures/readiness-score", headers=admin_headers, timeout=20)
     assert response.status_code == 200
