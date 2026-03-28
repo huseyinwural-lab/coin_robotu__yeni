@@ -1,0 +1,82 @@
+{
+  "test_timestamp": "2026-03-28 23:33:43 UTC",
+  "base_url": "https://quarantine-pipeline.preview.emergentagent.com",
+  "credentials_email": "canary.admin@platform.local",
+  "admin_login": {
+    "status": "success",
+    "token_length": 601
+  },
+  "auth_me_with_device": {
+    "status": "success",
+    "role": "super_admin",
+    "email": "canary.admin@platform.local"
+  },
+  "auth_me_without_device": {
+    "status": "success",
+    "expected_401": true,
+    "detail": "{\"detail\":\"session_device_mismatch\"}"
+  },
+  "execution_gate": {
+    "status": "success",
+    "gate_state": "BLOCKED",
+    "execution_allowed": false,
+    "artifact_status": "S3_UPLOADED",
+    "bybit_order_smoke_status": "FAIL",
+    "bybit_order_smoke_reason": null
+  },
+  "incident_export": {
+    "status": "success",
+    "has_runbook_recommendations": true,
+    "has_quarantine_replay_plan": true,
+    "runbook_type": "<class 'list'>",
+    "quarantine_plan_type": "<class 'list'>"
+  },
+  "quarantine_operations": {
+    "status": "success",
+    "quarantine_total": 2,
+    "quarantine_items_count": 2,
+    "action_endpoints": {
+      "replay": {
+        "status_code": 404,
+        "accessible": true
+      },
+      "dismiss": {
+        "status_code": 404,
+        "accessible": true
+      },
+      "mark_failed": {
+        "status_code": 404,
+        "accessible": true
+      }
+    }
+  },
+  "p1_endpoints": {
+    "status": "success",
+    "endpoints": {
+      "reconciliation_summary": {
+        "status": "success",
+        "status_code": 200,
+        "has_data": true,
+        "data_type": "<class 'dict'>"
+      },
+      "gate_trends": {
+        "status": "success",
+        "status_code": 200,
+        "has_data": true,
+        "data_type": "<class 'dict'>"
+      },
+      "interventions_audit_trail": {
+        "status": "success",
+        "status_code": 200,
+        "has_data": true,
+        "data_type": "<class 'dict'>"
+      },
+      "intents_stuck_batch_recover": {
+        "status": "success",
+        "status_code": 200,
+        "has_data": true,
+        "data_type": "<class 'dict'>"
+      }
+    }
+  }
+}

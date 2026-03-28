@@ -12,6 +12,7 @@ from typing import Any
 import boto3
 import httpx
 from botocore.exceptions import BotoCoreError, ClientError
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from db import redis_client
@@ -85,6 +86,10 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _reload_local_env() -> None:
+    load_dotenv("/app/backend/.env", override=True)
+
+
 def _as_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
@@ -134,6 +139,7 @@ def _safe_redis_set_json(key: str, payload: dict, ttl_sec: int) -> None:
 
 
 def _resolve_bybit_testnet_credentials(db: Session) -> dict:
+    _reload_local_env()
     adapter_credentials = execution_credentials_for_adapter(db)
     bybit = dict((adapter_credentials or {}).get("bybit") or {})
     return {
@@ -340,6 +346,7 @@ def run_bybit_testnet_order_smoke(db: Session, *, force_refresh: bool = False) -
 
 
 def _artifact_s3_candidates() -> list[dict]:
+    _reload_local_env()
     candidates: list[dict] = []
     primary = {
         "bucket": os.environ.get("EXECUTION_SAFETY_S3_BUCKET"),
