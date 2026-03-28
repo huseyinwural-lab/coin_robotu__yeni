@@ -2469,5 +2469,8 @@ def evaluate_go_live_readiness(
             "exchange_readiness": {},
             "symbol_readiness": {},
             "strategy_readiness": {},
+            "readiness_matrix": {"exchange": {}, "symbol": {}, "strategy": {}},
+            "latency_config": dict(DEFAULT_LATENCY_CONFIG),
+            "timeout_policy": dict(DEFAULT_TIMEOUT_POLICY),
             "latency_metrics": {},
         }

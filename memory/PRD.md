@@ -1,3 +1,65 @@
+## 2026-03-28 — P1 + P2 Production Hardening Closure (Master Görev Emri)
+
+### Tamamlanan P1 Kritik Doğrulamalar
+- Strategy Engine health kanonikleştirildi (`strategy:engine:heartbeat`, `strategy:engine:last_execution_at`, `strategy:engine:error_state`):
+  - heartbeat yoksa `UNKNOWN`
+  - heartbeat stale/error_state varsa `FAIL`
+  - sağlıklı heartbeat + execution taze ise `PASS`
+- Liquidation risk derinleştirildi: mark/liquidation yoksa entry+leverage üzerinden fallback hesap, symbol bazlı distance üretimi.
+- Funding readiness canlılaştırıldı: symbol bazlı funding state + freshness (stale/missing => `FAIL`).
+- Execution capability gerçek lifecycle doğrulamasına taşındı:
+  - DB `ExecutionMetric.state_machine_path`
+  - `ExecutionStateTransition`
+  - `ExecutionLifecycleEvent`
+  - create/partial/fill/cancel/reject + DB/event sync doğrulaması.
+- Reduce-only enforcement korunarak venue kabulü durumunda `FAIL` davranışı sürdürüldü.
+- Risk engine connectivity gerçek health’e taşındı:
+  - config load + sample policy apply (`evaluate_risk_decision`) + runtime hata yakalama.
+- Exchange readiness multi-venue matrix (binance/bybit) eklendi (connectivity/latency/orderbook/rate-limit).
+
+### Tamamlanan P2 Production Hardening
+- Latency sistemi operasyonelleştirildi:
+  - `backend/config/latency_config.json`
+  - p95/p99 hesapları ve threshold multiplier kontrol adımları.
+- Timeout framework eklendi:
+  - `backend/config/timeout_policy.json`
+  - step bazlı timeout bucket enforcement (`exchange_call`, `order_execution`, `market_data`).
+- Readiness history analitik sistemi eklendi:
+  - `backend/services/readiness_history_service.py`
+  - endpoint: `GET /api/admin/futures/readiness/history` (+ `/live-readiness/history`)
+  - çıktılar: `top_reason_codes`, `top_blockers`, `failure_frequency`, `failure_trend`, `layer_failure_rate`, `last_n_summary`.
+- Failure pattern analysis ve readiness matrix çıktılarına dahil edildi.
+- Multi-dimension readiness üretimi iyileştirildi:
+  - `exchange_readiness`, `symbol_readiness`, `strategy_readiness`, `readiness_matrix`.
+- Safety layer güçlendirildi:
+  - Dry-run enforcement artık `successful_lifecycle_count` zorunlu.
+  - Capital guard drawdown + effective exposure ile derinleştirildi.
+  - Tekil exposure policy kaynağı eklendi: `backend/core/readiness/exposure_policy.py` (global/symbol/strategy).
+
+### UI / Operasyon (Operator-ready Dashboard)
+- `AdminFuturesLiveReadinessPage` tamamen yenilendi:
+  - Layer breakdown
+  - blocker + fix suggestion paneli
+  - exchange/symbol/strategy matrix
+  - failure trend ve top blockers
+  - step breakdown tablo
+  - progress bar + execution readiness kontrat özeti
+- Tüm kritik/etkileşimli öğelere `data-testid` eklendi.
+
+### Kontrat ve Uyumluluk Notları
+- Legacy projection alanları korunmaya devam ediyor.
+- Tek kaynak yine nested validator output (`scores/by_layer/blocking_failures/warnings/unknowns`).
+- Kural korunuyor: **UNKNOWN veya eksik veri asla PASS/READY fail-open üretmiyor.**
+
+### Doğrulama Sonucu
+- Geniş readiness suite: **67 passed, 18 skipped, 0 failed**
+- Testing agent raporu: `/app/test_reports/iteration_169.json`
+  - P1/P2 invariantleri doğrulandı (kritik açık yok).
+
+### Açık Kalanlar / Operasyonel Not
+- Preview ortamı zaman zaman yanıt vermediği için UI smoke adımı stabil değil (backend testleri tam yeşil).
+- Bybit testnet credential/config uyumu ortam bazlı değişkenlik gösterebilir; readiness bunu `FAIL/UNKNOWN` ile güvenli kapatır.
+
 ## 2026-03-28 — P0 Readiness Contract Stabilization (Hard Green)
 
 ### Kapsam (kullanıcı onaylı P0)
