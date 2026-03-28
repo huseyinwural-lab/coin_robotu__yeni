@@ -1,0 +1,18 @@
+{
+  "global": {
+    "max_total_exposure_pct": 300,
+    "warn_ratio": 0.8
+  },
+  "symbol": {
+    "max_symbol_exposure_pct": 120
+  },
+  "strategy": {
+    "max_strategy_exposure_pct": 180
+  },
+  "capital_guard": {
+    "max_drawdown_pct": 20,
+    "grace_wallet_min_usd": 10,
+    "unrealized_weight": 1.0,
+    "realized_weight": 1.0
+  }
+}

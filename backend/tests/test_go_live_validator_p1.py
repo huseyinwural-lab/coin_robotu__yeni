@@ -116,7 +116,8 @@ def test_validator_blocks_when_execution_mocked():
     result = run_go_live_validator(context)
     assert result["readiness_state"] != "READY"
     reasons = [item["reason_code"] for item in result.get("blocking_failures", [])]
-    assert "EXECUTION_TEST_MOCKED" in reasons
+    assert "EXECUTION_PROOF_ONLY_MOCKED" in reasons
+    assert "EXECUTION_TEST_MOCKED" in (result.get("reason_codes") or [])
 
 
 def test_validator_blocks_when_funding_missing_or_stale():

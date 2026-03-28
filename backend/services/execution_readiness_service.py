@@ -52,6 +52,11 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> 
     if not reason_codes and final_status != "READY":
         reason_codes.append("READINESS_FAIL")
 
+    execution_proof = validator.get("execution_proof") or {}
+    has_mocked_paths = bool(execution_proof.get("has_mocked_paths"))
+    if has_mocked_paths and "EXECUTION_PROOF_MOCKED_PATHS" not in reason_codes:
+        reason_codes.append("EXECUTION_PROOF_MOCKED_PATHS")
+
     return {
         "exchange_connection": exchange_connection_status,
         "permissions": permissions_status,
@@ -62,6 +67,8 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> 
         "mocked_flag": mocked_flag,
         "override_active": override_active,
         "reason_codes": sorted(set(reason_codes)),
+        "execution_proof": execution_proof,
+        "mocked_paths": has_mocked_paths,
         "readiness_state": readiness_state,
         "execution_allowed": bool(validator.get("execution_allowed")),
         "go_live_allowed": bool(validator.get("go_live_allowed")),

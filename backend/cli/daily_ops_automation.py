@@ -23,6 +23,7 @@ from services.strategy_observability_service import prune_strategy_observability
 from services.system_alert_service import create_system_alert
 from services.audit_service import create_audit_log
 from services.audit_retention_service import prune_audit_logs_with_policy
+from services.readiness_history_maintenance_service import run_readiness_history_maintenance
 
 
 def _load_release_gate_payload(path: Path) -> dict:
@@ -164,6 +165,15 @@ def run(*, gate_file: str, dry_run: bool) -> dict:
             "status": "DRY_RUN" if dry_run else "DONE",
             "summary": trace_prune,
         })
+
+        readiness_maintenance = run_readiness_history_maintenance(db, dry_run=dry_run)
+        actions.append(
+            {
+                "type": "readiness_history_maintenance",
+                "status": "DRY_RUN" if dry_run else "DONE",
+                "summary": readiness_maintenance,
+            }
+        )
 
         if str(gate.get("overall") or "").upper() == "FAIL":
             payload = {

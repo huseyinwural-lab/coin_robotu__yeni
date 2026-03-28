@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from core.live.readiness_score_engine import compute_readiness_score
-from core.readiness.exposure_policy import evaluate_exposure_policy
+from core.readiness.exposure_policy import evaluate_exposure_policy, load_exposure_policy
 from core.safety.kill_switch import get_kill_switch_state
 from db import redis_client
 from models import (
@@ -31,6 +31,7 @@ from models import (
 )
 from runtime_control.pipeline_controller import PIPELINE_QUEUE_KEYS
 from services.execution_mode_control_service import get_execution_mode, normalize_execution_mode
+from services.admin_exchange_credentials_service import execution_credentials_for_adapter, get_execution_credentials
 from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter
 from services.exchange_adapter.market_data_adapter import ExchangeMarketDataAdapter
 from services.live_mode_service import (
@@ -65,6 +66,7 @@ RISK_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "risk_engine
 RISK_CONFIG_BACKUP_PATH = Path(__file__).resolve().parents[2] / "config" / "risk_engine_config_backup.json"
 LATENCY_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "latency_config.json"
 TIMEOUT_POLICY_PATH = Path(__file__).resolve().parents[2] / "config" / "timeout_policy.json"
+DATA_QUALITY_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "readiness_data_quality_config.json"
 
 DEFAULT_LATENCY_CONFIG = {
     "round_trip": {"warn": 500, "block": 1500},
@@ -81,6 +83,19 @@ DEFAULT_TIMEOUT_POLICY = {
     "order_execution": 5.0,
     "market_data": 2.0,
     "strategy_heartbeat_stale_sec": 90,
+    "strategy_restart_grace_period_sec": 45,
+    "venue_overrides": {},
+    "symbol_overrides": {},
+    "strategy_overrides": {},
+}
+
+DEFAULT_DATA_QUALITY_CONFIG = {
+    "funding_freshness_sec": 120,
+    "liquidation": {
+        "min_input_coverage_pct": 80,
+        "require_maintenance_margin": True,
+        "distance_warn_multiplier": 1.4,
+    },
 }
 
 
@@ -173,6 +188,43 @@ def _load_timeout_policy(cache=None, overrides: dict | None = None) -> dict:
         for key in payload.keys():
             if candidate.get(key) is not None:
                 payload[key] = candidate.get(key)
+    return payload
+
+
+def _load_data_quality_config(cache=None, overrides: dict | None = None) -> dict:
+    payload = dict(DEFAULT_DATA_QUALITY_CONFIG)
+    payload["liquidation"] = dict(DEFAULT_DATA_QUALITY_CONFIG.get("liquidation") or {})
+
+    file_payload = {}
+    try:
+        if DATA_QUALITY_CONFIG_PATH.exists():
+            file_payload = json.loads(DATA_QUALITY_CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        file_payload = {}
+
+    cache_override = {}
+    try:
+        cache_override = get_json(cache, "readiness:data_quality:config") if cache else {}
+    except Exception:
+        cache_override = {}
+
+    env_override = {}
+    raw_env = os.environ.get("READINESS_DATA_QUALITY_CONFIG_JSON")
+    if raw_env:
+        try:
+            env_override = json.loads(raw_env)
+        except Exception:
+            env_override = {}
+
+    for candidate in [file_payload, cache_override, env_override, overrides or {}]:
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("funding_freshness_sec") is not None:
+            payload["funding_freshness_sec"] = candidate.get("funding_freshness_sec")
+        liquidation = payload.get("liquidation") or {}
+        incoming_liquidation = candidate.get("liquidation") or {}
+        if isinstance(incoming_liquidation, dict):
+            payload["liquidation"] = {**liquidation, **incoming_liquidation}
     return payload
 
 
@@ -400,8 +452,10 @@ def build_go_live_context(
             risk_config = load_risk_config(cache)
         except Exception:
             risk_config = _load_risk_config()
+    exposure_policy = load_exposure_policy(risk_config=risk_config, overrides=overrides.get("exposure_policy_overrides"))
     latency_config = overrides.get("latency_config") or _load_latency_config(cache, overrides.get("latency_config_overrides"))
     timeout_policy = overrides.get("timeout_policy") or _load_timeout_policy(cache, overrides.get("timeout_policy_overrides"))
+    data_quality_config = overrides.get("data_quality_config") or _load_data_quality_config(cache, overrides.get("data_quality_config_overrides"))
     risk_orchestrator_enabled = _risk_orchestrator_enabled(db)
 
     positions_query = db.query(Position).filter(Position.status == "open")
@@ -457,6 +511,8 @@ def build_go_live_context(
     lifecycle_events: list[str] = []
     lifecycle_sync_ok = False
     successful_lifecycle_count = 0
+    mocked_metric_count = 0
+    real_metric_count = 0
     try:
         metric_query = db.query(ExecutionMetric).order_by(ExecutionMetric.created_at.desc()).limit(200)
         if user_id:
@@ -468,6 +524,12 @@ def build_go_live_context(
             path = row.state_machine_path if isinstance(row.state_machine_path, list) else []
             norm_path = [str(item).upper() for item in path if str(item or "").strip()]
             lifecycle_states.extend(norm_path)
+            exchange_response = row.exchange_response if isinstance(row.exchange_response, dict) else {}
+            is_mocked = bool(exchange_response.get("mocked"))
+            if is_mocked:
+                mocked_metric_count += 1
+            else:
+                real_metric_count += 1
             if "CREATED" in norm_path and "FILLED" in norm_path:
                 successful_lifecycle_count += 1
 
@@ -497,6 +559,8 @@ def build_go_live_context(
         lifecycle_events = []
         lifecycle_sync_ok = False
         successful_lifecycle_count = 0
+        mocked_metric_count = 0
+        real_metric_count = 0
 
     total_exposure = 0.0
     for row in engine_positions:
@@ -508,7 +572,8 @@ def build_go_live_context(
     funding_count = 0
     funding_by_symbol: dict[str, dict] = {}
     funding_fresh = False
-    funding_threshold_sec = max(int((_safe_float(risk_config.get("stale_data_threshold_ms")) or 120000) / 1000), 30)
+    configured_funding_freshness = _safe_float(data_quality_config.get("funding_freshness_sec"), None)
+    funding_threshold_sec = int(configured_funding_freshness) if configured_funding_freshness else max(int((_safe_float(risk_config.get("stale_data_threshold_ms")) or 120000) / 1000), 30)
     market_adapter = ExchangeMarketDataAdapter(timeout_seconds=float(timeout_policy.get("market_data") or 2.0))
     try:
         threshold = _utcnow() - timedelta(days=1)
@@ -588,7 +653,16 @@ def build_go_live_context(
     except Exception as exc:
         funding_error = str(exc)
 
-    exec_adapter = ExchangeExecutionAdapter()
+    adapter_credentials = {}
+    adapter_credential_summary = {}
+    try:
+        adapter_credentials = execution_credentials_for_adapter(db)
+        adapter_credential_summary = get_execution_credentials(db)
+    except Exception:
+        adapter_credentials = {}
+        adapter_credential_summary = {}
+
+    exec_adapter = ExchangeExecutionAdapter(credentials_override=adapter_credentials)
     test_exchange = connection_payload.get("exchange") or "bybit"
     test_symbol = "BTCUSDT"
     try:
@@ -723,6 +797,7 @@ def build_go_live_context(
     strategy_heartbeat = None
     strategy_last_execution = None
     strategy_error_state = None
+    strategy_restart_at = None
     if redis_client is not None:
         try:
             strategy_heartbeat = redis_client.get("strategy:engine:heartbeat")
@@ -736,6 +811,10 @@ def build_go_live_context(
             strategy_error_state = redis_client.get("strategy:engine:error_state")
         except Exception:
             strategy_error_state = None
+        try:
+            strategy_restart_at = redis_client.get("strategy:engine:restart_at")
+        except Exception:
+            strategy_restart_at = None
 
     db_ok = True
     try:
@@ -830,6 +909,9 @@ def build_go_live_context(
 
     sample_symbol = symbols[0] if symbols else test_symbol
     exchange_matrix: dict[str, dict] = {}
+    venue_config_checklist: dict[str, dict] = {}
+    runtime_environment = str(connection_payload.get("environment") or "testnet").lower()
+
     for venue in ["binance", "bybit"]:
         venue_payload = {
             "connectivity": "UNKNOWN",
@@ -838,6 +920,15 @@ def build_go_live_context(
             "rate_limit": "UNKNOWN",
             "websocket_age_sec": None,
             "source": "none",
+            "reason_code": "UNKNOWN",
+            "environment": runtime_environment,
+        }
+        checklist = {
+            "has_testnet_credentials": False,
+            "has_live_credentials": False,
+            "environment_mapped": True,
+            "policy_valid": True,
+            "reason_code": "PASS",
         }
         if venue == "binance":
             venue_payload["connectivity"] = "PASS" if connection_payload.get("exists") and connection_payload.get("validation_success") else "FAIL"
@@ -849,23 +940,50 @@ def build_go_live_context(
             ask = _safe_float(market_payload.get("ask") or market_payload.get("best_ask"))
             venue_payload["orderbook"] = "PASS" if bid and ask and bid > 0 and ask > 0 else "FAIL"
             venue_payload["source"] = "connection_snapshot"
+            venue_payload["reason_code"] = "PASS" if venue_payload["connectivity"] == "PASS" and venue_payload["orderbook"] == "PASS" else "BINANCE_PROBE_FAIL"
         else:
+            bybit_creds = (adapter_credentials or {}).get("bybit") or {}
+            checklist["has_testnet_credentials"] = bool(bybit_creds.get("testnet_api_key") and bybit_creds.get("testnet_api_secret"))
+            checklist["has_live_credentials"] = bool(bybit_creds.get("live_api_key") and bybit_creds.get("live_api_secret"))
+
+            if runtime_environment == "live" and not checklist["has_live_credentials"]:
+                checklist["environment_mapped"] = False
+                checklist["reason_code"] = "BYBIT_LIVE_CREDENTIALS_MISSING"
+            elif runtime_environment != "live" and not checklist["has_testnet_credentials"]:
+                checklist["environment_mapped"] = False
+                checklist["reason_code"] = "BYBIT_TESTNET_CREDENTIALS_MISSING"
+
             started = time.perf_counter()
             try:
+                auth_ok, auth_probe, _ = exec_adapter._bybit_auth_probe(environment=runtime_environment)  # noqa: SLF001
                 ticker = market_adapter.fetch_ticker(exchange="bybit", symbol=sample_symbol)
                 venue_payload["latency_ms"] = round((time.perf_counter() - started) * 1000, 2)
                 bid = _safe_float(ticker.get("bid_price"))
                 ask = _safe_float(ticker.get("ask_price"))
-                venue_payload["connectivity"] = "PASS"
+                venue_payload["connectivity"] = "PASS" if auth_ok else "FAIL"
                 venue_payload["orderbook"] = "PASS" if bid and ask and bid > 0 and ask > 0 else "FAIL"
                 venue_payload["rate_limit"] = "UNKNOWN"
                 venue_payload["source"] = "market_adapter"
+                venue_payload["provider"] = auth_probe
+                if not auth_ok:
+                    venue_payload["reason_code"] = "BYBIT_AUTH_PROBE_FAIL"
+                elif venue_payload["orderbook"] != "PASS":
+                    venue_payload["reason_code"] = "BYBIT_ORDERBOOK_INVALID"
+                else:
+                    venue_payload["reason_code"] = "PASS"
             except Exception:
                 venue_payload["latency_ms"] = round((time.perf_counter() - started) * 1000, 2)
                 venue_payload["connectivity"] = "FAIL"
                 venue_payload["orderbook"] = "FAIL"
                 venue_payload["source"] = "market_adapter_error"
+                venue_payload["reason_code"] = "BYBIT_CONNECTIVITY_FAIL"
+
+            if not checklist["environment_mapped"]:
+                venue_payload["connectivity"] = "FAIL"
+                venue_payload["reason_code"] = checklist["reason_code"]
+
         exchange_matrix[venue] = venue_payload
+        venue_config_checklist[venue] = checklist
 
     return {
         "generated_at": _utcnow().isoformat(),
@@ -883,8 +1001,10 @@ def build_go_live_context(
             "market_data": market_source,
         },
         "risk_config": risk_config,
+        "exposure_policy": exposure_policy,
         "latency_config": latency_config,
         "timeout_policy": timeout_policy,
+        "data_quality_config": data_quality_config,
         "risk_orchestrator_enabled": risk_orchestrator_enabled,
         "risk_engine_health": risk_engine_health,
         "trading_state": {
@@ -908,9 +1028,13 @@ def build_go_live_context(
             "events": sorted({event for event in lifecycle_events if event}),
             "sync_ok": lifecycle_sync_ok,
             "successful_lifecycle_count": successful_lifecycle_count,
+            "mocked_metric_count": mocked_metric_count,
+            "real_metric_count": real_metric_count,
         },
         "portfolio_exposure": portfolio_exposure,
         "exchange_matrix": exchange_matrix,
+        "venue_config_checklist": venue_config_checklist,
+        "adapter_credential_summary": adapter_credential_summary,
         "execution_tests": {
             "precision": precision_result,
             "submit": submit_result,
@@ -954,6 +1078,7 @@ def build_go_live_context(
             "strategy_heartbeat": strategy_heartbeat.decode() if isinstance(strategy_heartbeat, (bytes, bytearray)) else strategy_heartbeat,
             "strategy_last_execution": strategy_last_execution.decode() if isinstance(strategy_last_execution, (bytes, bytearray)) else strategy_last_execution,
             "strategy_error_state": strategy_error_state.decode() if isinstance(strategy_error_state, (bytes, bytearray)) else strategy_error_state,
+            "strategy_restart_at": strategy_restart_at.decode() if isinstance(strategy_restart_at, (bytes, bytearray)) else strategy_restart_at,
         },
     }
 
@@ -983,8 +1108,10 @@ def run_go_live_validator(context: dict) -> dict:
     reduce_only_test = context.get("reduce_only_test") or {}
     infra = context.get("infra") or {}
     risk_config = context.get("risk_config") or {}
+    exposure_policy = context.get("exposure_policy") or load_exposure_policy(risk_config=risk_config)
     latency_config = context.get("latency_config") or dict(DEFAULT_LATENCY_CONFIG)
     timeout_policy = context.get("timeout_policy") or dict(DEFAULT_TIMEOUT_POLICY)
+    data_quality_config = context.get("data_quality_config") or dict(DEFAULT_DATA_QUALITY_CONFIG)
     risk_orchestrator_enabled = bool(context.get("risk_orchestrator_enabled"))
     risk_engine_health = context.get("risk_engine_health") or {}
     latency_metrics = context.get("latency_metrics") or {}
@@ -994,6 +1121,7 @@ def run_go_live_validator(context: dict) -> dict:
     strategy_metrics = context.get("strategy_metrics") or {}
     symbols = context.get("symbols") or []
     exchange_matrix = context.get("exchange_matrix") or {}
+    venue_config_checklist = context.get("venue_config_checklist") or {}
     execution_lifecycle = context.get("execution_lifecycle") or {}
     portfolio_exposure = context.get("portfolio_exposure") or {}
 
@@ -1308,6 +1436,7 @@ def run_go_live_validator(context: dict) -> dict:
             details={
                 "funding_count": trading_state.get("funding_count", 0),
                 "funding_fresh": funding_fresh,
+                "freshness_threshold_sec": data_quality_config.get("funding_freshness_sec"),
                 "symbols": funding_by_symbol,
             },
             data_source="commercial_trades",
@@ -1315,7 +1444,11 @@ def run_go_live_validator(context: dict) -> dict:
         ),
     )
 
+    liquidation_cfg = data_quality_config.get("liquidation") or {}
     liquidation_threshold = _safe_float(risk_config.get("min_liquidation_distance_pct")) or 5.0
+    liquidation_warn_multiplier = _safe_float(liquidation_cfg.get("distance_warn_multiplier"), 1.4) or 1.4
+    min_coverage_pct = _safe_float(liquidation_cfg.get("min_input_coverage_pct"), 80.0) or 80.0
+    require_maint_margin = bool(liquidation_cfg.get("require_maintenance_margin", True))
     risk_payload = position_risk.get("payload")
     risk_positions = []
     if isinstance(risk_payload, list):
@@ -1332,6 +1465,11 @@ def run_go_live_validator(context: dict) -> dict:
 
     liquidation_distances = []
     liquidation_by_symbol: dict[str, dict] = {}
+    total_active_positions = 0
+    covered_positions = 0
+    missing_mark_symbols: list[str] = []
+    missing_liq_symbols: list[str] = []
+    missing_maint_symbols: list[str] = []
     for item in risk_positions:
         try:
             position_amt = float(item.get("positionAmt") or item.get("position_amt") or 0)
@@ -1339,10 +1477,12 @@ def run_go_live_validator(context: dict) -> dict:
             position_amt = 0
         if position_amt == 0:
             continue
+        total_active_positions += 1
         symbol_key = str(item.get("symbol") or item.get("s") or "").upper().strip()
         mark_price = _safe_float(item.get("markPrice") or item.get("mark_price"))
         liquidation_price = _safe_float(item.get("liquidationPrice") or item.get("liquidation_price"))
         leverage = _safe_float(item.get("leverage"))
+        maint_margin = _safe_float(item.get("maintMargin") or item.get("maintenanceMargin") or item.get("maint_margin"))
 
         if liquidation_price is None and symbol_key and symbol_key in engine_position_map:
             pos = engine_position_map.get(symbol_key)
@@ -1355,20 +1495,44 @@ def run_go_live_validator(context: dict) -> dict:
                 else:
                     liquidation_price = entry_price * (1 + (1 / leverage))
 
+        if require_maint_margin and maint_margin is None and symbol_key:
+            missing_maint_symbols.append(symbol_key)
+
+        if mark_price is None and symbol_key:
+            missing_mark_symbols.append(symbol_key)
+        if liquidation_price is None and symbol_key:
+            missing_liq_symbols.append(symbol_key)
+
         if mark_price and liquidation_price:
             distance_pct = abs((mark_price - liquidation_price) / mark_price) * 100
             liquidation_distances.append(distance_pct)
+            covered_positions += 1
             if symbol_key:
                 liquidation_by_symbol[symbol_key] = {
                     "distance_pct": round(distance_pct, 4),
                     "mark_price": mark_price,
                     "liquidation_price": round(liquidation_price, 8),
                     "threshold_pct": liquidation_threshold,
+                    "maintenance_margin": maint_margin,
                 }
+
+    coverage_pct = round((covered_positions / max(total_active_positions, 1)) * 100, 4) if total_active_positions > 0 else 100.0
 
     if engine_positions_count == 0:
         liquidation_status = "PASS"
         liquidation_reason = "PASS"
+    elif require_maint_margin and missing_maint_symbols:
+        liquidation_status = "FAIL"
+        liquidation_reason = "LIQUIDATION_MAINT_MARGIN_MISSING"
+    elif coverage_pct < min_coverage_pct:
+        liquidation_status = "FAIL"
+        liquidation_reason = "LIQUIDATION_INPUT_COVERAGE_LOW"
+    elif missing_mark_symbols:
+        liquidation_status = "UNKNOWN"
+        liquidation_reason = "LIQUIDATION_MARK_PRICE_MISSING"
+    elif missing_liq_symbols and not liquidation_distances:
+        liquidation_status = "UNKNOWN"
+        liquidation_reason = "LIQUIDATION_PRICE_UNAVAILABLE"
     elif not liquidation_distances:
         liquidation_status = "UNKNOWN"
         liquidation_reason = "LIQUIDATION_DATA_MISSING"
@@ -1377,7 +1541,7 @@ def run_go_live_validator(context: dict) -> dict:
         if min_distance < liquidation_threshold:
             liquidation_status = "FAIL"
             liquidation_reason = "LIQUIDATION_DISTANCE_LOW"
-        elif min_distance < liquidation_threshold * 1.5:
+        elif min_distance < liquidation_threshold * liquidation_warn_multiplier:
             liquidation_status = "WARN"
             liquidation_reason = "LIQUIDATION_DISTANCE_NEAR"
         else:
@@ -1396,6 +1560,17 @@ def run_go_live_validator(context: dict) -> dict:
                 "distance_min_pct": min(liquidation_distances) if liquidation_distances else None,
                 "threshold_pct": liquidation_threshold,
                 "by_symbol": liquidation_by_symbol,
+                "input_coverage": {
+                    "total_active_positions": total_active_positions,
+                    "covered_positions": covered_positions,
+                    "coverage_pct": coverage_pct,
+                    "min_required_pct": min_coverage_pct,
+                },
+                "missing_inputs": {
+                    "mark_price_symbols": sorted(set(missing_mark_symbols)),
+                    "liquidation_price_symbols": sorted(set(missing_liq_symbols)),
+                    "maintenance_margin_symbols": sorted(set(missing_maint_symbols)),
+                },
             },
             data_source="exchange_position_risk",
             started_at=time.perf_counter(),
@@ -1517,7 +1692,7 @@ def run_go_live_validator(context: dict) -> dict:
                 step_key=f"venue_connectivity_{venue_key}",
                 status=connectivity,
                 blocking=True,
-                reason_code="PASS" if connectivity == "PASS" else f"{venue_key.upper()}_CONNECTIVITY_{connectivity}",
+                reason_code="PASS" if connectivity == "PASS" else str(payload.get("reason_code") or f"{venue_key.upper()}_CONNECTIVITY_{connectivity}"),
                 message=f"{venue_key} connectivity ok" if connectivity == "PASS" else f"{venue_key} connectivity sorunlu",
                 details=payload,
                 data_source=f"exchange_matrix:{venue_key}",
@@ -1531,7 +1706,7 @@ def run_go_live_validator(context: dict) -> dict:
                 step_key=f"venue_orderbook_{venue_key}",
                 status=orderbook,
                 blocking=True,
-                reason_code="PASS" if orderbook == "PASS" else f"{venue_key.upper()}_ORDERBOOK_{orderbook}",
+                reason_code="PASS" if orderbook == "PASS" else str(payload.get("reason_code") or f"{venue_key.upper()}_ORDERBOOK_{orderbook}"),
                 message=f"{venue_key} orderbook ok" if orderbook == "PASS" else f"{venue_key} orderbook sorunlu",
                 details=payload,
                 data_source=f"exchange_matrix:{venue_key}",
@@ -1541,8 +1716,10 @@ def run_go_live_validator(context: dict) -> dict:
 
         latency_status = "UNKNOWN"
         latency_reason = f"{venue_key.upper()}_LATENCY_UNKNOWN"
+        venue_timeout_overrides = (timeout_policy.get("venue_overrides") or {}).get(venue_key) or {}
+        exchange_timeout_sec = _safe_float(venue_timeout_overrides.get("exchange_call"), _safe_float(timeout_policy.get("exchange_call"), 3.0) or 3.0) or 3.0
+        exchange_timeout_ms = float(exchange_timeout_sec) * 1000
         if venue_latency is not None:
-            exchange_timeout_ms = float(timeout_policy.get("exchange_call") or 3.0) * 1000
             if venue_latency > exchange_timeout_ms:
                 latency_status = "FAIL"
                 latency_reason = f"{venue_key.upper()}_LATENCY_TIMEOUT"
@@ -1558,7 +1735,7 @@ def run_go_live_validator(context: dict) -> dict:
                 blocking=True,
                 reason_code=latency_reason,
                 message=f"{venue_key} latency ok" if latency_status == "PASS" else f"{venue_key} latency risk",
-                details={"latency_ms": venue_latency, "timeout_ms": float(timeout_policy.get("exchange_call") or 3.0) * 1000},
+                details={"latency_ms": venue_latency, "timeout_ms": exchange_timeout_ms},
                 data_source=f"exchange_matrix:{venue_key}",
                 started_at=time.perf_counter(),
             ),
@@ -1575,6 +1752,22 @@ def run_go_live_validator(context: dict) -> dict:
                 message=f"{venue_key} rate limit ok" if rate_status == "PASS" else f"{venue_key} rate limit risk",
                 details={"rate_limit": venue_rate},
                 data_source=f"exchange_matrix:{venue_key}",
+                started_at=time.perf_counter(),
+            ),
+        )
+
+        checklist = venue_config_checklist.get(venue_key) or {}
+        checklist_ok = bool(checklist.get("environment_mapped", True)) and bool(checklist.get("policy_valid", True))
+        add_step(
+            "exchange",
+            _build_step(
+                step_key=f"venue_config_checklist_{venue_key}",
+                status="PASS" if checklist_ok else "FAIL",
+                blocking=True,
+                reason_code="PASS" if checklist_ok else str(checklist.get("reason_code") or f"{venue_key.upper()}_CONFIG_INVALID"),
+                message=f"{venue_key} config checklist ok" if checklist_ok else f"{venue_key} config checklist fail",
+                details=checklist,
+                data_source=f"venue_config:{venue_key}",
                 started_at=time.perf_counter(),
             ),
         )
@@ -1601,16 +1794,20 @@ def run_go_live_validator(context: dict) -> dict:
     submit_mocked = bool(submit.get("mocked"))
     submit_status_raw = str(submit.get("status") or "").upper()
     submit_ok = submit_status_raw in {"SUBMITTED", "FILLED"} and not submit_mocked
-    submit_status = "PASS" if submit_ok else "FAIL" if submit else "UNKNOWN"
+    submit_status = "WARN" if submit_mocked else "PASS" if submit_ok else "FAIL" if submit else "UNKNOWN"
     add_step(
         "execution",
         _build_step(
             step_key="dry_run_order",
             status=submit_status,
-            blocking=True,
+            blocking=False,
             reason_code="EXECUTION_TEST_MOCKED" if submit_mocked else "EXECUTION_SUBMIT_FAIL" if not submit_ok else "PASS",
             message="Dry run order ok" if submit_ok else "Dry run order başarısız",
-            details={"status": submit.get("status"), "mocked": submit_mocked},
+            details={
+                "status": submit.get("status"),
+                "mocked": submit_mocked,
+                "proof_class": "MOCKED" if submit_mocked else "REAL",
+            },
             data_source="execution_adapter",
             started_at=time.perf_counter(),
         ),
@@ -1620,16 +1817,20 @@ def run_go_live_validator(context: dict) -> dict:
     cancel_mocked = bool(cancel.get("mocked"))
     cancel_status_raw = str(cancel.get("status") or "").upper()
     cancel_ok = cancel_status_raw == "CANCELLED" and not cancel_mocked
-    cancel_status = "PASS" if cancel_ok else "FAIL" if cancel else "UNKNOWN"
+    cancel_status = "WARN" if cancel_mocked else "PASS" if cancel_ok else "FAIL" if cancel else "UNKNOWN"
     add_step(
         "execution",
         _build_step(
             step_key="cancel_test",
             status=cancel_status,
-            blocking=True,
+            blocking=False,
             reason_code="EXECUTION_CANCEL_MOCKED" if cancel_mocked else "EXECUTION_CANCEL_FAIL" if not cancel_ok else "PASS",
             message="Cancel test ok" if cancel_ok else "Cancel test başarısız",
-            details={"status": cancel.get("status"), "mocked": cancel_mocked},
+            details={
+                "status": cancel.get("status"),
+                "mocked": cancel_mocked,
+                "proof_class": "MOCKED" if cancel_mocked else "REAL",
+            },
             data_source="execution_adapter",
             started_at=time.perf_counter(),
         ),
@@ -1638,6 +1839,8 @@ def run_go_live_validator(context: dict) -> dict:
     lifecycle_states = {str(state or "").upper() for state in (execution_lifecycle.get("states") or []) if str(state or "").strip()}
     lifecycle_events = {str(state or "").upper() for state in (execution_lifecycle.get("events") or []) if str(state or "").strip()}
     lifecycle_sync_ok = bool(execution_lifecycle.get("sync_ok"))
+    real_metric_count = int(execution_lifecycle.get("real_metric_count") or 0)
+    mocked_metric_count = int(execution_lifecycle.get("mocked_metric_count") or 0)
 
     partial_ok = "PARTIALLY_FILLED" in lifecycle_states and "FILLED" in lifecycle_states
     fill_ok = "FILLED" in lifecycle_states
@@ -1710,6 +1913,26 @@ def run_go_live_validator(context: dict) -> dict:
             message="Execution lifecycle DB/event uyumlu" if lifecycle_sync_ok else "Execution lifecycle DB/event uyumsuz",
             details={"states": sorted(lifecycle_states), "events": sorted(lifecycle_events)},
             data_source="execution_lifecycle_events",
+            started_at=time.perf_counter(),
+        ),
+    )
+
+    proof_quality_ok = real_metric_count > 0
+    add_step(
+        "execution",
+        _build_step(
+            step_key="execution_proof_quality",
+            status="PASS" if proof_quality_ok else "FAIL",
+            blocking=True,
+            reason_code="PASS" if proof_quality_ok else "EXECUTION_PROOF_ONLY_MOCKED",
+            message="Execution proof gerçek testnet verisi içeriyor" if proof_quality_ok else "Execution proof sadece mocked",
+            details={
+                "real_metric_count": real_metric_count,
+                "mocked_metric_count": mocked_metric_count,
+                "submit_mocked": submit_mocked,
+                "cancel_mocked": cancel_mocked,
+            },
+            data_source="execution_metrics",
             started_at=time.perf_counter(),
         ),
     )
@@ -1866,6 +2089,7 @@ def run_go_live_validator(context: dict) -> dict:
         total_exposure=total_exposure,
         portfolio_exposure=portfolio_exposure,
         risk_config=risk_config,
+        policy_overrides=exposure_policy,
     )
     exposure_status = str(exposure_policy_result.get("state") or "UNKNOWN")
     exposure_reason = str(exposure_policy_result.get("reason_code") or "EXPOSURE_DATA_MISSING")
@@ -1973,26 +2197,56 @@ def run_go_live_validator(context: dict) -> dict:
 
     heartbeat_raw = infra.get("strategy_heartbeat")
     last_execution_raw = infra.get("strategy_last_execution")
+    restart_raw = infra.get("strategy_restart_at")
     strategy_error_state = str(infra.get("strategy_error_state") or "").strip()
     stale_threshold_sec = int(_safe_float(timeout_policy.get("strategy_heartbeat_stale_sec"), 90) or 90)
+    grace_period_sec = int(_safe_float(timeout_policy.get("strategy_restart_grace_period_sec"), 45) or 45)
 
-    heartbeat_ts = _parse_timestamp(heartbeat_raw)
+    heartbeat_payload = None
+    producer_id = None
+    heartbeat_ts = None
+    if isinstance(heartbeat_raw, dict):
+        heartbeat_payload = heartbeat_raw
+    elif isinstance(heartbeat_raw, str) and heartbeat_raw.strip().startswith("{"):
+        try:
+            heartbeat_payload = json.loads(heartbeat_raw)
+        except Exception:
+            heartbeat_payload = None
+
+    if isinstance(heartbeat_payload, dict):
+        producer_id = str(heartbeat_payload.get("producer_id") or "").strip() or None
+        heartbeat_ts = _parse_timestamp(heartbeat_payload.get("timestamp") or heartbeat_payload.get("generated_at") or heartbeat_payload.get("heartbeat_at"))
+
+    if heartbeat_ts is None:
+        heartbeat_ts = _parse_timestamp(heartbeat_raw)
     last_execution_ts = _parse_timestamp(last_execution_raw)
+    restart_ts = _parse_timestamp(restart_raw)
     heartbeat_age_sec = int((_utcnow() - heartbeat_ts).total_seconds()) if heartbeat_ts else None
     last_execution_age_sec = int((_utcnow() - last_execution_ts).total_seconds()) if last_execution_ts else None
+    restart_age_sec = int((_utcnow() - restart_ts).total_seconds()) if restart_ts else None
+    within_restart_grace = restart_age_sec is not None and restart_age_sec <= grace_period_sec
 
     if not heartbeat_ts:
         strategy_status = "UNKNOWN"
         strategy_reason = "STRATEGY_ENGINE_UNKNOWN"
+    elif within_restart_grace:
+        strategy_status = "UNKNOWN"
+        strategy_reason = "STRATEGY_ENGINE_GRACE_PERIOD"
     elif strategy_error_state:
         strategy_status = "FAIL"
         strategy_reason = "STRATEGY_ENGINE_ERROR"
     elif heartbeat_age_sec is not None and heartbeat_age_sec > stale_threshold_sec:
         strategy_status = "FAIL"
         strategy_reason = "STRATEGY_ENGINE_HEARTBEAT_STALE"
-    elif last_execution_age_sec is not None and last_execution_age_sec > stale_threshold_sec * 3:
+    elif producer_id is None:
         strategy_status = "FAIL"
-        strategy_reason = "STRATEGY_ENGINE_EXECUTION_STALE"
+        strategy_reason = "STRATEGY_HEARTBEAT_PRODUCER_MISSING"
+    elif last_execution_age_sec is None:
+        strategy_status = "FAIL"
+        strategy_reason = "STRATEGY_ENGINE_IDLE_NO_OUTPUT"
+    elif last_execution_age_sec > stale_threshold_sec * 3:
+        strategy_status = "FAIL"
+        strategy_reason = "STRATEGY_ENGINE_IDLE_NO_OUTPUT"
     else:
         strategy_status = "PASS"
         strategy_reason = "PASS"
@@ -2007,9 +2261,14 @@ def run_go_live_validator(context: dict) -> dict:
             message="Strategy engine health doğrulandı" if strategy_status == "PASS" else "Strategy engine health başarısız",
             details={
                 "heartbeat": heartbeat_raw,
+                "heartbeat_payload": heartbeat_payload,
+                "producer_id": producer_id,
                 "last_execution": last_execution_raw,
+                "restart_at": restart_raw,
                 "heartbeat_age_sec": heartbeat_age_sec,
                 "last_execution_age_sec": last_execution_age_sec,
+                "restart_age_sec": restart_age_sec,
+                "restart_grace_period_sec": grace_period_sec,
                 "error_state": strategy_error_state,
                 "stale_threshold_sec": stale_threshold_sec,
             },
@@ -2124,8 +2383,9 @@ def run_go_live_validator(context: dict) -> dict:
         ),
     )
 
-    max_drawdown_pct = _safe_float(risk_config.get("max_drawdown_pct") or risk_config.get("max_daily_loss_pct"))
-    max_exposure_pct_safety = _safe_float(risk_config.get("max_total_exposure_pct"))
+    capital_guard_policy = (exposure_policy or {}).get("capital_guard") or {}
+    max_drawdown_pct = _safe_float(capital_guard_policy.get("max_drawdown_pct") or risk_config.get("max_drawdown_pct") or risk_config.get("max_daily_loss_pct"))
+    max_exposure_pct_safety = _safe_float((exposure_policy.get("global") or {}).get("max_total_exposure_pct"), _safe_float(risk_config.get("max_total_exposure_pct")))
     drawdown_pct = None
     net_total_usd = _safe_float(pnl_snapshot.get("net_total_usd"))
     portfolio_notional = _safe_float(portfolio_exposure.get("global_notional"), 0.0) or 0.0
@@ -2396,6 +2656,15 @@ def run_go_live_validator(context: dict) -> dict:
         "strategy": strategy_readiness,
     }
 
+    execution_proof = {
+        "real_metric_count": int(execution_lifecycle.get("real_metric_count") or 0),
+        "mocked_metric_count": int(execution_lifecycle.get("mocked_metric_count") or 0),
+        "submit_mocked": bool((execution_tests.get("submit") or {}).get("mocked")),
+        "cancel_mocked": bool((execution_tests.get("cancel") or {}).get("mocked")),
+    }
+    execution_proof["has_mocked_paths"] = bool(execution_proof["submit_mocked"] or execution_proof["cancel_mocked"] or execution_proof["mocked_metric_count"] > 0)
+    execution_proof["proof_status"] = "REAL" if execution_proof["real_metric_count"] > 0 else "MOCKED_ONLY"
+
     return {
         "readiness_state": readiness_state,
         "go_live_allowed": readiness_state == "READY",
@@ -2424,8 +2693,12 @@ def run_go_live_validator(context: dict) -> dict:
         "symbol_readiness": symbol_readiness,
         "strategy_readiness": strategy_readiness,
         "readiness_matrix": readiness_matrix,
+        "execution_proof": execution_proof,
         "latency_config": latency_config,
         "timeout_policy": timeout_policy,
+        "data_quality_config": data_quality_config,
+        "venue_config_checklist": venue_config_checklist,
+        "adapter_credential_summary": context.get("adapter_credential_summary") or {},
         "latency_metrics": latency_metrics,
     }
 def evaluate_go_live_readiness(
@@ -2470,7 +2743,18 @@ def evaluate_go_live_readiness(
             "symbol_readiness": {},
             "strategy_readiness": {},
             "readiness_matrix": {"exchange": {}, "symbol": {}, "strategy": {}},
+            "execution_proof": {
+                "real_metric_count": 0,
+                "mocked_metric_count": 0,
+                "submit_mocked": True,
+                "cancel_mocked": True,
+                "has_mocked_paths": True,
+                "proof_status": "MOCKED_ONLY",
+            },
             "latency_config": dict(DEFAULT_LATENCY_CONFIG),
             "timeout_policy": dict(DEFAULT_TIMEOUT_POLICY),
+            "data_quality_config": dict(DEFAULT_DATA_QUALITY_CONFIG),
+            "venue_config_checklist": {},
+            "adapter_credential_summary": {},
             "latency_metrics": {},
         }

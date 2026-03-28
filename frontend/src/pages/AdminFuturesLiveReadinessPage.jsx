@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
+import { resolveRunbookKey } from "@/lib/readinessRunbookMap";
 
 const STATE_COLORS = {
   READY: "bg-emerald-200 text-emerald-950 border-emerald-400",
@@ -28,7 +29,7 @@ const REASON_HINTS = {
 
 const badgeClass = (state) => `inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${STATE_COLORS[state] || STATE_COLORS.UNKNOWN}`;
 
-const reasonFixHint = (reasonCode) => REASON_HINTS[reasonCode] || "Operasyon runbook'ta ilgili reason code adımını uygula.";
+const reasonFixHint = (reasonCode) => REASON_HINTS[reasonCode] || `Runbook uygula: ${resolveRunbookKey(reasonCode)}`;
 
 export const AdminFuturesLiveReadinessPage = () => {
   const [loading, setLoading] = useState(false);
@@ -38,6 +39,12 @@ export const AdminFuturesLiveReadinessPage = () => {
   const [scorePayload, setScorePayload] = useState(null);
   const [historyPayload, setHistoryPayload] = useState(null);
   const [executionPayload, setExecutionPayload] = useState(null);
+  const [filters, setFilters] = useState({
+    exchange: "",
+    symbol: "",
+    strategy: "",
+    degradedOnly: false,
+  });
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -46,7 +53,17 @@ export const AdminFuturesLiveReadinessPage = () => {
       const [liveRes, scoreRes, historyRes, executionRes] = await Promise.all([
         apiClient.get("/admin/futures/live-readiness", { params: { refresh: true } }),
         apiClient.get("/admin/futures/readiness-score", { params: { refresh: true } }),
-        apiClient.get("/admin/futures/readiness/history", { params: { limit: 30, days: 14 } }),
+        apiClient.get("/admin/futures/readiness/history", {
+          params: {
+            limit: 100,
+            days: 14,
+            page: 1,
+            page_size: 30,
+            exchange: filters.exchange || undefined,
+            symbol: filters.symbol || undefined,
+            strategy: filters.strategy || undefined,
+          },
+        }),
         apiClient.get("/admin/execution-readiness"),
       ]);
       setReadinessPayload(liveRes.data);
@@ -59,7 +76,7 @@ export const AdminFuturesLiveReadinessPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filters.exchange, filters.strategy, filters.symbol]);
 
   useEffect(() => {
     loadData();
@@ -79,6 +96,51 @@ export const AdminFuturesLiveReadinessPage = () => {
   const topBlockers = historyPayload?.top_blockers || [];
   const failureTrend = historyPayload?.failure_trend || [];
   const matrix = readinessPayload?.readiness_matrix || {};
+
+  const filteredExchangeEntries = useMemo(() => {
+    const query = filters.exchange.trim().toLowerCase();
+    return Object.entries(matrix.exchange || {}).filter(([exchange, value]) => {
+      if (query && !exchange.toLowerCase().includes(query)) return false;
+      if (filters.degradedOnly) {
+        const state = String(value?.state || "UNKNOWN").toUpperCase();
+        return state !== "READY" && state !== "PASS";
+      }
+      return true;
+    });
+  }, [filters.degradedOnly, filters.exchange, matrix.exchange]);
+
+  const filteredSymbolEntries = useMemo(() => {
+    const query = filters.symbol.trim().toUpperCase();
+    return Object.entries(matrix.symbol || {}).filter(([symbol, state]) => {
+      if (query && !symbol.toUpperCase().includes(query)) return false;
+      if (filters.degradedOnly) {
+        const normalized = String(state || "UNKNOWN").toUpperCase();
+        return normalized !== "READY" && normalized !== "PASS";
+      }
+      return true;
+    });
+  }, [filters.degradedOnly, filters.symbol, matrix.symbol]);
+
+  const filteredStrategyEntries = useMemo(() => {
+    const query = filters.strategy.trim();
+    return Object.entries(matrix.strategy || {}).filter(([strategy, state]) => {
+      if (query && !strategy.includes(query)) return false;
+      if (filters.degradedOnly) {
+        const normalized = String(state || "UNKNOWN").toUpperCase();
+        return normalized !== "READY" && normalized !== "PASS";
+      }
+      return true;
+    });
+  }, [filters.degradedOnly, filters.strategy, matrix.strategy]);
+
+  const filteredBlockingFailures = useMemo(() => {
+    const exchangeQuery = filters.exchange.trim().toLowerCase();
+    return blockingFailures.filter((item) => {
+      if (!exchangeQuery) return true;
+      return String(item?.reason_code || "").toLowerCase().includes(exchangeQuery)
+        || String(item?.step_key || "").toLowerCase().includes(exchangeQuery);
+    });
+  }, [blockingFailures, filters.exchange]);
 
   return (
     <section className="space-y-6 px-1" data-testid="admin-futures-live-readiness-page">
@@ -101,6 +163,44 @@ export const AdminFuturesLiveReadinessPage = () => {
           data-testid="live-readiness-refresh-button"
         >
           Refresh Readiness
+        </Button>
+        <input
+          value={filters.exchange}
+          onChange={(event) => setFilters((prev) => ({ ...prev, exchange: event.target.value }))}
+          placeholder="exchange filter"
+          className="h-9 rounded-md border border-cyan-700 bg-slate-900 px-3 text-xs text-cyan-100"
+          data-testid="live-readiness-filter-exchange-input"
+        />
+        <input
+          value={filters.symbol}
+          onChange={(event) => setFilters((prev) => ({ ...prev, symbol: event.target.value.toUpperCase() }))}
+          placeholder="symbol filter"
+          className="h-9 rounded-md border border-cyan-700 bg-slate-900 px-3 text-xs text-cyan-100"
+          data-testid="live-readiness-filter-symbol-input"
+        />
+        <input
+          value={filters.strategy}
+          onChange={(event) => setFilters((prev) => ({ ...prev, strategy: event.target.value }))}
+          placeholder="strategy filter"
+          className="h-9 rounded-md border border-cyan-700 bg-slate-900 px-3 text-xs text-cyan-100"
+          data-testid="live-readiness-filter-strategy-input"
+        />
+        <label className="inline-flex items-center gap-2 rounded-md border border-cyan-700 px-3 py-2 text-xs text-cyan-100" data-testid="live-readiness-filter-degraded-label">
+          <input
+            type="checkbox"
+            checked={filters.degradedOnly}
+            onChange={(event) => setFilters((prev) => ({ ...prev, degradedOnly: event.target.checked }))}
+            data-testid="live-readiness-filter-degraded-checkbox"
+          />
+          degraded/unknown only
+        </label>
+        <Button
+          variant="outline"
+          className="border-cyan-700 text-cyan-100"
+          onClick={() => setFilters({ exchange: "", symbol: "", strategy: "", degradedOnly: false })}
+          data-testid="live-readiness-filter-reset-button"
+        >
+          Reset Filters
         </Button>
         <p className="text-xs text-cyan-200" data-testid="live-readiness-loading-text">loading: {String(loading)}</p>
         <p className="text-xs text-cyan-200" data-testid="live-readiness-updated-at-text">updated: {updatedAt || "-"}</p>
@@ -183,16 +283,17 @@ export const AdminFuturesLiveReadinessPage = () => {
             <section className="rounded-xl border border-cyan-900 bg-slate-950 p-4" data-testid="live-readiness-blocker-panel">
               <h3 className="text-sm font-semibold text-cyan-100" data-testid="live-readiness-blocker-title">Critical Blockers & Fix</h3>
               <div className="mt-3 space-y-2" data-testid="live-readiness-blocker-list">
-                {blockingFailures.map((item, index) => (
+                {filteredBlockingFailures.map((item, index) => (
                   <article className="rounded-lg border border-rose-700/40 bg-rose-950/20 p-3" key={`${item.reason_code}-${index}`} data-testid={`live-readiness-blocker-item-${index}`}>
                     <div className="flex flex-wrap items-center gap-2" data-testid={`live-readiness-blocker-header-${index}`}>
                       <span className={badgeClass(item.status)} data-testid={`live-readiness-blocker-status-${index}`}>{item.status}</span>
                       <span className="text-xs font-semibold text-rose-200" data-testid={`live-readiness-blocker-reason-${index}`}>{item.reason_code}</span>
                     </div>
                     <p className="mt-2 text-xs text-rose-100" data-testid={`live-readiness-blocker-fix-${index}`}>{reasonFixHint(item.reason_code)}</p>
+                    <p className="mt-1 text-[11px] text-rose-300" data-testid={`live-readiness-blocker-runbook-${index}`}>runbook: {resolveRunbookKey(item.reason_code)}</p>
                   </article>
                 ))}
-                {blockingFailures.length === 0 && <p className="text-xs text-cyan-300" data-testid="live-readiness-blocker-empty">Kritik blocker yok.</p>}
+                {filteredBlockingFailures.length === 0 && <p className="text-xs text-cyan-300" data-testid="live-readiness-blocker-empty">Kritik blocker yok.</p>}
               </div>
             </section>
           </div>
@@ -201,7 +302,7 @@ export const AdminFuturesLiveReadinessPage = () => {
             <section className="rounded-xl border border-cyan-900 bg-slate-950 p-4" data-testid="live-readiness-exchange-matrix-panel">
               <h3 className="text-sm font-semibold text-cyan-100" data-testid="live-readiness-exchange-matrix-title">Exchange Matrix</h3>
               <div className="mt-3 space-y-2" data-testid="live-readiness-exchange-matrix-list">
-                {Object.entries(matrix.exchange || {}).map(([exchange, value]) => (
+                {filteredExchangeEntries.map(([exchange, value]) => (
                   <article className="rounded-lg border border-cyan-900/60 bg-slate-900 p-2" key={exchange} data-testid={`live-readiness-exchange-item-${exchange}`}>
                     <div className="flex items-center justify-between" data-testid={`live-readiness-exchange-header-${exchange}`}>
                       <p className="text-xs uppercase tracking-wide text-cyan-200" data-testid={`live-readiness-exchange-name-${exchange}`}>{exchange}</p>
@@ -216,26 +317,26 @@ export const AdminFuturesLiveReadinessPage = () => {
             <section className="rounded-xl border border-cyan-900 bg-slate-950 p-4" data-testid="live-readiness-symbol-matrix-panel">
               <h3 className="text-sm font-semibold text-cyan-100" data-testid="live-readiness-symbol-matrix-title">Symbol Matrix</h3>
               <div className="mt-3 space-y-2" data-testid="live-readiness-symbol-matrix-list">
-                {Object.entries(matrix.symbol || {}).map(([symbol, state]) => (
+                {filteredSymbolEntries.map(([symbol, state]) => (
                   <article className="flex items-center justify-between rounded-lg border border-cyan-900/60 bg-slate-900 p-2" key={symbol} data-testid={`live-readiness-symbol-item-${symbol}`}>
                     <p className="text-xs font-semibold text-cyan-200" data-testid={`live-readiness-symbol-name-${symbol}`}>{symbol}</p>
                     <span className={badgeClass(state)} data-testid={`live-readiness-symbol-state-${symbol}`}>{state}</span>
                   </article>
                 ))}
-                {Object.keys(matrix.symbol || {}).length === 0 && <p className="text-xs text-cyan-300" data-testid="live-readiness-symbol-empty">Symbol readiness verisi yok.</p>}
+                {filteredSymbolEntries.length === 0 && <p className="text-xs text-cyan-300" data-testid="live-readiness-symbol-empty">Symbol readiness verisi yok.</p>}
               </div>
             </section>
 
             <section className="rounded-xl border border-cyan-900 bg-slate-950 p-4" data-testid="live-readiness-strategy-matrix-panel">
               <h3 className="text-sm font-semibold text-cyan-100" data-testid="live-readiness-strategy-matrix-title">Strategy Matrix</h3>
               <div className="mt-3 space-y-2" data-testid="live-readiness-strategy-matrix-list">
-                {Object.entries(matrix.strategy || {}).map(([strategy, state]) => (
+                {filteredStrategyEntries.map(([strategy, state]) => (
                   <article className="flex items-center justify-between rounded-lg border border-cyan-900/60 bg-slate-900 p-2" key={strategy} data-testid={`live-readiness-strategy-item-${strategy}`}>
                     <p className="text-xs font-semibold text-cyan-200" data-testid={`live-readiness-strategy-name-${strategy}`}>{strategy}</p>
                     <span className={badgeClass(state)} data-testid={`live-readiness-strategy-state-${strategy}`}>{state}</span>
                   </article>
                 ))}
-                {Object.keys(matrix.strategy || {}).length === 0 && <p className="text-xs text-cyan-300" data-testid="live-readiness-strategy-empty">Strategy readiness verisi yok.</p>}
+                {filteredStrategyEntries.length === 0 && <p className="text-xs text-cyan-300" data-testid="live-readiness-strategy-empty">Strategy readiness verisi yok.</p>}
               </div>
             </section>
           </div>
@@ -245,10 +346,13 @@ export const AdminFuturesLiveReadinessPage = () => {
               <h3 className="text-sm font-semibold text-cyan-100" data-testid="live-readiness-top-blockers-title">Top Blockers</h3>
               <div className="mt-3 space-y-2" data-testid="live-readiness-top-blockers-list">
                 {topBlockers.map((item, index) => (
-                  <div className="flex items-center justify-between rounded-md border border-cyan-900/60 bg-slate-900 p-2" key={`${item.reason_code}-${index}`} data-testid={`live-readiness-top-blocker-item-${index}`}>
-                    <p className="text-xs text-cyan-200" data-testid={`live-readiness-top-blocker-reason-${index}`}>{item.reason_code}</p>
-                    <p className="text-xs font-semibold text-cyan-100" data-testid={`live-readiness-top-blocker-count-${index}`}>{item.count}</p>
-                  </div>
+                  <article className="rounded-md border border-cyan-900/60 bg-slate-900 p-2" key={`${item.reason_code}-${index}`} data-testid={`live-readiness-top-blocker-item-${index}`}>
+                    <div className="flex items-center justify-between" data-testid={`live-readiness-top-blocker-head-${index}`}>
+                      <p className="text-xs text-cyan-200" data-testid={`live-readiness-top-blocker-reason-${index}`}>{item.reason_code}</p>
+                      <p className="text-xs font-semibold text-cyan-100" data-testid={`live-readiness-top-blocker-count-${index}`}>{item.count}</p>
+                    </div>
+                    <p className="mt-1 text-[11px] text-cyan-300" data-testid={`live-readiness-top-blocker-runbook-${index}`}>{item.runbook || resolveRunbookKey(item.reason_code)}</p>
+                  </article>
                 ))}
                 {topBlockers.length === 0 && <p className="text-xs text-cyan-300" data-testid="live-readiness-top-blockers-empty">Blocker trend verisi yok.</p>}
               </div>
@@ -265,6 +369,22 @@ export const AdminFuturesLiveReadinessPage = () => {
                       <span className="text-rose-300" data-testid={`live-readiness-failure-trend-blocked-${index}`}>BLOCKED: {row.blocked}</span>
                       <span className="text-amber-300" data-testid={`live-readiness-failure-trend-warning-${index}`}>WARNING: {row.warning}</span>
                       <span className="text-slate-300" data-testid={`live-readiness-failure-trend-unknown-${index}`}>UNKNOWN: {row.unknown}</span>
+                    </div>
+                    <div className="mt-2 h-2 w-full rounded-full bg-slate-800" data-testid={`live-readiness-failure-trend-bar-track-${index}`}>
+                      <div
+                        className="h-full rounded-full bg-rose-400"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            Math.round(
+                              ((Number(row.blocked || 0) + Number(row.unknown || 0))
+                                / Math.max(Number(row.ready || 0) + Number(row.blocked || 0) + Number(row.warning || 0) + Number(row.unknown || 0), 1))
+                                * 100,
+                            ),
+                          )}%`,
+                        }}
+                        data-testid={`live-readiness-failure-trend-bar-value-${index}`}
+                      />
                     </div>
                   </article>
                 ))}
@@ -305,6 +425,8 @@ export const AdminFuturesLiveReadinessPage = () => {
             <div className="mt-2 flex flex-wrap gap-3 text-xs" data-testid="live-readiness-execution-readiness-content">
               <span data-testid="live-readiness-execution-final-status">final_status: {executionPayload?.final_status || "-"}</span>
               <span data-testid="live-readiness-execution-mode">mode: {executionPayload?.mode || "-"}</span>
+              <span data-testid="live-readiness-execution-mocked-paths">mocked_paths: {String(executionPayload?.mocked_paths)}</span>
+              <span data-testid="live-readiness-execution-proof-status">proof_status: {executionPayload?.execution_proof?.proof_status || readinessPayload?.execution_proof?.proof_status || "-"}</span>
               <span data-testid="live-readiness-execution-reason-codes">reason_codes: {(executionPayload?.reason_codes || []).join(", ") || "-"}</span>
             </div>
           </section>

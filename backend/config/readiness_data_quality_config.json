@@ -1,0 +1,8 @@
+{
+  "funding_freshness_sec": 120,
+  "liquidation": {
+    "min_input_coverage_pct": 80,
+    "require_maintenance_margin": true,
+    "distance_warn_multiplier": 1.4
+  }
+}

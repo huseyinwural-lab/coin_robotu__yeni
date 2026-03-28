@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -15,6 +17,34 @@ READINESS_ACTIONS = {
     "SYSTEM_READINESS_SCORE_VIEWED",
     "FUTURES_EXECUTION_READINESS_VIEWED",
 }
+
+RUNBOOK_MAPPING_PATH = Path(__file__).resolve().parents[1] / "config" / "readiness_runbook_mapping.json"
+
+
+def _load_runbook_mapping() -> dict:
+    try:
+        if RUNBOOK_MAPPING_PATH.exists():
+            payload = json.loads(RUNBOOK_MAPPING_PATH.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                return {str(k): str(v) for k, v in payload.items()}
+    except Exception:
+        return {}
+    return {}
+
+
+def _match_filter(details: dict, *, exchange: str | None, strategy: str | None, symbol: str | None) -> bool:
+    matrix = details.get("readiness_matrix") or {}
+    exchange_matrix = matrix.get("exchange") or details.get("exchange_readiness") or {}
+    strategy_matrix = matrix.get("strategy") or details.get("strategy_readiness") or {}
+    symbol_matrix = matrix.get("symbol") or details.get("symbol_readiness") or {}
+
+    if exchange and str(exchange).strip().lower() not in {str(key).strip().lower() for key in exchange_matrix.keys()}:
+        return False
+    if strategy and str(strategy).strip() not in {str(key).strip() for key in strategy_matrix.keys()}:
+        return False
+    if symbol and str(symbol).strip().upper() not in {str(key).strip().upper() for key in symbol_matrix.keys()}:
+        return False
+    return True
 
 
 def _utcnow() -> datetime:
@@ -45,6 +75,11 @@ def get_readiness_history(
     *,
     limit: int = 50,
     days: int = 14,
+    page: int = 1,
+    page_size: int = 25,
+    exchange: str | None = None,
+    strategy: str | None = None,
+    symbol: str | None = None,
 ) -> dict:
     now = _utcnow()
     since = now - timedelta(days=max(int(days or 1), 1))
@@ -57,6 +92,7 @@ def get_readiness_history(
         .limit(max(limit * 10, 200))
     )
     rows = query.all()
+    runbook_mapping = _load_runbook_mapping()
 
     reason_counter: Counter[str] = Counter()
     blocker_counter: Counter[str] = Counter()
@@ -70,6 +106,8 @@ def get_readiness_history(
     for row in rows:
         details = dict(row.details or {})
         state = str(details.get("readiness_state") or "UNKNOWN").upper()
+        if not _match_filter(details, exchange=exchange, strategy=strategy, symbol=symbol):
+            continue
         score = float(details.get("readiness_score") or 0.0)
         reason_codes = [str(code) for code in (details.get("reason_codes") or []) if str(code).strip()]
         blocking_failures = details.get("blocking_failures") or []
@@ -98,6 +136,7 @@ def get_readiness_history(
             {
                 "audit_id": row.id,
                 "timestamp": row.created_at.isoformat() if row.created_at else None,
+                "incident_correlation_id": f"{day_key}:{state}:{(reason_codes[0] if reason_codes else 'NA')}",
                 "action": row.action,
                 "severity": row.severity,
                 "readiness_state": state,
@@ -107,13 +146,25 @@ def get_readiness_history(
                 "summary": details.get("summary") or {},
                 "scores": scores,
                 "top_reason_codes": [code for code, _ in Counter(reason_codes).most_common(3)],
+                "recommended_remediations": [
+                    {
+                        "reason_code": code,
+                        "runbook": runbook_mapping.get(code, "runbook_generic_readiness_triage"),
+                    }
+                    for code in reason_codes[:5]
+                ],
             }
         )
 
-    items = items[: max(limit, 1)]
+    total_items = len(items)
+    page = max(int(page or 1), 1)
+    page_size = max(min(int(page_size or limit or 25), 100), 1)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_items = items[start:end]
 
     failure_frequency = {
-        "total": len(items),
+        "total": total_items,
         "ready": state_counter.get("READY", 0),
         "blocked": state_counter.get("BLOCKED", 0),
         "warning": state_counter.get("WARNING", 0),
@@ -148,13 +199,25 @@ def get_readiness_history(
             "rate": round(failed / max(total, 1), 6),
         }
 
-    top_reason_codes = [{"reason_code": code, "count": count} for code, count in reason_counter.most_common(10)]
-    top_blockers = [{"reason_code": code, "count": count} for code, count in blocker_counter.most_common(10)]
+    top_reason_codes = [{"reason_code": code, "count": count, "runbook": runbook_mapping.get(code, "runbook_generic_readiness_triage")} for code, count in reason_counter.most_common(10)]
+    top_blockers = [{"reason_code": code, "count": count, "runbook": runbook_mapping.get(code, "runbook_generic_readiness_triage")} for code, count in blocker_counter.most_common(10)]
 
     return {
-        "items": items,
+        "items": paginated_items,
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_items": total_items,
+            "total_pages": max((total_items + page_size - 1) // page_size, 1),
+        },
+        "filters": {
+            "days": days,
+            "exchange": exchange,
+            "strategy": strategy,
+            "symbol": symbol,
+        },
         "last_n_summary": {
-            "count": len(items),
+            "count": total_items,
             "states": dict(state_counter),
         },
         "top_reason_codes": top_reason_codes,
@@ -162,4 +225,5 @@ def get_readiness_history(
         "failure_frequency": failure_frequency,
         "failure_trend": failure_trend,
         "layer_failure_rate": layer_failure_rate,
+        "runbook_mapping": runbook_mapping,
     }

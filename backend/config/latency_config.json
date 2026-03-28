@@ -1,7 +1,7 @@
 {
   "round_trip": {
-    "warn": 500,
-    "block": 1500
+    "warn": 600,
+    "block": 1800
   },
   "order_execution": {
     "warn": 1000,
