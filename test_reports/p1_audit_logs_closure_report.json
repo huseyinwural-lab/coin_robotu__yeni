@@ -41,6 +41,13 @@
       "details": {
         "path": "/app/test_reports/summary.md"
       }
+    },
+    {
+      "name": "perf_summary_present",
+      "passed": true,
+      "details": {
+        "path": "/app/test_reports/perf_summary.md"
+      }
     }
   ],
   "overall_pass": true

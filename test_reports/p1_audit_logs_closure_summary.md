@@ -14,3 +14,5 @@ Overall: PASS
   - details: {'missing': []}
 - PASS — performance_summary_present
   - details: {'path': '/app/test_reports/summary.md'}
+- PASS — perf_summary_present
+  - details: {'path': '/app/test_reports/perf_summary.md'}
