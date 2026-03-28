@@ -834,3 +834,47 @@ def apply_runtime_quarantine_action(
         "resolved_at": _as_utc(row.resolved_at).isoformat() if _as_utc(row.resolved_at) else None,
         "payload": payload,
     }
+
+
+def build_execution_incident_package(
+    db: Session,
+    *,
+    user_id: str | None = None,
+    include_events: bool = False,
+) -> dict:
+    gate_snapshot = get_execution_safety_gate(db, user_id=user_id, force_refresh=False)
+    intents_snapshot = get_execution_intent_state_machine_snapshot(
+        db,
+        limit=200,
+        include_events=include_events,
+        auto_quarantine_stuck=True,
+    )
+    quarantine_snapshot = get_runtime_quarantine_snapshot(db, limit=200)
+
+    package_id = str(uuid.uuid4())
+    generated_at = _utcnow().isoformat()
+    package_payload = {
+        "schema_version": "1.0",
+        "package_type": "execution_incident_package",
+        "package_id": package_id,
+        "generated_at": generated_at,
+        "gate_snapshot": gate_snapshot,
+        "intents_snapshot": intents_snapshot,
+        "quarantine_snapshot": quarantine_snapshot,
+        "artifact_links": {
+            "gate_artifact_local": ((gate_snapshot.get("artifact") or {}).get("local_path")),
+            "gate_artifact_s3": ((gate_snapshot.get("artifact") or {}).get("s3_uri")),
+        },
+    }
+
+    incident_artifact = write_signed_artifact(
+        package_payload,
+        artifact_type="execution_incident_package",
+        filename_prefix="execution_incident_package",
+    )
+    package_payload["package_artifact"] = {
+        "artifact_id": incident_artifact.get("artifact_id"),
+        "path": incident_artifact.get("path"),
+        "entry": incident_artifact.get("entry"),
+    }
+    return package_payload

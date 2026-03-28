@@ -304,6 +304,22 @@ export const AdminExecutionReadinessPage = () => {
     }
   }, [exportDateFrom, exportDateTo, exportScope]);
 
+  const handleIncidentPackageExport = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/execution-readiness/incident/export?include_events=false");
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `execution-incident-package-${Date.now()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("Incident paket export hazır");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Incident paket export alınamadı");
+    }
+  }, []);
+
   const failCodesText = useMemo(() => (ops?.active_fail_codes || []).join(", "), [ops?.active_fail_codes]);
 
   const filteredHistoryItems = useMemo(() => {
@@ -372,6 +388,7 @@ export const AdminExecutionReadinessPage = () => {
             <Button variant="outline" onClick={() => load(true)} disabled={loading || actionLoading} data-testid="admin-production-gate-refresh-button">Yenile</Button>
             <Button variant="outline" onClick={() => setNewFailPulse(false)} data-testid="admin-production-gate-clear-fail-pulse-button">Yeni FAIL işaretini temizle</Button>
             <Button variant="outline" onClick={handleExportJson} data-testid="admin-production-gate-export-json-button">JSON Export</Button>
+            <Button variant="outline" onClick={handleIncidentPackageExport} data-testid="admin-production-gate-export-incident-package-button">Incident Paketi Export</Button>
             <Button onClick={() => handleRerun()} disabled={actionLoading} data-testid="admin-production-gate-rerun-all-button">Tüm Checkleri Rerun</Button>
           </div>
         </div>

@@ -8,6 +8,7 @@ from deps import require_admin
 from models import User
 from services.execution_safety_core_service import (
     apply_runtime_quarantine_action,
+    build_execution_incident_package,
     get_execution_intent_state_machine_snapshot,
     get_execution_safety_gate,
     get_runtime_quarantine_snapshot,
@@ -74,3 +75,14 @@ def execution_quarantine_action(
         detail = str(exc)
         status_code = status.HTTP_404_NOT_FOUND if detail == "quarantine_event_not_found" else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.get("/incident/export")
+def execution_incident_export(
+    include_events: bool = Query(default=False),
+    user_id: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return build_execution_incident_package(db, user_id=user_id, include_events=include_events)

@@ -14,9 +14,11 @@
   - `GET /api/execution-readiness/intents`
   - `GET /api/execution-readiness/quarantine`
   - `POST /api/execution-readiness/quarantine/{event_id}/{action}`
+  - `GET /api/execution-readiness/incident/export` (tek tık incident paket export)
 - Router `server.py` içine bağlandı.
 - Frontend güncellendi:
   - `AdminExecutionReadinessPage.jsx` içine Execution Safety Core overview kartları (gate, intents, quarantine)
+  - `AdminExecutionReadinessPage.jsx` header’a `Incident Paketi Export` butonu eklendi (JSON download)
   - `AdminRuntimeQuarantinePage.jsx` yeni `/execution-readiness/quarantine` endpointlerine geçirildi.
 
 ### Bu tur test/doğrulama
