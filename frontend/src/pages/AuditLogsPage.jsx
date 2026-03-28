@@ -7,7 +7,7 @@ import "@xyflow/react/dist/style.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { apiClient } from "@/lib/api";
+import { apiClient, FRONTEND_BACKEND_URL } from "@/lib/api";
 
 const severityClass = {
   info: "bg-cyan-900/40 text-cyan-200",
@@ -255,6 +255,11 @@ export const AuditLogsPage = () => {
       toast.error(error?.response?.data?.detail || "Incident kapatılamadı");
     }
   }, [fetchIncidents, selectedCorrelation]);
+
+  const exportIncidentBundle = useCallback((incidentId) => {
+    const url = `${FRONTEND_BACKEND_URL}/api/audit-logs/incidents/${encodeURIComponent(incidentId)}/bundle`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, []);
 
   const loadMore = useCallback(() => {
     if (!hasMore || !nextCursor || loading) return;
@@ -813,6 +818,8 @@ export const AuditLogsPage = () => {
             <p className="text-sm text-rose-100" data-testid="audit-root-cause-breakdown-cluster">cluster_id: {rootCauseBreakdown.cluster_id || "-"}</p>
             <p className="text-sm text-rose-100" data-testid="audit-root-cause-breakdown-reasons">reason_codes: {(rootCauseBreakdown.reason_codes || []).join(", ") || "none"}</p>
             <p className="text-sm text-rose-100" data-testid="audit-root-cause-breakdown-blockers">critical_blockers: {(rootCauseBreakdown.critical_blockers || []).join(", ") || "none"}</p>
+            <p className="text-sm text-rose-100" data-testid="audit-root-cause-breakdown-anomaly">anomaly_detected: {String(Boolean(rootCauseBreakdown.anomaly_detected))}</p>
+            <p className="text-sm text-rose-100" data-testid="audit-root-cause-breakdown-anomaly-reasons">anomaly_reasons: {(rootCauseBreakdown.anomaly_reasons || []).join(", ") || "none"}</p>
           </div>
         )}
 
@@ -855,22 +862,32 @@ export const AuditLogsPage = () => {
           ) : (
             <div className="mt-2 space-y-2" data-testid="audit-incident-list-items">
               {incidents.map((incident, idx) => (
-                <div key={incident.incident_id} className="flex flex-wrap items-center justify-between rounded border border-slate-700 px-3 py-2" data-testid={`audit-incident-item-${idx}`}>
+                <div key={incident.incident_id} className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-700 px-3 py-2" data-testid={`audit-incident-item-${idx}`}>
                   <div className="space-y-1">
                     <p className="text-sm text-slate-200" data-testid={`audit-incident-item-id-${idx}`}>{incident.incident_id}</p>
                     <p className="text-xs text-slate-400" data-testid={`audit-incident-item-meta-${idx}`}>
                       {incident.severity} • {incident.status} • auto_created={String(Boolean(incident.auto_created))}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={incident.status === "closed"}
-                    onClick={() => closeIncident(incident.incident_id)}
-                    data-testid={`audit-incident-close-button-${idx}`}
-                  >
-                    Close
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => exportIncidentBundle(incident.incident_id)}
+                      data-testid={`audit-incident-export-button-${idx}`}
+                    >
+                      Export Bundle
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={incident.status === "closed"}
+                      onClick={() => closeIncident(incident.incident_id)}
+                      data-testid={`audit-incident-close-button-${idx}`}
+                    >
+                      Close
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -263,8 +263,35 @@ def close_incident(db: Session, *, incident: DebugIncident, closed_by: str | Non
 def build_incident_debug_bundle(db: Session, *, incident: DebugIncident) -> dict:
     correlation_id = str(incident.linked_correlation_id or "").strip()
     lifecycle = get_lifecycle_chain(db, correlation_id, limit=1500) if correlation_id else {}
+    events = lifecycle.get("events") or lifecycle.get("chain", {}).get("events") or []
+    root_cause_breakdown = lifecycle.get("root_cause_breakdown") or {}
+    rca_summary = {
+        "failure_type": root_cause_breakdown.get("failure_type") or root_cause_breakdown.get("pattern_tag") or "unknown",
+        "root_cause": root_cause_breakdown.get("root_cause") or "unknown",
+        "pattern_id": root_cause_breakdown.get("pattern_id"),
+        "cluster_id": root_cause_breakdown.get("cluster_id"),
+        "confidence": root_cause_breakdown.get("confidence") or "low",
+        "anomaly_detected": bool(root_cause_breakdown.get("anomaly_detected")),
+        "anomaly_reasons": root_cause_breakdown.get("anomaly_reasons") or [],
+    }
+    replay_input = {
+        "correlation_id": correlation_id,
+        "replay_mode": "isolated",
+        "events": events,
+    }
+    metadata = {
+        "correlation_id": correlation_id,
+        "event_count": len(events),
+        "trace_incomplete": bool(lifecycle.get("trace_incomplete")),
+        "missing_critical_stages": lifecycle.get("missing_critical_stages") or [],
+        "broken_chain": bool(lifecycle.get("broken_chain")),
+        "export_version": "p1_debug_bundle_v2",
+    }
     return {
         "incident": serialize_incident(incident),
         "lifecycle": lifecycle,
+        "rca_summary": rca_summary,
+        "replay_input": replay_input,
+        "metadata": metadata,
         "exported_at": _utcnow().isoformat(),
     }

@@ -1,0 +1,40 @@
+{
+  "checks": [
+    {
+      "name": "canonical_endpoints_present",
+      "passed": true,
+      "details": {
+        "missing": []
+      }
+    },
+    {
+      "name": "deprecated_aliases_removed",
+      "passed": true,
+      "details": {
+        "found": []
+      }
+    },
+    {
+      "name": "explain_payload_fields_present",
+      "passed": true,
+      "details": {
+        "missing": []
+      }
+    },
+    {
+      "name": "incident_bundle_fields_present",
+      "passed": true,
+      "details": {
+        "missing": []
+      }
+    },
+    {
+      "name": "audit_logs_ui_anomaly_and_export",
+      "passed": true,
+      "details": {
+        "missing": []
+      }
+    }
+  ],
+  "overall_pass": true
+}
