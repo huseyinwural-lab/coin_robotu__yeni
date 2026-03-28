@@ -8,8 +8,12 @@ from deps import require_admin
 from models import User
 from services.execution_safety_core_service import (
     apply_runtime_quarantine_action,
+    batch_recover_stuck_intents,
     build_execution_incident_package,
+    get_gate_failure_trends,
     get_execution_intent_state_machine_snapshot,
+    get_manual_intervention_audit_trail,
+    get_order_reconciliation_summary,
     get_execution_safety_gate,
     get_runtime_quarantine_snapshot,
 )
@@ -86,3 +90,51 @@ def execution_incident_export(
 ):
     _ = current_user
     return build_execution_incident_package(db, user_id=user_id, include_events=include_events)
+
+
+@router.post("/intents/stuck/batch-recover")
+def execution_stuck_intents_batch_recover(
+    action: str = Query(default="replay"),
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return batch_recover_stuck_intents(
+            db,
+            action=action,
+            limit=limit,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/reconciliation/summary")
+def execution_reconciliation_summary(
+    limit: int = Query(default=500, ge=1, le=2000),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_order_reconciliation_summary(db, limit=limit)
+
+
+@router.get("/gate/trends")
+def execution_gate_failure_trends(
+    days: int = Query(default=7, ge=1, le=90),
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    return get_gate_failure_trends(days=days)
+
+
+@router.get("/interventions/audit-trail")
+def execution_interventions_audit_trail(
+    limit: int = Query(default=100, ge=1, le=500),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_manual_intervention_audit_trail(db, limit=limit)

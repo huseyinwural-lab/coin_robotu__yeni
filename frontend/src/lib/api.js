@@ -34,6 +34,7 @@ export const apiClient = axios.create({
 });
 
 const SESSION_STORAGE_KEY = "platform-session-id";
+const DEVICE_STORAGE_KEY = "platform-device-id";
 
 const readStoredToken = () => {
   if (typeof window === "undefined") {
@@ -67,6 +68,22 @@ const generateRequestId = () => {
   return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
+const ensureDeviceId = () => {
+  if (typeof window === "undefined") {
+    return "server-device-id";
+  }
+  const current = String(window.localStorage.getItem(DEVICE_STORAGE_KEY) || "").trim();
+  if (current.length >= 24) {
+    return current;
+  }
+  const randomPart = typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID().replace(/-/g, "")
+    : `${Date.now()}${Math.random().toString(16).slice(2)}`;
+  const deviceId = `dev${randomPart}`.slice(0, 64);
+  window.localStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
+  return deviceId;
+};
+
 apiClient.interceptors.request.use((config) => {
   const nextConfig = config;
   nextConfig.headers = nextConfig.headers || {};
@@ -79,6 +96,7 @@ apiClient.interceptors.request.use((config) => {
   }
 
   nextConfig.headers["X-Session-ID"] = ensureSessionId();
+  nextConfig.headers["X-Session-Device"] = ensureDeviceId();
   nextConfig.headers["X-Request-ID"] = generateRequestId();
   return nextConfig;
 });

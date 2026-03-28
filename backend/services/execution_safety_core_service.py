@@ -15,7 +15,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy.orm import Session
 
 from db import redis_client
-from models import ExecutionIntent, ExecutionIntentEvent, FailedEvent
+from models import AuditLog, ExecutionIntent, ExecutionIntentEvent, FailedEvent
 from services.admin_exchange_credentials_service import execution_credentials_for_adapter
 from services.artifact_service import write_signed_artifact
 from services.audit_service import create_audit_log
@@ -339,13 +339,29 @@ def run_bybit_testnet_order_smoke(db: Session, *, force_refresh: bool = False) -
         return result
 
 
-def _artifact_s3_config() -> dict:
-    return {
+def _artifact_s3_candidates() -> list[dict]:
+    candidates: list[dict] = []
+    primary = {
         "bucket": os.environ.get("EXECUTION_SAFETY_S3_BUCKET"),
         "region": os.environ.get("EXECUTION_SAFETY_S3_REGION"),
         "access_key": os.environ.get("EXECUTION_SAFETY_AWS_ACCESS_KEY_ID"),
         "secret_key": os.environ.get("EXECUTION_SAFETY_AWS_SECRET_ACCESS_KEY"),
+        "source": "execution_safety",
     }
+    if all(primary.values()):
+        candidates.append(primary)
+
+    backup = {
+        "bucket": os.environ.get("BACKUP_S3_BUCKET"),
+        "region": os.environ.get("BACKUP_AWS_REGION"),
+        "access_key": os.environ.get("BACKUP_AWS_ACCESS_KEY_ID"),
+        "secret_key": os.environ.get("BACKUP_AWS_SECRET_ACCESS_KEY"),
+        "source": "backup_fallback",
+    }
+    if all(backup.values()):
+        if not candidates or any(backup[key] != candidates[0][key] for key in ("bucket", "region", "access_key")):
+            candidates.append(backup)
+    return candidates
 
 
 def persist_execution_safety_artifact(payload: dict) -> dict:
@@ -356,8 +372,8 @@ def persist_execution_safety_artifact(payload: dict) -> dict:
     )
     entry = dict(local_artifact.get("entry") or {})
     artifact_path = str(local_artifact.get("path") or "")
-    config = _artifact_s3_config()
-    if not all(config.values()):
+    configs = _artifact_s3_candidates()
+    if not configs:
         return {
             "status": "LOCAL_ONLY",
             "local_path": artifact_path,
@@ -367,41 +383,47 @@ def persist_execution_safety_artifact(payload: dict) -> dict:
 
     file_name = Path(artifact_path).name
     object_key = f"execution-safety/{_utcnow().strftime('%Y/%m/%d')}/{file_name}"
-    try:
-        client = boto3.client(
-            "s3",
-            region_name=config["region"],
-            aws_access_key_id=config["access_key"],
-            aws_secret_access_key=config["secret_key"],
-        )
-        with Path(artifact_path).open("rb") as handle:
-            client.put_object(
-                Bucket=config["bucket"],
-                Key=object_key,
-                Body=handle.read(),
-                ContentType="application/json",
-                Metadata={
-                    "artifact-type": "execution_safety_gate",
-                    "artifact-id": str(entry.get("artifact_id") or ""),
-                },
+    last_error = None
+    for config in configs:
+        try:
+            client = boto3.client(
+                "s3",
+                region_name=config["region"],
+                aws_access_key_id=config["access_key"],
+                aws_secret_access_key=config["secret_key"],
             )
-        return {
-            "status": "S3_UPLOADED",
-            "local_path": artifact_path,
-            "entry": entry,
-            "bucket": config["bucket"],
-            "region": config["region"],
-            "s3_key": object_key,
-            "s3_uri": f"s3://{config['bucket']}/{object_key}",
-        }
-    except (ClientError, BotoCoreError, OSError) as exc:
-        return {
-            "status": "LOCAL_ONLY",
-            "local_path": artifact_path,
-            "entry": entry,
-            "reason": "s3_upload_failed",
-            "error": str(exc),
-        }
+            with Path(artifact_path).open("rb") as handle:
+                client.put_object(
+                    Bucket=config["bucket"],
+                    Key=object_key,
+                    Body=handle.read(),
+                    ContentType="application/json",
+                    Metadata={
+                        "artifact-type": "execution_safety_gate",
+                        "artifact-id": str(entry.get("artifact_id") or ""),
+                    },
+                )
+            return {
+                "status": "S3_UPLOADED",
+                "local_path": artifact_path,
+                "entry": entry,
+                "bucket": config["bucket"],
+                "region": config["region"],
+                "credential_source": config.get("source"),
+                "s3_key": object_key,
+                "s3_uri": f"s3://{config['bucket']}/{object_key}",
+            }
+        except (ClientError, BotoCoreError, OSError) as exc:
+            last_error = str(exc)
+
+    return {
+        "status": "LOCAL_ONLY",
+        "local_path": artifact_path,
+        "entry": entry,
+        "reason": "s3_upload_failed",
+        "credential_source": configs[0].get("source"),
+        "error": last_error or "unknown_s3_error",
+    }
 
 
 def _gate_state_from_readiness(readiness_state: str, hard_blockers: list[str]) -> str:
@@ -836,6 +858,253 @@ def apply_runtime_quarantine_action(
     }
 
 
+def batch_recover_stuck_intents(
+    db: Session,
+    *,
+    action: str,
+    limit: int,
+    actor_user_id: str,
+    actor_role: str,
+) -> dict:
+    normalized_action = str(action or "replay").strip().lower()
+    if normalized_action not in {"replay", "dismiss", "mark_failed"}:
+        raise ValueError("invalid_action")
+
+    capped_limit = min(max(int(limit or 1), 1), 200)
+    candidates = (
+        db.query(FailedEvent)
+        .filter(FailedEvent.entity_type == "execution_intent")
+        .filter(FailedEvent.status.in_(["quarantined", "retrying", "pending"]))
+        .order_by(FailedEvent.updated_at.asc())
+        .limit(capped_limit)
+        .all()
+    )
+    if not candidates:
+        return {"processed": 0, "action": normalized_action, "results": []}
+
+    results = []
+    for row in candidates:
+        try:
+            results.append(
+                apply_runtime_quarantine_action(
+                    db,
+                    event_id=row.id,
+                    action=normalized_action,
+                    actor_user_id=actor_user_id,
+                    actor_role=actor_role,
+                )
+            )
+        except Exception as exc:
+            results.append({"id": row.id, "status": "error", "error": str(exc)})
+    return {"processed": len(results), "action": normalized_action, "results": results}
+
+
+def get_order_reconciliation_summary(db: Session, *, limit: int = 500) -> dict:
+    capped_limit = min(max(int(limit or 1), 1), 2000)
+    events = db.query(ExecutionIntentEvent).order_by(ExecutionIntentEvent.created_at.desc()).limit(capped_limit).all()
+
+    by_external_order: dict[str, int] = {}
+    filled_without_external: list[str] = []
+    for event in events:
+        external_order_id = str(event.external_order_id or "").strip()
+        if external_order_id:
+            by_external_order[external_order_id] = by_external_order.get(external_order_id, 0) + 1
+        elif _normalize_code(event.event_status) == "FILLED":
+            filled_without_external.append(event.intent_id)
+
+    duplicates = [
+        {"external_order_id": order_id, "event_count": count}
+        for order_id, count in by_external_order.items()
+        if count > 1
+    ]
+    duplicates.sort(key=lambda item: item["event_count"], reverse=True)
+
+    intent_snapshot = get_execution_intent_state_machine_snapshot(
+        db,
+        limit=200,
+        include_events=False,
+        auto_quarantine_stuck=False,
+    )
+    stuck_items = [item for item in (intent_snapshot.get("items") or []) if item.get("is_stuck")]
+
+    return {
+        "scanned_events": len(events),
+        "duplicate_external_orders": duplicates[:100],
+        "duplicate_external_order_count": len(duplicates),
+        "filled_without_external_order_count": len(filled_without_external),
+        "filled_without_external_order_intents": filled_without_external[:100],
+        "stuck_intent_count": len(stuck_items),
+        "stuck_intents": stuck_items[:100],
+    }
+
+
+def get_gate_failure_trends(*, days: int = 7) -> dict:
+    capped_days = min(max(int(days or 1), 1), 90)
+    manifest_path = Path("/app/artifacts/manifests/execution_safety_gate_manifest.jsonl")
+    if not manifest_path.exists():
+        return {"days": capped_days, "items": [], "reason": "manifest_not_found"}
+
+    cutoff = _utcnow() - timedelta(days=capped_days)
+    daily: dict[str, dict] = {}
+    with manifest_path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            created_at_raw = row.get("created_at")
+            try:
+                created_at = datetime.fromisoformat(str(created_at_raw).replace("Z", "+00:00"))
+            except Exception:
+                continue
+            created_at = _as_utc(created_at)
+            if not created_at or created_at < cutoff:
+                continue
+            day_key = created_at.strftime("%Y-%m-%d")
+            bucket = daily.setdefault(day_key, {"total": 0, "states": {}, "fail_reasons": {}})
+            bucket["total"] += 1
+
+            payload = row.get("payload") or {}
+            gate = payload.get("gate") or {}
+            state = _normalize_code(gate.get("gate_state") or "UNKNOWN")
+            bucket["states"][state] = int(bucket["states"].get(state, 0)) + 1
+            for reason in gate.get("hard_blockers") or []:
+                code = _normalize_code(reason)
+                bucket["fail_reasons"][code] = int(bucket["fail_reasons"].get(code, 0)) + 1
+
+    items = []
+    for day_key in sorted(daily.keys()):
+        day_payload = daily[day_key]
+        items.append(
+            {
+                "date": day_key,
+                "total": day_payload["total"],
+                "states": day_payload["states"],
+                "top_fail_reasons": sorted(
+                    [{"reason_code": key, "count": value} for key, value in day_payload["fail_reasons"].items()],
+                    key=lambda item: item["count"],
+                    reverse=True,
+                )[:10],
+            }
+        )
+    return {"days": capped_days, "items": items}
+
+
+def get_manual_intervention_audit_trail(db: Session, *, limit: int = 100) -> dict:
+    capped_limit = min(max(int(limit or 1), 1), 500)
+    rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.action.in_([
+            "execution_quarantine_replay",
+            "execution_quarantine_dismiss",
+            "execution_quarantine_mark_failed",
+        ]))
+        .order_by(AuditLog.created_at.desc())
+        .limit(capped_limit)
+        .all()
+    )
+    items = []
+    for row in rows:
+        details = dict(row.details or {})
+        items.append(
+            {
+                "id": row.id,
+                "action": row.action,
+                "entity_type": row.entity_type,
+                "entity_id": row.entity_id,
+                "actor_user_id": row.actor_user_id,
+                "actor_role": row.actor_role,
+                "severity": row.severity,
+                "created_at": _as_utc(row.created_at).isoformat() if _as_utc(row.created_at) else None,
+                "details": details,
+            }
+        )
+    return {"total": len(items), "items": items}
+
+
+def _build_quarantine_replay_plan(quarantine_snapshot: dict) -> list[dict]:
+    plan: list[dict] = []
+    for row in quarantine_snapshot.get("items") or []:
+        status = _normalize_code(row.get("status"))
+        if status not in {"QUARANTINED", "RETRYING", "PENDING"}:
+            continue
+        retry_count = _safe_int(row.get("retry_count"), 0)
+        max_retry = _safe_int(row.get("max_retry"), 0)
+        next_action = "dismiss" if max_retry and retry_count >= max_retry else "replay"
+        plan.append(
+            {
+                "event_row_id": row.get("id"),
+                "event_id": row.get("event_id"),
+                "entity_type": row.get("entity_type"),
+                "current_status": row.get("status"),
+                "recommended_action": next_action,
+                "reason": "retry_limit_reached" if next_action == "dismiss" else "retry_window_open",
+            }
+        )
+        if len(plan) >= 50:
+            break
+    return plan
+
+
+def _build_runbook(gate_snapshot: dict, intents_snapshot: dict, quarantine_snapshot: dict) -> list[dict]:
+    runbook: list[dict] = []
+    gate_state = _normalize_code(gate_snapshot.get("gate_state"))
+    hard_blockers = [str(item) for item in (gate_snapshot.get("hard_blockers") or [])]
+    if gate_state == "BLOCKED":
+        runbook.append(
+            {
+                "step": 1,
+                "title": "Gate BLOCKED nedenlerini temizle",
+                "action": "hard_blockers listesindeki kodları sırayla çöz ve gate'i force_refresh ile tekrar çalıştır.",
+                "evidence": hard_blockers,
+            }
+        )
+    bybit_status = _normalize_code((gate_snapshot.get("bybit_order_smoke") or {}).get("status"))
+    if bybit_status != "PASS":
+        runbook.append(
+            {
+                "step": len(runbook) + 1,
+                "title": "Bybit order smoke bağlantısını doğrula",
+                "action": "Bybit testnet API erişimini/whitelist'i doğrula ve order smoke PASS olana kadar tekrar et.",
+                "evidence": [
+                    (gate_snapshot.get("bybit_order_smoke") or {}).get("reason_code"),
+                    (gate_snapshot.get("bybit_order_smoke") or {}).get("detail"),
+                ],
+            }
+        )
+    if _safe_int(intents_snapshot.get("stuck_count"), 0) > 0:
+        runbook.append(
+            {
+                "step": len(runbook) + 1,
+                "title": "Stuck intent recovery",
+                "action": "Stuck intentleri quarantine planına göre replay/dismiss et ve state geçişlerini doğrula.",
+                "evidence": {"stuck_count": intents_snapshot.get("stuck_count")},
+            }
+        )
+    if _safe_int(quarantine_snapshot.get("total"), 0) > 0:
+        runbook.append(
+            {
+                "step": len(runbook) + 1,
+                "title": "Quarantine backlog temizliği",
+                "action": "runtime ve execution_intent quarantine kayıtlarını batch aksiyonlarla azalt.",
+                "evidence": {"quarantine_total": quarantine_snapshot.get("total")},
+            }
+        )
+    if not runbook:
+        runbook.append(
+            {
+                "step": 1,
+                "title": "Sistem sağlıklı",
+                "action": "Gate READY/DEGRADED ve quarantine stabil. Rutin monitoring sürdür.",
+                "evidence": {"gate_state": gate_state},
+            }
+        )
+    return runbook
+
+
 def build_execution_incident_package(
     db: Session,
     *,
@@ -865,6 +1134,8 @@ def build_execution_incident_package(
             "gate_artifact_local": ((gate_snapshot.get("artifact") or {}).get("local_path")),
             "gate_artifact_s3": ((gate_snapshot.get("artifact") or {}).get("s3_uri")),
         },
+        "runbook_recommendations": _build_runbook(gate_snapshot, intents_snapshot, quarantine_snapshot),
+        "quarantine_replay_plan": _build_quarantine_replay_plan(quarantine_snapshot),
     }
 
     incident_artifact = write_signed_artifact(

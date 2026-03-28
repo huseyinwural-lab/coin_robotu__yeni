@@ -45,6 +45,9 @@ export const AdminExecutionReadinessPage = () => {
   const [safetyGate, setSafetyGate] = useState(null);
   const [intentLifecycle, setIntentLifecycle] = useState(null);
   const [runtimeQuarantine, setRuntimeQuarantine] = useState(null);
+  const [reconciliationSummary, setReconciliationSummary] = useState(null);
+  const [gateTrend, setGateTrend] = useState(null);
+  const [interventionTrail, setInterventionTrail] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const previousFailCountRef = useRef(0);
@@ -73,6 +76,9 @@ export const AdminExecutionReadinessPage = () => {
         { data: safetyGatePayload },
         { data: intentLifecyclePayload },
         { data: quarantinePayload },
+        { data: reconciliationPayload },
+        { data: trendPayload },
+        { data: interventionPayload },
       ] = await Promise.all([
         apiClient.get(`/phase4/admin/production-gate?refresh_checks=${refreshChecks ? "true" : "false"}`),
         apiClient.get("/admin/execution-readiness"),
@@ -84,6 +90,9 @@ export const AdminExecutionReadinessPage = () => {
         apiClient.get(`/execution-readiness/gate?force_refresh=${refreshChecks ? "true" : "false"}`),
         apiClient.get("/execution-readiness/intents?limit=120&auto_quarantine_stuck=true"),
         apiClient.get("/execution-readiness/quarantine?limit=200"),
+        apiClient.get("/execution-readiness/reconciliation/summary?limit=600"),
+        apiClient.get("/execution-readiness/gate/trends?days=14"),
+        apiClient.get("/execution-readiness/interventions/audit-trail?limit=120"),
       ]);
       setGate(gateData);
       setReadiness(readinessData);
@@ -95,6 +104,9 @@ export const AdminExecutionReadinessPage = () => {
       setSafetyGate(safetyGatePayload || null);
       setIntentLifecycle(intentLifecyclePayload || null);
       setRuntimeQuarantine(quarantinePayload || null);
+      setReconciliationSummary(reconciliationPayload || null);
+      setGateTrend(trendPayload || null);
+      setInterventionTrail(interventionPayload || null);
 
       const flappingConfig = historyData?.flapping_config || {};
       if (flappingConfig.window_sec) setFlappingWindowSec(Number(flappingConfig.window_sec));
@@ -157,6 +169,15 @@ export const AdminExecutionReadinessPage = () => {
       await runAction(async () => {
         await apiClient.post(`/execution-readiness/quarantine/${eventId}/${action}`);
       }, `Quarantine ${action} tamamlandı`);
+    },
+    [runAction]
+  );
+
+  const handleBatchRecoverStuckIntents = useCallback(
+    async (action) => {
+      await runAction(async () => {
+        await apiClient.post(`/execution-readiness/intents/stuck/batch-recover?action=${action}&limit=50`);
+      }, `Batch ${action} tamamlandı`);
     },
     [runAction]
   );
@@ -560,6 +581,17 @@ export const AdminExecutionReadinessPage = () => {
               <p className="text-xs text-slate-400" data-testid="execution-safety-intent-stuck-empty">stuck intent yok</p>
             )}
           </div>
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="execution-safety-intent-batch-actions">
+            <Button size="sm" className="bg-cyan-500 text-black hover:bg-cyan-600" onClick={() => handleBatchRecoverStuckIntents("replay")} data-testid="execution-safety-intent-batch-replay-button">
+              Batch Replay
+            </Button>
+            <Button size="sm" variant="outline" className="border-slate-500 text-slate-200" onClick={() => handleBatchRecoverStuckIntents("dismiss")} data-testid="execution-safety-intent-batch-dismiss-button">
+              Batch Dismiss
+            </Button>
+            <Button size="sm" variant="outline" className="border-red-500 text-red-300" onClick={() => handleBatchRecoverStuckIntents("mark_failed")} data-testid="execution-safety-intent-batch-mark-failed-button">
+              Batch Mark Failed
+            </Button>
+          </div>
         </article>
 
         <article className="rounded-lg border border-red-700/40 bg-slate-900 p-4" data-testid="execution-safety-quarantine-card">
@@ -594,6 +626,42 @@ export const AdminExecutionReadinessPage = () => {
               <p className="text-xs text-slate-400" data-testid="execution-safety-quarantine-items-empty">quarantine kaydı yok</p>
             )}
           </div>
+        </article>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3" data-testid="execution-safety-p1-analytics-grid">
+        <article className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="execution-safety-reconciliation-card">
+          <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-reconciliation-title">Reconciliation Özeti</h3>
+          <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-reconciliation-duplicate-count">
+            duplicate_external_order_count: {reconciliationSummary?.duplicate_external_order_count ?? 0}
+          </p>
+          <p className="text-xs text-slate-300" data-testid="execution-safety-reconciliation-missing-external-count">
+            filled_without_external_order_count: {reconciliationSummary?.filled_without_external_order_count ?? 0}
+          </p>
+          <p className="text-xs text-slate-300" data-testid="execution-safety-reconciliation-stuck-intent-count">
+            stuck_intent_count: {reconciliationSummary?.stuck_intent_count ?? 0}
+          </p>
+        </article>
+
+        <article className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="execution-safety-gate-trend-card">
+          <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-gate-trend-title">Gate Failure Trend (14g)</h3>
+          <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-gate-trend-days">days: {gateTrend?.days ?? "-"}</p>
+          <p className="text-xs text-slate-300" data-testid="execution-safety-gate-trend-points">points: {(gateTrend?.items || []).length}</p>
+          {(gateTrend?.items || []).slice(-3).map((item, idx) => (
+            <p key={`${item.date}-${idx}`} className="text-xs text-slate-400" data-testid={`execution-safety-gate-trend-item-${idx}`}>
+              {item.date}: total={item.total} blocked={item?.states?.BLOCKED || 0}
+            </p>
+          ))}
+        </article>
+
+        <article className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="execution-safety-intervention-audit-card">
+          <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-intervention-audit-title">Manual Intervention Trail</h3>
+          <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-intervention-audit-total">total: {interventionTrail?.total ?? 0}</p>
+          {(interventionTrail?.items || []).slice(0, 3).map((item, idx) => (
+            <p key={`${item.id}-${idx}`} className="text-xs text-slate-400" data-testid={`execution-safety-intervention-audit-item-${idx}`}>
+              {item.action} / {item.actor_role} / {item.entity_id}
+            </p>
+          ))}
         </article>
       </div>
 

@@ -59,7 +59,9 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token_device_binding")
 
     cookie_device_id = str((request.cookies.get("device_id") if request else "") or "").strip()
-    if not cookie_device_id or cookie_device_id != token_device_id:
+    header_device_id = str((request.headers.get("x-session-device") if request else "") or "").strip()
+    bound_device_id = cookie_device_id or header_device_id
+    if not bound_device_id or bound_device_id != token_device_id:
         invalidate_session_by_token(
             db,
             access_token=raw_token,

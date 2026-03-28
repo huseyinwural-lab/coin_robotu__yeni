@@ -5,6 +5,7 @@ import secrets
 from fastapi import Request, Response
 
 DEVICE_COOKIE_NAME = "device_id"
+DEVICE_HEADER_NAME = "x-session-device"
 DEVICE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 
@@ -27,6 +28,9 @@ def resolve_or_create_device_id(request: Request) -> tuple[str, bool]:
     existing = str(request.cookies.get(DEVICE_COOKIE_NAME) or "").strip()
     if _is_valid_device_id(existing):
         return existing, False
+    header_device = str(request.headers.get(DEVICE_HEADER_NAME) or "").strip()
+    if _is_valid_device_id(header_device):
+        return header_device, False
     return secrets.token_urlsafe(32), True
 
 
