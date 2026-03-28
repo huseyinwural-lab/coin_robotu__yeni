@@ -56,6 +56,7 @@ def _base_context():
             "max_leverage": 5,
             "max_total_exposure_pct": 300,
             "max_margin_usage_pct": 75,
+            "max_drawdown_pct": 20,
             "stale_data_threshold_ms": 120000,
         },
         "risk_orchestrator_enabled": True,
@@ -80,7 +81,7 @@ def _base_context():
         "reduce_only_test": {"payload": {"status": "REJECTED"}, "status_code": 400},
         "exchange_metrics": {"websocket": {"age_sec": 5}, "rate_limit_status": "ok"},
         "latency_metrics": {"round_trip_ms": 120, "order_execution_ms": 200, "tick_to_trade_ms": 100},
-        "pnl_snapshot": {"net_total_usd": 0, "as_of": "2099-01-01T00:00:00+00:00"},
+        "pnl_snapshot": {"net_total_usd": -120, "as_of": "2099-01-01T00:00:00+00:00"},
         "dry_run_count": 2,
         "strategy_ids": ["alpha"],
         "symbols": ["BTCUSDT"],
@@ -90,7 +91,7 @@ def _base_context():
             "queue_sizes": {"runtime:execution:queue": 0},
             "worker_events": 3,
             "worker_lag_sec": 5,
-            "strategy_engine_status": "ok",
+            "strategy_engine_status": "unknown",
         },
     }
 
@@ -105,6 +106,8 @@ def test_validator_output_has_layers():
     for key in ["core", "trading_state", "exchange", "execution", "risk", "infra", "latency", "safety"]:
         assert key in result["scores"]
         assert key in result["by_layer"]
+    assert result.get("execution_allowed") is False
+    assert "STRATEGY_ENGINE_UNKNOWN" in (result.get("reason_codes") or [])
 
 
 def test_validator_blocks_when_execution_mocked():
@@ -121,4 +124,10 @@ def test_validator_ready_with_funding_unknown():
     context["trading_state"]["funding_available"] = False
     context["trading_state"]["funding_count"] = 0
     result = run_go_live_validator(context)
-    assert result["readiness_state"] == "READY"
+    funding_step = next((step for step in result.get("steps", []) if step.get("step_key") == "funding_status"), None)
+    assert funding_step is not None
+    assert funding_step.get("blocking") is False
+    assert funding_step.get("status") == "UNKNOWN"
+
+    blocking_reasons = [item.get("reason_code") for item in result.get("blocking_failures", [])]
+    assert "FUNDING_DATA_MISSING" not in blocking_reasons

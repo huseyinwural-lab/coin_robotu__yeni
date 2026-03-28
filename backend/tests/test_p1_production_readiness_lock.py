@@ -26,6 +26,9 @@ from datetime import datetime, timezone
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
+if not BASE_URL:
+    pytest.skip("REACT_APP_BACKEND_URL tanımlı değil", allow_module_level=True)
+
 # Test credentials
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
@@ -690,7 +693,7 @@ class TestExportHardLock:
             snapshot_id = response.headers.get("x-incident-snapshot-id")
             snapshot_hash = response.headers.get("x-incident-snapshot-hash")
             snapshot_at = response.headers.get("x-incident-snapshot-at")
-            row_count = response.headers.get("x-incident-snapshot-row-count")
+            _ = response.headers.get("x-incident-snapshot-row-count")
 
             assert snapshot_id, "Missing x-incident-snapshot-id header"
             assert snapshot_hash, "Missing x-incident-snapshot-hash header"

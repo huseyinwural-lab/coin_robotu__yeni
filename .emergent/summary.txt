@@ -1,139 +1,457 @@
 <analysis>### original_problem_statement
-The user mandated a massive P0/P1/P2 **EXECUTION POLICY & GOVERNANCE CORE TRANSFORMATION**. The system previously relied on static JSON execution policies. The goal was to build a dynamic, real-time Risk & Execution Policy Engine that actively enforces rules across the trade lifecycle (PRE-TRADE → EXECUTION → POST-TRADE), tracks violations, manages versioning (active/passive/canary/rollback), and supports multi-environment overrides. 
-
-**CURRENT MANDATE (P2 HARD CLOSE - Policy UX & Tooling):** Eliminate manual JSON editing by building a comprehensive Form-Based Policy Builder UI, a strict Validation Engine, a Diff Viewer for version comparison, a Simulation Panel, and Bulk Operations capabilities.
+The user mandated a massive P0/P1/P2 **FUTURES LIVE READINESS CORE COMPLETENESS** transformation. The system previously relied on fragmented readiness checks that could falsely yield a READY state even when data was missing. The goal was to centralize the go-live decision into a single deterministic validator () ensuring no false-positive readiness. Further, the user mandated expanding this validator (P1+P2) to check true trading states (balance, positions, funding), exchange health (API, WebSocket, orderbook), execution capabilities (dry-runs, reduce-only), and infra health.
 
 **User's preferred language**: Turkish (INSTRUCT NEXT AGENT: KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.)
 
 **what currently exists?**
-The backend core for the Dynamic Policy Engine, Enforcement Pipeline (Hard Blocks), Multi-layer Risk Engine, Violation Tracking, Policy Versioning (canary/rollback), Strategy Governance, and Multi-Environment (DEV/STAGING/PROD) overrides are fully built, tested, and operational. Safe mode auto-activation is implemented. Basic admin observability metrics exist on the frontend. The agent *just started* writing the backend services for the P2 UI & Tooling phase (Builder, Validation, Diff, Simulation engines).
+The P2 Policy UX & Tooling is fully hard-closed and tested. For the Readiness system, the  was successfully centralized (P0). The agent then expanded the validator to include P1 layered checks (, , , , , ). Mock adapters were integrated to verify execution capabilities safely. However, the structural changes to the validator's output schema (introducing nested layer dictionaries) broke existing unit tests, leaving the backend test suite in a failing state. 
 
 **Last working item**:
-- **Last item agent was working**: Implementing the backend service layers for P2 Hard Close (Policy Builder, Validation Engine, Diff Service, Simulation Service). The agent applied the very first patch to create these structural services based on the user's latest approval.
-- **Status**: IN PROGRESS
-- **Agent Testing Done**: N (Just started development for P2 Hard Close)
-- **Which testing method agent to use?** both (Use backend tests/curl for the new validation/diff/simulation endpoints, and screenshot_tool / frontend testing agent for the new Policy Builder UI).
-- **User Testing Done**: N
+    - Last item agent was working: Updating backend services and tests to accommodate the new P1/P2 nested  schema (adding layered scores, warning lists, blocking failures). The agent ran ============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: anyio-4.12.1
+collected 5889 items / 7 errors
+
+==================================== ERRORS ====================================
+____ ERROR collecting backend/tests/test_indicator_screener_filter_layer.py ____
+backend/tests/test_indicator_screener_filter_layer.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="filterlayer")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+__ ERROR collecting backend/tests/test_indicator_screener_iq_comprehensive.py __
+backend/tests/test_indicator_screener_iq_comprehensive.py:24: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="iq_comprehensive")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase1.py _______
+backend/tests/test_indicator_screener_phase1.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase1")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase2.py _______
+backend/tests/test_indicator_screener_phase2.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase2")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase3.py _______
+backend/tests/test_indicator_screener_phase3.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase3")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_ ERROR collecting backend/tests/test_indicator_screener_u_is_filter_layer.py __
+backend/tests/test_indicator_screener_u_is_filter_layer.py:30: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="uisfilter")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+____________________ ERROR collecting ui_validation_test.py ____________________
+ImportError while importing test module '/app/ui_validation_test.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ui_validation_test.py:11: in <module>
+    from bs4 import BeautifulSoup
+E   ModuleNotFoundError: No module named 'bs4'
+=============================== warnings summary ===============================
+../root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12
+  /root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+../root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+backend/routers/admin_execution.py:349
+  /app/backend/routers/admin_execution.py:349: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class PolicyBuilderRequest(BaseModel):
+
+backend/server.py:434
+  /app/backend/server.py:434: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("startup")
+
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+backend/server.py:646
+  /app/backend/server.py:646: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR backend/tests/test_indicator_screener_filter_layer.py - AssertionError:...
+ERROR backend/tests/test_indicator_screener_iq_comprehensive.py - AssertionEr...
+ERROR backend/tests/test_indicator_screener_phase1.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_phase2.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_phase3.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_u_is_filter_layer.py - AssertionE...
+ERROR ui_validation_test.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
+======================== 7 warnings, 7 errors in 19.25s ======================== which resulted in 10 failures.
+    - Status: IN PROGRESS
+    - Agent Testing Done: Y
+    - Which testing method agent to use? manual testing by ============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: anyio-4.12.1
+collected 5889 items / 7 errors
+
+==================================== ERRORS ====================================
+____ ERROR collecting backend/tests/test_indicator_screener_filter_layer.py ____
+backend/tests/test_indicator_screener_filter_layer.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="filterlayer")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+__ ERROR collecting backend/tests/test_indicator_screener_iq_comprehensive.py __
+backend/tests/test_indicator_screener_iq_comprehensive.py:24: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="iq_comprehensive")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase1.py _______
+backend/tests/test_indicator_screener_phase1.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase1")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase2.py _______
+backend/tests/test_indicator_screener_phase2.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase2")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase3.py _______
+backend/tests/test_indicator_screener_phase3.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase3")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_ ERROR collecting backend/tests/test_indicator_screener_u_is_filter_layer.py __
+backend/tests/test_indicator_screener_u_is_filter_layer.py:30: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="uisfilter")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+____________________ ERROR collecting ui_validation_test.py ____________________
+ImportError while importing test module '/app/ui_validation_test.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ui_validation_test.py:11: in <module>
+    from bs4 import BeautifulSoup
+E   ModuleNotFoundError: No module named 'bs4'
+=============================== warnings summary ===============================
+../root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12
+  /root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+../root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+backend/routers/admin_execution.py:349
+  /app/backend/routers/admin_execution.py:349: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class PolicyBuilderRequest(BaseModel):
+
+backend/server.py:434
+  /app/backend/server.py:434: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("startup")
+
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+backend/server.py:646
+  /app/backend/server.py:646: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR backend/tests/test_indicator_screener_filter_layer.py - AssertionError:...
+ERROR backend/tests/test_indicator_screener_iq_comprehensive.py - AssertionEr...
+ERROR backend/tests/test_indicator_screener_phase1.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_phase2.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_phase3.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_u_is_filter_layer.py - AssertionE...
+ERROR ui_validation_test.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
+======================== 7 warnings, 7 errors in 6.36s ========================= / backend testing agent
+    - User Testing Done: N
 
 **All Pending/In progress Issue list**:
-- **Issue 1: P2 Policy UX & Tooling Backend APIs** (P0)
-   - **Attempted fixes**: Agent just laid down the initial service patch.
-   - **Next debug checklist**: Implement the new endpoints under . **CRITICAL:** Ensure all new routes use the prefix  (do not create a new namespace). 
-   - **Why fix this issue and what will be achieved with the fix?**: Provides the data and logic layers for the new UI to validate, simulate, and compare policies without direct JSON manipulation.
-   - **Status**: IN PROGRESS
-   - **Is recurring issue?**: N
-   - **Should Test frontend/backend/both after fix?**: backend
-   - **Blocked on other issue**: None
+  - Issue 1: Backend Test Failures (P0)
+     - Attempted fixes: The agent edited  to match new keys (e.g.,  vs nested layers), but downstream services like  and  are still failing due to schema mismatches.
+     - Next debug checklist: Check  and . Fix the assertions and mock return values to align with the new nested dictionary output of .
+     - Why fix this issue and what will be achieved with the fix? Fixing this is required to restore backend health and allow the new readiness gate to function in CI/CD without regressions.
+     - Status: IN PROGRESS
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? backend
+     - Blocked on other issue: None
 
 **In progress Task List**:
-- **Task 1: Build the Form-Based Policy Builder UI (P2)**
-   - **Where to resume**: Modify  and create new components for the form builder (Condition Builder, Rule Builder, Action/Severity/Scope selection).
-   - **What will be achieved with this?**: Replaces raw JSON editing with a safe, user-friendly interface. **CRITICAL:** Advanced JSON view must remain strictly **read-only**.
-   - **Status**: NOT STARTED
-   - **Should Test frontend/backend/both after fix?**: frontend
-   - **Blocked on something**: Task 1 (Backend APIs)
-- **Task 2: Implement the Validation Engine & Activation Gate**
-   - **Where to resume**: Backend policy activation logic. If , hard block activation. If , require  +  + generate audit log.
-   - **What will be achieved with this?**: Prevents catastrophic policy misconfigurations from reaching production.
-   - **Status**: NOT STARTED
-   - **Should Test frontend/backend/both after fix?**: both
-   - **Blocked on something**: None
-- **Task 3: Bulk Operations & Audit Logging**
-   - **Where to resume**: Backend logic for batch activate, batch rollback, and multi-strategy binding. Must include line-by-line detailed return results and full audit logging for UI actions.
-   - **Status**: NOT STARTED
+  - Task 1: P1 Core Completeness Validations implementation
+     - Where to resume:  and .
+     - What will be achieved with this? Converts superficial readiness placeholders into true deterministic checks (Liquidation Risk, Margin Mode, Partial Fill handling, Reduce-only enforcement).
+     - Status: IN PROGRESS
+     - Should Test frontend/backend/both after fix? backend
+     - Blocked on something: Failing unit tests (Issue 1)
 
 **Upcoming and Future Tasks**
-- **P0 (Sprint 2 - Constraint & Leverage Engine)**: Order Constraint Engine (Slippage limits, price band validation, partial fills) & Leverage Engine (Cross vs Isolated, liquidation distance). *(Note: User pivoted directly to Governance/UI, so this core execution logic might still be pending in the backlog).*
-- **Future Task (P2.5/P3)**: Drag & Drop UI for the policy builder (currently form-based only).
-- **Future Task (P2.5/P3)**: Auto-recovery mechanics from Safe Mode.
-- **Future Task**: What-if simulator for release gates.
+    Upcoming Tasks:
+    - P2 Production Hardening: Implement Latency & Performance threshold validations (round-trip, order execution, tick-to-trade) (P1).
+    - P2 Observability: Implement Readiness history store (extending AuditLog) and  endpoint (P1).
+    - P2 UX / Operation: Build UI layer breakdown panel for Readiness to show actionable dashboards (P2).
+    - P2 Multi-Dimension Readiness: Granular symbol and strategy readiness checks (P2).
+    - P2 Safety Layer: Dry-run enforcement, Capital Guard, Exposure limits (P2).
+    
+    Future Tasks:
+    - Readiness trend graph based on time-series storage.
+    - Incident replay for readiness state.
 
 **Completed work in this session**
-- P0 Sprint-1 Dynamic Policy Engine & Enforcement Pipeline (DONE)
-- P0 Hard Close: Fail-safe hard blocks, execution/post-trade actual validation, portfolio domain isolation (DONE)
-- P1 Control & Observability: Violation tracking, Severity auto-actions, Explainability/Trace logs, Policy Versioning (Rollback/Canary/A-B), Strategy binding (DONE)
-- P2 Phase-1 Backend: Multi-environment support (DEV/STAGING/PROD normalization), Deterministic overrides, Safe Mode auto-activation (DONE)
+- P2 Final Close Verification for Policy UX Tooling (DONE)
+- P0 Futures Live Readiness Centralization ( created and integrated) (DONE)
+- Mode safety enforcement (MOCKED vs LIVE strict separation) (DONE)
+- BinanceMockAdapter integration for execution testing (DONE)
 
 **Earlier issues found/mentioned but not fixed**
-- None. Previous tests thoroughly resolved all issues up to P2 Phase-1.
+   - None
 
 **Known issue recurrence from previous fork**
-- **Issue recurrence in previous fork**: N/A
-- **Recurrence count**: 0
-- **Status**: N/A
+  - Issue recurrence in previous fork: N/A
+  - Recurrence count: 0
+  - Status: N/A
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Enforcement Pipeline**: Orders flow through PRE-TRADE → EXECUTION → POST-TRADE → VIOLATION.
-- **Fail-Safe Mode**: System automatically drops into safe mode (throttling/blocking) on critical violation spikes or missing data. 
-- **Policy Versioning**: Policies have states (DRAFT, PASSIVE, ACTIVE, CANARY, DEPRECATED, ROLLED_BACK).
-- **Environment Determinism**: Evaluation order is GLOBAL → ENVIRONMENT (override active) → PORTFOLIO → USER → STRATEGY → SYMBOL.
+- **Go-Live Validator**: A strictly deterministic, fail-safe engine. If data is missing or stale, it defaults to  or . It groups checks into , , , , , and .
+- **Sandbox Execution Testing**: Real capability is verified by placing dry-run/mock orders via  rather than just pinging the API.
+- **Fail-Safe Principle**:  state heavily penalizes the system and explicitly disables  and .
 
 **key DB schema**
-- , : Handles versioning and canary logic.
-- , : Critical for tracing decisions and UI action audits.
-- : Manages env-specific rule permutations.
+  - : {live_mode_enabled, kill_switch_enabled, leverage_cap}
+  - : {connection_health, validation_success, readiness_snapshot}
+  -  / : {position_id, symbol, size, entry_price} 
+  - : Utilized as the canonical source for readiness history and operations tracking.
 
 **changes in tech stack**
-- No new tech stack changes. Standardized on FastAPI/SQLAlchemy/React.
+  - None. Standardized on FastAPI/SQLAlchemy/React.
 
 **All files of reference**
--  (Must house ALL new P2 endpoints).
-- 
--  and  mapping files.
+1.  (Updated to v2 nested layered architecture)
+2.  (Updated to consume new validator output)
+3.  (Updated readiness response schemas)
+4.  (Failing test file)
+5.  (Failing test file)
 
 **Areas that need refactoring**:
--  requires a massive UI overhaul to integrate the Form Builder, Diff Viewer, and Simulation Panel, moving away from pure JSON editing.
+- The tests inside  that mock or validate readiness outputs need comprehensive refactoring to understand the new layered schema (, , ).
 
 **key api endpoints**
+-  (Now standardly returns the  output)
 - 
-- 
--  (Central hub for all admin governance).
 
 **Critical Info for New Agent**
-- **Endpoint Strictness**: ALL new backend API paths for P2 (Builder, Diff, Simulation) MUST be prefixed with . Do not create new namespaces like .
-- **JSON Editing Ban**: The frontend policy builder must use a Form-based UI. The Advanced JSON view must remain strictly **READ-ONLY**. The save payload must come from the builder form.
-- **Simulation Isolation**: Policy simulation tools must NEVER write to production metrics or violation logs.
-- **Validation Gates**: If validation returns , the ACTIVE/CANARY buttons must be disabled/blocked. If , the user MUST provide  and a  text to activate it, which triggers an audit log.
+- **Test Failures Blocking**: The agent must immediately fix the 10 failing ============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: anyio-4.12.1
+collected 5889 items / 7 errors
+
+==================================== ERRORS ====================================
+____ ERROR collecting backend/tests/test_indicator_screener_filter_layer.py ____
+backend/tests/test_indicator_screener_filter_layer.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="filterlayer")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+__ ERROR collecting backend/tests/test_indicator_screener_iq_comprehensive.py __
+backend/tests/test_indicator_screener_iq_comprehensive.py:24: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="iq_comprehensive")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase1.py _______
+backend/tests/test_indicator_screener_phase1.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase1")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase2.py _______
+backend/tests/test_indicator_screener_phase2.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase2")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase3.py _______
+backend/tests/test_indicator_screener_phase3.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase3")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_ ERROR collecting backend/tests/test_indicator_screener_u_is_filter_layer.py __
+backend/tests/test_indicator_screener_u_is_filter_layer.py:30: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="uisfilter")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+____________________ ERROR collecting ui_validation_test.py ____________________
+ImportError while importing test module '/app/ui_validation_test.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ui_validation_test.py:11: in <module>
+    from bs4 import BeautifulSoup
+E   ModuleNotFoundError: No module named 'bs4'
+=============================== warnings summary ===============================
+../root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12
+  /root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+../root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+backend/routers/admin_execution.py:349
+  /app/backend/routers/admin_execution.py:349: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class PolicyBuilderRequest(BaseModel):
+
+backend/server.py:434
+  /app/backend/server.py:434: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("startup")
+
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+backend/server.py:646
+  /app/backend/server.py:646: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR backend/tests/test_indicator_screener_filter_layer.py - AssertionError:...
+ERROR backend/tests/test_indicator_screener_iq_comprehensive.py - AssertionEr...
+ERROR backend/tests/test_indicator_screener_phase1.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_phase2.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_phase3.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_u_is_filter_layer.py - AssertionE...
+ERROR ui_validation_test.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
+======================== 7 warnings, 7 errors in 6.58s ========================= cases before writing new features. The failure is due to reshaping the validator's output to include , , and distinct lists of /. 
+- **Strategy Engine Health**: Zip does not have a canonical strategy engine heartbeat yet. By explicit user mandate, Strategy Engine status MUST be  (and thus ) until a new heartbeat mechanism is built. DO NOT fake a .
+- **No False Positives**: Never default any missing data or timeout to a READY or PASS state.
+- **Language**: User mandate is strictly Turkish for communication. 
 
 **documents and test reports created in this job**
--  (Sprint 1 Engine Tests)
--  (P0 Hard Close Tests)
--  (P1 Governance Tests)
--  (P2 Phase-1 Environment Tests)
--  
+  - 
 
 **Last 10 User Messages and any pending HUMAN messages** 
-1. (User) Gave P0 Hard Close mandate (Fail-safe, Execution/Post-trade real enforcement, Portfolio isolation).
-2. (Agent) Implemented and verified P0 Hard Close.
-3. (User) Gave P1 Control/Observability Expansion mandate (Violation tracking, Auto-actions, Traceability, Versioning, Strategy mapping).
-4. (Agent) Implemented and verified P1.
-5. (User) Gave P2 mandate (Multi-Env, Safe Mode, Policy Builder UI, Tooling).
-6. (Agent) Asked for execution order and UI scope clarifications for P2.
-7. (User) Confirmed Phase-1 starts with Multi-env/Safe mode.
-8. (Agent) Implemented and verified P2 Phase-1 backend.
-9. (User) Gave P2 Hard Close mandate (Policy UX & Tooling: Form Builder, Validation Gate, Diff Viewer, Simulation).
-10. (Agent) Asked for clarification on Endpoint structures, JSON read-only enforcement, and override logic.
-11. (User) Confirmed: Keep  prefix, JSON is Read-Only, Bulk ops supported, High-risk override needs flag + reason. *(LATEST PENDING INSTRUCTION)*
+1. (User) Gave P0 Futures Live Readiness closure mandate (eliminate false positive readiness, centralize to ).
+2. (Agent) Implemented P0, ran tests, and successfully hard closed P0.
+3. (User) Provided Extended P1+P2 Mandate (Full Core Completeness: Trading state, exchange checks, execution validation, risk, and infra).
+4. (Agent) Asked for canonical sources for liquidation, margin mode, strategy engine health, latency thresholds, and history store.
+5. (User) Answered: Use mock adapter for execution tests, mark price + config for liquidation, exchange adapter for margin mode, AuditLog for history store. Advised that Strategy Engine health has no clean source, so it must remain  until built. *(LATEST PENDING INSTRUCTION - Implement and fix test coverage)*
 
 **Project Health Check:**
-- Backend: Stable & Heavily tested.
-- Frontend: Stable (Ready for P2 UI overhaul).
-- Database: Safe, Postgres migrations applied.
+- Backend: BROKEN (Unit tests failing due to schema refactoring).
+- Frontend: Stable.
+- Database: Safe.
 
 **3rd Party Integrations** 
-None directly interacting with this policy layer.
+- OpenAI GPT-4o — uses Emergent LLM Key
+- Binance (Testnet/Live) — requires User API Key
 
 **Testing status**
-- Testing agent used after significant changes: YES (Heavily used across 4 iterations).
-- Troubleshoot agent used after agent stuck in loop: NO
-- Test files created: Extensive suite in  (e.g., , , ).
-- Known regressions: None currently.
+  - Testing agent used after significant changes: YES (For Frontend)
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: 
+  - Known regressions: [10 backend unit tests failing in  and  due to schema modification]
 
 **Credentials to test flow:**
-Refer to  (canary.admin@platform.local).
+- Email: 
+- Password: 
 
 **What agent forgot to execute**
-The agent just started creating the stub backend files/patches for the P2 Validation/Diff/Simulation services. The next agent must immediately continue writing the backend logic for these services in  and then build out the React UI in .</analysis>
+The agent modified the core  and integrated it with  to use a complex nested dictionary (, ), but failed to adequately update the assertions and dummy data within the unit tests. As a result, the test suite is broken. The next agent must start by fixing these 10 test failures.</analysis>

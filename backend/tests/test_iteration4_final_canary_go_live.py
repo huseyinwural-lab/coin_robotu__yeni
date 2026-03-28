@@ -15,9 +15,12 @@ import requests
 import json
 from datetime import datetime
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://testnet-trading-hub.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
+
+if not BASE_URL:
+    pytest.skip("REACT_APP_BACKEND_URL tanımlı değil", allow_module_level=True)
 
 
 @pytest.fixture(scope="module")
@@ -64,7 +67,7 @@ class TestHealthAndBasicEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data.get("access_token") or data.get("token")
-        print(f"Admin login PASS: token received")
+        print("Admin login PASS: token received")
 
 
 class TestRuntimeExecutionMode:
@@ -230,7 +233,7 @@ class TestKillSwitchVerifyRollback:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print(f"Kill-switch verify PASS")
+            print("Kill-switch verify PASS")
             
             # Verify artifact path
             assert "artifact_path" in result
@@ -265,7 +268,7 @@ class TestTestnetLifecycleValidation:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print(f"Testnet lifecycle PASS")
+            print("Testnet lifecycle PASS")
             
             # Verify artifact path
             assert "artifact_path" in result
@@ -313,7 +316,7 @@ class TestCanaryRun:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print(f"Canary run PASS")
+            print("Canary run PASS")
             
             # Verify steps
             steps = result.get("steps", {})
@@ -351,7 +354,7 @@ class TestFinalRegression:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print(f"Final regression PASS")
+            print("Final regression PASS")
             
             # Verify checks
             checks = result.get("checks", {})

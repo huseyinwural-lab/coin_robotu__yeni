@@ -418,10 +418,10 @@ def build_go_live_context(
     except Exception as exc:
         pnl_error = str(exc)
 
-    metrics_query = db.query(ExecutionMetric).order_by(ExecutionMetric.created_at.desc()).limit(50)
+    metrics_query = db.query(ExecutionMetric)
     if user_id:
         metrics_query = metrics_query.filter(ExecutionMetric.user_id == user_id)
-    metrics = metrics_query.all()
+    metrics = metrics_query.order_by(ExecutionMetric.created_at.desc()).limit(50).all()
     ack_latencies = []
     execution_latencies = []
     tick_latencies = []
@@ -1118,8 +1118,24 @@ def run_go_live_validator(context: dict) -> dict:
         ),
     )
 
-    partial_path = _build_state_path({"forced_outcome": "partial"})
-    partial_states = [item.get("state") for item in partial_path]
+    def _extract_states(path_payload: Any) -> list[str]:
+        if isinstance(path_payload, dict):
+            raw_path = path_payload.get("path") or []
+        else:
+            raw_path = path_payload or []
+
+        states: list[str] = []
+        for item in raw_path:
+            if isinstance(item, dict):
+                state = str(item.get("state") or item.get("to_state") or "").strip()
+            else:
+                state = str(item).strip()
+            if state:
+                states.append(state.upper())
+        return states
+
+    partial_path = _build_state_path({}, {"forced_outcome": "partial"})
+    partial_states = _extract_states(partial_path)
     partial_ok = "PARTIALLY_FILLED" in partial_states and "FILLED" in partial_states
     partial_status = "PASS" if partial_ok else "FAIL"
     partial_reason = "PASS" if partial_ok else "PARTIAL_FILL_INVALID"
@@ -1138,7 +1154,7 @@ def run_go_live_validator(context: dict) -> dict:
     )
 
     fill_path = _build_state_path({})
-    fill_states = [item.get("state") for item in fill_path]
+    fill_states = _extract_states(fill_path)
     fill_ok = "FILLED" in fill_states
     add_step(
         "execution",
@@ -1154,8 +1170,8 @@ def run_go_live_validator(context: dict) -> dict:
         ),
     )
 
-    reject_path = _build_state_path({"forced_outcome": "rejected"})
-    reject_states = [item.get("state") for item in reject_path]
+    reject_path = _build_state_path({}, {"forced_outcome": "rejected"})
+    reject_states = _extract_states(reject_path)
     reject_ok = "REJECTED" in reject_states
     add_step(
         "execution",
@@ -1413,15 +1429,8 @@ def run_go_live_validator(context: dict) -> dict:
     )
 
     strategy_status_raw = str(infra.get("strategy_engine_status") or "unknown").lower()
-    if strategy_status_raw in {"pass", "ok", "healthy"}:
-        strategy_status = "PASS"
-        strategy_reason = "PASS"
-    elif strategy_status_raw in {"fail", "blocked", "down"}:
-        strategy_status = "FAIL"
-        strategy_reason = "STRATEGY_ENGINE_DOWN"
-    else:
-        strategy_status = "UNKNOWN"
-        strategy_reason = "STRATEGY_ENGINE_UNKNOWN"
+    strategy_status = "UNKNOWN"
+    strategy_reason = "STRATEGY_ENGINE_UNKNOWN"
 
     add_step(
         "infra",
@@ -1430,8 +1439,13 @@ def run_go_live_validator(context: dict) -> dict:
             status=strategy_status,
             blocking=True,
             reason_code=strategy_reason,
-            message="Strategy engine sağlıklı" if strategy_status == "PASS" else "Strategy engine health yok",
-            details={"status": strategy_status_raw},
+            message="Strategy engine için kanonik heartbeat yok; durum UNKNOWN",
+            details={
+                "status": strategy_status_raw,
+                "heartbeat": infra.get("strategy_heartbeat"),
+                "last_execution": infra.get("strategy_last_execution"),
+                "canonical_source_available": False,
+            },
             data_source="strategy_engine",
             started_at=time.perf_counter(),
         ),

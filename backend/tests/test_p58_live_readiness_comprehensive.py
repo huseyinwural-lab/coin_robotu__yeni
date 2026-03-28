@@ -289,18 +289,18 @@ class TestLiveReadinessGuard:
         assert result["size_multiplier"] == 0.0
         assert result["event"]["event"] == "LIVE_READINESS_BLOCK"
     
-    def test_downshift_action_when_state_warning(self):
+    def test_block_action_when_state_warning(self):
         from core.live.live_readiness_guard import evaluate_live_readiness_guard
         
         result = evaluate_live_readiness_guard({
             "readiness_state": "WARNING",
             "readiness_confidence_score": 75.0,
         })
-        assert result["action"] == "DOWNSHIFT"
-        assert result["reject_trade"] is False
-        assert result["pause_engine"] is False
-        assert result["size_multiplier"] == 0.7
-        assert result["event"] is None  # No event for DOWNSHIFT
+        assert result["action"] == "BLOCK"
+        assert result["reject_trade"] is True
+        assert result["pause_engine"] is True
+        assert result["size_multiplier"] == 0.0
+        assert result["event"]["event"] == "LIVE_READINESS_BLOCK"
     
     def test_allow_action_when_state_ready(self):
         from core.live.live_readiness_guard import evaluate_live_readiness_guard

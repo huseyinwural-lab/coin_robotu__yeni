@@ -7,12 +7,15 @@ import time
 import pytest
 import requests
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://identity-control-1.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 API_URL = f"{BASE_URL}/api"
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"
 USER_EMAIL = "testuser1773706589@example.com"
 USER_PASSWORD = "TestPassword123!"
+
+if not BASE_URL:
+    pytest.skip("REACT_APP_BACKEND_URL tanımlı değil", allow_module_level=True)
 
 
 @pytest.fixture(scope="module")
