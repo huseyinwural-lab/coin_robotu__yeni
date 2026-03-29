@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
+import statistics
 
 import httpx
 
@@ -13,6 +15,7 @@ SUPPORTED_VENUES = ("binance", "bybit")
 VENUE_PRIORITY = {"binance": 0, "bybit": 1}
 SNAPSHOT_KEY = "execution:microstructure:snapshot:{venue}:{symbol}"
 BUFFER_KEY = "execution:microstructure:buffer:{venue}:{symbol}"
+REPLAY_FILE = Path("/app/artifacts/manifests/execution_microstructure_replay.jsonl")
 
 
 def _safe_float(value, fallback: float = 0.0) -> float:
@@ -68,6 +71,10 @@ def _stale_after_ms() -> int:
 
 def _buffer_size() -> int:
     return max(10, _env_int("MICROSTRUCTURE_BUFFER_SIZE", 120))
+
+
+def _depth_levels() -> int:
+    return max(5, _env_int("MICROSTRUCTURE_DEPTH_LEVELS", 20))
 
 
 def _invalid_snapshot(venue: str, symbol: str, reason: str, *, error: str | None = None) -> dict:
@@ -133,6 +140,13 @@ def _append_buffer(cache, key: str, payload: dict) -> None:
 
 def _book_notional(rows: list[list[float]]) -> float:
     return round(sum(_safe_float(price) * _safe_float(qty) for price, qty in rows), 8)
+
+
+def _stddev(values: list[float]) -> float:
+    clean = [float(item) for item in values if isinstance(item, (int, float))]
+    if len(clean) < 2:
+        return 0.0
+    return float(statistics.pstdev(clean))
 
 
 def _volatility_from_trades(trades: list[dict]) -> float:
@@ -227,6 +241,211 @@ def _update_legacy_cache(cache, snapshot: dict) -> None:
     set_json(cache, f"market:ticker:{symbol}", ticker_payload)
 
 
+def _append_replay_row(snapshot: dict) -> None:
+    row = {
+        "captured_at": snapshot.get("collected_at"),
+        "venue": snapshot.get("venue"),
+        "symbol": snapshot.get("symbol"),
+        "data_state": snapshot.get("data_state"),
+        "mid_price": snapshot.get("mid_price"),
+        "spread_bps": snapshot.get("spread_bps"),
+        "visible_bid_depth_notional": snapshot.get("visible_bid_depth_notional"),
+        "visible_ask_depth_notional": snapshot.get("visible_ask_depth_notional"),
+        "fast_market": snapshot.get("fast_market"),
+        "transport_latency_ms": snapshot.get("transport_latency_ms"),
+        "trade_flow": snapshot.get("trade_flow") or {},
+    }
+    REPLAY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with REPLAY_FILE.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _buffer_rows(cache, venue: str, symbol: str, *, limit: int = 30) -> list[dict]:
+    if cache is None:
+        return []
+    rows = get_json(cache, BUFFER_KEY.format(venue=venue, symbol=symbol.upper())) or []
+    return list(rows)[-max(1, limit) :]
+
+
+def _market_regime(snapshot: dict, buffer_rows: list[dict]) -> dict:
+    prices = [_safe_float(item.get("mid_price"), 0.0) for item in buffer_rows if _safe_float(item.get("mid_price"), 0.0) > 0]
+    current_price = _safe_float(snapshot.get("mid_price"), 0.0)
+    if current_price > 0:
+        prices.append(current_price)
+    start_price = prices[0] if prices else current_price
+    end_price = prices[-1] if prices else current_price
+    momentum_pct = ((end_price - start_price) / start_price) if start_price > 0 else 0.0
+    trend_regime = "bull" if momentum_pct >= 0.0015 else "bear" if momentum_pct <= -0.0015 else "chop"
+
+    depth_notional = min(
+        _safe_float(snapshot.get("visible_bid_depth_notional"), 0.0),
+        _safe_float(snapshot.get("visible_ask_depth_notional"), 0.0),
+    )
+    liquidity_regime = "high_liquidity" if depth_notional >= _env_float("MICROSTRUCTURE_HIGH_LIQUIDITY_NOTIONAL", 150000.0) else "low_liquidity"
+    market_speed = "fast" if bool(snapshot.get("fast_market")) else "normal"
+    return {
+        "trend": trend_regime,
+        "liquidity": liquidity_regime,
+        "market_speed": market_speed,
+        "momentum_pct": round(momentum_pct, 6),
+    }
+
+
+def _venue_health(snapshot: dict, buffer_rows: list[dict]) -> dict:
+    latency_values = [_safe_float(item.get("transport_latency_ms"), 0.0) for item in buffer_rows if _safe_float(item.get("transport_latency_ms"), 0.0) > 0]
+    spread_values = [_safe_float(item.get("spread_bps"), 0.0) for item in buffer_rows if _safe_float(item.get("spread_bps"), 0.0) >= 0]
+    depth_values = [
+        min(_safe_float(item.get("visible_bid_depth_notional"), 0.0), _safe_float(item.get("visible_ask_depth_notional"), 0.0))
+        for item in buffer_rows
+        if isinstance(item, dict)
+    ]
+    retry_ratio = 0.0
+    if buffer_rows:
+        invalid_count = len([item for item in buffer_rows if str(item.get("data_state") or "").upper() != "VALID"])
+        retry_ratio = invalid_count / len(buffer_rows)
+    spread_instability = _stddev(spread_values)
+    depth_instability = _stddev(depth_values)
+    avg_latency = (sum(latency_values) / len(latency_values)) if latency_values else 0.0
+
+    latency_penalty = min(avg_latency / 10.0, 25.0)
+    retry_penalty = retry_ratio * 35.0
+    spread_penalty = min(spread_instability * 3.5, 20.0)
+    depth_penalty = min((depth_instability / max(sum(depth_values) / len(depth_values), 1.0)) * 40.0 if depth_values else 0.0, 20.0)
+    venue_health_score = max(0.0, min(100.0, 100.0 - latency_penalty - retry_penalty - spread_penalty - depth_penalty))
+    liquidity_stress_score = max(
+        0.0,
+        min(
+            100.0,
+            (_safe_float(snapshot.get("spread_bps"), 0.0) * 1.5)
+            + spread_penalty
+            + depth_penalty
+            + (20.0 if bool(snapshot.get("fast_market")) else 0.0),
+        ),
+    )
+    return {
+        "venue_health_score": round(venue_health_score, 4),
+        "liquidity_stress_score": round(liquidity_stress_score, 4),
+        "latency_score": round(max(0.0, 100.0 - latency_penalty), 4),
+        "retry_score": round(max(0.0, 100.0 - retry_penalty), 4),
+        "spread_instability": round(spread_instability, 6),
+        "depth_instability": round(depth_instability, 6),
+        "avg_transport_latency_ms": round(avg_latency, 4),
+        "retry_ratio": round(retry_ratio, 6),
+    }
+
+
+def _execution_recommendation(
+    *,
+    state: str,
+    regime: dict,
+    venue_health: dict,
+    selected_venue: str,
+    snapshots: dict,
+    capacity: dict,
+) -> dict:
+    recommendations: list[str] = []
+    primary = "passive"
+    if state == "BLOCK":
+        primary = "reduce-size"
+        recommendations.append("reduce-size")
+    elif capacity.get("state") == "REDUCE_SIZE" or state == "REDUCE_SIZE":
+        primary = "reduce-size"
+        recommendations.append("reduce-size")
+
+    if regime.get("market_speed") == "fast" or _safe_float(venue_health.get("liquidity_stress_score"), 0.0) >= 55.0:
+        recommendations.append("slice")
+    if regime.get("trend") == "bull" and regime.get("liquidity") == "high_liquidity" and regime.get("market_speed") == "normal":
+        recommendations.append("aggressive")
+    else:
+        recommendations.append("passive")
+
+    current_health = _safe_float(venue_health.get("venue_health_score"), 0.0)
+    alternative_candidates = []
+    for venue, snapshot in snapshots.items():
+        if venue == selected_venue or str(snapshot.get("data_state") or "") != "VALID":
+            continue
+        other_health = _venue_health(snapshot, [])
+        if _safe_float(other_health.get("venue_health_score"), 0.0) >= current_health + 12.0:
+            alternative_candidates.append(venue)
+    if alternative_candidates:
+        recommendations.append("venue-switch-candidate")
+
+    ordered = list(dict.fromkeys(recommendations))
+    if primary not in ordered:
+        primary = ordered[0] if ordered else primary
+    return {
+        "primary": primary,
+        "all": ordered,
+        "venue_switch_candidates": alternative_candidates,
+    }
+
+
+def get_microstructure_replay(*, venue: str | None = None, symbol: str | None = None, limit: int = 100) -> dict:
+    if not REPLAY_FILE.exists():
+        return {"items": []}
+    items = []
+    venue_filter = str(venue or "").lower().strip()
+    symbol_filter = str(symbol or "").upper().strip()
+    for raw in REPLAY_FILE.read_text(encoding="utf-8").splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            row = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if venue_filter and str(row.get("venue") or "").lower() != venue_filter:
+            continue
+        if symbol_filter and str(row.get("symbol") or "").upper() != symbol_filter:
+            continue
+        items.append(row)
+    return {"items": items[-max(1, min(limit, 500)) :]}
+
+
+def build_latest_execution_replay(db, *, symbol: str | None = None) -> dict:
+    from models import ExecutionMetric
+
+    query = db.query(ExecutionMetric)
+    if symbol:
+        query = query.filter(ExecutionMetric.symbol == str(symbol).upper())
+    metric = query.order_by(ExecutionMetric.created_at.desc()).first()
+    if metric is None:
+        return {"status": "empty", "reason": "execution_metric_missing"}
+
+    raw_status = dict(metric.raw_exchange_status or {})
+    guard_payload = dict(raw_status.get("microstructure_guard") or {})
+    replay_rows = get_microstructure_replay(
+        venue=str(guard_payload.get("selected_venue") or metric.exchange or "binance"),
+        symbol=str(metric.symbol or ""),
+        limit=25,
+    ).get("items") or []
+    predicted_bps = _safe_float(raw_status.get("predicted_slippage_bps"), 0.0)
+    realized_bps = _safe_float(raw_status.get("realized_slippage_bps"), abs(_safe_float(metric.slippage_pct)) * 100)
+    error_bps = _safe_float(raw_status.get("slippage_error_bps"), abs(realized_bps - predicted_bps))
+    root_cause = "timing_delay"
+    if error_bps <= 1.0:
+        root_cause = "prediction_match"
+    elif _safe_float(((guard_payload.get("slippage_decomposition") or {}).get("impact_bps")), 0.0) >= max(
+        _safe_float(((guard_payload.get("slippage_decomposition") or {}).get("spread_bps")), 0.0),
+        _safe_float(((guard_payload.get("slippage_decomposition") or {}).get("timing_bps")), 0.0),
+    ):
+        root_cause = "market_impact"
+    elif any(bool(item.get("fast_market")) for item in replay_rows[-5:]):
+        root_cause = "fast_market"
+    return {
+        "status": "ok",
+        "symbol": metric.symbol,
+        "order_id": metric.order_id,
+        "exchange": metric.exchange,
+        "predicted_slippage_bps": round(predicted_bps, 6),
+        "realized_slippage_bps": round(realized_bps, 6),
+        "slippage_error_bps": round(error_bps, 6),
+        "root_cause": root_cause,
+        "pre_trade_guard": guard_payload,
+        "replay_rows": replay_rows,
+    }
+
+
 async def _fetch_json(client: httpx.AsyncClient, url: str, *, headers: dict | None = None, params: dict | None = None) -> dict | list:
     response = await client.get(url, headers=headers or {}, params=params or {})
     response.raise_for_status()
@@ -241,16 +460,18 @@ async def _fetch_binance_snapshot(client: httpx.AsyncClient, symbol: str) -> dic
         return _invalid_snapshot("binance", symbol, "binance_market_data_env_missing")
 
     headers = {"X-Proxy-Token": proxy_token}
+    started = asyncio.get_running_loop().time()
     try:
         depth_payload, trades_payload = await asyncio.gather(
-            _fetch_json(client, f"{base_url}/fapi/v1/depth", headers=headers, params={"symbol": symbol, "limit": 5}),
+            _fetch_json(client, f"{base_url}/fapi/v1/depth", headers=headers, params={"symbol": symbol, "limit": _depth_levels()}),
             _fetch_json(client, f"{base_url}/fapi/v1/trades", headers=headers, params={"symbol": symbol, "limit": 20}),
         )
     except Exception as exc:  # noqa: BLE001
         return _invalid_snapshot("binance", symbol, "binance_market_data_unreachable", error=str(exc)[:240])
 
-    bids_raw = list((depth_payload or {}).get("bids") or [])[:5]
-    asks_raw = list((depth_payload or {}).get("asks") or [])[:5]
+    transport_latency_ms = round((asyncio.get_running_loop().time() - started) * 1000, 4)
+    bids_raw = list((depth_payload or {}).get("bids") or [])[: _depth_levels()]
+    asks_raw = list((depth_payload or {}).get("asks") or [])[: _depth_levels()]
     if not bids_raw or not asks_raw:
         return _invalid_snapshot("binance", symbol, "binance_orderbook_missing")
 
@@ -296,6 +517,7 @@ async def _fetch_binance_snapshot(client: httpx.AsyncClient, symbol: str) -> dic
         "recent_trades": trades,
         "trade_flow": _trade_flow(trades),
         "fast_market": False,
+        "transport_latency_ms": transport_latency_ms,
     }
     return snapshot
 
@@ -305,17 +527,19 @@ async def _fetch_bybit_snapshot(client: httpx.AsyncClient, symbol: str) -> dict:
     if not base_url:
         return _invalid_snapshot("bybit", symbol, "bybit_market_data_env_missing")
 
+    started = asyncio.get_running_loop().time()
     try:
         orderbook_payload, trades_payload = await asyncio.gather(
-            _fetch_json(client, f"{base_url}/v5/market/orderbook", params={"category": "linear", "symbol": symbol, "limit": 5}),
+            _fetch_json(client, f"{base_url}/v5/market/orderbook", params={"category": "linear", "symbol": symbol, "limit": _depth_levels()}),
             _fetch_json(client, f"{base_url}/v5/market/recent-trade", params={"category": "linear", "symbol": symbol, "limit": 20}),
         )
     except Exception as exc:  # noqa: BLE001
         return _invalid_snapshot("bybit", symbol, "bybit_market_data_unreachable", error=str(exc)[:240])
 
     result = dict((orderbook_payload or {}).get("result") or {})
-    bids_raw = list(result.get("b") or [])[:5]
-    asks_raw = list(result.get("a") or [])[:5]
+    transport_latency_ms = round((asyncio.get_running_loop().time() - started) * 1000, 4)
+    bids_raw = list(result.get("b") or [])[: _depth_levels()]
+    asks_raw = list(result.get("a") or [])[: _depth_levels()]
     if not bids_raw or not asks_raw:
         return _invalid_snapshot("bybit", symbol, "bybit_orderbook_missing")
 
@@ -361,6 +585,7 @@ async def _fetch_bybit_snapshot(client: httpx.AsyncClient, symbol: str) -> dict:
         "recent_trades": recent_trade_rows,
         "trade_flow": _trade_flow(recent_trade_rows),
         "fast_market": False,
+        "transport_latency_ms": transport_latency_ms,
     }
     return snapshot
 
@@ -424,8 +649,12 @@ class ExecutionMicrostructureRuntime:
                 "mid_price": snapshot.get("mid_price"),
                 "data_state": snapshot.get("data_state"),
                 "fast_market": snapshot.get("fast_market"),
+                "visible_bid_depth_notional": snapshot.get("visible_bid_depth_notional"),
+                "visible_ask_depth_notional": snapshot.get("visible_ask_depth_notional"),
+                "transport_latency_ms": snapshot.get("transport_latency_ms"),
             },
         )
+        _append_replay_row(snapshot)
         if str(snapshot.get("data_state") or "") == "VALID":
             _update_legacy_cache(self.cache, snapshot)
 
@@ -453,11 +682,14 @@ def build_microstructure_venue_summary(cache, symbols: list[str] | None = None) 
     for venue in SUPPORTED_VENUES:
         rows = [get_venue_snapshot(cache, venue, symbol) for symbol in tracked]
         ready_count = len([row for row in rows if row.get("data_state") == "VALID"])
+        health_rows = [_venue_health(row, _buffer_rows(cache, venue, row.get("symbol") or "")) for row in rows]
         venues[venue] = {
             "venue": venue,
             "ready_count": ready_count,
             "invalid_count": len(rows) - ready_count,
             "status": "READY" if ready_count > 0 else "INVALID",
+            "venue_health_score": round((sum(_safe_float(item.get("venue_health_score"), 0.0) for item in health_rows) / len(health_rows)) if health_rows else 0.0, 4),
+            "liquidity_stress_score": round((sum(_safe_float(item.get("liquidity_stress_score"), 0.0) for item in health_rows) / len(health_rows)) if health_rows else 0.0, 4),
             "symbols": [
                 {
                     "symbol": row.get("symbol"),
@@ -466,6 +698,7 @@ def build_microstructure_venue_summary(cache, symbols: list[str] | None = None) 
                     "spread_bps": row.get("spread_bps"),
                     "fast_market": row.get("fast_market"),
                     "reason": row.get("reason"),
+                    "venue_health": _venue_health(row, _buffer_rows(cache, venue, row.get("symbol") or "")),
                 }
                 for row in rows
             ],
@@ -555,6 +788,10 @@ def build_order_microstructure_assessment(
     spread_cost_bps = spread_bps
     depth_impact_bps = round(max(depth_ratio, 0.0) * _env_float("MICROSTRUCTURE_DEPTH_IMPACT_FACTOR_BPS", 12.0), 6)
     latency_penalty_bps = round((quote_age_ms / 1000.0) * _env_float("MICROSTRUCTURE_LATENCY_PENALTY_BPS_PER_SEC", 0.8), 6)
+    buffer_rows = _buffer_rows(cache, selected_venue, symbol_code)
+    regime = _market_regime(snapshot, buffer_rows)
+    venue_health = _venue_health(snapshot, buffer_rows)
+    retry_cost_bps = round(_safe_float(venue_health.get("retry_ratio"), 0.0) * _env_float("MICROSTRUCTURE_RETRY_COST_FACTOR_BPS", 6.0), 6)
     if bool(snapshot.get("fast_market")):
         latency_penalty_bps += _env_float("MICROSTRUCTURE_FAST_MARKET_LATENCY_BPS", 4.0)
 
@@ -606,6 +843,14 @@ def build_order_microstructure_assessment(
         reasons.extend(capacity.get("reasons") or [])
 
     adjusted_size = round(max(adjusted_size, 0.0), 8)
+    recommendation = _execution_recommendation(
+        state=state,
+        regime=regime,
+        venue_health=venue_health,
+        selected_venue=selected_venue,
+        snapshots=snapshots,
+        capacity=capacity,
+    )
     return {
         "state": state,
         "selected_venue": selected_venue,
@@ -621,8 +866,18 @@ def build_order_microstructure_assessment(
             "spread_cost_bps": round(spread_cost_bps, 6),
             "depth_impact_bps": round(depth_impact_bps, 6),
             "latency_penalty_bps": round(latency_penalty_bps, 6),
-            "expected_slippage_bps": round(spread_cost_bps + depth_impact_bps + latency_penalty_bps, 6),
+            "retry_cost_bps": round(retry_cost_bps, 6),
+            "expected_slippage_bps": round(spread_cost_bps + depth_impact_bps + latency_penalty_bps + retry_cost_bps, 6),
         },
+        "slippage_decomposition": {
+            "spread_bps": round(spread_cost_bps, 6),
+            "impact_bps": round(depth_impact_bps, 6),
+            "timing_bps": round(latency_penalty_bps, 6),
+            "retry_cost_bps": round(retry_cost_bps, 6),
+        },
+        "market_regime": regime,
+        "venue_health": venue_health,
+        "execution_recommendation": recommendation,
         "market_snapshot": {
             "data_state": snapshot.get("data_state"),
             "venue_readiness": snapshot.get("venue_readiness"),
@@ -642,6 +897,7 @@ def build_order_microstructure_assessment(
                 "spread_bps": row.get("spread_bps"),
                 "quote_age_ms": row.get("quote_age_ms"),
                 "reason": row.get("reason"),
+                "venue_health": _venue_health(row, _buffer_rows(cache, venue, symbol_code)),
             }
             for venue, row in snapshots.items()
         },

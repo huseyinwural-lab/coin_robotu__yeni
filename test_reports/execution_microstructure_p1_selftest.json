@@ -1,0 +1,58 @@
+{
+  "login": {
+    "status": 200,
+    "ok": true
+  },
+  "venues": {
+    "status": 200,
+    "ok": true,
+    "binance_health": 65.7021,
+    "binance_liquidity_stress": 29.9427
+  },
+  "guard_preview": {
+    "status": 200,
+    "ok": true,
+    "state": "SWITCH_EXECUTION_MODE",
+    "market_regime": {
+      "trend": "chop",
+      "liquidity": "high_liquidity",
+      "market_speed": "fast",
+      "momentum_pct": 0.00029
+    },
+    "execution_recommendation": {
+      "primary": "passive",
+      "all": [
+        "slice",
+        "passive"
+      ],
+      "venue_switch_candidates": []
+    },
+    "slippage_decomposition_keys": [
+      "spread_bps",
+      "impact_bps",
+      "timing_bps",
+      "retry_cost_bps"
+    ],
+    "venue_health_keys": [
+      "venue_health_score",
+      "liquidity_stress_score",
+      "latency_score",
+      "retry_score",
+      "spread_instability",
+      "depth_instability",
+      "avg_transport_latency_ms",
+      "retry_ratio"
+    ]
+  },
+  "microstructure_replay": {
+    "status": 200,
+    "ok": true,
+    "count": 5
+  },
+  "execution_replay_latest": {
+    "status": 200,
+    "ok": true,
+    "state": "ok",
+    "root_cause": "prediction_match"
+  }
+}
