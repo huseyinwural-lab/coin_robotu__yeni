@@ -119,6 +119,84 @@
   - `backend/tests/test_execution_safety_namespace.py` (7 PASS, auth bağlı testler skip)
   - `backend/tests/test_execution_safety_advanced_p0.py` lint temizlendi
 
+## 2026-03-29 — P1 Sprint-1 Tamamlandı (Batch + Quarantine + Explainability)
+
+### Sprint-1 scope (kilitli seçimlere göre)
+- Backend-first yaklaşım uygulandı
+- P1 Sprint-1 hedefleri:
+  1) Batch recovery operasyonları production-ready
+  2) Quarantine operability (inspect + action)
+  3) Gate explainability
+
+### Tamamlanan backend geliştirmeleri
+1. **Explainability katmanı**
+   - Yeni servis çıktısı: `get_execution_safety_gate_explain(...)`
+   - Yeni endpoint: `GET /api/execution-safety/gate/explain`
+   - Çıktı: `score, state, confidence_band, components[], blockers, override_reason, warnings`
+
+2. **Quarantine yönetimi derinleştirme**
+   - `GET /api/execution-safety/quarantine` artık `summary.by_status` + `summary.by_failure_stage` döndürüyor
+   - `GET /api/execution-safety/quarantine/{quarantine_id}` detay çıktısı genişletildi:
+     - `resolution_history[]`
+     - `correlation_chain_link`
+     - `failure_timeline`
+     - `related_intent_events`
+   - Action desteği genişletildi (`note` destekli):
+     - replay, reprocess, mark_resolved, escalate, attach_note, release_from_quarantine
+   - Replay/reprocess aksiyonlarında yeni correlation context üretilmesi eklendi
+
+3. **Batch recovery production-ready genişletme**
+   - Mevcut bulk endpointler korundu + genişletildi:
+     - `POST /api/execution-safety/recovery/bulk-retry`
+     - `POST /api/execution-safety/recovery/bulk-cancel`
+     - `POST /api/execution-safety/recovery/bulk-reconcile`
+     - `POST /api/execution-safety/recovery/bulk-force-reconcile`
+     - `POST /api/execution-safety/recovery/bulk-move-to-quarantine`
+     - `POST /api/execution-safety/recovery/bulk-release-from-quarantine`
+   - Selection mode genişletmesi: `explicit_ids`, `by_filter`, `by_state`, `by_failure_stage`, `by_reason_code`, `by_retry_exhaustion`, `by_environment`, `by_age_window`
+   - Output item-bazlı ve fail-fast değil:
+     - `before_state, attempted_action, result(success|skipped|failed), error, after_state, correlation_id`
+   - Top-level sayımlar:
+     - `success_count, skipped_count, failed_count`
+
+4. **Reconcile çıktısı P1 hazırlığı**
+   - Reconcile result’a eklendi:
+     - `mismatch_severity`
+     - `confidence`
+     - `requires_manual_intervention`
+
+### Tamamlanan frontend geliştirmeleri (minimum UI)
+1. **AdminRuntimeQuarantinePage**
+   - Batch action panel eklendi
+   - Quarantine inspect dialog eklendi
+   - JSON inspect (`payload_snapshot`, `error_snapshot`)
+   - Correlation chain görünümü
+   - Failure timeline + resolution history görünümü
+   - Action panel (apply action / attach note / escalate)
+
+2. **AdminExecutionReadinessPage**
+   - Gate Explainability kartı eklendi
+   - Score/state/confidence/override + component breakdown görünümü
+
+### Sprint-1 test durumu
+- `testing_agent` raporu: `/app/test_reports/iteration_176.json`
+  - Backend: 23/23 PASS
+  - Frontend selector/integration: PASS
+- `deep_testing_backend_v2` final doğrulama: PASS
+- `auto_frontend_testing_agent` final doğrulama: PASS (auth flakiness ayrı not)
+- Local pytest:
+  - `test_execution_safety_advanced_unit.py` PASS
+  - `test_execution_safety_namespace.py` PASS/skip beklendiği gibi
+
+### Bilinen dış bloker
+- Bybit testnet erişimi bu runtime’da halen HTTP 403; acceptance run fail-safe olarak BLOCKED üretmeye devam eder.
+
+### Sprint-2 hazırlık notu
+- Reconcile engine full production edge-case derinleştirme
+- Dry-run / shadow pipeline
+- Historical analytics (7g default, 30g opsiyonel)
+- Manual intervention audit ve false-ready/false-allow detection sertleştirme
+
 
 ## 2026-03-28 — Execution Safety Core (P0) İlk Uygulama
 
