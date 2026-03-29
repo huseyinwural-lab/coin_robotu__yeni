@@ -1,3 +1,61 @@
+## 2026-03-29 — INCIDENT INTELLIGENCE CORE (PRODUCTION HARDENING & OPERATORIZATION)
+
+### P0 — Operator Center UI
+- Yeni admin operator ekranı eklendi: `/admin/incident-intelligence`
+- Yeni detail sayfası eklendi: `/admin/incident-intelligence/:incidentId`
+- Tek ekran üstünde aktif olarak gösteriliyor:
+  - Incident Stream
+  - Timeline View
+  - Root Cause Panel
+  - Action Panel
+  - Impact Panel
+  - Trend / Predictions
+  - Correlation Graph
+- Frontend sayfaları:
+  - `/app/frontend/src/pages/AdminIncidentIntelligencePage.jsx`
+  - `/app/frontend/src/pages/AdminIncidentDetailPage.jsx`
+- Sidebar ve route entegrasyonu tamamlandı.
+
+### Canlı akış (stream)
+- Yeni websocket endpoint: `/api/incident-intelligence/ws/stream`
+- Yeni stream hub: `/app/backend/core/incident_stream.py`
+- Backend tarafında incident intelligence loop snapshot event yayımlıyor.
+- UI polling yerine websocket stream ile yenileniyor.
+
+### P1 — Real internal action connectors + policy engine
+- Yeni gerçek internal aksiyon connector’ları aktif:
+  - `block_trading`
+  - `reduce_leverage`
+  - `reconcile_trigger`
+  - `restart_worker` (connector hazır)
+- Yeni endpointler:
+  - `POST /api/admin/incident-intelligence/incidents/{id}/actions`
+  - `POST /api/admin/incident-intelligence/incidents/{id}/actions/rollback`
+  - `GET /api/admin/incident-intelligence/policies`
+  - `PUT /api/admin/incident-intelligence/policies`
+- Domain-specific policy config aktif:
+  - execution
+  - risk
+  - system
+  - exchange
+- Audit ve rollback payload zinciri aktif.
+
+### P2 — Prediction / visibility integration
+- Prediction ve trend verileri operator dashboard’a bağlandı.
+- Recurring incident prediction endpoint mevcut ve dashboard’da listeleniyor.
+- Graph drilldown ReactFlow tabanlı görünür hale getirildi.
+
+### Test / doğrulama
+- Backend testing agent: `/app/test_reports/iteration_181.json` → **43/43 backend PASS**
+- Frontend uzman ajanı: operator ekranı ve detail page selector/state doğrulaması PASS
+- Local/backend self-test:
+  - `/app/test_reports/incident_intelligence_selftest.json`
+  - `/app/test_reports/incident_operatorization_selftest.json`
+
+### Operasyonel gerçeklik
+- Preview URL’de `session_device_mismatch` kaynaklı auth dalgalanması görülebiliyor; testing agent bunu altyapı/preview sorunu olarak işaretledi.
+- Auto-remediation external side effects hâlâ **MOCKED/SAFE-ORIENTED**; internal stateful connectors gerçek çalışıyor.
+
 ## 2026-03-29 — OBSERVABILITY & INCIDENT INTELLIGENCE CORE (P0 + P1 + P2)
 
 ### Uygulanan çekirdek mimari
