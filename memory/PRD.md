@@ -1,3 +1,72 @@
+## 2026-03-29 — Scope Lock Uygulaması (Execution Safety Core)
+
+### Scope Lock Kararları (Uygulandı)
+- Yeni API yüzeyi: `/api/execution-safety/*` (kanonik)
+- Legacy yüzey: `/api/execution-readiness/*` **deprecated** olarak bırakıldı (silinmedi)
+- Canonical cancel state: `CANCELED`
+- Testnet acceptance en sona alındı (core tamamlandıktan sonra)
+- Teslim formatı: Kod + Test + Ops + Jira
+
+### Bu turda tamamlanan ana işler
+1. **Yeni namespace router**
+   - `backend/routers/execution_safety.py`
+   - Endpointler:
+     - `/api/execution-safety/gate`
+     - `/api/execution-safety/intents`
+     - `/api/execution-safety/quarantine`
+     - `/api/execution-safety/quarantine/{quarantine_id}/{action}`
+     - `/api/execution-safety/artifacts`
+     - `/api/execution-safety/artifacts/incident-export`
+     - `/api/execution-safety/recovery`
+     - `/api/execution-safety/recovery/{intent_id}/{action}`
+     - `/api/execution-safety/recovery/batch`
+     - `/api/execution-safety/recovery/policy`
+     - `/api/execution-safety/recovery/policy/{environment}`
+     - `/api/execution-safety/recovery/reconciliation-summary`
+     - `/api/execution-safety/recovery/gate-trends`
+     - `/api/execution-safety/recovery/intervention-audit`
+     - `/api/execution-safety/observability`
+
+2. **Merkezi safety namespace servisi**
+   - `backend/services/execution_safety_namespace_service.py`
+   - Standard gate response şeması üretimi: `state, score, blockers, warnings, evaluated_at, correlation_id`
+   - Hard blocker override + fail-safe deny
+   - Unified environment policy okuma/yazma
+   - Canonical intent lifecycle (CANCELED dahil) + stuck timeout + recovery actionları
+   - Quarantine contract dönüşümü (zorunlu alanlarla)
+   - Immutable execution artefact üretimi + incident export
+   - Observability snapshot
+
+3. **Model + migration**
+   - `LiveActivationConfig.environment_policy` alanı eklendi
+   - Migration: `20260329_0097_execution_safety_environment_policy.py`
+   - `execution_intents.status` ve `execution_intent_events.event_status` için `CANCELLED -> CANCELED` normalize SQL
+
+4. **Legacy namespace deprecation işaretleme**
+   - `backend/routers/execution_readiness_core.py` tüm response’lara:
+     - `deprecated: true`
+     - `replacement_namespace: /api/execution-safety/*`
+
+5. **Frontend wiring güncellemesi**
+   - `frontend/src/pages/AdminExecutionReadinessPage.jsx`
+   - `frontend/src/pages/AdminRuntimeQuarantinePage.jsx`
+   - Aktif API çağrıları `/execution-safety/*` namespace’ine taşındı.
+
+6. **Jira teslim dosyası**
+   - `app/memory/JIRA_EXECUTION_SAFETY_CORE.md`
+   - Epic + Story + AC formatında kapsam çıkarıldı.
+
+### Test/Doğrulama
+- `testing_agent` raporu: `/app/test_reports/iteration_174.json`
+  - Backend doğrulama: %100 pass (kontratlar doğrulandı)
+  - Frontend: cross-origin cookie kaynaklı browser-auth limiti not edildi
+- `deep_testing_backend_v2` final doğrulama: tüm namespace endpointleri pass
+- `auto_frontend_testing_agent` selector + handler + namespace wiring doğrulaması pass
+
+### Güncel dış blokerler
+- Bybit testnet erişimi bu runtime’da hala HTTP 403 (ortam/ağ kısıtı)
+- Bu yüzden gerçek testnet acceptance zinciri (madde 8) son aşamada dış erişim açılınca tamamlanacak
+
 ## 2026-03-28 — Execution Safety Core (P0) İlk Uygulama
 
 ### Uygulanan P0 kapsamı

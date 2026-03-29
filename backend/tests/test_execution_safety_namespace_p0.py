@@ -13,10 +13,24 @@ Features tested:
 """
 
 import os
+from pathlib import Path
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
+
+def _resolve_base_url() -> str:
+    env_url = os.environ.get("REACT_APP_BACKEND_URL", "").strip()
+    if env_url:
+        return env_url.rstrip("/")
+    frontend_env = Path("/app/frontend/.env")
+    if frontend_env.exists():
+        for line in frontend_env.read_text(encoding="utf-8").splitlines():
+            if line.startswith("REACT_APP_BACKEND_URL="):
+                return line.split("=", 1)[1].strip().strip('"').rstrip("/")
+    return ""
+
+
+BASE_URL = _resolve_base_url()
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 
@@ -24,6 +38,8 @@ ADMIN_PASSWORD = "CanaryAdmin123!"
 @pytest.fixture(scope="module")
 def admin_session():
     """Get authenticated admin session with device_id header"""
+    if not BASE_URL:
+        pytest.skip("REACT_APP_BACKEND_URL is missing")
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
     
@@ -34,7 +50,7 @@ def admin_session():
     
     # Login
     login_response = session.post(
-        f"{BASE_URL}/api/auth/login",
+        f"{BASE_URL}/api/auth/login/admin",
         json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
     )
     
