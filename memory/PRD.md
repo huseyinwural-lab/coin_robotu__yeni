@@ -1,3 +1,17 @@
+## 2026-03-29 — Test User Credential Added
+
+- Kullanıcı doğrulaması için yeni standart USER hesabı oluşturuldu.
+- Credential:
+  - `review.user@platform.local`
+  - `ReviewUser123!`
+- Durum:
+  - role=`user`
+  - approval_status=`approved`
+  - onboarding profile etkin (`email_verified`, `trading_eligibility`, `futures_capability`, `spot_capability`)
+- Backend login self-test PASS:
+  - `POST /api/auth/login/user` → 200
+  - `GET /api/auth/me` → 200
+
 ## 2026-03-29 — INCIDENT INTELLIGENCE (PRODUCTION ACTIVATION PHASE)
 
 ### P0 — Preview auth stabilization
