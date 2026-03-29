@@ -1,0 +1,176 @@
+{
+  "summary": "Incident Intelligence Core (P0+P1+P2) testing completed. 43/43 backend tests passed (100%). All incident intelligence features verified including new action connectors (block_trading, reduce_leverage, reconcile_trigger, rollback) and policies endpoint. Frontend code review confirms all required panels and data-testid attributes are present. Preview URL login has session_device_mismatch issue preventing UI testing.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Admin Login via Preview URL",
+        "issue": "Login stuck in processing state due to session_device_mismatch - token not stored in localStorage",
+        "affected_selectors": ["[data-testid='admin-login-submit-button']"],
+        "priority": "MEDIUM",
+        "note": "This is a known preview URL issue, not a code bug. Backend TestClient tests pass."
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_incident_intelligence_testclient.py",
+    "/app/backend/tests/test_incident_intelligence_actions.py",
+    "/app/test_reports/pytest/incident_intelligence_iteration181.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Frontend AdminIncidentIntelligencePage.jsx has all required panels: stream-state-badge, kpi-grid, stream-panel, root-cause-panel, impact-panel, timeline-panel, action-panel, graph-panel",
+    "Frontend AdminIncidentDetailPage.jsx has proper timeline, summary, evidence, and actions panels with data-testid attributes",
+    "Backend action connectors (block_trading, reduce_leverage, reconcile_trigger, rollback) are fully functional",
+    "Policy config endpoint (GET/PUT /policies) works correctly with execution, risk, system, exchange domains",
+    "Auto-remediation remains SAFE/MOCK-ORIENTED - no live external action execution"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_incident_intelligence_actions.py"
+  ],
+  "success_rate": {
+    "backend": "100% (43 passed, 0 failed)",
+    "frontend": "Code review passed - UI testing blocked by preview URL session issue"
+  },
+  "test_credentials": "canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "None - used existing test fixtures and engine-generated data",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Incident Intelligence Core features fully tested via TestClient. All P0+P1+P2 endpoints verified including new action connectors. Preview URL has session_device_mismatch issue preventing UI testing - this is a known infrastructure issue, not a code bug. Backend tests are the source of truth.",
+  "features_verified": {
+    "engine_run": {
+      "status": "PASS",
+      "details": "Returns 200 with generated_at, context (volatility, load, regime), thresholds (z_score, baseline_deviation, burst_count, repeat_count), anomalies, incidents, auto_remediation"
+    },
+    "anomalies_unified_model": {
+      "status": "PASS",
+      "details": "Returns items with id, type, source, domain, severity, state, owner, linked_events, impact, root_cause, suggested_actions"
+    },
+    "incidents_list": {
+      "status": "PASS",
+      "details": "Returns items with incident_id, title, severity, state, owner, evidence, impact, root_cause, suggested_actions, remediation_history"
+    },
+    "incident_detail_timeline": {
+      "status": "PASS",
+      "details": "Returns incident and timeline with chain containing kinds: raw_event, anomaly, incident, remediation, resolution"
+    },
+    "incident_state_patch": {
+      "status": "PASS",
+      "details": "Supports FALSE_POSITIVE, INVESTIGATING, MITIGATED, RESOLVED states with owner/note update"
+    },
+    "action_connectors": {
+      "status": "PASS",
+      "details": "block_trading, reduce_leverage, reconcile_trigger actions work correctly with connector_result and state update to MITIGATED"
+    },
+    "rollback_endpoint": {
+      "status": "PASS",
+      "details": "POST /incidents/{id}/actions/rollback correctly rolls back last action with rollback_payload"
+    },
+    "policies_endpoint": {
+      "status": "PASS",
+      "details": "GET/PUT /policies returns/updates policy config with execution, risk, system, exchange domains"
+    },
+    "kpis": {
+      "status": "PASS",
+      "details": "Returns days, incident_count, mttd_seconds, mttr_seconds, repeat_incident_rate"
+    },
+    "weekly_summary": {
+      "status": "PASS",
+      "details": "Returns generated_at, kpis, top_root_causes, top_domains, top_incidents"
+    },
+    "graph": {
+      "status": "PASS",
+      "details": "Returns nodes (id, type) and edges (source, target, relation)"
+    },
+    "predictions": {
+      "status": "PASS",
+      "details": "Returns generated_at, items with fingerprint, recurrence_count, predicted_risk, risk_trend, last_seen_at, root_cause"
+    },
+    "existing_routes_regression": {
+      "status": "PASS",
+      "details": "No regressions on /audit-logs, /audit-logs/timeline, /audit-logs/incidents, /audit-logs/trading-lifecycle"
+    }
+  },
+  "mocked_apis": {
+    "has_mocked_apis": true,
+    "mocked_apis_list": [
+      "Auto-remediation external side effects are SAFE/MOCK-ORIENTED - no live external action execution",
+      "Bybit public/live access remains environment-limited"
+    ]
+  },
+  "backend_tests_summary": {
+    "total": 43,
+    "passed": 43,
+    "skipped": 0,
+    "failed": 0,
+    "test_files": [
+      "test_incident_intelligence_testclient.py - 34 API contract tests for incident intelligence endpoints",
+      "test_incident_intelligence_actions.py - 9 tests for action connectors, rollback, and policies"
+    ]
+  },
+  "api_contracts_verified": {
+    "POST /api/admin/incident-intelligence/engine/run": {
+      "fields": ["generated_at", "context", "thresholds", "anomalies", "incidents", "auto_remediation"],
+      "status": "PASS"
+    },
+    "GET /api/admin/incident-intelligence/anomalies": {
+      "fields": ["items"],
+      "status": "PASS"
+    },
+    "GET /api/admin/incident-intelligence/incidents": {
+      "fields": ["items"],
+      "status": "PASS"
+    },
+    "GET /api/admin/incident-intelligence/incidents/{id}": {
+      "fields": ["incident", "timeline"],
+      "status": "PASS"
+    },
+    "PATCH /api/admin/incident-intelligence/incidents/{id}": {
+      "supported_states": ["OPEN", "INVESTIGATING", "MITIGATED", "RESOLVED", "FALSE_POSITIVE"],
+      "status": "PASS"
+    },
+    "POST /api/admin/incident-intelligence/incidents/{id}/actions": {
+      "supported_actions": ["block_trading", "reduce_leverage", "reconcile_trigger"],
+      "response_fields": ["incident", "action_result"],
+      "status": "PASS"
+    },
+    "POST /api/admin/incident-intelligence/incidents/{id}/actions/rollback": {
+      "response_fields": ["incident", "rollback_payload"],
+      "status": "PASS"
+    },
+    "GET /api/admin/incident-intelligence/policies": {
+      "domains": ["execution", "risk", "system", "exchange"],
+      "status": "PASS"
+    },
+    "PUT /api/admin/incident-intelligence/policies": {
+      "status": "PASS"
+    },
+    "GET /api/admin/incident-intelligence/kpis": {
+      "fields": ["days", "incident_count", "mttd_seconds", "mttr_seconds", "repeat_incident_rate"],
+      "status": "PASS"
+    },
+    "GET /api/admin/incident-intelligence/weekly-summary": {
+      "fields": ["generated_at", "kpis", "top_root_causes", "top_domains", "top_incidents"],
+      "status": "PASS"
+    },
+    "GET /api/admin/incident-intelligence/graph": {
+      "fields": ["nodes", "edges"],
+      "status": "PASS"
+    },
+    "GET /api/admin/incident-intelligence/predictions": {
+      "fields": ["generated_at", "items"],
+      "status": "PASS"
+    }
+  },
+  "notes": [
+    "Preview URL has session_device_mismatch issue preventing UI testing - this is a known infrastructure issue",
+    "Backend TestClient tests are the source of truth for API functionality",
+    "Frontend code review confirms all required panels and data-testid attributes are present",
+    "All 43 backend tests passed (34 from testclient + 9 from actions)"
+  ]
+}

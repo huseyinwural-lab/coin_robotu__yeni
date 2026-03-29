@@ -1,0 +1,14 @@
+{
+  "block": {
+    "status": 200,
+    "body": "{\"incident\":{\"incident_id\":\"36c56b16-2a86-463c-98f0-a3d9b8a5210d\",\"title\":\"EXCHANGE incident: exchange_403\",\"severity\":\"CRITICAL\",\"state\":\"MITIGATED\",\"owner\":\"exchange-ops\",\"evidence\":{\"linked_events\":[\"alert:44e2e606-5438-4277-8e5e-97a28c0c9b0a\",\"alert:533286ce-b4fe-4840-a7a0-ce73e7e28c72\",\"alert:6"
+  },
+  "rollback": {
+    "status": 200,
+    "body": "{\"incident\":{\"incident_id\":\"36c56b16-2a86-463c-98f0-a3d9b8a5210d\",\"title\":\"EXCHANGE incident: exchange_403\",\"severity\":\"CRITICAL\",\"state\":\"MITIGATED\",\"owner\":\"exchange-ops\",\"evidence\":{\"linked_events\":[\"alert:44e2e606-5438-4277-8e5e-97a28c0c9b0a\",\"alert:533286ce-b4fe-4840-a7a0-ce73e7e28c72\",\"alert:6"
+  },
+  "reduce": {
+    "status": 200,
+    "body": "{\"incident\":{\"incident_id\":\"36c56b16-2a86-463c-98f0-a3d9b8a5210d\",\"title\":\"EXCHANGE incident: exchange_403\",\"severity\":\"CRITICAL\",\"state\":\"MITIGATED\",\"owner\":\"exchange-ops\",\"evidence\":{\"linked_events\":[\"alert:44e2e606-5438-4277-8e5e-97a28c0c9b0a\",\"alert:533286ce-b4fe-4840-a7a0-ce73e7e28c72\",\"alert:6"
+  }
+}
