@@ -4059,7 +4059,10 @@ class CommercialP0WsWorkerStatusResponse(BaseModel):
 
 class LearningImpactSimulationRequest(BaseModel):
     strategy_id: str | None = None
+    strategy_ids: list[str] = Field(default_factory=list)
     family: str | None = None
+    symbol_cluster: list[str] = Field(default_factory=list)
+    scenario: str = "base"
     recommendation_type: str = "decrease_weight_recommendation"
     suggested_weight_multiplier: float | None = Field(default=None, ge=0.1, le=3.0)
 
@@ -4070,7 +4073,10 @@ class LearningImpactSimulationResponse(BaseModel):
     simulated_at: datetime
     scope: str
     strategy_id: str | None = None
+    strategy_ids: list[str] = Field(default_factory=list)
     family: str | None = None
+    symbol_cluster: list[str] = Field(default_factory=list)
+    scenario: str = "base"
     recommendation_type: str
     read_only: bool = True
     projected_risk_score: float
@@ -4087,6 +4093,7 @@ class LearningImpactSimulationResponse(BaseModel):
     counterfactual_replay: dict = Field(default_factory=dict)
     portfolio_impact: dict = Field(default_factory=dict)
     risk_aware_view: dict = Field(default_factory=dict)
+    interaction_effects: dict = Field(default_factory=dict)
     assumptions: list[str] = Field(default_factory=list)
 
 

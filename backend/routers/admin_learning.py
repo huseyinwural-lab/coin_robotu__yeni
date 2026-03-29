@@ -180,7 +180,10 @@ def admin_simulate_learning_impact(
     return simulate_learning_recommendation_impact(
         db,
         strategy_id=payload.strategy_id,
+        strategy_ids=payload.strategy_ids,
         family=payload.family,
+        symbol_cluster=payload.symbol_cluster,
+        scenario=payload.scenario,
         recommendation_type=payload.recommendation_type,
         suggested_weight_multiplier=payload.suggested_weight_multiplier,
     )

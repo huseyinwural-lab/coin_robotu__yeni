@@ -1,0 +1,43 @@
+{
+  "overview": {
+    "status": 200,
+    "ok": true,
+    "keys": [
+      "schema_version",
+      "engine_version",
+      "generated_at",
+      "guardrails",
+      "strategy_memory",
+      "family_memory",
+      "recommendations",
+      "events",
+      "adaptive_summary"
+    ]
+  },
+  "simulate_impact": {
+    "status": 200,
+    "ok": true,
+    "keys": [
+      "schema_version",
+      "engine_version",
+      "simulated_at",
+      "scope",
+      "strategy_id",
+      "strategy_ids",
+      "family",
+      "symbol_cluster",
+      "scenario",
+      "recommendation_type",
+      "read_only",
+      "projected_risk_score",
+      "projected_gate_decision",
+      "expected_hit_rate_delta",
+      "expected_avg_return_delta",
+      "allocation_drift_delta",
+      "hedge_effect_score",
+      "baseline_metrics",
+      "projected_metrics",
+      "delta_metrics"
+    ]
+  }
+}

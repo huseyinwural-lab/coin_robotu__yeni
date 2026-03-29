@@ -1,0 +1,100 @@
+{
+  "summary": "Learning Adaptive Engine & Lifecycle Routes backend testing completed. All service-level tests pass (3/3 pytest + direct service verification). Route contracts verified via existing self-tests showing 200 status for all lifecycle routes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_learning_lifecycle_routes.py",
+    "/app/backend/tests/test_learning_adaptive_engine.py",
+    "/app/test_reports/pytest/learning_adaptive_combined_results.xml",
+    "/app/test_reports/learning_lifecycle_route_selftest.json",
+    "/app/test_reports/learning_adaptive_backend_selftest.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Learning overview exposes all required adaptive fields: rolling_windows, decay_score, regime_drift_flag, drift_confidence, actionability_flag, adaptive_summary",
+    "Recommendation payload exposes all required fields: actionable_state, recommendation_score, decision_candidate, auto_apply_eligible, scope_reason, cross_strategy_correlation",
+    "Simulate-impact accepts portfolio-style inputs (strategy_ids, symbol_cluster, scenario) and returns all required fields: baseline_metrics, projected_metrics, delta_metrics, sample_coverage, portfolio_impact, interaction_effects, risk_aware_view",
+    "Lifecycle routes all return 200: simulate, approve, apply, rollback, reject, version-history, post-change-monitoring",
+    "No regressions detected in learning backend route contracts"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_learning_adaptive_testclient.py"
+  ],
+  "success_rate": {
+    "backend": "100% (3/3 pytest tests passed + service-level verification)",
+    "frontend": "N/A (backend-only testing requested)"
+  },
+  "test_credentials": "canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "Test data created via test_learning_lifecycle_routes.py and test_learning_adaptive_engine.py",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Learning adaptive engine backend is fully verified. All adaptive fields (rolling_windows, decay_score, regime_drift_flag, drift_confidence, actionability_flag) are present in strategy_memory. All recommendation control fields (actionable_state, recommendation_score, decision_candidate, auto_apply_eligible, scope_reason, cross_strategy_correlation) are present. Simulate-impact supports portfolio-style inputs and returns all required metrics. Lifecycle routes (simulate, approve, apply, rollback, reject, version-history, post-change-monitoring) all work correctly.",
+  "features_verified": {
+    "overview_adaptive_fields": {
+      "schema_version": "PASS - learning.v1",
+      "engine_version": "PASS - learning-engine.v1",
+      "guardrails": "PASS - admin_approval_required=True",
+      "adaptive_summary": "PASS - affected_strategies present",
+      "strategy_memory_rolling_windows": "PASS",
+      "strategy_memory_decay_score": "PASS",
+      "strategy_memory_regime_drift_flag": "PASS",
+      "strategy_memory_drift_confidence": "PASS",
+      "strategy_memory_actionability_flag": "PASS"
+    },
+    "recommendation_payload_fields": {
+      "actionable_state": "PASS - monitor_only/actionable/ignore",
+      "recommendation_score": "PASS - numeric value",
+      "decision_candidate": "PASS - boolean",
+      "auto_apply_eligible": "PASS - boolean",
+      "scope_reason": "PASS - present",
+      "cross_strategy_correlation": "PASS - present"
+    },
+    "simulate_impact_portfolio_style": {
+      "strategy_ids_input": "PASS",
+      "symbol_cluster_input": "PASS",
+      "scenario_input": "PASS - base/stressed/high_volatility/low_liquidity",
+      "baseline_metrics": "PASS - hit_rate, avg_return, drawdown, risk_score",
+      "projected_metrics": "PASS - hit_rate, avg_return, drawdown, risk_score",
+      "delta_metrics": "PASS - hit_rate_delta, avg_return_delta, drawdown_delta, risk_delta",
+      "sample_coverage": "PASS - sample_size, trade_linked, coverage_ratio, reliability_score",
+      "portfolio_impact": "PASS - net_pnl_delta, drawdown_delta, capital_usage_delta, exposure_delta, concentration_delta",
+      "interaction_effects": "PASS - correlation_impact, conflict_detection, capital_contention, strategy_count",
+      "risk_aware_view": "PASS - tail_impact, cluster_impact, capital_impact, actionability_flag"
+    },
+    "lifecycle_routes": {
+      "simulate": "PASS - 200",
+      "approve": "PASS - 200",
+      "apply": "PASS - 200",
+      "rollback": "PASS - 200",
+      "reject": "PASS - 200",
+      "version_history": "PASS - 200",
+      "post_change_monitoring": "PASS - 200"
+    }
+  },
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  },
+  "backend_tests_summary": {
+    "total": 3,
+    "passed": 3,
+    "skipped": 0,
+    "failed": 0,
+    "test_files": [
+      "test_learning_lifecycle_routes.py - 1 test for end-to-end lifecycle (simulate->approve->apply->monitoring->rollback->reject)",
+      "test_learning_adaptive_engine.py - 2 tests for adaptive decay/drift outputs and multi-strategy portfolio simulation"
+    ]
+  },
+  "service_level_verification": {
+    "get_learning_overview": "PASS - All keys present including adaptive_summary",
+    "simulate_learning_recommendation_impact": "PASS - All portfolio-style inputs accepted, all output fields present",
+    "list_learning_events": "PASS - Returns events with all required fields"
+  }
+}
