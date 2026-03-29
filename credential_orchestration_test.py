@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Credential Orchestration Backend API Test
-Target: https://finops-dashboard-10.preview.emergentagent.com
+Target: https://dry-run-shadow.preview.emergentagent.com
 Admin: canary.admin@platform.local / CanaryAdmin123!
 
 Tests:
@@ -27,7 +27,7 @@ from datetime import datetime
 
 class CredentialOrchestrationTester:
     def __init__(self):
-        self.base_url = "https://finops-dashboard-10.preview.emergentagent.com"
+        self.base_url = "https://dry-run-shadow.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.session = requests.Session()

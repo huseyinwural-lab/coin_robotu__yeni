@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 QA-02 Kısa Regression Test
-Target: https://enforcement-backend.preview.emergentagent.com
+Target: https://dry-run-shadow.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Requirements:
@@ -21,7 +21,7 @@ from typing import Dict, Any, List, Optional
 
 class QA02RegressionTest:
     def __init__(self):
-        self.base_url = "https://enforcement-backend.preview.emergentagent.com"
+        self.base_url = "https://dry-run-shadow.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.session = requests.Session()

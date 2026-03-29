@@ -7,7 +7,7 @@ import requests
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://futures-health-check.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 
 def test_frontend_accessibility():
     """Test frontend page accessibility"""

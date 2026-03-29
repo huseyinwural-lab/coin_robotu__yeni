@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -243,6 +244,19 @@ def _bybit_private_get(db: Session, endpoint: str, params: dict) -> dict:
     }
 
 
+def _bybit_private_get_with_retry(db: Session, endpoint: str, params: dict, *, retries: int = 3) -> dict:
+    last_result = {"ok": False, "reason": "not_started"}
+    for attempt in range(1, retries + 1):
+        last_result = _bybit_private_get(db, endpoint, params)
+        if last_result.get("ok"):
+            last_result["attempt"] = attempt
+            return last_result
+        if attempt < retries:
+            time.sleep(min(0.4 * (2 ** (attempt - 1)), 2.0))
+    last_result["attempt"] = retries
+    return last_result
+
+
 def _extract_external_order_id(events: list[ExecutionIntentEvent]) -> str | None:
     for event in reversed(events):
         oid = str(event.external_order_id or "").strip()
@@ -410,6 +424,25 @@ def reconcile_intent_with_exchange(
     if intent is None:
         raise ValueError("intent_not_found")
 
+    latest_reconcile = (
+        db.query(ExecutionIntentEvent)
+        .filter(ExecutionIntentEvent.intent_id == intent_id, ExecutionIntentEvent.event_type == "EXECUTION_RECONCILE_RESULT")
+        .order_by(ExecutionIntentEvent.created_at.desc())
+        .first()
+    )
+    if latest_reconcile is not None:
+        created = _as_utc(latest_reconcile.created_at)
+        if created and (_utcnow() - created).total_seconds() < 45:
+            payload = dict(latest_reconcile.payload or {})
+            return {
+                "intent_id": intent.intent_id,
+                "before_state": _normalize_state(intent.status),
+                "after_state": _normalize_state(intent.status),
+                "reconcile_result": payload,
+                "artifact": {},
+                "idempotent_hit": True,
+            }
+
     events = (
         db.query(ExecutionIntentEvent)
         .filter(ExecutionIntentEvent.intent_id == intent_id)
@@ -456,12 +489,12 @@ def reconcile_intent_with_exchange(
     resolution_reason = "exchange_data_unavailable"
 
     if external_order_id:
-        order_resp = _bybit_private_get(
+        order_resp = _bybit_private_get_with_retry(
             db,
             "/v5/order/realtime",
             {"category": "linear", "symbol": intent.symbol, "orderId": external_order_id},
         )
-        exec_resp = _bybit_private_get(
+        exec_resp = _bybit_private_get_with_retry(
             db,
             "/v5/execution/list",
             {"category": "linear", "symbol": intent.symbol, "orderId": external_order_id, "limit": 50},

@@ -8,7 +8,7 @@ This script validates the P2+Escalation updates on the backend as requested:
 3. Import/Export endpoints
 4. Role-based access controls
 
-Test URL: https://identity-control-1.preview.emergentagent.com
+Test URL: https://dry-run-shadow.preview.emergentagent.com
 """
 
 import json
@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 # Test configuration
-BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials from review request

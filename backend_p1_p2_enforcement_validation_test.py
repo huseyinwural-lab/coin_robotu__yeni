@@ -4,7 +4,7 @@ P1/P2 Enforcement Backend Validation Test
 
 Turkish Review Request:
 P1/P2 doğrulama testi yap (backend odaklı).
-Ortam: https://enforcement-backend.preview.emergentagent.com
+Ortam: https://dry-run-shadow.preview.emergentagent.com
 
 Kontrol listesi:
 1) Scheduler API: export schedule create endpoint çalışıyor mu? max_retry alanı kabul ediyor mu?
@@ -25,7 +25,7 @@ import sys
 from datetime import datetime
 
 # Base URL from frontend/.env
-BASE_URL = "https://enforcement-backend.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 
 def test_readiness_endpoint():
     """Test 3: Readiness - /api/ready returns 200 and preview_smoke_gate ready"""

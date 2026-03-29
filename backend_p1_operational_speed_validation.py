@@ -11,7 +11,7 @@ Test Requirements:
 5) Metrics + observability: GET /api/metrics
 6) Frontend smoke: /admin/audit-logs page accessibility
 
-URL: https://failure-explainer.preview.emergentagent.com
+URL: https://dry-run-shadow.preview.emergentagent.com
 Test credentials: canary.admin@platform.local / CanaryAdmin123!
 """
 
@@ -21,7 +21,7 @@ import time
 from datetime import datetime, timezone, timedelta
 
 # Configuration
-BASE_URL = "https://failure-explainer.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

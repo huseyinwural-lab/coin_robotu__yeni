@@ -10,7 +10,7 @@ import pytest
 import requests
 from sqlalchemy import create_engine, text
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or "https://identity-control-1.preview.emergentagent.com"
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or "https://dry-run-shadow.preview.emergentagent.com"
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("PG_DSN")
 
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"

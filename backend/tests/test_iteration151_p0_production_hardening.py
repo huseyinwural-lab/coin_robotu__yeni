@@ -19,7 +19,7 @@ import subprocess
 import json
 import tempfile
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://ops-risk-final.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://dry-run-shadow.preview.emergentagent.com").rstrip("/")
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

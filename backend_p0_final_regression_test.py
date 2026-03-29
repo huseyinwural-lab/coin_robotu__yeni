@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Final P0 Backend Regression Test
-Base URL: https://identity-control-1.preview.emergentagent.com
+Base URL: https://dry-run-shadow.preview.emergentagent.com
 Admin creds: canary.admin@platform.local / CanaryAdmin123!
 
 Test cases:
@@ -22,7 +22,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

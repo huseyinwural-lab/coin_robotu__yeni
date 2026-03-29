@@ -8,7 +8,7 @@ import requests
 import time
 from datetime import datetime
 
-BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 def test_escalation_endpoints():

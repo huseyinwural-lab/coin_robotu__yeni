@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 CREDENTIALS = {
     "super_admin": {"email": "canary.admin@platform.local", "password": "CanaryAdmin123!"}
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 MFA Optional Policy Quick Backend Validation Test
-Base URL: https://identity-control-1.preview.emergentagent.com
+Base URL: https://dry-run-shadow.preview.emergentagent.com
 Test Requirements:
 1) POST /api/auth/login/admin with canary.admin@platform.local / CanaryAdmin123! should return 200 with access_token directly and mfa_required=false.
 2) Using returned token, PUT /api/auth/mfa/settings with is_enabled=false should return 200 (admin için disable artık izinli).
@@ -14,7 +14,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

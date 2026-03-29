@@ -9,7 +9,7 @@ import sys
 
 def test_acceptance_latest():
     """Test the acceptance latest endpoint specifically"""
-    base_url = "https://quarantine-pipeline.preview.emergentagent.com"
+    base_url = "https://dry-run-shadow.preview.emergentagent.com"
     
     # Authenticate
     auth_data = {"email": "canary.admin@platform.local", "password": "CanaryAdmin123!"}

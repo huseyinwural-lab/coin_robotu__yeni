@@ -1,0 +1,73 @@
+{
+  "base_url": "https://dry-run-shadow.preview.emergentagent.com",
+  "tests": {
+    "login_admin": {
+      "status": 200,
+      "token_present": true
+    },
+    "analytics_gate_failures_7d": {
+      "status": 200,
+      "ok": true,
+      "response_keys": [
+        "blocked_count",
+        "degraded_count",
+        "failure_rate",
+        "ready_count",
+        "timeseries",
+        "total_evaluations",
+        "window"
+      ],
+      "body_preview": "{\"window\": \"7d\", \"total_evaluations\": 0, \"blocked_count\": 0, \"degraded_count\": 0, \"ready_count\": 0, \"failure_rate\": 0.0, \"timeseries\": []}"
+    },
+    "anomalies_filtered": {
+      "status": 200,
+      "ok": true,
+      "response_keys": [
+        "items",
+        "total_anomalies",
+        "window"
+      ],
+      "body_preview": "{\"window\": \"7d\", \"total_anomalies\": 0, \"items\": []}"
+    },
+    "dry_run_default": {
+      "status": 200,
+      "ok": true,
+      "response_keys": [
+        "confidence",
+        "correlation_id",
+        "degrade_mode",
+        "divergence_from_real_market",
+        "expected_fill_price",
+        "expected_pnl",
+        "expected_slippage",
+        "intent_id",
+        "mode",
+        "qty",
+        "risk_exposure",
+        "side",
+        "symbol"
+      ],
+      "body_preview": "{\"mode\": \"dry-run\", \"symbol\": \"BTCUSDT\", \"qty\": 0.001, \"side\": \"BUY\", \"expected_fill_price\": 1000.5, \"expected_slippage\": 0.0005, \"expected_pnl\": 0.0005, \"risk_exposure\": {\"notional\": 1.0005, \"max_drawdown_estimate\": 0.015, \"leverage_assumed\": 1}, \"divergence_from_real_market\": {\"mark_price\": 1000.0, \"abs_diff\": 0.5, \"pct_diff\": 0.0005}, \"degrade_m"
+    },
+    "shadow_default": {
+      "status": 200,
+      "ok": true,
+      "response_keys": [
+        "confidence",
+        "correlation_id",
+        "degrade_mode",
+        "divergence_from_real_market",
+        "expected_fill_price",
+        "expected_pnl",
+        "expected_slippage",
+        "intent_id",
+        "mode",
+        "qty",
+        "risk_exposure",
+        "side",
+        "symbol"
+      ],
+      "body_preview": "{\"mode\": \"shadow\", \"symbol\": \"BTCUSDT\", \"qty\": 0.001, \"side\": \"BUY\", \"expected_fill_price\": 1000.5, \"expected_slippage\": 0.0005, \"expected_pnl\": 0.0005, \"risk_exposure\": {\"notional\": 1.0005, \"max_drawdown_estimate\": 0.015, \"leverage_assumed\": 1}, \"divergence_from_real_market\": {\"mark_price\": 1000.0, \"abs_diff\": 0.5, \"pct_diff\": 0.0005}, \"degrade_mo"
+    }
+  }
+}

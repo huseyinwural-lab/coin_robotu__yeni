@@ -1,6 +1,6 @@
 {
   "test_time": "2026-03-24T11:17:34.638331",
-  "base_url": "https://identity-control-1.preview.emergentagent.com",
+  "base_url": "https://dry-run-shadow.preview.emergentagent.com",
   "summary": {
     "runtime_health": "FAIL",
     "mfa_standard": "PARTIAL",

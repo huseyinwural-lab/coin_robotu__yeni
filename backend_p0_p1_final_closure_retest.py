@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P0+P1 Final Closure Retest (Post-Security-Header Fix)
-URL: https://failure-explainer.preview.emergentagent.com
+URL: https://dry-run-shadow.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Validate:
@@ -22,7 +22,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://failure-explainer.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

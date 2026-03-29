@@ -8,7 +8,7 @@ import json
 import time
 
 # Get backend URL from frontend env
-BACKEND_URL = "https://finops-dashboard-10.preview.emergentagent.com"
+BACKEND_URL = "https://dry-run-shadow.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials

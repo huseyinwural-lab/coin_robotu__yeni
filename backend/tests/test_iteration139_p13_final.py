@@ -13,7 +13,7 @@ import uuid
 import requests
 
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://revenue-snapshot.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://dry-run-shadow.preview.emergentagent.com").rstrip("/")
 
 
 def _admin_headers():

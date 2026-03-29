@@ -6,7 +6,7 @@ Final Admin Credential Orchestration Layer Test Summary
 import requests
 import json
 
-BASE_URL = "https://binance-reconcile.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 USER_EMAIL = "huseyinwural@gmail.com"

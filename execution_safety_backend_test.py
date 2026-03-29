@@ -612,7 +612,7 @@ def main():
     """Main function to run the execution-safety namespace validation"""
     
     # Configuration
-    BASE_URL = "https://quarantine-pipeline.preview.emergentagent.com"
+    BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
     EMAIL = "canary.admin@platform.local"
     PASSWORD = "CanaryAdmin123!"
     

@@ -26,7 +26,7 @@ import requests
 from fastapi.testclient import TestClient
 
 # Backend URL'i frontend .env dosyasından al
-BACKEND_URL = "https://admin-dashboard-api-1.preview.emergentagent.com"
+BACKEND_URL = "https://dry-run-shadow.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials

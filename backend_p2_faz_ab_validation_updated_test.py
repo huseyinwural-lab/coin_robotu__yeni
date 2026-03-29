@@ -3,7 +3,7 @@
 P2 Faz-A/B Hızlı Doğrulama - Updated Backend Test
 Turkish Review Request Validation (Updated for Device Fingerprinting)
 
-URL: https://failure-explainer.preview.emergentagent.com
+URL: https://dry-run-shadow.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Requirements (Updated):
@@ -23,7 +23,7 @@ from typing import Dict, Any, List, Optional
 
 class P2FazABValidatorUpdated:
     def __init__(self):
-        self.base_url = "https://failure-explainer.preview.emergentagent.com"
+        self.base_url = "https://dry-run-shadow.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.session = requests.Session()

@@ -2,7 +2,7 @@
 
 """
 Final P2 Backend Validation Test
-Base URL: https://identity-control-1.preview.emergentagent.com
+Base URL: https://dry-run-shadow.preview.emergentagent.com
 Creds: canary.admin@platform.local / CanaryAdmin123!
 
 Test matrix:
@@ -20,7 +20,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"

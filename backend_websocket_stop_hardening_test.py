@@ -3,7 +3,7 @@
 Final Backend Validation Rerun After Websocket-Stop Hardening
 
 Test Requirements from Review Request:
-- Base URL: https://binance-reconcile.preview.emergentagent.com
+- Base URL: https://dry-run-shadow.preview.emergentagent.com
 - Admin: canary.admin@platform.local / CanaryAdmin123!
 - Target user: huseyinwural@gmail.com
 
@@ -646,7 +646,7 @@ class WebsocketStopHardeningTester:
 def main():
     """Main test execution"""
     # Test configuration from review request
-    BASE_URL = "https://binance-reconcile.preview.emergentagent.com"
+    BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
     ADMIN_EMAIL = "canary.admin@platform.local"
     ADMIN_PASSWORD = "CanaryAdmin123!"
     TARGET_USER_EMAIL = "huseyinwural@gmail.com"

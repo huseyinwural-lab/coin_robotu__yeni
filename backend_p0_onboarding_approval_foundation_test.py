@@ -13,7 +13,7 @@ Test cases:
 8) /api/admin/audit/export working?
 9) /api/ready status PASS?
 
-Target: https://enforcement-backend.preview.emergentagent.com
+Target: https://dry-run-shadow.preview.emergentagent.com
 Admin credentials: canary.admin@platform.local / CanaryAdmin123!
 """
 
@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple
 
 # Configuration
-BASE_URL = "https://enforcement-backend.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

@@ -23,7 +23,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+    BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 
 TEST_CREDENTIALS = {
     "email": "canary.admin@platform.local",

@@ -1,3 +1,26 @@
+## 2026-03-29 — P1 Sprint-2 UI Full Entegrasyon + Dry/Shadow Stabilizasyonu
+
+### Bu turda tamamlananlar
+- `frontend/src/pages/AdminExecutionReadinessPage.jsx` içinde P1 Sprint-2 minimum operable UI tamamlandı:
+  - Analytics paneli (7d/30d window, gate failures, blockers, recovery)
+  - False Decision Anomaly paneli (severity/type/time filtresi)
+  - Hybrid Dry-run / Shadow execution paneli (BTCUSDT/0.001/BUY default)
+- Kritik kullanıcı yüzeyi ve etkileşimli alanlara `data-testid` eklendi (Sprint-2 yeni bloklar dahil).
+- Dry-run/shadow backend 500 hatası giderildi:
+  - Kök neden: `execution_intents.strategy_id` FK (`strategy_definitions`) ihlali.
+  - Düzeltme: `backend/services/execution_safety_p1_service.py` içinde simulation çağrısından önce strategy/version seed garantisi eklendi (`_ensure_simulation_strategy_seed`).
+
+### Self-test kanıtları (bu tur)
+- API sözleşme/wiring/self-test raporu: `/app/test_reports/p1_sprint2_selftest_api.json`
+- UI wiring kontrol raporu: `/app/test_reports/p1_sprint2_ui_wiring_check.json`
+- Fail-safe davranış kontrolü (degrade_mode): `/app/test_reports/p1_sprint2_dryrun_fail_safe_check.json`
+- Tek screenshot smoke: admin login ekranı başarıyla render edildi; auth/mfa nedeniyle panel navigasyonu ortam bağımlı kaldı.
+
+### Durum sınıflaması
+- **Implemented**: Sprint-2 temel UI (Analytics + Anomaly + Dry-run/Shadow) + backend simulation stabilizasyonu
+- **Self-tested**: Endpoint contract, request/response, fail-safe degrade_mode, UI selector/wiring
+- **Live validation pending**: Gerçek exchange bağlantısı, API key doğrulaması, gerçek order/fill/reconcile
+
 ## 2026-03-29 — Scope Lock Uygulaması (Execution Safety Core)
 
 ### Scope Lock Kararları (Uygulandı)
@@ -3324,7 +3347,7 @@
 - Unit test: `pytest -q /app/backend/tests/test_commercial_ops_p0_service.py` → **3 passed**
 - Lint: yeni/edilen backend dosyaları için **pass**
 - `deep_testing_backend_v2` sonucu: **ENV BLOCKER**
-  - Preview URL `https://binance-reconcile.preview.emergentagent.com` üzerinde `/api/health` dahil 502
+  - Preview URL `https://dry-run-shadow.preview.emergentagent.com` üzerinde `/api/health` dahil 502
   - Kök neden (lokal teşhis): `postgres.internal` bu runtime’da çözümlenmiyor (`Name or service not known`)
   - Bu nedenle canlı endpoint E2E/curl doğrulaması bu turda tamamlanamadı.
 

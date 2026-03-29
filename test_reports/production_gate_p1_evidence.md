@@ -1,7 +1,7 @@
 # Production Gate P1 — Evidence Closure
 
 - Generated: 2026-03-23
-- Base URL: `https://identity-control-1.preview.emergentagent.com`
+- Base URL: `https://dry-run-shadow.preview.emergentagent.com`
 - Manifest: `/backend/exports/artifact_manifest.json`
 
 ## Mandatory Artefacts (Present)

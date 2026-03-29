@@ -78,5 +78,5 @@
     },
     "data_testid_coverage": "Comprehensive - all critical elements have data-testid"
   },
-  "infrastructure_notes": "Preview environment (https://admin-dashboard-api-1.preview.emergentagent.com) has intermittent timeout issues. Backend TestClient tests confirm all functionality works correctly. This is a known infrastructure issue mentioned in iteration_143."
+  "infrastructure_notes": "Preview environment (https://dry-run-shadow.preview.emergentagent.com) has intermittent timeout issues. Backend TestClient tests confirm all functionality works correctly. This is a known infrastructure issue mentioned in iteration_143."
 }

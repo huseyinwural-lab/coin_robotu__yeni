@@ -8,7 +8,7 @@ import requests
 import re
 from datetime import datetime
 
-BASE_URL = "https://failure-explainer.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 
 def test_frontend_indicators():
     """Test frontend audit logs page for required indicators"""

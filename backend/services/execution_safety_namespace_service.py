@@ -354,6 +354,8 @@ def get_execution_safety_gate_explain(
     request_id: str | None = None,
     session_id: str | None = None,
     correlation_id: str | None = None,
+    include_trend: bool = False,
+    window: str = "7d",
 ) -> dict:
     gate = evaluate_execution_safety_gate(
         db,
@@ -389,7 +391,7 @@ def get_execution_safety_gate_explain(
     elif score < 80 or computed < 80:
         confidence_band = "MEDIUM"
 
-    return {
+    result = {
         "score": round(score if score > 0 else computed, 2),
         "state": gate.get("state"),
         "confidence_band": confidence_band,
@@ -400,6 +402,19 @@ def get_execution_safety_gate_explain(
         "correlation_id": gate.get("correlation_id"),
         "evaluated_at": gate.get("evaluated_at"),
     }
+    if include_trend:
+        from services.execution_safety_p1_service import analytics_blockers, analytics_gate_failures
+
+        result["trend"] = {
+            "gate_failures": analytics_gate_failures(window=window),
+            "blockers": analytics_blockers(window=window),
+            "score_volatility": {
+                "window": window,
+                "latest_score": result["score"],
+                "confidence_band": result["confidence_band"],
+            },
+        }
+    return result
 
 
 def _intent_state_from_event(current_state: str, event: ExecutionIntentEvent) -> tuple[str, str | None]:

@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-03-28T10:03:31.496467+00:00",
-  "base_url": "https://futures-health-check.preview.emergentagent.com",
+  "base_url": "https://dry-run-shadow.preview.emergentagent.com",
   "admin_login_smoke": {
     "name": "admin_login_smoke",
     "status": "PASS",

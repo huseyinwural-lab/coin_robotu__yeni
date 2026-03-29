@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 FAZ-4 Actionable Alerting Backend Validation
-Target: https://identity-control-1.preview.emergentagent.com
+Target: https://dry-run-shadow.preview.emergentagent.com
 Tests: Anomaly alerts policy, mute flow, validation guards
 """
 
@@ -16,7 +16,7 @@ def test_faz4_actionable_alerting():
     Tests all required endpoints and flows.
     """
     
-    BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+    BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
     
     print("=" * 80)
     print("FAZ-4 ACTIONABLE ALERTING BACKEND VALIDATION")

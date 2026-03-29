@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Final Closure Smoke Test (Backend Only)
-Base URL: https://identity-control-1.preview.emergentagent.com
+Base URL: https://dry-run-shadow.preview.emergentagent.com
 Requirements:
 1) /api/health and /api/ready => 200
 2) login/admin canary => mfa_required=false
@@ -16,7 +16,7 @@ import json
 import sys
 from typing import Dict, Any, Tuple
 
-BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

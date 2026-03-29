@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 
 # Configuration from frontend/.env
-BASE_URL = "https://quarantine-pipeline.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

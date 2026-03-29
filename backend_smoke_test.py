@@ -10,7 +10,7 @@ import sys
 from datetime import datetime
 
 # Test configuration
-BASE_URL = "https://identity-control-1.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 TIMEOUT = 10
 
 def test_endpoint(method, endpoint, expected_codes=None, description=""):

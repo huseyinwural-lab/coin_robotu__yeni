@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Backend MFA-Aware Identity Control Smoke Test
-Target: https://identity-control-1.preview.emergentagent.com
+Target: https://dry-run-shadow.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Flow:
@@ -23,7 +23,7 @@ from datetime import datetime
 
 class MFAIdentityControlTester:
     def __init__(self):
-        self.base_url = "https://identity-control-1.preview.emergentagent.com"
+        self.base_url = "https://dry-run-shadow.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.session = requests.Session()

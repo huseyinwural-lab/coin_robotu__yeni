@@ -50,6 +50,18 @@ export const AdminExecutionReadinessPage = () => {
   const [interventionTrail, setInterventionTrail] = useState(null);
   const [acceptanceLatest, setAcceptanceLatest] = useState(null);
   const [gateExplain, setGateExplain] = useState(null);
+  const [analyticsWindow, setAnalyticsWindow] = useState("7d");
+  const [analyticsGateFailures, setAnalyticsGateFailures] = useState(null);
+  const [analyticsBlockers, setAnalyticsBlockers] = useState(null);
+  const [analyticsRecovery, setAnalyticsRecovery] = useState(null);
+  const [anomalySeverityFilter, setAnomalySeverityFilter] = useState("ALL");
+  const [anomalyTypeFilter, setAnomalyTypeFilter] = useState("ALL");
+  const [anomalies, setAnomalies] = useState(null);
+  const [dryRunSymbol, setDryRunSymbol] = useState("BTCUSDT");
+  const [dryRunQty, setDryRunQty] = useState("0.001");
+  const [dryRunSide, setDryRunSide] = useState("BUY");
+  const [dryRunResult, setDryRunResult] = useState(null);
+  const [shadowResult, setShadowResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const previousFailCountRef = useRef(0);
@@ -67,6 +79,14 @@ export const AdminExecutionReadinessPage = () => {
   const load = useCallback(async (refreshChecks = false) => {
     setLoading(true);
     try {
+      const anomalyParams = new URLSearchParams({ window: analyticsWindow });
+      if (anomalySeverityFilter !== "ALL") {
+        anomalyParams.append("severity", anomalySeverityFilter);
+      }
+      if (anomalyTypeFilter !== "ALL") {
+        anomalyParams.append("type", anomalyTypeFilter);
+      }
+
       const [
         { data: gateData },
         { data: readinessData },
@@ -83,6 +103,10 @@ export const AdminExecutionReadinessPage = () => {
         { data: interventionPayload },
         { data: acceptanceLatestPayload },
         { data: explainPayload },
+        { data: analyticsGatePayload },
+        { data: analyticsBlockersPayload },
+        { data: analyticsRecoveryPayload },
+        { data: anomaliesPayload },
       ] = await Promise.all([
         apiClient.get(`/phase4/admin/production-gate?refresh_checks=${refreshChecks ? "true" : "false"}`),
         apiClient.get("/admin/execution-readiness"),
@@ -98,7 +122,11 @@ export const AdminExecutionReadinessPage = () => {
         apiClient.get("/execution-safety/recovery/gate-trends?days=14"),
         apiClient.get("/execution-safety/recovery/intervention-audit?limit=120"),
         apiClient.get("/execution-safety/acceptance/testnet/latest"),
-        apiClient.get(`/execution-safety/gate/explain?force_refresh=${refreshChecks ? "true" : "false"}`),
+        apiClient.get(`/execution-safety/gate/explain?force_refresh=${refreshChecks ? "true" : "false"}&include_trend=true&window=${analyticsWindow}`),
+        apiClient.get(`/execution-safety/analytics/gate-failures?window=${analyticsWindow}`),
+        apiClient.get(`/execution-safety/analytics/blockers?window=${analyticsWindow}`),
+        apiClient.get(`/execution-safety/analytics/recovery?window=${analyticsWindow}`),
+        apiClient.get(`/execution-safety/anomalies/false-decisions?${anomalyParams.toString()}`),
       ]);
       setGate(gateData);
       setReadiness(readinessData);
@@ -115,6 +143,10 @@ export const AdminExecutionReadinessPage = () => {
       setInterventionTrail(interventionPayload || null);
       setAcceptanceLatest(acceptanceLatestPayload?.latest || null);
       setGateExplain(explainPayload || null);
+      setAnalyticsGateFailures(analyticsGatePayload || null);
+      setAnalyticsBlockers(analyticsBlockersPayload || null);
+      setAnalyticsRecovery(analyticsRecoveryPayload || null);
+      setAnomalies(anomaliesPayload || null);
 
       const flappingConfig = historyData?.flapping_config || {};
       if (flappingConfig.window_sec) setFlappingWindowSec(Number(flappingConfig.window_sec));
@@ -130,7 +162,7 @@ export const AdminExecutionReadinessPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [analyticsWindow, anomalySeverityFilter, anomalyTypeFilter]);
 
   useEffect(() => {
     load(true);
@@ -358,6 +390,53 @@ export const AdminExecutionReadinessPage = () => {
     }
   }, []);
 
+  const handleAnomalyFilterApply = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ window: analyticsWindow });
+      if (anomalySeverityFilter !== "ALL") {
+        params.append("severity", anomalySeverityFilter);
+      }
+      if (anomalyTypeFilter !== "ALL") {
+        params.append("type", anomalyTypeFilter);
+      }
+      const { data } = await apiClient.get(`/execution-safety/anomalies/false-decisions?${params.toString()}`);
+      setAnomalies(data || null);
+      toast.success("Anomaly filtreleri uygulandı");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Anomaly filtreleri uygulanamadı");
+    }
+  }, [analyticsWindow, anomalySeverityFilter, anomalyTypeFilter]);
+
+  const handleExecutionSimulation = useCallback(
+    async (mode) => {
+      const normalizedQty = Number(dryRunQty);
+      if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
+        toast.error("Qty değeri 0'dan büyük sayı olmalı");
+        return;
+      }
+
+      const symbol = String(dryRunSymbol || "").trim().toUpperCase() || "BTCUSDT";
+      const side = String(dryRunSide || "BUY").toUpperCase();
+      const endpoint = mode === "shadow" ? "/execution-safety/execution/shadow" : "/execution-safety/execution/dry-run";
+      const params = new URLSearchParams({
+        symbol,
+        qty: String(normalizedQty),
+        side,
+      });
+
+      await runAction(async () => {
+        const { data } = await apiClient.post(`${endpoint}?${params.toString()}`);
+        if (mode === "shadow") {
+          setShadowResult(data || null);
+        } else {
+          setDryRunResult(data || null);
+        }
+        return data;
+      }, mode === "shadow" ? "Shadow execution tamamlandı" : "Dry-run execution tamamlandı");
+    },
+    [dryRunQty, dryRunSide, dryRunSymbol, runAction]
+  );
+
   const failCodesText = useMemo(() => (ops?.active_fail_codes || []).join(", "), [ops?.active_fail_codes]);
 
   const filteredHistoryItems = useMemo(() => {
@@ -391,6 +470,11 @@ export const AdminExecutionReadinessPage = () => {
     [intentLifecycle?.items]
   );
   const topQuarantineItems = useMemo(() => (runtimeQuarantine?.items || []).slice(0, 6), [runtimeQuarantine?.items]);
+  const anomaliesList = useMemo(() => anomalies?.items || [], [anomalies?.items]);
+  const anomalyTypeOptions = useMemo(
+    () => ["ALL", "FALSE_READY", "FALSE_ALLOW", "CORRELATION_BREACH"],
+    []
+  );
 
   const reasonPieStyle = useMemo(() => {
     const entries = Object.entries(reasonDistribution);
@@ -703,6 +787,228 @@ export const AdminExecutionReadinessPage = () => {
             ))}
           </div>
         </article>
+      </div>
+
+      <div className="space-y-4 rounded-lg border border-indigo-700/40 bg-slate-900 p-4" data-testid="execution-safety-p1-sprint2-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="execution-safety-p1-sprint2-header">
+          <div data-testid="execution-safety-p1-sprint2-header-left">
+            <h2 className="text-base font-semibold text-indigo-200" data-testid="execution-safety-p1-sprint2-title">P1 Sprint-2: Analytics & Anomaly Ops</h2>
+            <p className="text-xs text-slate-300" data-testid="execution-safety-p1-sprint2-subtitle">7g/30g analitik, false decision anomaly ve dry-run/shadow operasyon paneli.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2" data-testid="execution-safety-p1-sprint2-header-controls">
+            <label className="text-xs text-slate-300" data-testid="execution-safety-p1-window-label">window</label>
+            <select
+              value={analyticsWindow}
+              onChange={(event) => setAnalyticsWindow(event.target.value)}
+              className="rounded border border-slate-600 bg-slate-950 px-2 py-1 text-xs text-white"
+              data-testid="execution-safety-p1-window-select"
+            >
+              <option value="7d">7d</option>
+              <option value="30d">30d</option>
+            </select>
+            <Button
+              variant="outline"
+              onClick={() => load(false)}
+              disabled={loading || actionLoading}
+              data-testid="execution-safety-p1-refresh-button"
+            >
+              Analytics Yenile
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3" data-testid="execution-safety-p1-metrics-grid">
+          <article className="rounded-lg border border-slate-700 bg-slate-950 p-3" data-testid="execution-safety-p1-gate-failure-card">
+            <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-p1-gate-failure-title">Gate Failure Analytics</h3>
+            <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-p1-gate-failure-total">total_evaluations: {analyticsGateFailures?.total_evaluations ?? 0}</p>
+            <p className="text-xs text-slate-300" data-testid="execution-safety-p1-gate-failure-blocked">blocked_count: {analyticsGateFailures?.blocked_count ?? 0}</p>
+            <p className="text-xs text-slate-300" data-testid="execution-safety-p1-gate-failure-degraded">degraded_count: {analyticsGateFailures?.degraded_count ?? 0}</p>
+            <p className="text-xs text-slate-300" data-testid="execution-safety-p1-gate-failure-ready">ready_count: {analyticsGateFailures?.ready_count ?? 0}</p>
+            <p className="text-xs text-amber-200" data-testid="execution-safety-p1-gate-failure-rate">
+              failure_rate: {((Number(analyticsGateFailures?.failure_rate || 0) || 0) * 100).toFixed(2)}%
+            </p>
+            <div className="mt-2 space-y-1" data-testid="execution-safety-p1-gate-failure-timeseries-list">
+              {(analyticsGateFailures?.timeseries || []).slice(-5).map((item, index) => (
+                <p key={`${item.date}-${index}`} className="text-xs text-slate-400" data-testid={`execution-safety-p1-gate-failure-timeseries-item-${index}`}>
+                  {item.date}: blocked={item.blocked} / total={item.total}
+                </p>
+              ))}
+              {(analyticsGateFailures?.timeseries || []).length === 0 && (
+                <p className="text-xs text-slate-500" data-testid="execution-safety-p1-gate-failure-timeseries-empty">timeseries verisi yok</p>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-lg border border-slate-700 bg-slate-950 p-3" data-testid="execution-safety-p1-blockers-card">
+            <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-p1-blockers-title">Top Blockers</h3>
+            <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-p1-blockers-window">window: {analyticsBlockers?.window || analyticsWindow}</p>
+            <div className="mt-2 space-y-1" data-testid="execution-safety-p1-blockers-list">
+              {(analyticsBlockers?.top_blockers || []).slice(0, 8).map((item, index) => (
+                <p key={`${item.code}-${index}`} className="text-xs text-slate-300" data-testid={`execution-safety-p1-blocker-item-${index}`}>
+                  {item.code}: {item.count}
+                </p>
+              ))}
+              {(analyticsBlockers?.top_blockers || []).length === 0 && (
+                <p className="text-xs text-slate-500" data-testid="execution-safety-p1-blockers-empty">hard blocker verisi yok</p>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-slate-400" data-testid="execution-safety-p1-blockers-distribution-size">
+              distribution_days: {(analyticsBlockers?.distribution || []).length}
+            </p>
+          </article>
+
+          <article className="rounded-lg border border-slate-700 bg-slate-950 p-3" data-testid="execution-safety-p1-recovery-card">
+            <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-p1-recovery-title">Recovery Analytics</h3>
+            <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-p1-recovery-window">window: {analyticsRecovery?.window || analyticsWindow}</p>
+            <p className="text-xs text-slate-300" data-testid="execution-safety-p1-recovery-retry-rate">
+              retry_success_rate: {((Number(analyticsRecovery?.retry_success_rate || 0) || 0) * 100).toFixed(2)}%
+            </p>
+            <p className="text-xs text-slate-300" data-testid="execution-safety-p1-recovery-reconcile-rate">
+              reconcile_success_rate: {((Number(analyticsRecovery?.reconcile_success_rate || 0) || 0) * 100).toFixed(2)}%
+            </p>
+            <p className="text-xs text-slate-300" data-testid="execution-safety-p1-recovery-quarantine-rate">
+              quarantine_rate: {((Number(analyticsRecovery?.quarantine_rate || 0) || 0) * 100).toFixed(2)}%
+            </p>
+            <p className="text-xs text-emerald-300" data-testid="execution-safety-p1-recovery-avg-time">
+              avg_recovery_time_sec: {analyticsRecovery?.avg_recovery_time_sec ?? 0}
+            </p>
+          </article>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2" data-testid="execution-safety-p1-anomaly-simulation-grid">
+          <article className="rounded-lg border border-rose-700/40 bg-slate-950 p-3" data-testid="execution-safety-p1-anomaly-card">
+            <div className="flex flex-wrap items-center justify-between gap-2" data-testid="execution-safety-p1-anomaly-header">
+              <h3 className="text-sm font-semibold text-rose-200" data-testid="execution-safety-p1-anomaly-title">False Decision Anomaly Detection</h3>
+              <p className="text-xs text-rose-100" data-testid="execution-safety-p1-anomaly-total">total_anomalies: {anomalies?.total_anomalies ?? 0}</p>
+            </div>
+            <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="execution-safety-p1-anomaly-filter-grid">
+              <div data-testid="execution-safety-p1-anomaly-severity-filter-wrapper">
+                <label className="text-xs text-slate-300" data-testid="execution-safety-p1-anomaly-severity-filter-label">severity</label>
+                <select
+                  value={anomalySeverityFilter}
+                  onChange={(event) => setAnomalySeverityFilter(event.target.value)}
+                  className="mt-1 w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white"
+                  data-testid="execution-safety-p1-anomaly-severity-filter-select"
+                >
+                  <option value="ALL">ALL</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                </select>
+              </div>
+              <div data-testid="execution-safety-p1-anomaly-type-filter-wrapper">
+                <label className="text-xs text-slate-300" data-testid="execution-safety-p1-anomaly-type-filter-label">type</label>
+                <select
+                  value={anomalyTypeFilter}
+                  onChange={(event) => setAnomalyTypeFilter(event.target.value)}
+                  className="mt-1 w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white"
+                  data-testid="execution-safety-p1-anomaly-type-filter-select"
+                >
+                  {anomalyTypeOptions.map((optionValue) => (
+                    <option key={optionValue} value={optionValue}>{optionValue}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end" data-testid="execution-safety-p1-anomaly-filter-apply-wrapper">
+                <Button
+                  variant="outline"
+                  onClick={handleAnomalyFilterApply}
+                  disabled={loading || actionLoading}
+                  className="w-full"
+                  data-testid="execution-safety-p1-anomaly-filter-apply-button"
+                >
+                  Filtre Uygula
+                </Button>
+              </div>
+            </div>
+            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto" data-testid="execution-safety-p1-anomaly-items-list">
+              {anomaliesList.slice(0, 20).map((item, index) => (
+                <div key={`${item.intent_id || "unknown"}-${index}`} className="rounded border border-rose-800/40 bg-rose-950/20 p-2" data-testid={`execution-safety-p1-anomaly-item-${index}`}>
+                  <p className="text-xs text-rose-100" data-testid={`execution-safety-p1-anomaly-item-type-${index}`}>type: {item.type}</p>
+                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-severity-${index}`}>severity: {item.severity}</p>
+                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-risk-${index}`}>risk_score: {item.risk_score}</p>
+                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-intent-${index}`}>intent_id: {item.intent_id || "-"}</p>
+                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-detected-at-${index}`}>detected_at: {item.detected_at || "-"}</p>
+                  <p className="text-xs text-amber-200" data-testid={`execution-safety-p1-anomaly-item-reason-${index}`}>reason: {item.reason || "-"}</p>
+                </div>
+              ))}
+              {anomaliesList.length === 0 && (
+                <p className="text-xs text-slate-500" data-testid="execution-safety-p1-anomaly-empty">Seçili filtrelere göre anomaly bulunamadı.</p>
+              )}
+            </div>
+          </article>
+
+          <article className="rounded-lg border border-cyan-700/40 bg-slate-950 p-3" data-testid="execution-safety-p1-simulation-card">
+            <h3 className="text-sm font-semibold text-cyan-200" data-testid="execution-safety-p1-simulation-title">Hybrid Dry-run / Shadow Execution</h3>
+            <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="execution-safety-p1-simulation-form-grid">
+              <div data-testid="execution-safety-p1-simulation-symbol-wrapper">
+                <label className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-symbol-label">symbol</label>
+                <input
+                  value={dryRunSymbol}
+                  onChange={(event) => setDryRunSymbol(event.target.value)}
+                  className="mt-1 w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white"
+                  data-testid="execution-safety-p1-simulation-symbol-input"
+                />
+              </div>
+              <div data-testid="execution-safety-p1-simulation-qty-wrapper">
+                <label className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-qty-label">qty</label>
+                <input
+                  value={dryRunQty}
+                  onChange={(event) => setDryRunQty(event.target.value)}
+                  className="mt-1 w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white"
+                  data-testid="execution-safety-p1-simulation-qty-input"
+                />
+              </div>
+              <div data-testid="execution-safety-p1-simulation-side-wrapper">
+                <label className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-side-label">side</label>
+                <select
+                  value={dryRunSide}
+                  onChange={(event) => setDryRunSide(event.target.value)}
+                  className="mt-1 w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-white"
+                  data-testid="execution-safety-p1-simulation-side-select"
+                >
+                  <option value="BUY">BUY</option>
+                  <option value="SELL">SELL</option>
+                </select>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2" data-testid="execution-safety-p1-simulation-action-buttons">
+              <Button
+                onClick={() => handleExecutionSimulation("dry-run")}
+                disabled={actionLoading}
+                data-testid="execution-safety-p1-simulation-run-dry-button"
+              >
+                Dry-run Execute
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleExecutionSimulation("shadow")}
+                disabled={actionLoading}
+                data-testid="execution-safety-p1-simulation-run-shadow-button"
+              >
+                Shadow Execute
+              </Button>
+            </div>
+
+            <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="execution-safety-p1-simulation-results-grid">
+              <div className="rounded border border-slate-700 bg-slate-900 p-2" data-testid="execution-safety-p1-simulation-dry-result-card">
+                <p className="text-xs font-semibold text-slate-200" data-testid="execution-safety-p1-simulation-dry-result-title">dry_run_result</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-dry-mode">mode: {dryRunResult?.mode || "-"}</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-dry-intent-id">intent_id: {dryRunResult?.intent_id || "-"}</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-dry-fill">expected_fill_price: {dryRunResult?.expected_fill_price ?? "-"}</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-dry-pnl">expected_pnl: {dryRunResult?.expected_pnl ?? "-"}</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-dry-degrade">degrade_mode: {dryRunResult ? (dryRunResult?.degrade_mode ? "true" : "false") : "-"}</p>
+              </div>
+              <div className="rounded border border-slate-700 bg-slate-900 p-2" data-testid="execution-safety-p1-simulation-shadow-result-card">
+                <p className="text-xs font-semibold text-slate-200" data-testid="execution-safety-p1-simulation-shadow-result-title">shadow_result</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-shadow-mode">mode: {shadowResult?.mode || "-"}</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-shadow-intent-id">intent_id: {shadowResult?.intent_id || "-"}</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-shadow-fill">expected_fill_price: {shadowResult?.expected_fill_price ?? "-"}</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-shadow-pnl">expected_pnl: {shadowResult?.expected_pnl ?? "-"}</p>
+                <p className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-shadow-degrade">degrade_mode: {shadowResult ? (shadowResult?.degrade_mode ? "true" : "false") : "-"}</p>
+              </div>
+            </div>
+          </article>
+        </div>
       </div>
 
       {deployBlocked && (

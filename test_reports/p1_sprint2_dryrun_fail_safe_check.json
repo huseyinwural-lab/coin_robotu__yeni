@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "ok": true,
+  "mode": "dry-run",
+  "has_intent_id": true,
+  "has_correlation_id": true,
+  "degrade_mode": true,
+  "expected_fill_price": 1000.5,
+  "expected_pnl": 0.0005,
+  "notes": "degrade_mode=true ise market eri\u015fimi olmasa da fail-safe simulation devam eder."
+}

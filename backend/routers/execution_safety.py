@@ -34,6 +34,13 @@ from services.execution_safety_advanced_service import (
     run_bulk_recovery,
     run_testnet_acceptance,
 )
+from services.execution_safety_p1_service import (
+    analytics_blockers,
+    analytics_gate_failures,
+    analytics_recovery,
+    detect_false_decisions,
+    run_execution_simulation,
+)
 
 
 router = APIRouter(prefix="/execution-safety", tags=["execution_safety"])
@@ -67,6 +74,8 @@ def execution_safety_gate_explain(
     request_id: str | None = Query(default=None),
     session_id: str | None = Query(default=None),
     correlation_id: str | None = Query(default=None),
+    include_trend: bool = Query(default=False),
+    window: str = Query(default="7d"),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -78,7 +87,71 @@ def execution_safety_gate_explain(
         request_id=request_id,
         session_id=session_id,
         correlation_id=correlation_id,
+        include_trend=include_trend,
+        window=window,
     )
+
+
+@router.get("/analytics/gate-failures")
+def execution_safety_analytics_gate_failures(
+    window: str = Query(default="7d"),
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    return analytics_gate_failures(window=window)
+
+
+@router.get("/analytics/blockers")
+def execution_safety_analytics_blockers(
+    window: str = Query(default="7d"),
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    return analytics_blockers(window=window)
+
+
+@router.get("/analytics/recovery")
+def execution_safety_analytics_recovery(
+    window: str = Query(default="7d"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return analytics_recovery(db, window=window)
+
+
+@router.get("/anomalies/false-decisions")
+def execution_safety_anomalies_false_decisions(
+    window: str = Query(default="7d"),
+    severity: str | None = Query(default=None),
+    type: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return detect_false_decisions(db, window=window, severity=severity, anomaly_type=type)
+
+
+@router.post("/execution/dry-run")
+def execution_safety_dry_run(
+    symbol: str = Query(default="BTCUSDT"),
+    qty: float = Query(default=0.001),
+    side: str = Query(default="BUY"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return run_execution_simulation(db, mode="dry-run", symbol=symbol, qty=qty, side=side, requested_by=current_user.id)
+
+
+@router.post("/execution/shadow")
+def execution_safety_shadow(
+    symbol: str = Query(default="BTCUSDT"),
+    qty: float = Query(default=0.001),
+    side: str = Query(default="BUY"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return run_execution_simulation(db, mode="shadow", symbol=symbol, qty=qty, side=side, requested_by=current_user.id)
 
 
 @router.get("/intents")

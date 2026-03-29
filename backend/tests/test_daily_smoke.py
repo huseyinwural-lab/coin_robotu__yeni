@@ -4,7 +4,7 @@ import subprocess
 
 def test_daily_smoke_skipped_credential_model():
     env = os.environ.copy()
-    env.setdefault("REACT_APP_BACKEND_URL", "https://revenue-snapshot.preview.emergentagent.com")
+    env.setdefault("REACT_APP_BACKEND_URL", "https://dry-run-shadow.preview.emergentagent.com")
     env.setdefault("DAILY_SMOKE_ADMIN_EMAIL", "canary.admin@platform.local")
     env.setdefault("DAILY_SMOKE_ADMIN_PASSWORD", "CanaryAdmin123!")
     env.pop("DAILY_SMOKE_TARGET_USER_EMAIL", None)

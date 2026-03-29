@@ -9,7 +9,7 @@ import re
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://failure-explainer.preview.emergentagent.com"
+BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 
