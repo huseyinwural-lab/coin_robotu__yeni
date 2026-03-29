@@ -1,28 +1,30 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 
+const metricCard = "border border-slate-300 bg-white p-4";
+const monoBox = "overflow-x-auto bg-slate-50 p-2 text-[11px] text-slate-700";
+
+const safeJson = (value) => JSON.stringify(value || {}, null, 2);
+
+const scopeLabel = (row) => row.strategy_id || row.family || row.recommendation_scope || "global";
+
 export const AdminLearningPanelPage = () => {
-  const [overview, setOverview] = useState({ strategy_memory: [], family_memory: [], recommendations: [], events: [], guardrails: {} });
+  const [overview, setOverview] = useState({ strategy_memory: [], family_memory: [], recommendations: [], events: [], guardrails: {}, adaptive_summary: {} });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [isSimulating, setIsSimulating] = useState(false);
+  const [actionLoading, setActionLoading] = useState("");
+  const [reasonById, setReasonById] = useState({});
   const [simulationHistory, setSimulationHistory] = useState([]);
-  const [simForm, setSimForm] = useState({
-    strategy_id: "",
-    family: "",
-    recommendation_type: "decrease_weight_recommendation",
-    suggested_weight_multiplier: "0.8",
-  });
 
   const loadOverview = async () => {
     setLoading(true);
     try {
       const { data } = await apiClient.get("/admin/learning/overview");
-      setOverview(data || { strategy_memory: [], family_memory: [], recommendations: [], events: [], guardrails: {} });
+      setOverview(data || { strategy_memory: [], family_memory: [], recommendations: [], events: [], guardrails: {}, adaptive_summary: {} });
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Learning overview yüklenemedi");
     } finally {
@@ -47,263 +49,252 @@ export const AdminLearningPanelPage = () => {
     }
   };
 
-  const applyRecommendation = async (recommendationId) => {
+  const requireReason = (recommendationId) => {
+    const reason = String(reasonById[recommendationId] || "").trim();
+    if (!reason) {
+      toast.error("Aksiyon için reason zorunlu");
+      return null;
+    }
+    return reason;
+  };
+
+  const actOnRecommendation = async (recommendationId, action) => {
+    const reason = requireReason(recommendationId);
+    if (!reason) return;
+    setActionLoading(`${action}-${recommendationId}`);
     try {
-      await apiClient.post(`/admin/learning/recommendations/${recommendationId}/apply`);
+      let response;
+      if (action === "simulate") {
+        response = await apiClient.post(`/admin/learning/recommendations/${recommendationId}/simulate`);
+        setSimulationHistory((prev) => [response.data, ...prev].slice(0, 20));
+      } else {
+        response = await apiClient.post(`/admin/learning/recommendations/${recommendationId}/${action}`, { reason });
+      }
       await loadOverview();
-      toast.success("Öneri uygulandı");
+      toast.success(`Recommendation ${action} tamamlandı`);
+      return response?.data;
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Öneri uygulanamadı");
-    }
-  };
-
-  const pushSimulationResult = (payload) => {
-    setSimulationHistory((prev) => [payload, ...prev].slice(0, 20));
-  };
-
-  const simulateRecommendation = async (recommendationId) => {
-    setIsSimulating(true);
-    try {
-      const { data } = await apiClient.post(`/admin/learning/recommendations/${recommendationId}/simulate`);
-      pushSimulationResult(data);
-      toast.success("Recommendation impact simülasyonu üretildi");
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Recommendation simulation başarısız");
+      toast.error(error?.response?.data?.detail || `Recommendation ${action} başarısız`);
+      return null;
     } finally {
-      setIsSimulating(false);
+      setActionLoading("");
     }
   };
 
-  const simulateGlobalImpact = async () => {
-    setIsSimulating(true);
-    try {
-      const payload = {
-        strategy_id: String(simForm.strategy_id || "").trim() || null,
-        family: String(simForm.family || "").trim() || null,
-        recommendation_type: simForm.recommendation_type,
-        suggested_weight_multiplier: simForm.suggested_weight_multiplier ? Number(simForm.suggested_weight_multiplier) : null,
-      };
-      const { data } = await apiClient.post("/admin/learning/simulate-impact", payload);
-      pushSimulationResult(data);
-      toast.success("Global impact simülasyonu üretildi");
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Global simulation başarısız");
-    } finally {
-      setIsSimulating(false);
-    }
-  };
+  const summary = useMemo(
+    () => ({
+      strategies: overview.strategy_memory?.length || 0,
+      families: overview.family_memory?.length || 0,
+      recommendations: overview.recommendations?.length || 0,
+      affectedStrategies: overview.adaptive_summary?.affected_strategies?.length || 0,
+    }),
+    [overview],
+  );
 
   return (
-    <section className="space-y-4" data-testid="admin-learning-panel-page">
-      <header className="border border-black/40 bg-lime-300 p-4" data-testid="admin-learning-panel-header">
-        <h2 className="text-3xl font-black uppercase tracking-tight text-black" data-testid="admin-learning-panel-title">Learning Memory Panel</h2>
-        <p className="mt-2 text-sm text-black/80" data-testid="admin-learning-panel-description">
-          Bu panel öneri üretir; production kural setini otomatik değiştirmez (admin onayı gerekir).
+    <section className="space-y-5 bg-[#F9FAFB] text-slate-900" data-testid="admin-learning-panel-page">
+      <header className="border border-slate-300 bg-white p-5" data-testid="admin-learning-panel-header">
+        <p className="text-xs uppercase tracking-[0.25em] text-slate-500" data-testid="admin-learning-panel-kicker">Learning Control</p>
+        <h2 className="mt-1 text-3xl font-black tracking-tight text-slate-900" data-testid="admin-learning-panel-title">Learning Memory</h2>
+        <p className="mt-2 text-sm text-slate-600" data-testid="admin-learning-panel-description">
+          Kanonik learning event kayıtları, adaptive performans sinyalleri, recommendation lifecycle ve replay tabanlı simülasyonlar.
         </p>
+        <div className="mt-4 flex flex-wrap gap-2" data-testid="admin-learning-panel-toolbar">
+          <Button type="button" onClick={loadOverview} data-testid="admin-learning-panel-reload-button">Yenile</Button>
+          <Button type="button" variant="outline" onClick={refreshLearning} disabled={refreshing} data-testid="admin-learning-panel-refresh-button">
+            {refreshing ? "Çalışıyor..." : "Learning Refresh (30g)"}
+          </Button>
+          <Link to="/admin/learning-impact-simulator" className="inline-flex" data-testid="admin-learning-panel-open-impact-simulator-link">
+            <Button type="button" variant="outline" data-testid="admin-learning-panel-open-impact-simulator-button">Recommendation Simulator</Button>
+          </Link>
+        </div>
       </header>
 
-      <div className="flex flex-wrap gap-2" data-testid="admin-learning-panel-toolbar">
-        <Button type="button" onClick={loadOverview} data-testid="admin-learning-panel-reload-button">Yenile</Button>
-        <Button type="button" variant="outline" onClick={refreshLearning} disabled={refreshing} data-testid="admin-learning-panel-refresh-button">
-          {refreshing ? "Çalışıyor..." : "Learning Refresh (30g)"}
-        </Button>
-        <Link to="/admin/learning-impact-simulator" className="inline-flex" data-testid="admin-learning-panel-open-impact-simulator-link">
-          <Button type="button" variant="outline" data-testid="admin-learning-panel-open-impact-simulator-button">Impact Simulator (Detay)</Button>
-        </Link>
+      <div className="grid gap-3 md:grid-cols-4" data-testid="admin-learning-summary-grid">
+        {[["strategies", summary.strategies], ["families", summary.families], ["recommendations", summary.recommendations], ["affected-strategies", summary.affectedStrategies]].map(([label, value]) => (
+          <div key={label} className={metricCard} data-testid={`admin-learning-summary-card-${label}`}>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500" data-testid={`admin-learning-summary-label-${label}`}>{label}</p>
+            <p className="mt-2 font-mono text-3xl" data-testid={`admin-learning-summary-value-${label}`}>{value}</p>
+          </div>
+        ))}
       </div>
 
       {loading ? (
-        <div className="border border-slate-700 bg-slate-900 p-4 text-sm" data-testid="admin-learning-panel-loading">Yükleniyor...</div>
+        <div className="border border-slate-300 bg-white p-4 text-sm" data-testid="admin-learning-panel-loading">Yükleniyor...</div>
       ) : (
         <>
-          <div className="rounded border border-blue-800/50 bg-blue-950/20 p-3" data-testid="admin-learning-impact-global-form-panel">
-            <p className="text-sm font-semibold" data-testid="admin-learning-impact-global-form-title">Learning Recommendation Impact Simulator (Global)</p>
-            <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="admin-learning-impact-global-form-grid">
-              <input
-                value={simForm.strategy_id}
-                onChange={(event) => setSimForm((prev) => ({ ...prev, strategy_id: event.target.value }))}
-                placeholder="strategy_id (opsiyonel)"
-                className="h-10 rounded border border-blue-700 bg-black px-3 text-xs"
-                data-testid="admin-learning-impact-global-strategy-id-input"
-              />
-              <input
-                value={simForm.family}
-                onChange={(event) => setSimForm((prev) => ({ ...prev, family: event.target.value }))}
-                placeholder="family (trend/breakout/...)"
-                className="h-10 rounded border border-blue-700 bg-black px-3 text-xs"
-                data-testid="admin-learning-impact-global-family-input"
-              />
-              <select
-                value={simForm.recommendation_type}
-                onChange={(event) => setSimForm((prev) => ({ ...prev, recommendation_type: event.target.value }))}
-                className="h-10 rounded border border-blue-700 bg-black px-3 text-xs"
-                data-testid="admin-learning-impact-global-recommendation-type-select"
-              >
-                <option value="disable_recommendation">disable_recommendation</option>
-                <option value="decrease_weight_recommendation">decrease_weight_recommendation</option>
-                <option value="increase_weight_recommendation">increase_weight_recommendation</option>
-              </select>
-              <input
-                type="number"
-                step="0.05"
-                min="0.1"
-                max="3"
-                value={simForm.suggested_weight_multiplier}
-                onChange={(event) => setSimForm((prev) => ({ ...prev, suggested_weight_multiplier: event.target.value }))}
-                placeholder="weight multiplier"
-                className="h-10 rounded border border-blue-700 bg-black px-3 text-xs"
-                data-testid="admin-learning-impact-global-weight-multiplier-input"
-              />
-            </div>
-            <div className="mt-2 flex items-center gap-2" data-testid="admin-learning-impact-global-form-actions">
-              <Button type="button" variant="outline" disabled={isSimulating} onClick={simulateGlobalImpact} data-testid="admin-learning-impact-global-simulate-button">
-                {isSimulating ? "Simulating..." : "Simulate Impact"}
-              </Button>
-              <p className="text-xs text-blue-100" data-testid="admin-learning-impact-global-form-note">Read-only simülasyon; Apply ayrı butondur.</p>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto border border-slate-700" data-testid="admin-learning-strategy-memory-wrapper">
-            <table className="min-w-[1400px] text-xs" data-testid="admin-learning-strategy-memory-table">
-              <thead>
-                <tr>
-                  <th className="px-2 py-1 text-left">strategy</th>
-                  <th className="px-2 py-1 text-left">direction</th>
-                  <th className="px-2 py-1 text-left">regime</th>
-                  <th className="px-2 py-1 text-left">sample</th>
-                  <th className="px-2 py-1 text-left">hit_rate</th>
-                  <th className="px-2 py-1 text-left">avg_return</th>
-                  <th className="px-2 py-1 text-left">false_allow</th>
-                  <th className="px-2 py-1 text-left">false_reject</th>
-                  <th className="px-2 py-1 text-left">rolling</th>
-                  <th className="px-2 py-1 text-left">decay_quality</th>
-                  <th className="px-2 py-1 text-left">quality_degradation</th>
-                  <th className="px-2 py-1 text-left">recommendation</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(overview.strategy_memory || []).map((row, idx) => (
-                  <tr key={`${row.strategy_id}-${idx}`} className="border-t border-slate-800" data-testid={`admin-learning-strategy-memory-row-${idx}`}>
-                    <td className="px-2 py-1" data-testid={`admin-learning-strategy-memory-strategy-${idx}`}>{row.strategy_id}</td>
-                    <td className="px-2 py-1">{row.direction}</td>
-                    <td className="px-2 py-1">{row.regime}</td>
-                    <td className="px-2 py-1">{row.sample_count}</td>
-                    <td className="px-2 py-1">{row.hit_rate}</td>
-                    <td className="px-2 py-1">{row.avg_return}</td>
-                    <td className="px-2 py-1">{row.false_allow_rate}</td>
-                    <td className="px-2 py-1">{row.false_reject_rate}</td>
-                    <td className="px-2 py-1">{row.rolling_quality_score ?? row.recent_rolling_score}</td>
-                    <td className="px-2 py-1">{row.decay_adjusted_score ?? row.decay_adjusted_quality_score}</td>
-                    <td className="px-2 py-1">{row.quality_degradation_flag ? "yes" : "no"}</td>
-                    <td className="px-2 py-1">{row?.recommendation?.recommendation_type || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="overflow-x-auto border border-slate-700" data-testid="admin-learning-family-memory-wrapper">
-            <table className="min-w-[1000px] text-xs" data-testid="admin-learning-family-memory-table">
-              <thead>
-                <tr>
-                  <th className="px-2 py-1 text-left">family</th>
-                  <th className="px-2 py-1 text-left">regime</th>
-                  <th className="px-2 py-1 text-left">sample</th>
-                  <th className="px-2 py-1 text-left">hit_rate</th>
-                  <th className="px-2 py-1 text-left">avg_return</th>
-                  <th className="px-2 py-1 text-left">volatility_success</th>
-                  <th className="px-2 py-1 text-left">conflict_success</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(overview.family_memory || []).map((row, idx) => (
-                  <tr key={`${row.family}-${idx}`} className="border-t border-slate-800" data-testid={`admin-learning-family-memory-row-${idx}`}>
-                    <td className="px-2 py-1">{row.family}</td>
-                    <td className="px-2 py-1">{row.regime}</td>
-                    <td className="px-2 py-1">{row.sample_count}</td>
-                    <td className="px-2 py-1">{row.hit_rate}</td>
-                    <td className="px-2 py-1">{row.avg_return}</td>
-                    <td className="px-2 py-1">{row.volatility_success}</td>
-                    <td className="px-2 py-1">{row.conflict_success}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="border border-slate-700 p-3" data-testid="admin-learning-recommendation-panel">
-            <p className="text-sm font-semibold" data-testid="admin-learning-recommendation-title">Learning Recommendations</p>
-            <div className="mt-2 rounded border border-lime-900/60 bg-lime-950/20 p-2" data-testid="admin-learning-guardrail-panel">
-              <p className="text-xs" data-testid="admin-learning-guardrail-auto-change">Auto Change Forbidden: {overview?.guardrails?.auto_change_forbidden ? "true" : "false"}</p>
-              <p className="text-xs" data-testid="admin-learning-guardrail-admin-approval">Admin Approval Required: {overview?.guardrails?.admin_approval_required ? "true" : "false"}</p>
-              <p className="text-xs" data-testid="admin-learning-guardrail-audit">Audit Log Enabled: {overview?.guardrails?.audit_log_enabled ? "true" : "false"}</p>
-            </div>
-            <div className="mt-2 space-y-2" data-testid="admin-learning-recommendation-list">
-              {(overview.recommendations || []).map((item) => (
-                <div key={item.id} className="flex flex-wrap items-center gap-2 rounded border border-slate-700 p-2" data-testid={`admin-learning-recommendation-item-${item.id}`}>
-                  <p className="text-xs">{item.recommendation_type}</p>
-                  <p className="text-xs">{item.strategy_id || item.family || "global"}</p>
-                  <p className="text-xs">severity={item.severity}</p>
-                  <p className="text-xs">{item.note}</p>
-                  <Button type="button" size="sm" variant="outline" disabled={Boolean(item.is_applied)} onClick={() => applyRecommendation(item.id)} data-testid={`admin-learning-recommendation-apply-button-${item.id}`}>
-                    {item.is_applied ? "Applied" : "Apply"}
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" disabled={isSimulating} onClick={() => simulateRecommendation(item.id)} data-testid={`admin-learning-recommendation-simulate-button-${item.id}`}>
-                    Simulate Impact
-                  </Button>
+          <div className="grid gap-4 xl:grid-cols-12" data-testid="admin-learning-main-grid">
+            <div className="space-y-4 xl:col-span-7" data-testid="admin-learning-left-column">
+              <div className="overflow-x-auto border border-slate-300 bg-white" data-testid="admin-learning-strategy-memory-wrapper">
+                <div className="border-b border-slate-200 px-4 py-3">
+                  <h3 className="text-sm font-bold uppercase tracking-[0.2em]" data-testid="admin-learning-strategy-memory-title">Strategy Performance</h3>
                 </div>
-              ))}
-              {(overview.recommendations || []).length === 0 && <p className="text-xs" data-testid="admin-learning-recommendation-empty">Öneri yok.</p>}
+                <table className="min-w-[2200px] text-xs" data-testid="admin-learning-strategy-memory-table">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      {[
+                        "strategy", "direction", "regime", "sample", "hit_rate", "avg_return", "drawdown", "false_allow", "false_reject", "pnl_by_regime", "decision_quality", "rolling_windows", "window_comparison", "stability", "decay_score", "drift_flag", "drift_confidence", "confidence_degradation", "actionability", "recommendation",
+                      ].map((label) => (
+                        <th key={label} className="px-2 py-2 text-left uppercase tracking-[0.16em] text-slate-500">{label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(overview.strategy_memory || []).map((row, idx) => (
+                      <tr key={`${row.strategy_id}-${idx}`} className="border-t border-slate-200 align-top" data-testid={`admin-learning-strategy-memory-row-${idx}`}>
+                        <td className="px-2 py-2 font-mono" data-testid={`admin-learning-strategy-memory-strategy-${idx}`}>{row.strategy_id}</td>
+                        <td className="px-2 py-2">{row.direction}</td>
+                        <td className="px-2 py-2">{row.regime}</td>
+                        <td className="px-2 py-2">{row.sample_count}</td>
+                        <td className="px-2 py-2">{row.hit_rate}</td>
+                        <td className="px-2 py-2">{row.avg_return}</td>
+                        <td className="px-2 py-2">{row.drawdown}</td>
+                        <td className="px-2 py-2">{row.false_allow_rate}</td>
+                        <td className="px-2 py-2">{row.false_reject_rate}</td>
+                        <td className="px-2 py-2"><pre className={monoBox}>{safeJson(row.pnl_by_regime)}</pre></td>
+                        <td className="px-2 py-2"><pre className={monoBox}>{safeJson(row.decision_quality_breakdown)}</pre></td>
+                        <td className="px-2 py-2"><pre className={monoBox}>{safeJson(row.rolling_windows)}</pre></td>
+                        <td className="px-2 py-2"><pre className={monoBox}>{safeJson(row.window_comparison)}</pre></td>
+                        <td className="px-2 py-2">{row.stability_score}</td>
+                        <td className="px-2 py-2">{row.decay_score}</td>
+                        <td className="px-2 py-2">{row.regime_drift_flag ? "yes" : "no"}</td>
+                        <td className="px-2 py-2">{row.drift_confidence}</td>
+                        <td className="px-2 py-2">{row.confidence_degradation}</td>
+                        <td className="px-2 py-2">{row.actionability_flag ? "actionable" : "monitor"}</td>
+                        <td className="px-2 py-2">{row?.recommendation?.recommendation_type || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="overflow-x-auto border border-slate-300 bg-white" data-testid="admin-learning-events-wrapper">
+                <div className="border-b border-slate-200 px-4 py-3">
+                  <h3 className="text-sm font-bold uppercase tracking-[0.2em]" data-testid="admin-learning-events-title">Learning Events</h3>
+                </div>
+                <table className="min-w-[2000px] text-xs" data-testid="admin-learning-events-table">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      {[
+                        "event_id", "signal", "decision", "outcome", "pnl_norm", "mfe", "mae", "false_allow", "false_reject", "regime", "strategy_id", "symbol", "created_at",
+                      ].map((label) => (
+                        <th key={label} className="px-2 py-2 text-left uppercase tracking-[0.16em] text-slate-500">{label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(overview.events || []).slice(0, 120).map((item, idx) => (
+                      <tr key={item.event_id} className="border-t border-slate-200 align-top" data-testid={`admin-learning-events-row-${idx}`}>
+                        <td className="px-2 py-2 font-mono" data-testid={`admin-learning-events-id-${idx}`}>{item.event_id}</td>
+                        <td className="px-2 py-2"><pre className={monoBox}>{safeJson(item.signal)}</pre></td>
+                        <td className="px-2 py-2">{item.decision}</td>
+                        <td className="px-2 py-2">{item.outcome}</td>
+                        <td className="px-2 py-2">{item.pnl_norm}</td>
+                        <td className="px-2 py-2">{item.mfe}</td>
+                        <td className="px-2 py-2">{item.mae}</td>
+                        <td className="px-2 py-2">{item.false_allow ? "true" : "false"}</td>
+                        <td className="px-2 py-2">{item.false_reject ? "true" : "false"}</td>
+                        <td className="px-2 py-2">{item.regime}</td>
+                        <td className="px-2 py-2 font-mono">{item.strategy_id}</td>
+                        <td className="px-2 py-2">{item.symbol}</td>
+                        <td className="px-2 py-2 font-mono">{String(item.created_at || "")}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
 
-          <div className="grid gap-2 md:grid-cols-2" data-testid="admin-learning-impact-simulation-results-grid">
-            {simulationHistory.map((item, idx) => (
-              <article key={`sim-${idx}`} className="rounded border border-blue-700/60 bg-black/30 p-3" data-testid={`admin-learning-impact-simulation-result-card-${idx}`}>
-                <p className="text-xs" data-testid={`admin-learning-impact-simulation-scope-${idx}`}>scope={item.scope} · rec={item.recommendation_type}</p>
-                <p className="text-xs" data-testid={`admin-learning-impact-simulation-project-risk-${idx}`}>projected_risk_score={item.projected_risk_score}</p>
-                <p className="text-xs" data-testid={`admin-learning-impact-simulation-project-gate-${idx}`}>projected_gate_decision={item.projected_gate_decision}</p>
-                <p className="text-xs" data-testid={`admin-learning-impact-simulation-hit-delta-${idx}`}>expected_hit_rate_delta={item.expected_hit_rate_delta}</p>
-                <p className="text-xs" data-testid={`admin-learning-impact-simulation-return-delta-${idx}`}>expected_avg_return_delta={item.expected_avg_return_delta}</p>
-                <p className="text-xs" data-testid={`admin-learning-impact-simulation-drift-delta-${idx}`}>allocation_drift_delta={item.allocation_drift_delta}</p>
-                <p className="text-xs" data-testid={`admin-learning-impact-simulation-hedge-score-${idx}`}>hedge_effect_score={item.hedge_effect_score}</p>
-              </article>
-            ))}
-            {simulationHistory.length === 0 && <p className="text-xs text-slate-300" data-testid="admin-learning-impact-simulation-empty">Henüz simülasyon çalıştırılmadı.</p>}
-          </div>
+            <aside className="space-y-4 xl:col-span-5" data-testid="admin-learning-right-column">
+              <div className="border border-slate-300 bg-white p-4" data-testid="admin-learning-guardrail-panel">
+                <h3 className="text-sm font-bold uppercase tracking-[0.2em]">Guardrails</h3>
+                <div className="mt-3 space-y-1 text-xs">
+                  <p data-testid="admin-learning-guardrail-auto-change">Auto Change Forbidden: {overview?.guardrails?.auto_change_forbidden ? "true" : "false"}</p>
+                  <p data-testid="admin-learning-guardrail-admin-approval">Admin Approval Required: {overview?.guardrails?.admin_approval_required ? "true" : "false"}</p>
+                  <p data-testid="admin-learning-guardrail-audit">Audit Log Enabled: {overview?.guardrails?.audit_log_enabled ? "true" : "false"}</p>
+                </div>
+              </div>
 
-          <div className="overflow-x-auto border border-slate-700" data-testid="admin-learning-events-wrapper">
-            <table className="min-w-[1400px] text-xs" data-testid="admin-learning-events-table">
-              <thead>
-                <tr>
-                  <th className="px-2 py-1 text-left">event_id</th>
-                  <th className="px-2 py-1 text-left">symbol</th>
-                  <th className="px-2 py-1 text-left">decision</th>
-                  <th className="px-2 py-1 text-left">outcome</th>
-                  <th className="px-2 py-1 text-left">pnl_norm</th>
-                  <th className="px-2 py-1 text-left">mfe</th>
-                  <th className="px-2 py-1 text-left">mae</th>
-                  <th className="px-2 py-1 text-left">hold_duration</th>
-                  <th className="px-2 py-1 text-left">created_at</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(overview.events || []).slice(0, 120).map((item, idx) => (
-                  <tr key={item.event_id} className="border-t border-slate-800" data-testid={`admin-learning-events-row-${idx}`}>
-                    <td className="px-2 py-1" data-testid={`admin-learning-events-id-${idx}`}>{item.event_id}</td>
-                    <td className="px-2 py-1">{item.symbol}</td>
-                    <td className="px-2 py-1">{item.decision}</td>
-                    <td className="px-2 py-1">{item.outcome_label}</td>
-                    <td className="px-2 py-1">{item.pnl_normalized}</td>
-                    <td className="px-2 py-1">{item.max_favorable_excursion}</td>
-                    <td className="px-2 py-1">{item.max_adverse_excursion}</td>
-                    <td className="px-2 py-1">{item.hold_duration}</td>
-                    <td className="px-2 py-1">{String(item.created_at || "")}</td>
-                  </tr>
+              <div className="space-y-3" data-testid="admin-learning-recommendation-list">
+                {(overview.recommendations || []).map((item, idx) => (
+                  <article key={item.id} className="border border-slate-300 bg-white p-4" data-testid={`admin-learning-recommendation-item-${idx}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{item.recommendation_type}</p>
+                        <h4 className="mt-1 text-base font-bold" data-testid={`admin-learning-recommendation-scope-${idx}`}>{scopeLabel(item)}</h4>
+                      </div>
+                      <p className="font-mono text-sm" data-testid={`admin-learning-recommendation-actionable-state-${idx}`}>{item.actionable_state}</p>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 text-xs">
+                      <p data-testid={`admin-learning-recommendation-reason-${idx}`}>reason: {item.reason}</p>
+                      <p data-testid={`admin-learning-recommendation-confidence-${idx}`}>confidence: {item.confidence}</p>
+                      <p data-testid={`admin-learning-recommendation-score-${idx}`}>recommendation_score: {item.recommendation_score}</p>
+                      <p data-testid={`admin-learning-recommendation-scope-label-${idx}`}>scope: {item.recommendation_scope}</p>
+                      <p data-testid={`admin-learning-recommendation-decision-candidate-${idx}`}>decision_candidate: {String(item.decision_candidate)}</p>
+                      <p data-testid={`admin-learning-recommendation-auto-apply-${idx}`}>auto_apply_eligible: {String(item.auto_apply_eligible)}</p>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                      <div>
+                        <p className="mb-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">evidence_summary</p>
+                        <pre className={monoBox} data-testid={`admin-learning-recommendation-evidence-${idx}`}>{safeJson(item.evidence_summary)}</pre>
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">risk_impact</p>
+                        <pre className={monoBox} data-testid={`admin-learning-recommendation-risk-impact-${idx}`}>{safeJson(item.risk_impact)}</pre>
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">status / version history</p>
+                        <pre className={monoBox} data-testid={`admin-learning-recommendation-version-${idx}`}>{safeJson({ lifecycle: item.lifecycle, status_history: item.status_history, version: item.version, version_history: item.version_history })}</pre>
+                      </div>
+                      <div>
+                        <p className="mb-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">monitoring / simulation</p>
+                        <pre className={monoBox} data-testid={`admin-learning-recommendation-monitoring-${idx}`}>{safeJson({ post_change_monitoring: item.post_change_monitoring, last_simulation: item.recommendation_value?.last_simulation })}</pre>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-2" data-testid={`admin-learning-recommendation-action-form-${idx}`}>
+                      <textarea
+                        value={reasonById[item.id] || ""}
+                        onChange={(event) => setReasonById((prev) => ({ ...prev, [item.id]: event.target.value }))}
+                        placeholder="reason zorunlu"
+                        className="min-h-[72px] border border-slate-300 px-3 py-2 text-sm"
+                        data-testid={`admin-learning-recommendation-reason-input-${idx}`}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" onClick={() => actOnRecommendation(item.id, "simulate")} disabled={!!actionLoading} data-testid={`admin-learning-recommendation-simulate-button-${idx}`}>Simulate</Button>
+                        <Button type="button" variant="outline" onClick={() => actOnRecommendation(item.id, "approve")} disabled={!!actionLoading} data-testid={`admin-learning-recommendation-approve-button-${idx}`}>Approve</Button>
+                        <Button type="button" variant="outline" onClick={() => actOnRecommendation(item.id, "reject")} disabled={!!actionLoading} data-testid={`admin-learning-recommendation-reject-button-${idx}`}>Reject</Button>
+                        <Button type="button" onClick={() => actOnRecommendation(item.id, "apply")} disabled={!!actionLoading} data-testid={`admin-learning-recommendation-apply-button-${idx}`}>Apply</Button>
+                        <Button type="button" variant="outline" onClick={() => actOnRecommendation(item.id, "rollback")} disabled={!!actionLoading} data-testid={`admin-learning-recommendation-rollback-button-${idx}`}>Rollback</Button>
+                      </div>
+                    </div>
+                  </article>
                 ))}
-                {(overview.events || []).length === 0 && <tr><td className="px-2 py-2 text-xs" colSpan={9} data-testid="admin-learning-events-empty">Event yok.</td></tr>}
-              </tbody>
-            </table>
+                {(overview.recommendations || []).length === 0 && <div className="border border-slate-300 bg-white p-4 text-sm" data-testid="admin-learning-recommendation-empty">Öneri yok.</div>}
+              </div>
+            </aside>
+          </div>
+
+          <div className="border border-slate-300 bg-white p-4" data-testid="admin-learning-simulation-history-panel">
+            <h3 className="text-sm font-bold uppercase tracking-[0.2em]" data-testid="admin-learning-simulation-history-title">Recommendation Simulator Output</h3>
+            <div className="mt-3 grid gap-3 lg:grid-cols-2" data-testid="admin-learning-simulation-history-grid">
+              {simulationHistory.map((item, idx) => (
+                <article key={`sim-${idx}`} className="border border-slate-200 p-3" data-testid={`admin-learning-simulation-history-card-${idx}`}>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{item.scope} · {item.recommendation_type}</p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2 text-xs">
+                    <pre className={monoBox} data-testid={`admin-learning-simulation-baseline-${idx}`}>{safeJson(item.baseline_metrics)}</pre>
+                    <pre className={monoBox} data-testid={`admin-learning-simulation-projected-${idx}`}>{safeJson(item.projected_metrics)}</pre>
+                    <pre className={monoBox} data-testid={`admin-learning-simulation-delta-${idx}`}>{safeJson(item.delta_metrics)}</pre>
+                    <pre className={monoBox} data-testid={`admin-learning-simulation-coverage-${idx}`}>{safeJson(item.sample_coverage)}</pre>
+                    <pre className={monoBox} data-testid={`admin-learning-simulation-risk-aware-${idx}`}>{safeJson(item.risk_aware_view)}</pre>
+                    <pre className={monoBox} data-testid={`admin-learning-simulation-portfolio-impact-${idx}`}>{safeJson(item.portfolio_impact)}</pre>
+                    <pre className={monoBox} data-testid={`admin-learning-simulation-counterfactual-${idx}`}>{safeJson(item.counterfactual_replay)}</pre>
+                    <pre className={monoBox} data-testid={`admin-learning-simulation-interaction-${idx}`}>{safeJson(item.interaction_effects)}</pre>
+                  </div>
+                </article>
+              ))}
+              {simulationHistory.length === 0 && <p className="text-sm text-slate-500" data-testid="admin-learning-simulation-history-empty">Henüz simülasyon çalıştırılmadı.</p>}
+            </div>
           </div>
         </>
       )}

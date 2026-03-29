@@ -4,6 +4,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 
+const monoBox = "overflow-x-auto bg-slate-50 p-2 text-[11px] text-slate-700";
+const safeJson = (value) => JSON.stringify(value || {}, null, 2);
+
 export const AdminLearningImpactSimulatorPage = () => {
   const [overview, setOverview] = useState({ strategy_memory: [], family_memory: [], recommendations: [] });
   const [loading, setLoading] = useState(true);
@@ -11,7 +14,10 @@ export const AdminLearningImpactSimulatorPage = () => {
   const [simulationResult, setSimulationResult] = useState(null);
   const [form, setForm] = useState({
     strategy_id: "",
+    strategy_ids: "",
     family: "",
+    symbol_cluster: "",
+    scenario: "base",
     recommendation_type: "decrease_weight_recommendation",
     suggested_weight_multiplier: "0.8",
   });
@@ -37,7 +43,10 @@ export const AdminLearningImpactSimulatorPage = () => {
     try {
       const payload = {
         strategy_id: String(form.strategy_id || "").trim() || null,
+        strategy_ids: String(form.strategy_ids || "").split(",").map((item) => item.trim()).filter(Boolean),
         family: String(form.family || "").trim() || null,
+        symbol_cluster: String(form.symbol_cluster || "").split(",").map((item) => item.trim().toUpperCase()).filter(Boolean),
+        scenario: form.scenario,
         recommendation_type: form.recommendation_type,
         suggested_weight_multiplier: form.suggested_weight_multiplier ? Number(form.suggested_weight_multiplier) : null,
       };
@@ -73,7 +82,7 @@ export const AdminLearningImpactSimulatorPage = () => {
         </p>
       </header>
 
-      <div className="grid gap-2 md:grid-cols-5" data-testid="admin-learning-impact-simulator-form-grid">
+      <div className="grid gap-2 md:grid-cols-7" data-testid="admin-learning-impact-simulator-form-grid">
         <input
           value={form.strategy_id}
           onChange={(event) => setForm((prev) => ({ ...prev, strategy_id: event.target.value }))}
@@ -82,12 +91,37 @@ export const AdminLearningImpactSimulatorPage = () => {
           data-testid="admin-learning-impact-simulator-strategy-id-input"
         />
         <input
+          value={form.strategy_ids}
+          onChange={(event) => setForm((prev) => ({ ...prev, strategy_ids: event.target.value }))}
+          placeholder="strategy_ids (csv)"
+          className="h-10 rounded border border-slate-700 bg-black px-3 text-xs"
+          data-testid="admin-learning-impact-simulator-strategy-ids-input"
+        />
+        <input
           value={form.family}
           onChange={(event) => setForm((prev) => ({ ...prev, family: event.target.value }))}
           placeholder="family"
           className="h-10 rounded border border-slate-700 bg-black px-3 text-xs"
           data-testid="admin-learning-impact-simulator-family-input"
         />
+        <input
+          value={form.symbol_cluster}
+          onChange={(event) => setForm((prev) => ({ ...prev, symbol_cluster: event.target.value }))}
+          placeholder="symbol_cluster (csv)"
+          className="h-10 rounded border border-slate-700 bg-black px-3 text-xs"
+          data-testid="admin-learning-impact-simulator-symbol-cluster-input"
+        />
+        <select
+          value={form.scenario}
+          onChange={(event) => setForm((prev) => ({ ...prev, scenario: event.target.value }))}
+          className="h-10 rounded border border-slate-700 bg-black px-3 text-xs"
+          data-testid="admin-learning-impact-simulator-scenario-select"
+        >
+          <option value="base">base</option>
+          <option value="stressed">stressed</option>
+          <option value="high_volatility">high_volatility</option>
+          <option value="low_liquidity">low_liquidity</option>
+        </select>
         <select
           value={form.recommendation_type}
           onChange={(event) => setForm((prev) => ({ ...prev, recommendation_type: event.target.value }))}
@@ -97,6 +131,7 @@ export const AdminLearningImpactSimulatorPage = () => {
           <option value="disable_recommendation">disable_recommendation</option>
           <option value="decrease_weight_recommendation">decrease_weight_recommendation</option>
           <option value="increase_weight_recommendation">increase_weight_recommendation</option>
+          <option value="threshold_tune">threshold_tune</option>
         </select>
         <input
           type="number"
@@ -115,13 +150,18 @@ export const AdminLearningImpactSimulatorPage = () => {
       </div>
 
       <div className="overflow-x-auto border border-slate-700" data-testid="admin-learning-impact-simulator-recommendations-wrapper">
-        <table className="min-w-[900px] text-xs" data-testid="admin-learning-impact-simulator-recommendations-table">
+        <table className="min-w-[1500px] text-xs" data-testid="admin-learning-impact-simulator-recommendations-table">
           <thead>
             <tr>
               <th className="px-2 py-1 text-left">type</th>
               <th className="px-2 py-1 text-left">target</th>
+              <th className="px-2 py-1 text-left">reason</th>
+              <th className="px-2 py-1 text-left">confidence</th>
+              <th className="px-2 py-1 text-left">scope</th>
+              <th className="px-2 py-1 text-left">score</th>
+              <th className="px-2 py-1 text-left">actionable</th>
               <th className="px-2 py-1 text-left">severity</th>
-              <th className="px-2 py-1 text-left">note</th>
+              <th className="px-2 py-1 text-left">risk</th>
               <th className="px-2 py-1 text-left">action</th>
             </tr>
           </thead>
@@ -130,8 +170,13 @@ export const AdminLearningImpactSimulatorPage = () => {
               <tr key={item.id} className="border-t border-slate-800" data-testid={`admin-learning-impact-simulator-recommendation-row-${idx}`}>
                 <td className="px-2 py-1">{item.recommendation_type}</td>
                 <td className="px-2 py-1">{item.strategy_id || item.family || "global"}</td>
+                <td className="px-2 py-1">{item.reason}</td>
+                <td className="px-2 py-1">{item.confidence}</td>
+                <td className="px-2 py-1">{item.recommendation_scope}</td>
+                <td className="px-2 py-1">{item.recommendation_score}</td>
+                <td className="px-2 py-1">{item.actionable_state}</td>
                 <td className="px-2 py-1">{item.severity}</td>
-                <td className="px-2 py-1">{item.note}</td>
+                <td className="px-2 py-1"><pre className={monoBox}>{safeJson(item.risk_impact)}</pre></td>
                 <td className="px-2 py-1">
                   <Button
                     type="button"
@@ -146,7 +191,7 @@ export const AdminLearningImpactSimulatorPage = () => {
                 </td>
               </tr>
             ))}
-            {(overview.recommendations || []).length === 0 && <tr><td className="px-2 py-2" colSpan={5} data-testid="admin-learning-impact-simulator-recommendations-empty">Recommendation yok.</td></tr>}
+            {(overview.recommendations || []).length === 0 && <tr><td className="px-2 py-2" colSpan={10} data-testid="admin-learning-impact-simulator-recommendations-empty">Recommendation yok.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -156,13 +201,15 @@ export const AdminLearningImpactSimulatorPage = () => {
       {simulationResult && (
         <article className="rounded border border-blue-700/60 bg-blue-950/20 p-4" data-testid="admin-learning-impact-simulator-result-panel">
           <p className="text-sm font-semibold" data-testid="admin-learning-impact-simulator-result-title">Simulation Output</p>
-          <div className="mt-2 grid gap-1 md:grid-cols-2" data-testid="admin-learning-impact-simulator-result-grid">
-            <p className="text-xs" data-testid="admin-learning-impact-simulator-result-projected-risk">projected_risk_score: {simulationResult.projected_risk_score}</p>
-            <p className="text-xs" data-testid="admin-learning-impact-simulator-result-gate">projected_gate_decision: {simulationResult.projected_gate_decision}</p>
-            <p className="text-xs" data-testid="admin-learning-impact-simulator-result-hit-delta">expected_hit_rate_delta: {simulationResult.expected_hit_rate_delta}</p>
-            <p className="text-xs" data-testid="admin-learning-impact-simulator-result-return-delta">expected_avg_return_delta: {simulationResult.expected_avg_return_delta}</p>
-            <p className="text-xs" data-testid="admin-learning-impact-simulator-result-drift-delta">allocation_drift_delta: {simulationResult.allocation_drift_delta}</p>
-            <p className="text-xs" data-testid="admin-learning-impact-simulator-result-hedge-score">hedge_effect_score: {simulationResult.hedge_effect_score}</p>
+          <div className="mt-2 grid gap-3 md:grid-cols-2" data-testid="admin-learning-impact-simulator-result-grid">
+            <pre className={monoBox} data-testid="admin-learning-impact-simulator-result-baseline-metrics">{safeJson(simulationResult.baseline_metrics)}</pre>
+            <pre className={monoBox} data-testid="admin-learning-impact-simulator-result-projected-metrics">{safeJson(simulationResult.projected_metrics)}</pre>
+            <pre className={monoBox} data-testid="admin-learning-impact-simulator-result-delta-metrics">{safeJson(simulationResult.delta_metrics)}</pre>
+            <pre className={monoBox} data-testid="admin-learning-impact-simulator-result-sample-coverage">{safeJson(simulationResult.sample_coverage)}</pre>
+            <pre className={monoBox} data-testid="admin-learning-impact-simulator-result-risk-aware-view">{safeJson(simulationResult.risk_aware_view)}</pre>
+            <pre className={monoBox} data-testid="admin-learning-impact-simulator-result-portfolio-impact">{safeJson(simulationResult.portfolio_impact)}</pre>
+            <pre className={monoBox} data-testid="admin-learning-impact-simulator-result-counterfactual">{safeJson(simulationResult.counterfactual_replay)}</pre>
+            <pre className={monoBox} data-testid="admin-learning-impact-simulator-result-interaction-effects">{safeJson(simulationResult.interaction_effects)}</pre>
           </div>
         </article>
       )}
