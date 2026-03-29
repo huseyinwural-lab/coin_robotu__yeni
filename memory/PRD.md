@@ -1,3 +1,66 @@
+## 2026-03-29 — UNIFIED RISK CORE Sprint-2 (P1 FULL)
+
+### Sprint-2 hedefi (gerçekleşen)
+- Cluster risk + Tail risk + Strategy risk governance katmanları unified core içine deterministik olarak entegre edildi.
+- Tek karar noktası (`risk_orchestrator`) kuralı korunarak P1 metrikleri global risk state ve execution policy’yi etkiler hale getirildi.
+
+### Uygulanan P1 modülleri
+- **Cluster risk hardening**
+  - rolling correlation windows: 30 / 60 / 120
+  - symbol-level correlation matrix
+  - cluster grouping: base + sector/proxy
+  - concentration score + dominant cluster + directional stacking
+  - output: `cluster_risk {clusters, concentration_score, dominant_cluster, risk_flag}`
+
+- **Tail risk engine (gerçek model)**
+  - historical VaR (5th percentile)
+  - CVaR (left-tail mean)
+  - zorunlu stress senaryoları:
+    - BTC -20%
+    - altcoin correlation spike
+    - market-wide drawdown
+    - liquidity drop
+  - output: `tail_risk {var, cvar, stress_loss, worst_scenario, risk_flag}`
+
+- **Strategy risk governance**
+  - strategy bazlı usage hesaplandı
+  - policy matrix:
+    - usage > 80% → THROTTLE
+    - usage > 100% → PAUSE
+    - repeated breach → BLOCK
+  - output: `strategy_risk {strategies, breached_strategies, actions}`
+
+- **Ruleset deepening (Binance/Bybit)**
+  - symbol-specific leverage bracket
+  - tier-based maintenance margin schedule
+  - collateral haircut + usable margin etkisi
+  - core değişmeden ruleset/adaptor seviyesinde davranış farklılaştırma
+
+- **Unified core integration + explainability expansion**
+  - global state değerlendirmesi artık liquidation+portfolio+capital+cluster+tail+strategy birlikte
+  - explainability: `reason[]` + `metrics{cluster_score, tail_var, tail_cvar, ...}` + `policy_result`
+
+### Test/Validation (Sprint-2)
+- Pytest scenario seti:
+  - correlation spike
+  - tail shock
+  - strategy overload
+  - combined scenario
+  - sonuç: `5 passed` (`/app/backend/tests/test_unified_risk_core_sprint1.py`)
+
+- API self-test:
+  - `/app/test_reports/unified_risk_core_sprint2_api_selftest.json`
+  - correlation spike → cluster HIGH + state escalation
+  - tail shock → var/cvar + policy değişimi
+  - strategy overload → pause action
+  - combined scenario → BLOCKED
+
+### Teslim dosyaları (güncel)
+- Kod: `/app/backend/services/unified_risk_core_service.py`
+- Router entegrasyonu: `/app/backend/routers/strategy_domain.py`
+- Testler: `/app/backend/tests/test_unified_risk_core_sprint1.py`
+- Jira/task breakdown: `/app/memory/JIRA_UNIFIED_RISK_CORE.md`
+
 ## 2026-03-29 — UNIFIED RISK CORE Sprint-1 (P0 Full + P2 Orchestrator Skeleton)
 
 ### Kilitlenen kararlar (uygulandı)

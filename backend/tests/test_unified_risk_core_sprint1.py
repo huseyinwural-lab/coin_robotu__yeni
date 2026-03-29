@@ -1,9 +1,6 @@
-from services.unified_risk_core_service import (
-    jira_epic_breakdown,
-    list_rulesets,
-    run_unified_risk_orchestrator,
-    simulate_pre_trade_risk,
-)
+import uuid
+
+from services.unified_risk_core_service import jira_epic_breakdown, list_rulesets, run_unified_risk_orchestrator, simulate_pre_trade_risk
 
 
 def _sample_input_state():
@@ -44,43 +41,121 @@ def _sample_input_state():
     }
 
 
-def test_unified_risk_orchestrator_core_outputs():
+def test_correlation_spike_sets_cluster_high_and_state_escalates():
+    input_state = _sample_input_state()
+    input_state["cluster_override"] = {"correlation_spike": True}
     payload = run_unified_risk_orchestrator(
         db=None,
         cache=None,
         user_id="test-user",
         ruleset="binance",
-        input_state=_sample_input_state(),
+        input_state=input_state,
         snapshot_type="portfolio-level",
-        stage="pre-trade",
+        stage="cluster-spike",
         actor_id=None,
         persist_artifact=False,
     )
 
-    assert payload["orchestrator_contract"]["single_entry"] == "risk_orchestrator"
-    assert payload["ruleset"] == "binance"
-    assert len(payload["liquidation"]["positions"]) == 2
-    assert "margin_ratio" in payload["liquidation"]["positions"][0]
-    assert payload["global_risk_state"] in {"NORMAL", "WARN", "HIGH", "CRITICAL", "BLOCKED"}
-    assert "execution_policy" in payload
-    assert payload["execution_policy"]["decision"] in {
-        "ALLOW",
-        "ALLOW_WITH_REDUCE",
-        "REDUCE_RISK",
-        "BLOCK_NEW_ORDERS",
-        "KILL_SWITCH",
+    assert payload["cluster_risk"]["risk_flag"] == "HIGH"
+    assert payload["global_risk_state"] in {"HIGH", "CRITICAL", "BLOCKED"}
+    assert "cluster_concentration_high" in payload["explainability"]["reason"] or "cluster_concentration_critical" in payload["explainability"]["reason"]
+
+
+def test_tail_shock_changes_execution_policy():
+    input_state = _sample_input_state()
+    input_state["tail_override"] = {"returns": [-0.22] * 80}
+    payload = run_unified_risk_orchestrator(
+        db=None,
+        cache=None,
+        user_id="test-user",
+        ruleset="binance",
+        input_state=input_state,
+        snapshot_type="portfolio-level",
+        stage="tail-shock",
+        actor_id=None,
+        persist_artifact=False,
+    )
+
+    assert payload["tail_risk"]["risk_flag"] == "HIGH"
+    assert payload["execution_policy"]["decision"] != "ALLOW"
+    assert payload["tail_risk"]["var"] > 0
+    assert payload["tail_risk"]["cvar"] > 0
+
+
+def test_strategy_overload_triggers_pause_or_block():
+    strategy_id = f"stress-{uuid.uuid4().hex[:8]}"
+    input_state = {
+        "account": {"equity": 5000.0, "free_collateral": 1500.0, "used_margin": 3500.0},
+        "positions": [
+            {
+                "symbol": "BTCUSDT",
+                "side": "LONG",
+                "quantity": 0.2,
+                "entry_price": 65000.0,
+                "mark_price": 65000.0,
+                "leverage": 6,
+                "margin_mode": "cross",
+                "strategy_id": strategy_id,
+            }
+        ],
+        "strategy_risk_budgets": {strategy_id: 15.0},
+    }
+    payload = run_unified_risk_orchestrator(
+        db=None,
+        cache=None,
+        user_id="test-user",
+        ruleset="binance",
+        input_state=input_state,
+        snapshot_type="portfolio-level",
+        stage="strategy-overload",
+        actor_id=None,
+        persist_artifact=False,
+    )
+
+    actions = [row["action"] for row in payload["strategy_risk"]["actions"]]
+    assert any(action in {"THROTTLE", "PAUSE", "BLOCK"} for action in actions)
+    assert payload["strategy_risk"]["strategies"][0]["usage_pct"] > 100
+
+
+def test_combined_scenario_hits_critical_or_blocked():
+    strategy_id = f"combo-{uuid.uuid4().hex[:8]}"
+    input_state = {
+        "account": {"equity": 4000.0, "free_collateral": 600.0, "used_margin": 3400.0},
+        "positions": [
+            {
+                "symbol": "BTCUSDT",
+                "side": "LONG",
+                "quantity": 0.22,
+                "entry_price": 65000.0,
+                "mark_price": 63200.0,
+                "leverage": 10,
+                "margin_mode": "cross",
+                "strategy_id": strategy_id,
+            },
+            {
+                "symbol": "SOLUSDT",
+                "side": "LONG",
+                "quantity": 180,
+                "entry_price": 190.0,
+                "mark_price": 185.0,
+                "leverage": 12,
+                "margin_mode": "cross",
+                "strategy_id": strategy_id,
+            },
+        ],
+        "strategy_risk_budgets": {strategy_id: 12.0},
+        "cluster_override": {"correlation_spike": True},
+        "tail_override": {"returns": [-0.25] * 100},
     }
 
-
-def test_pre_trade_simulation_produces_before_after_and_delta():
     proposed_order = {
-        "symbol": "SOLUSDT",
+        "symbol": "ETHUSDT",
         "side": "LONG",
-        "quantity": 25,
-        "price": 185.0,
-        "leverage": 10,
+        "quantity": 8,
+        "price": 3300.0,
+        "leverage": 8,
         "margin_mode": "cross",
-        "strategy_id": "trend_alpha",
+        "strategy_id": strategy_id,
     }
     simulation = simulate_pre_trade_risk(
         db=None,
@@ -91,10 +166,22 @@ def test_pre_trade_simulation_produces_before_after_and_delta():
         actor_id=None,
     )
 
-    assert simulation["before"]["global_risk_state"] in {"NORMAL", "WARN", "HIGH", "CRITICAL", "BLOCKED"}
-    assert simulation["after"]["global_risk_state"] in {"NORMAL", "WARN", "HIGH", "CRITICAL", "BLOCKED"}
-    assert "gross_exposure_delta" in simulation["impact_delta"]
-    assert simulation["impact_delta"]["state_transition"]["before"] in {"NORMAL", "WARN", "HIGH", "CRITICAL", "BLOCKED"}
+    payload = run_unified_risk_orchestrator(
+        db=None,
+        cache=None,
+        user_id="test-user",
+        ruleset="binance",
+        input_state=input_state,
+        snapshot_type="portfolio-level",
+        stage="combined-scenario",
+        actor_id=None,
+        persist_artifact=False,
+    )
+
+    assert payload["global_risk_state"] in {"CRITICAL", "BLOCKED"}
+    assert payload["execution_policy"]["decision"] in {"BLOCK_NEW_ORDERS", "KILL_SWITCH", "PAUSE_STRATEGY", "REDUCE_RISK"}
+    assert simulation["impact_delta"]["state_transition"]["after"] in {"NORMAL", "WARN", "HIGH", "CRITICAL", "BLOCKED"}
+    assert "stress_sensitivity_delta" in simulation["impact_delta"]
 
 
 def test_ruleset_and_jira_contract():

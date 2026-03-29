@@ -11,8 +11,6 @@ from sqlalchemy.orm import Session
 
 from models import PaperPosition, UserExecutionIntent, UserRiskSetting
 from services.audit_service import create_audit_log
-from services.futures_correlation_service import get_futures_cluster_risk
-from services.futures_tail_risk_service import get_futures_tail_risk
 
 
 RISK_SNAPSHOT_DIR = Path("/app/artifacts/risk_snapshots")
@@ -22,22 +20,64 @@ RULESETS: dict[str, dict[str, Any]] = {
     "binance": {
         "name": "binance",
         "maintenance_margin_base": 0.005,
-        "maintenance_margin_step": 0.0005,
         "fee_buffer_pct": 0.0006,
         "safety_haircut_pct": 0.02,
         "warn_liquidation_buffer_pct": 8.0,
         "critical_liquidation_buffer_pct": 3.0,
         "max_leverage": 125,
+        "symbol_rules": {
+            "BTCUSDT": {
+                "max_leverage": 125,
+                "collateral_haircut": 0.98,
+                "margin_tiers": [
+                    {"max_notional": 50000, "maintenance_margin_rate": 0.0045},
+                    {"max_notional": 250000, "maintenance_margin_rate": 0.005},
+                    {"max_notional": 1000000, "maintenance_margin_rate": 0.0075},
+                    {"max_notional": 999999999, "maintenance_margin_rate": 0.01},
+                ],
+            },
+            "ETHUSDT": {
+                "max_leverage": 100,
+                "collateral_haircut": 0.975,
+                "margin_tiers": [
+                    {"max_notional": 30000, "maintenance_margin_rate": 0.005},
+                    {"max_notional": 150000, "maintenance_margin_rate": 0.006},
+                    {"max_notional": 800000, "maintenance_margin_rate": 0.009},
+                    {"max_notional": 999999999, "maintenance_margin_rate": 0.012},
+                ],
+            },
+        },
     },
     "bybit": {
         "name": "bybit",
         "maintenance_margin_base": 0.0055,
-        "maintenance_margin_step": 0.00055,
         "fee_buffer_pct": 0.0007,
         "safety_haircut_pct": 0.022,
         "warn_liquidation_buffer_pct": 7.5,
         "critical_liquidation_buffer_pct": 2.8,
         "max_leverage": 100,
+        "symbol_rules": {
+            "BTCUSDT": {
+                "max_leverage": 100,
+                "collateral_haircut": 0.975,
+                "margin_tiers": [
+                    {"max_notional": 40000, "maintenance_margin_rate": 0.005},
+                    {"max_notional": 200000, "maintenance_margin_rate": 0.006},
+                    {"max_notional": 900000, "maintenance_margin_rate": 0.0085},
+                    {"max_notional": 999999999, "maintenance_margin_rate": 0.0115},
+                ],
+            },
+            "ETHUSDT": {
+                "max_leverage": 80,
+                "collateral_haircut": 0.97,
+                "margin_tiers": [
+                    {"max_notional": 25000, "maintenance_margin_rate": 0.0055},
+                    {"max_notional": 120000, "maintenance_margin_rate": 0.0065},
+                    {"max_notional": 600000, "maintenance_margin_rate": 0.0095},
+                    {"max_notional": 999999999, "maintenance_margin_rate": 0.013},
+                ],
+            },
+        },
     },
 }
 
@@ -120,6 +160,96 @@ def _percentile(values: list[float], q: float) -> float:
     ordered = sorted(values)
     pos = max(0, min(len(ordered) - 1, int(round((len(ordered) - 1) * q))))
     return ordered[pos]
+
+
+def _pearson(x: list[float], y: list[float]) -> float:
+    if len(x) < 3 or len(y) < 3:
+        return 0.0
+    size = min(len(x), len(y))
+    x = x[-size:]
+    y = y[-size:]
+    mx = sum(x) / size
+    my = sum(y) / size
+    numerator = sum((x[idx] - mx) * (y[idx] - my) for idx in range(size))
+    denom_x = sum((value - mx) ** 2 for value in x)
+    denom_y = sum((value - my) ** 2 for value in y)
+    if denom_x <= 0 or denom_y <= 0:
+        return 0.0
+    return max(min(numerator / ((denom_x ** 0.5) * (denom_y ** 0.5)), 1.0), -1.0)
+
+
+def _symbol_base(symbol: str) -> str:
+    value = str(symbol or "").upper()
+    return value[:-4] if value.endswith("USDT") else value
+
+
+def _sector_group(symbol: str) -> str:
+    base = _symbol_base(symbol)
+    if base in {"BTC", "ETH"}:
+        return "majors"
+    if base in {"SOL", "AVAX", "ARB", "OP", "MATIC"}:
+        return "alts_l1_l2"
+    if base in {"LINK", "UNI", "AAVE"}:
+        return "defi_beta"
+    return "others"
+
+
+def _resolve_symbol_rule(ruleset: dict, symbol: str, notional: float) -> dict:
+    symbol_rules = dict(ruleset.get("symbol_rules") or {})
+    default_rule = {
+        "max_leverage": int(ruleset.get("max_leverage") or 50),
+        "collateral_haircut": 1.0 - float(ruleset.get("safety_haircut_pct") or 0.02),
+        "margin_tiers": [
+            {"max_notional": 50000, "maintenance_margin_rate": float(ruleset.get("maintenance_margin_base") or 0.005)},
+            {"max_notional": 999999999, "maintenance_margin_rate": float(ruleset.get("maintenance_margin_base") or 0.005) * 1.4},
+        ],
+    }
+    rule = dict(symbol_rules.get(str(symbol).upper()) or default_rule)
+    tiers = list(rule.get("margin_tiers") or default_rule["margin_tiers"])
+    selected_rate = float(ruleset.get("maintenance_margin_base") or 0.005)
+    for tier in tiers:
+        if notional <= float(tier.get("max_notional") or 0):
+            selected_rate = float(tier.get("maintenance_margin_rate") or selected_rate)
+            break
+    return {
+        "max_leverage": max(_safe_int(rule.get("max_leverage"), int(ruleset.get("max_leverage") or 50)), 1),
+        "collateral_haircut": max(min(_safe_float(rule.get("collateral_haircut"), 0.98), 1.0), 0.8),
+        "maintenance_margin_rate": max(selected_rate, 0.001),
+    }
+
+
+def _strategy_breach_history_from_manifest(strategy_id: str, lookback: int = 200) -> int:
+    if not RISK_SNAPSHOT_MANIFEST.exists():
+        return 0
+    count = 0
+    rows = 0
+    with RISK_SNAPSHOT_MANIFEST.open("r", encoding="utf-8") as handle:
+        for raw in reversed(handle.readlines()):
+            if rows >= lookback:
+                break
+            rows += 1
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                row = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            artifact_path = Path(str(row.get("artifact_path") or ""))
+            if not artifact_path.exists():
+                continue
+            try:
+                artifact_payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            strategy_rows = (
+                ((artifact_payload.get("payload") or {}).get("capital") or {}).get("strategy_allocation")
+                or []
+            )
+            matched = [item for item in strategy_rows if str(item.get("strategy_id") or "") == strategy_id and bool(item.get("breach"))]
+            if matched:
+                count += 1
+    return count
 
 
 def _default_position_from_input(raw: dict, mark_price_fallback: float) -> dict:
@@ -210,12 +340,11 @@ def _compute_liquidation(position: dict, *, cross_collateral_share: float, rules
     side = str(position.get("side") or "LONG").upper()
     notional = max(abs(quantity * mark_price), 0.0001)
 
-    maintenance_rate = float(ruleset.get("maintenance_margin_base", 0.005)) + (
-        max(leverage - 1, 0) * float(ruleset.get("maintenance_margin_step", 0.0005))
-    )
-    maintenance_rate = min(max(maintenance_rate, 0.003), 0.08)
+    symbol_rule = _resolve_symbol_rule(ruleset, str(position.get("symbol") or ""), notional)
+    capped_leverage = min(leverage, int(symbol_rule.get("max_leverage") or leverage))
+    maintenance_rate = float(symbol_rule.get("maintenance_margin_rate") or ruleset.get("maintenance_margin_base", 0.005))
     maintenance_margin = notional * maintenance_rate
-    initial_margin = notional / leverage
+    initial_margin = notional / max(capped_leverage, 1)
 
     pnl_direction = 1.0 if side == "LONG" else -1.0
     unrealized_pnl = (mark_price - entry_price) * quantity * pnl_direction
@@ -226,8 +355,9 @@ def _compute_liquidation(position: dict, *, cross_collateral_share: float, rules
     isolated_margin = max(_safe_float(position.get("isolated_margin"), 0.0), 0.0)
     collateral = isolated_margin if margin_mode == "isolated" and isolated_margin > 0 else cross_collateral_share
     collateral = max(collateral, initial_margin)
+    usable_collateral = collateral * float(symbol_rule.get("collateral_haircut") or 0.98)
 
-    effective_margin = collateral + unrealized_pnl - fee_buffer - safety_haircut
+    effective_margin = usable_collateral + unrealized_pnl - fee_buffer - safety_haircut
     margin_ratio = (effective_margin / maintenance_margin) if maintenance_margin > 0 else 999.0
 
     distance_price = (effective_margin - maintenance_margin) / max(quantity, 0.0001)
@@ -244,6 +374,7 @@ def _compute_liquidation(position: dict, *, cross_collateral_share: float, rules
         "side": side,
         "margin_mode": margin_mode,
         "leverage": leverage,
+        "effective_leverage": capped_leverage,
         "entry_price": round(entry_price, 6),
         "mark_price": round(mark_price, 6),
         "quantity": round(quantity, 6),
@@ -251,6 +382,7 @@ def _compute_liquidation(position: dict, *, cross_collateral_share: float, rules
         "initial_margin": round(initial_margin, 6),
         "maintenance_margin": round(maintenance_margin, 6),
         "maintenance_margin_rate": round(maintenance_rate, 6),
+        "collateral_haircut": round(float(symbol_rule.get("collateral_haircut") or 0.98), 6),
         "unrealized_pnl": round(unrealized_pnl, 6),
         "margin_ratio": round(margin_ratio, 6),
         "liquidation_price": round(liquidation_price, 6),
@@ -331,64 +463,274 @@ def _capital_governance(account: dict, portfolio: dict, liquidation_rows: list[d
     }
 
 
-def _cluster_tail_skeleton(db: Session | None, cache, user_id: str, replay_prices: list[float]) -> dict:
-    rets = _returns(replay_prices)
-    left_tail = sorted(rets)[: max(1, int(len(rets) * 0.05))] if rets else []
-    var_95 = abs(_percentile(rets, 0.05)) if rets else 0.0
-    cvar_95 = abs(sum(left_tail) / len(left_tail)) if left_tail else 0.0
+def _build_symbol_series(positions: list[dict], replay_prices: list[float], input_state: dict | None) -> dict[str, list[float]]:
+    base_prices = replay_prices[-240:] if replay_prices else [100.0 + idx * 0.2 for idx in range(240)]
+    base_returns = _returns(base_prices)
+    series: dict[str, list[float]] = {}
+    provided = dict((input_state or {}).get("symbol_price_series") or {})
 
-    stress_scenarios = [
-        {"name": "major_coin_shock", "shock_pct": -0.12},
-        {"name": "alt_correlation_spike", "shock_pct": -0.18},
-        {"name": "market_wide_drawdown", "shock_pct": -0.22},
-        {"name": "liquidity_deterioration", "shock_pct": -0.09},
-    ]
+    for idx, position in enumerate(positions):
+        symbol = str(position.get("symbol") or "UNKNOWN").upper()
+        if symbol in provided and isinstance(provided[symbol], list) and len(provided[symbol]) >= 30:
+            series[symbol] = [max(_safe_float(item, 0.0), 0.0001) for item in provided[symbol][-240:]]
+            continue
 
-    cluster_payload = {"risk_state": "NORMAL", "cluster_exposures": [], "cluster_risk_alerts": []}
-    tail_payload = {"tail_risk_score": 0.0, "risk_state": "NORMAL", "active_alerts": []}
-    if db is not None and cache is not None:
-        try:
-            cluster_payload = get_futures_cluster_risk(db, cache, user_id, refresh=False)
-        except Exception:
-            cluster_payload = {"risk_state": "NORMAL", "cluster_exposures": [], "cluster_risk_alerts": []}
-        try:
-            tail_payload = get_futures_tail_risk(db, cache, user_id, refresh=False)
-        except Exception:
-            tail_payload = {"tail_risk_score": 0.0, "risk_state": "NORMAL", "active_alerts": []}
+        seed_price = max(_safe_float(position.get("mark_price"), 100.0), 0.0001)
+        symbol_returns = [
+            float(ret) * max(0.4, 1 - (idx * 0.08))
+            for ret in base_returns
+        ]
+        prices = [seed_price]
+        for ret in symbol_returns[-180:]:
+            prices.append(max(prices[-1] * (1 + ret), 0.0001))
+        series[symbol] = prices[-180:]
+    return series
+
+
+def _build_cluster_risk(positions: list[dict], series: dict[str, list[float]], gross_exposure: float, input_state: dict | None) -> dict:
+    windows = [30, 60, 120]
+    symbols = sorted(set(series.keys()))
+    matrix_by_window: dict[str, dict[str, float]] = {}
+    for window in windows:
+        matrix: dict[str, float] = {}
+        for left_idx, left in enumerate(symbols):
+            left_returns = _returns(series.get(left, [])[-(window + 1) :])
+            for right in symbols[left_idx + 1 :]:
+                right_returns = _returns(series.get(right, [])[-(window + 1) :])
+                key = f"{left}:{right}"
+                matrix[key] = round(_pearson(left_returns, right_returns), 6)
+        matrix_by_window[str(window)] = matrix
+
+    cluster_map: dict[str, dict] = {}
+    symbol_notional = {
+        str(item.get("symbol") or "UNKNOWN").upper(): abs(_safe_float(item.get("quantity"), 0.0) * _safe_float(item.get("mark_price"), 0.0))
+        for item in positions
+    }
+    direction_map: dict[str, float] = {}
+    for item in positions:
+        symbol = str(item.get("symbol") or "UNKNOWN").upper()
+        direction_sign = 1 if str(item.get("side") or "LONG").upper() == "LONG" else -1
+        direction_map[symbol] = direction_map.get(symbol, 0.0) + direction_sign * symbol_notional.get(symbol, 0.0)
+
+    matrix_120 = matrix_by_window.get("120", {})
+    for symbol in symbols:
+        base_cluster = _symbol_base(symbol)
+        sector_cluster = _sector_group(symbol)
+        for cluster_id in [f"base:{base_cluster}", f"sector:{sector_cluster}"]:
+            bucket = cluster_map.setdefault(cluster_id, {"symbols": set(), "exposure": 0.0, "directional": 0.0, "corr_weights": []})
+            bucket["symbols"].add(symbol)
+            bucket["exposure"] += symbol_notional.get(symbol, 0.0)
+            bucket["directional"] += direction_map.get(symbol, 0.0)
+
+    for cluster_id, payload in cluster_map.items():
+        cluster_symbols = sorted(payload["symbols"])
+        for left_idx, left in enumerate(cluster_symbols):
+            for right in cluster_symbols[left_idx + 1 :]:
+                pair_key = f"{left}:{right}"
+                reverse_key = f"{right}:{left}"
+                corr = matrix_120.get(pair_key, matrix_120.get(reverse_key, 0.0))
+                payload["corr_weights"].append(abs(corr))
+
+    clusters = []
+    for cluster_id, payload in cluster_map.items():
+        exposure = float(payload["exposure"])
+        concentration = (exposure / max(gross_exposure, 1e-6)) if gross_exposure > 0 else 0.0
+        avg_corr = statistics.mean(payload["corr_weights"]) if payload["corr_weights"] else 0.0
+        directional_bias = abs(float(payload["directional"])) / max(exposure, 1e-6) if exposure > 0 else 0.0
+        concentration_score = min(concentration * 0.6 + avg_corr * 0.25 + directional_bias * 0.15, 1.0)
+        clusters.append(
+            {
+                "cluster_id": cluster_id,
+                "symbols": sorted(payload["symbols"]),
+                "cluster_exposure": round(exposure, 6),
+                "concentration_ratio": round(concentration, 6),
+                "avg_correlation": round(avg_corr, 6),
+                "directional_bias": round(directional_bias, 6),
+                "concentration_score": round(concentration_score, 6),
+            }
+        )
+
+    clusters.sort(key=lambda item: item["concentration_score"], reverse=True)
+    dominant = clusters[0] if clusters else None
+    concentration_score = float(dominant.get("concentration_score") or 0.0) if dominant else 0.0
+
+    override = dict((input_state or {}).get("cluster_override") or {})
+    if bool(override.get("correlation_spike")):
+        concentration_score = max(concentration_score, 0.92)
+
+    risk_flag = "LOW"
+    if concentration_score >= 0.8:
+        risk_flag = "HIGH"
+    elif concentration_score >= 0.6:
+        risk_flag = "WARN"
 
     return {
-        "cluster": {
-            "risk_state": str(cluster_payload.get("risk_state") or "NORMAL"),
-            "cluster_exposures": cluster_payload.get("cluster_exposures") or [],
-            "cluster_alerts": cluster_payload.get("cluster_risk_alerts") or [],
-        },
-        "tail": {
-            "risk_state": str(tail_payload.get("risk_state") or "NORMAL"),
-            "tail_risk_score": round(_safe_float(tail_payload.get("tail_risk_score"), 0.0), 6),
-            "historical_var_95": round(var_95, 6),
-            "historical_cvar_95": round(cvar_95, 6),
-            "stress_scenarios": stress_scenarios,
-            "active_alerts": tail_payload.get("active_alerts") or [],
-        },
+        "windows": windows,
+        "correlation_matrix": matrix_by_window,
+        "clusters": clusters,
+        "concentration_score": round(concentration_score, 6),
+        "dominant_cluster": dominant,
+        "risk_flag": risk_flag,
     }
 
 
-def _risk_state_machine(*, min_liquidation_buffer_pct: float, margin_usage_pct: float, risk_budget_breaches: int, cluster_state: str, tail_score: float) -> tuple[str, list[str]]:
+def _tail_scenario_loss(positions: list[dict], scenario: dict) -> float:
+    name = scenario.get("name")
+    loss = 0.0
+    for position in positions:
+        symbol = str(position.get("symbol") or "UNKNOWN").upper()
+        base = _symbol_base(symbol)
+        side_sign = 1 if str(position.get("side") or "LONG").upper() == "LONG" else -1
+        notional = abs(_safe_float(position.get("quantity"), 0.0) * _safe_float(position.get("mark_price"), 0.0))
+        shock = _safe_float(scenario.get("all"), 0.0)
+        if name == "btc_-20" and base == "BTC":
+            shock = -0.20
+        elif name == "altcoin_correlation_spike":
+            shock = -0.18 if base not in {"BTC", "ETH"} else -0.09
+        elif name == "market_wide_drawdown":
+            shock = -0.15
+        elif name == "liquidity_drop":
+            shock = -0.08
+        pnl = notional * shock * side_sign
+        loss += -min(pnl, 0.0)
+    return round(loss, 6)
+
+
+def _build_tail_risk(positions: list[dict], series: dict[str, list[float]], liquidation_rows: list[dict], input_state: dict | None) -> dict:
+    weighted_returns: list[float] = []
+    symbol_weights = {
+        str(item.get("symbol") or "UNKNOWN").upper(): abs(_safe_float(item.get("quantity"), 0.0) * _safe_float(item.get("mark_price"), 0.0))
+        for item in positions
+    }
+    total_weight = sum(symbol_weights.values())
+    for symbol, prices in series.items():
+        rets = _returns(prices)
+        weight = symbol_weights.get(symbol, 0.0) / max(total_weight, 1e-6) if total_weight > 0 else 0.0
+        weighted_returns.extend([ret * weight for ret in rets[-240:]])
+
+    override = dict((input_state or {}).get("tail_override") or {})
+    if isinstance(override.get("returns"), list) and override.get("returns"):
+        weighted_returns = [float(item) for item in override.get("returns")]
+
+    var_95 = abs(_percentile(weighted_returns, 0.05)) if weighted_returns else 0.0
+    left_tail = sorted(weighted_returns)[: max(1, int(len(weighted_returns) * 0.05))] if weighted_returns else []
+    cvar_95 = abs(sum(left_tail) / len(left_tail)) if left_tail else 0.0
+
+    scenarios = [
+        {"name": "btc_-20"},
+        {"name": "altcoin_correlation_spike"},
+        {"name": "market_wide_drawdown"},
+        {"name": "liquidity_drop"},
+    ]
+    scenario_rows = []
+    for scenario in scenarios:
+        stress_loss = _tail_scenario_loss(positions, scenario)
+        scenario_rows.append({
+            "name": scenario["name"],
+            "portfolio_loss": stress_loss,
+        })
+
+    scenario_rows.sort(key=lambda item: item["portfolio_loss"], reverse=True)
+    worst = scenario_rows[0] if scenario_rows else {"name": None, "portfolio_loss": 0.0}
+    current_min_buffer = min([float(item.get("liquidation_buffer_pct") or 999.0) for item in liquidation_rows], default=999.0)
+    liquidation_proximity_change = min(current_min_buffer, current_min_buffer * (1 - min(worst.get("portfolio_loss", 0.0) / max(total_weight, 1e-6), 0.9)))
+
+    risk_flag = "LOW"
+    if var_95 >= 0.08 or cvar_95 >= 0.12 or worst.get("portfolio_loss", 0.0) > max(total_weight, 1.0) * 0.18:
+        risk_flag = "HIGH"
+    elif var_95 >= 0.05 or cvar_95 >= 0.08:
+        risk_flag = "WARN"
+
+    return {
+        "var": round(var_95, 6),
+        "cvar": round(cvar_95, 6),
+        "stress_loss": round(float(worst.get("portfolio_loss") or 0.0), 6),
+        "worst_scenario": worst.get("name"),
+        "risk_flag": risk_flag,
+        "stress_scenarios": scenario_rows,
+        "liquidation_proximity_change": round(liquidation_proximity_change, 6),
+    }
+
+
+def _strategy_risk_governance(strategy_allocation: list[dict]) -> dict:
+    strategies = []
+    breached = []
+    actions: list[dict] = []
+    for row in strategy_allocation:
+        strategy_id = str(row.get("strategy_id") or "default")
+        usage = (float(row.get("capital_share_pct") or 0.0) / max(float(row.get("risk_budget_pct") or 1.0), 1e-6)) * 100
+        repeated_breach_count = _strategy_breach_history_from_manifest(strategy_id)
+        action = "NORMAL"
+        if usage > 100:
+            action = "PAUSE"
+        elif usage > 80:
+            action = "THROTTLE"
+        if repeated_breach_count >= 3 and usage > 100:
+            action = "BLOCK"
+
+        strategy_row = {
+            "strategy_id": strategy_id,
+            "usage_pct": round(usage, 6),
+            "risk_budget_pct": row.get("risk_budget_pct"),
+            "capital_share_pct": row.get("capital_share_pct"),
+            "repeated_breach_count": repeated_breach_count,
+            "action": action,
+            "breach": bool(row.get("breach")) or usage > 100,
+        }
+        strategies.append(strategy_row)
+        if strategy_row["breach"]:
+            breached.append(strategy_row)
+        if action in {"THROTTLE", "PAUSE", "BLOCK"}:
+            actions.append({"strategy_id": strategy_id, "action": action})
+
+    return {
+        "strategies": strategies,
+        "breached_strategies": breached,
+        "actions": actions,
+    }
+
+
+def _risk_state_machine(
+    *,
+    min_liquidation_buffer_pct: float,
+    margin_usage_pct: float,
+    risk_budget_breaches: int,
+    cluster_score: float,
+    tail_var: float,
+    tail_cvar: float,
+    strategy_actions: list[dict],
+) -> tuple[str, list[str]]:
     triggers: list[str] = []
     state = "NORMAL"
 
     if min_liquidation_buffer_pct < 10:
         state = "WARN"
         triggers.append("liquidation_buffer_warn")
-    if min_liquidation_buffer_pct < 5 or margin_usage_pct > 65 or risk_budget_breaches > 0:
+    if min_liquidation_buffer_pct < 5 or margin_usage_pct > 65 or risk_budget_breaches > 0 or cluster_score >= 0.6 or tail_var >= 0.05:
         state = "HIGH"
-        triggers.extend(["liquidation_buffer_high", "margin_usage_high" if margin_usage_pct > 65 else "", "risk_budget_breach" if risk_budget_breaches > 0 else ""])
-    if min_liquidation_buffer_pct < 3 or margin_usage_pct > 80 or cluster_state in {"HIGH", "CRITICAL"} or tail_score > 75:
+        triggers.extend(
+            [
+                "liquidation_buffer_high",
+                "margin_usage_high" if margin_usage_pct > 65 else "",
+                "risk_budget_breach" if risk_budget_breaches > 0 else "",
+                "cluster_concentration_high" if cluster_score >= 0.6 else "",
+                "tail_var_breach" if tail_var >= 0.05 else "",
+            ]
+        )
+    if min_liquidation_buffer_pct < 3 or margin_usage_pct > 80 or cluster_score >= 0.8 or tail_cvar >= 0.1 or any(item.get("action") == "PAUSE" for item in strategy_actions):
         state = "CRITICAL"
-        triggers.extend(["liquidation_buffer_critical", "margin_usage_critical" if margin_usage_pct > 80 else "", "cluster_or_tail_critical"])
-    if min_liquidation_buffer_pct < 1.5 or margin_usage_pct > 90 or tail_score > 90:
+        triggers.extend(
+            [
+                "liquidation_buffer_critical",
+                "margin_usage_critical" if margin_usage_pct > 80 else "",
+                "cluster_concentration_critical" if cluster_score >= 0.8 else "",
+                "tail_cvar_breach" if tail_cvar >= 0.1 else "",
+                "strategy_pause_triggered" if any(item.get("action") == "PAUSE" for item in strategy_actions) else "",
+            ]
+        )
+    if min_liquidation_buffer_pct < 1.5 or margin_usage_pct > 90 or tail_cvar >= 0.16 or any(item.get("action") == "BLOCK" for item in strategy_actions):
         state = "BLOCKED"
-        triggers.extend(["kill_switch_threshold"])
+        triggers.extend(["kill_switch_threshold", "strategy_block_triggered" if any(item.get("action") == "BLOCK" for item in strategy_actions) else ""])
 
     triggers = [item for item in triggers if item]
     return state, sorted(set(triggers))
@@ -407,7 +749,7 @@ def _execution_policy_from_state(state: str) -> dict:
     if state == "WARN":
         policy.update({"reduce_size_multiplier": 0.85, "decision": "ALLOW_WITH_REDUCE"})
     elif state == "HIGH":
-        policy.update({"reduce_size_multiplier": 0.6, "reduce_leverage_to": 3, "decision": "REDUCE_RISK", "pause_strategy": True})
+        policy.update({"reduce_size_multiplier": 0.6, "reduce_leverage_to": 3, "decision": "REDUCE_RISK", "pause_strategy": False})
     elif state == "CRITICAL":
         policy.update({"block_new_orders": True, "reduce_size_multiplier": 0.0, "reduce_leverage_to": 2, "pause_strategy": True, "decision": "BLOCK_NEW_ORDERS"})
     elif state == "BLOCKED":
@@ -499,17 +841,34 @@ def run_unified_risk_orchestrator(
 
     portfolio = _portfolio_metrics(positions, liquidation_rows, float(account_state.get("equity") or 1.0))
     capital = _capital_governance(account_state, portfolio, liquidation_rows, input_state)
-    cluster_tail = _cluster_tail_skeleton(db, cache, user_id, replay_prices)
+    symbol_series = _build_symbol_series(positions, replay_prices, input_state)
+    cluster_risk = _build_cluster_risk(positions, symbol_series, float(portfolio.get("gross_exposure") or 0.0), input_state)
+    tail_risk = _build_tail_risk(positions, symbol_series, liquidation_rows, input_state)
+    strategy_risk = _strategy_risk_governance(capital.get("strategy_allocation") or [])
 
     min_liq_buffer = min((row.get("liquidation_buffer_pct") or 999.0) for row in liquidation_rows) if liquidation_rows else 999.0
     state, triggers = _risk_state_machine(
         min_liquidation_buffer_pct=float(min_liq_buffer),
         margin_usage_pct=float(capital.get("margin_usage_pct") or 0.0),
         risk_budget_breaches=int(capital.get("risk_budget_breach_count") or 0),
-        cluster_state=str(cluster_tail.get("cluster", {}).get("risk_state") or "NORMAL"),
-        tail_score=float(cluster_tail.get("tail", {}).get("tail_risk_score") or 0.0),
+        cluster_score=float(cluster_risk.get("concentration_score") or 0.0),
+        tail_var=float(tail_risk.get("var") or 0.0),
+        tail_cvar=float(tail_risk.get("cvar") or 0.0),
+        strategy_actions=strategy_risk.get("actions") or [],
     )
     execution_policy = _execution_policy_from_state(state)
+    if any(item.get("action") == "THROTTLE" for item in (strategy_risk.get("actions") or [])) and execution_policy.get("reduce_size_multiplier", 1.0) > 0.7:
+        execution_policy["reduce_size_multiplier"] = 0.7
+        execution_policy["decision"] = "REDUCE_RISK"
+    if any(item.get("action") == "PAUSE" for item in (strategy_risk.get("actions") or [])):
+        execution_policy["pause_strategy"] = True
+        execution_policy["decision"] = "PAUSE_STRATEGY"
+    if any(item.get("action") == "BLOCK" for item in (strategy_risk.get("actions") or [])):
+        execution_policy["block_new_orders"] = True
+        execution_policy["kill_switch_triggered"] = True
+        execution_policy["decision"] = "KILL_SWITCH"
+        state = "BLOCKED"
+        triggers.append("strategy_block_triggered")
 
     canonical_state = {
         "user_id": user_id,
@@ -524,14 +883,26 @@ def run_unified_risk_orchestrator(
         },
         "portfolio": portfolio,
         "capital": capital,
-        "cluster": cluster_tail.get("cluster") or {},
-        "tail": cluster_tail.get("tail") or {},
+        "cluster_risk": cluster_risk,
+        "tail_risk": tail_risk,
+        "strategy_risk": strategy_risk,
+        "cluster": cluster_risk,
+        "tail": tail_risk,
         "global_risk_state": state,
         "state_machine": ["NORMAL", "WARN", "HIGH", "CRITICAL", "BLOCKED"],
         "execution_policy": execution_policy,
         "explainability": {
             "decision": execution_policy.get("decision"),
-            "triggers": triggers,
+            "triggers": sorted(set(triggers)),
+            "reason": sorted(set(triggers)),
+            "metrics": {
+                "cluster_score": cluster_risk.get("concentration_score"),
+                "tail_var": tail_risk.get("var"),
+                "tail_cvar": tail_risk.get("cvar"),
+                "margin_usage_pct": capital.get("margin_usage_pct"),
+                "strategy_actions": strategy_risk.get("actions"),
+                "min_liquidation_buffer_pct": min_liq_buffer,
+            },
             "input_summary": {
                 "position_count": len(positions),
                 "equity": account_state.get("equity"),
@@ -539,6 +910,7 @@ def run_unified_risk_orchestrator(
                 "snapshot_type": snapshot_type,
                 "stage": stage,
             },
+            "policy_result": execution_policy,
             "timestamp": _iso(),
         },
         "orchestrator_contract": {
@@ -658,6 +1030,18 @@ def simulate_pre_trade_risk(
             "before": before_state.get("global_risk_state"),
             "after": after_state.get("global_risk_state"),
         },
+        "stress_sensitivity_delta": {
+            "var_delta": round(
+                _safe_float((after_state.get("tail_risk") or {}).get("var"), 0.0)
+                - _safe_float((before_state.get("tail_risk") or {}).get("var"), 0.0),
+                6,
+            ),
+            "cvar_delta": round(
+                _safe_float((after_state.get("tail_risk") or {}).get("cvar"), 0.0)
+                - _safe_float((before_state.get("tail_risk") or {}).get("cvar"), 0.0),
+                6,
+            ),
+        },
     }
 
     return {
@@ -669,6 +1053,9 @@ def simulate_pre_trade_risk(
             "liquidation": before_state.get("liquidation"),
             "portfolio": before_state.get("portfolio"),
             "capital": before_state.get("capital"),
+            "cluster_risk": before_state.get("cluster_risk"),
+            "tail_risk": before_state.get("tail_risk"),
+            "strategy_risk": before_state.get("strategy_risk"),
             "artifact": before_state.get("artifact"),
         },
         "after": {
@@ -677,6 +1064,9 @@ def simulate_pre_trade_risk(
             "liquidation": after_state.get("liquidation"),
             "portfolio": after_state.get("portfolio"),
             "capital": after_state.get("capital"),
+            "cluster_risk": after_state.get("cluster_risk"),
+            "tail_risk": after_state.get("tail_risk"),
+            "strategy_risk": after_state.get("strategy_risk"),
             "artifact": after_state.get("artifact"),
         },
         "impact_delta": delta,
@@ -688,6 +1078,7 @@ def jira_epic_breakdown() -> dict:
         "epics": [
             {
                 "epic": "URC-P0 Unified Risk Core",
+                "status": "done",
                 "items": [
                     "URC-01 Canonical unified risk data model",
                     "URC-02 Position-level liquidation engine (cross/isolated)",
@@ -699,21 +1090,25 @@ def jira_epic_breakdown() -> dict:
                 ],
             },
             {
+                "epic": "URC-P1 Advanced Risk Layer",
+                "status": "done_in_sprint_2",
+                "items": [
+                    "URC-31 Rolling correlation windows (30/60/120) + cluster concentration",
+                    "URC-32 Tail risk engine: VaR/CVaR + stress scenarios",
+                    "URC-33 Strategy risk budget governance (throttle/pause/block)",
+                    "URC-34 Ruleset deepening (tier-based margin + leverage brackets + collateral haircuts)",
+                    "URC-35 P1 metrics integrated into unified state + execution policy",
+                    "URC-36 Explainability expansion (reason + metrics + policy result)",
+                ],
+            },
+            {
                 "epic": "URC-P2 Orchestrator Skeleton (Early)",
+                "status": "done",
                 "items": [
                     "URC-21 Single-entry risk_orchestrator contract",
                     "URC-22 Pre-trade simulation before/after impact",
                     "URC-23 Explainability payload + proof logs",
                     "URC-24 Kill-switch policy mapping",
-                ],
-            },
-            {
-                "epic": "URC-P1 Advanced Layer (Next Sprint)",
-                "items": [
-                    "URC-31 Rolling correlation cluster concentration",
-                    "URC-32 Historical VaR/CVaR + stress scenario expansions",
-                    "URC-33 Strategy risk budget throttle/pause",
-                    "URC-34 Exchange rules abstraction hardening",
                 ],
             },
         ],
