@@ -7,7 +7,7 @@ import "@xyflow/react/dist/style.css";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { apiClient, FRONTEND_BACKEND_URL } from "@/lib/api";
+import { apiClient, FRONTEND_BACKEND_URL, getSessionDeviceId } from "@/lib/api";
 
 const severityTone = {
   CRITICAL: "border-l-red-600 bg-red-50 text-red-900",
@@ -112,30 +112,46 @@ export const AdminIncidentIntelligencePage = () => {
     const token = window.localStorage.getItem("token");
     const url = streamUrl();
     if (!token || !url) return undefined;
-    const socket = new WebSocket(`${url}?token=${encodeURIComponent(token)}`);
-    socketRef.current = socket;
-    socket.onopen = () => setStreamState("connected");
-    socket.onclose = () => setStreamState("disconnected");
-    socket.onerror = () => setStreamState("error");
-    socket.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (["incident_stream_bootstrap", "incident_intelligence_snapshot"].includes(payload.event_type)) {
-          loadDashboard();
-          if (selectedIncidentId) {
-            loadIncidentDetail(selectedIncidentId);
+    let reconnectTimer = null;
+    let socket = null;
+
+    const connect = () => {
+      const deviceId = getSessionDeviceId();
+      socket = new WebSocket(`${url}?token=${encodeURIComponent(token)}&device_id=${encodeURIComponent(deviceId)}`);
+      socketRef.current = socket;
+      socket.onopen = () => setStreamState("connected");
+      socket.onclose = () => {
+        setStreamState("disconnected");
+        reconnectTimer = window.setTimeout(connect, 2000);
+      };
+      socket.onerror = () => setStreamState("error");
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (["incident_stream_bootstrap", "incident_intelligence_snapshot"].includes(payload.event_type)) {
+            loadDashboard();
+            if (selectedIncidentId) {
+              loadIncidentDetail(selectedIncidentId);
+            }
           }
+        } catch {
+          setStreamState("error");
         }
-      } catch {
-        setStreamState("error");
-      }
+      };
     };
+
+    connect();
     const heartbeat = window.setInterval(() => {
-      if (socket.readyState === WebSocket.OPEN) socket.send("ping");
+      if (socket && socket.readyState === WebSocket.OPEN) socket.send("ping");
     }, 15000);
     return () => {
       window.clearInterval(heartbeat);
-      socket.close();
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+      }
+      if (socket) {
+        socket.close();
+      }
     };
   }, [loadDashboard, loadIncidentDetail, selectedIncidentId]);
 

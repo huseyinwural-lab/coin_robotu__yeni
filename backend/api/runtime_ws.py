@@ -48,11 +48,24 @@ def _resolve_admin_user(token: str | None):
     return SimpleNamespace(id=subject, role=resolved_role)
 
 
+def _device_matches_token(websocket: WebSocket, user) -> bool:
+    token = _extract_token(websocket)
+    if not token:
+        return False
+    try:
+        payload = decode_access_token(token)
+    except ValueError:
+        return False
+    token_device_id = str(payload.get("device_id") or "").strip()
+    provided_device_id = str(websocket.query_params.get("device_id") or websocket.headers.get("x-session-device") or "").strip()
+    return bool(token_device_id and provided_device_id and token_device_id == provided_device_id)
+
+
 @router.websocket("/runtime/ws/execution-timeline")
 async def runtime_execution_timeline_ws(websocket: WebSocket):
     token = _extract_token(websocket)
     user = _resolve_admin_user(token)
-    if user is None:
+    if user is None or not _device_matches_token(websocket, user):
         await websocket.accept()
         await websocket.send_json({"event_type": "runtime_stream_error", "detail": "unauthorized"})
         await asyncio.sleep(0.15)

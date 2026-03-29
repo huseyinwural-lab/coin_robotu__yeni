@@ -84,6 +84,8 @@ const ensureDeviceId = () => {
   return deviceId;
 };
 
+export const getSessionDeviceId = () => ensureDeviceId();
+
 apiClient.interceptors.request.use((config) => {
   const nextConfig = config;
   nextConfig.headers = nextConfig.headers || {};

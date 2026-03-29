@@ -69,6 +69,21 @@ export const AuthProvider = ({ children }) => {
           return;
         }
         const status = Number(error?.response?.status || 0);
+        const detail = String(error?.response?.data?.detail || "").toLowerCase();
+        if (status === 401 && detail.includes("session_device_mismatch")) {
+          try {
+            await new Promise((resolve) => window.setTimeout(resolve, 350));
+            const retry = await apiClient.get("/auth/me");
+            if (!cancelled) {
+              setUser(retry.data);
+              localStorage.setItem(AUTH_USER_KEY, JSON.stringify(retry.data));
+              setLoading(false);
+            }
+            return;
+          } catch {
+            // fall through to normal 401 cleanup
+          }
+        }
         if (status === 401) {
           clearAuthSession();
           setAuthToken(null);
