@@ -511,7 +511,7 @@ class TestCorrelationEnforcement:
         # Check individual items
         for item in data.get("items", []):
             state = item.get("state", "")
-            assert state != "CANCELLED", f"Found CANCELLED state, should be CANCELED"
+            assert state != "CANCELLED", "Found CANCELLED state, should be CANCELED"
 
     def test_gate_blocked_produces_artifact(self, client, auth_headers):
         """When gate is BLOCKED, acceptance should still produce artifact"""
@@ -521,7 +521,7 @@ class TestCorrelationEnforcement:
             headers=auth_headers,
         )
         assert gate_resp.status_code == 200
-        gate = gate_resp.json()
+        _ = gate_resp.json()
         
         # Run acceptance
         response = client.post(
