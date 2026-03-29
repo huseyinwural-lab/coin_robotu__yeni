@@ -1,3 +1,62 @@
+## 2026-03-29 — P2 Sprint-A + Sprint-B (Operasyonel Zeka ve Müdahale Hızlandırma)
+
+### Uygulanan kapsam (kilitli scope)
+
+#### Sprint-A (çekirdek zeka katmanı) — TAMAMLANDI
+- **Analytics CSV Export** (UTF-8, header, pagination, streaming):
+  - `GET /api/execution-safety/analytics/gate-failures?window=7d|30d&format=csv&page=&page_size=`
+  - `GET /api/execution-safety/analytics/blockers?window=7d|30d&format=csv&page=&page_size=`
+  - `GET /api/execution-safety/analytics/recovery?window=7d|30d&format=csv&page=&page_size=`
+  - JSON path’leri korunarak `pagination` eklendi; CSV aynı data setten üretiliyor.
+- **Incident Severity Scoring Engine** (deterministic + explainable):
+  - `detect_false_decisions` çıktısına eklendi: `severity_score`, `severity_level`, `impact`, `priority`, `severity_explanation`
+  - Score mapping: LOW/MEDIUM/HIGH (0.0–0.3 / 0.3–0.7 / 0.7–1.0)
+- **Recommended Recovery Playbook**:
+  - anomaly başına `recommended_actions[]` üretimi (confidence + reason)
+  - örnek aksiyonlar: `bulk_reconcile`, `bulk_retry`, `bulk_cancel`, `escalate`
+- **Anomaly Quick Actions** (bulk endpoint reuse):
+  - Frontend anomaly panelinde Retry/Reconcile/Cancel/Escalate
+  - Multi-select destekli
+  - HIGH severity için confirmation modal zorunlu
+  - MEDIUM/LOW direkt akış + audit log bilgilendirmesi
+
+#### Sprint-B (operatör deneyimi) — TEMEL OPERATİF SÜRÜM TAMAMLANDI
+- **Operator Center route**: `/admin/execution/operator-center`
+  - tek ekranda: top risky intents, blocker breakdown, recommended actions rollup, recent failures, quick actions
+- **Correlation-aware drilldown**:
+  - backend: `GET /api/execution-safety/anomalies/drilldown/{intent_id}`
+  - chain links: Anomaly → Intent → Events → Artifact → Reconcile → Quarantine
+  - timeline görünümü aktif
+- **UI polish (operasyonel)**:
+  - loading skeleton
+  - error state + retry
+  - empty states
+  - action sonrası toast + state refresh
+  - filter state korunumu
+
+### Etkilenen ana dosyalar
+- Backend
+  - `/app/backend/services/execution_safety_p1_service.py`
+  - `/app/backend/routers/execution_safety.py`
+  - `/app/backend/services/execution_safety_advanced_service.py` (bulk recovery rollback güvenliği)
+- Frontend
+  - `/app/frontend/src/pages/AdminExecutionReadinessPage.jsx`
+  - `/app/frontend/src/pages/AdminExecutionOperatorCenterPage.jsx` (yeni)
+  - `/app/frontend/src/App.js`
+  - `/app/frontend/src/components/PanelLayout.jsx`
+
+### Self-test kanıtları
+- `/app/test_reports/p2_sprintA_backend_selftest.json`
+- `/app/test_reports/p2_anomaly_scoring_probe.json`
+- `/app/test_reports/p2_drilldown_probe.json`
+- `/app/test_reports/p2_quick_action_probe.json`
+- `/app/test_reports/p2_frontend_wiring_selftest.json`
+
+### Durum sınıflaması
+- **Implemented**: CSV export + scoring + playbook + quick actions + operator center + drilldown + UI operatif polish
+- **Self-tested**: endpoint wiring, request/response contract, CSV content-type/header, scoring/playbook alanları, drilldown zinciri, quick action endpoint davranışı
+- **Live validation pending**: gerçek exchange bağlantısı, credential/proxy doğrulaması, canlı market order/fill/reconcile kabul zinciri
+
 ## 2026-03-29 — P1 Sprint-2 UI Full Entegrasyon + Dry/Shadow Stabilizasyonu
 
 ### Bu turda tamamlananlar

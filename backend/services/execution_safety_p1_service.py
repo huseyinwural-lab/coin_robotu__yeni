@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import httpx
 from dotenv import load_dotenv
@@ -47,6 +49,58 @@ def _window_delta(window: str) -> timedelta:
     return timedelta(days=7)
 
 
+def _normalize_iso_z(value: datetime | str | None) -> str:
+    if isinstance(value, datetime):
+        candidate = _as_utc(value)
+    elif value is not None:
+        try:
+            candidate = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            candidate = _as_utc(candidate)
+        except Exception:
+            candidate = None
+    else:
+        candidate = None
+    if not candidate:
+        candidate = _utcnow()
+    return candidate.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _normalize_pagination(page: int, page_size: int) -> tuple[int, int]:
+    safe_page = max(int(page or 1), 1)
+    safe_page_size = min(max(int(page_size or 200), 1), 2000)
+    return safe_page, safe_page_size
+
+
+def _paginate_rows(rows: list[dict], *, page: int = 1, page_size: int = 200) -> tuple[list[dict], dict]:
+    safe_page, safe_page_size = _normalize_pagination(page, page_size)
+    total_items = len(rows)
+    start = (safe_page - 1) * safe_page_size
+    end = start + safe_page_size
+    paginated = rows[start:end]
+    total_pages = (total_items + safe_page_size - 1) // safe_page_size if total_items else 1
+    return paginated, {
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total_items": total_items,
+        "total_pages": total_pages,
+    }
+
+
+def _csv_bytes_iterator(columns: list[str], rows: Iterable[dict]) -> Iterable[bytes]:
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=columns)
+    writer.writeheader()
+    yield buffer.getvalue().encode("utf-8")
+    buffer.seek(0)
+    buffer.truncate(0)
+
+    for row in rows:
+        writer.writerow({column: row.get(column) for column in columns})
+        yield buffer.getvalue().encode("utf-8")
+        buffer.seek(0)
+        buffer.truncate(0)
+
+
 def _read_manifest(path: str, *, window: str) -> list[dict]:
     file_path = Path(path)
     if not file_path.exists():
@@ -75,7 +129,7 @@ def _read_manifest(path: str, *, window: str) -> list[dict]:
     return rows
 
 
-def analytics_gate_failures(*, window: str = "7d") -> dict:
+def analytics_gate_failures(*, window: str = "7d", page: int = 1, page_size: int = 200) -> dict:
     rows = _read_manifest("/app/artifacts/manifests/execution_safety_gate_manifest.jsonl", window=window)
     ready = 0
     degraded = 0
@@ -100,6 +154,18 @@ def analytics_gate_failures(*, window: str = "7d") -> dict:
             bucket["degraded"] += 1
 
     total = ready + degraded + blocked
+    timeseries_rows = [
+        {
+            "date": day,
+            "ready": payload["ready"],
+            "degraded": payload["degraded"],
+            "blocked": payload["blocked"],
+            "total": payload["total"],
+        }
+        for day, payload in sorted(timeseries.items())
+    ]
+    paginated_rows, pagination = _paginate_rows(timeseries_rows, page=page, page_size=page_size)
+
     return {
         "window": window,
         "total_evaluations": total,
@@ -107,20 +173,12 @@ def analytics_gate_failures(*, window: str = "7d") -> dict:
         "degraded_count": degraded,
         "ready_count": ready,
         "failure_rate": round((blocked / total) if total else 0.0, 4),
-        "timeseries": [
-            {
-                "date": day,
-                "ready": payload["ready"],
-                "degraded": payload["degraded"],
-                "blocked": payload["blocked"],
-                "total": payload["total"],
-            }
-            for day, payload in sorted(timeseries.items())
-        ],
+        "timeseries": paginated_rows,
+        "pagination": pagination,
     }
 
 
-def analytics_blockers(*, window: str = "7d") -> dict:
+def analytics_blockers(*, window: str = "7d", page: int = 1, page_size: int = 200) -> dict:
     rows = _read_manifest("/app/artifacts/manifests/execution_safety_gate_manifest.jsonl", window=window)
     counts: dict[str, int] = {}
     distribution_by_day: dict[str, dict[str, int]] = {}
@@ -136,17 +194,21 @@ def analytics_blockers(*, window: str = "7d") -> dict:
             bucket[code] = bucket.get(code, 0) + 1
 
     top = sorted(counts.items(), key=lambda item: item[1], reverse=True)
+    distribution_rows = [
+        {"date": day, "blockers": payload}
+        for day, payload in sorted(distribution_by_day.items())
+    ]
+    paginated_distribution, pagination = _paginate_rows(distribution_rows, page=page, page_size=page_size)
+
     return {
         "window": window,
         "top_blockers": [{"code": code, "count": count} for code, count in top[:20]],
-        "distribution": [
-            {"date": day, "blockers": payload}
-            for day, payload in sorted(distribution_by_day.items())
-        ],
+        "distribution": paginated_distribution,
+        "pagination": pagination,
     }
 
 
-def analytics_recovery(db: Session, *, window: str = "7d") -> dict:
+def analytics_recovery(db: Session, *, window: str = "7d", page: int = 1, page_size: int = 200) -> dict:
     cutoff = _utcnow() - _window_delta(window)
     audit_rows = (
         db.query(AuditLog)
@@ -181,16 +243,410 @@ def analytics_recovery(db: Session, *, window: str = "7d") -> dict:
         ) / len(resolved)
 
     intents_total = db.query(ExecutionIntent).filter(ExecutionIntent.created_at >= cutoff).count()
-    return {
+    metrics = {
         "window": window,
         "retry_success_rate": round((retry_success / retry_total) if retry_total else 0.0, 4),
         "reconcile_success_rate": round((reconcile_success / reconcile_total) if reconcile_total else 0.0, 4),
         "quarantine_rate": round((len(quarantines) / intents_total) if intents_total else 0.0, 4),
         "avg_recovery_time_sec": round(avg_recovery_time_sec, 2),
     }
+    metric_rows = [{
+        "window": metrics["window"],
+        "retry_success_rate": metrics["retry_success_rate"],
+        "reconcile_success_rate": metrics["reconcile_success_rate"],
+        "quarantine_rate": metrics["quarantine_rate"],
+        "avg_recovery_time_sec": metrics["avg_recovery_time_sec"],
+    }]
+    _, pagination = _paginate_rows(metric_rows, page=page, page_size=page_size)
+    return {**metrics, "pagination": pagination}
 
 
-def detect_false_decisions(db: Session, *, window: str = "7d", severity: str | None = None, anomaly_type: str | None = None) -> dict:
+def _severity_level_from_score(score: float) -> str:
+    if score >= 0.7:
+        return "HIGH"
+    if score >= 0.3:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _infer_blocker_type(reason: str, anomaly_type: str) -> str:
+    reason_raw = str(reason or "").lower()
+    anomaly_raw = str(anomaly_type or "").upper()
+    if "permission" in reason_raw:
+        return "permission_error"
+    if "timeout" in reason_raw:
+        return "timeout"
+    if "missing_fill" in reason_raw or "missing fill" in reason_raw:
+        return "missing_fill"
+    if "late_ack" in reason_raw or "late ack" in reason_raw:
+        return "late_ack"
+    if "correlation" in reason_raw or anomaly_raw == "CORRELATION_BREACH":
+        return "correlation_violation"
+    if anomaly_raw == "FALSE_ALLOW":
+        return "false_allow"
+    if anomaly_raw == "FALSE_READY":
+        return "false_ready"
+    return "generic"
+
+
+def _derive_mismatch_severity(anomaly_type: str) -> str:
+    normalized = str(anomaly_type or "").upper()
+    if normalized in {"FALSE_ALLOW", "CORRELATION_BREACH"}:
+        return "HIGH"
+    if normalized in {"FALSE_READY"}:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _calculate_severity(
+    *,
+    blocker_type: str,
+    mismatch_severity: str,
+    retry_count: int,
+    failure_stage: str,
+    time_stuck_seconds: float,
+    correlation_complete: bool,
+) -> dict:
+    blocker_weight = {
+        "permission_error": 0.28,
+        "correlation_violation": 0.26,
+        "missing_fill": 0.21,
+        "late_ack": 0.19,
+        "timeout": 0.18,
+        "false_allow": 0.2,
+        "false_ready": 0.16,
+        "generic": 0.12,
+    }.get(blocker_type, 0.12)
+    mismatch_weight = {"HIGH": 0.22, "MEDIUM": 0.14, "LOW": 0.06}.get(str(mismatch_severity).upper(), 0.06)
+    stage_weight = {
+        "CORRELATION": 0.2,
+        "RISK": 0.12,
+        "ORDER_SUBMIT": 0.18,
+        "RECONCILE": 0.16,
+        "ACK": 0.12,
+        "UNKNOWN": 0.08,
+    }.get(str(failure_stage or "UNKNOWN").upper(), 0.08)
+
+    safe_retry = max(int(retry_count or 0), 0)
+    retry_weight = min(safe_retry, 5) * 0.045
+    stuck_weight = min(max(float(time_stuck_seconds or 0.0), 0.0) / 3600.0, 1.0) * 0.12
+    correlation_weight = 0.0 if correlation_complete else 0.16
+
+    severity_score = min(max(0.05 + blocker_weight + mismatch_weight + stage_weight + retry_weight + stuck_weight + correlation_weight, 0.0), 1.0)
+    severity_level = _severity_level_from_score(severity_score)
+    priority = 1 if severity_level == "HIGH" else 2 if severity_level == "MEDIUM" else 3
+    impact = "execution_blocked" if severity_level == "HIGH" else "execution_risk" if severity_level == "MEDIUM" else "monitor"
+
+    return {
+        "severity_score": round(severity_score, 4),
+        "severity_level": severity_level,
+        "impact": impact,
+        "priority": priority,
+        "severity_explanation": [
+            f"blocker_type={blocker_type}",
+            f"mismatch_severity={mismatch_severity}",
+            f"retry_count={safe_retry}",
+            f"failure_stage={failure_stage or 'UNKNOWN'}",
+            f"time_stuck_seconds={round(float(time_stuck_seconds or 0.0), 2)}",
+            f"correlation_complete={str(bool(correlation_complete)).lower()}",
+        ],
+    }
+
+
+def _build_recommended_actions(*, anomaly_type: str, severity_level: str, reconcile_result: str, failure_reason: str) -> list[dict]:
+    normalized_type = str(anomaly_type or "").upper()
+    normalized_reason = str(failure_reason or "").lower()
+    normalized_reconcile = str(reconcile_result or "").lower()
+    sev = str(severity_level or "LOW").upper()
+
+    action_map: dict[str, dict] = {}
+
+    def add_action(action: str, confidence: float, reason: str):
+        bounded_confidence = min(max(confidence + (0.05 if sev == "HIGH" else 0.0), 0.0), 0.99)
+        current = action_map.get(action)
+        candidate = {"action": action, "confidence": round(bounded_confidence, 2), "reason": reason}
+        if not current or candidate["confidence"] > current["confidence"]:
+            action_map[action] = candidate
+
+    if "late_ack" in normalized_reason or normalized_type in {"FALSE_READY", "FALSE_ALLOW"}:
+        add_action("bulk_reconcile", 0.82, "late_ack_detected")
+    if "missing fill" in normalized_reason or "missing_fill" in normalized_reason:
+        add_action("bulk_reconcile", 0.86, "missing_fill_detected")
+    if "timeout" in normalized_reason:
+        add_action("bulk_retry", 0.74, "timeout_detected")
+    if "permission" in normalized_reason:
+        add_action("escalate", 0.9, "permission_error_detected")
+    if normalized_type == "CORRELATION_BREACH":
+        add_action("escalate", 0.92, "correlation_chain_breach")
+        add_action("bulk_cancel", 0.66, "preventive_cancel_recommended")
+    if "mismatch" in normalized_reconcile:
+        add_action("bulk_reconcile", 0.78, "reconcile_mismatch_detected")
+
+    if not action_map:
+        fallback_action = "bulk_reconcile" if sev == "HIGH" else "bulk_retry"
+        add_action(fallback_action, 0.58, "default_safe_recovery")
+
+    ranked = sorted(action_map.values(), key=lambda item: item["confidence"], reverse=True)
+    return ranked[:3]
+
+
+def _enrich_anomaly_item(item: dict) -> dict:
+    blocker_type = _infer_blocker_type(item.get("reason", ""), item.get("type", ""))
+    mismatch_severity = str(item.get("mismatch_severity") or _derive_mismatch_severity(item.get("type", ""))).upper()
+    retry_count = int(item.get("retry_count") or 0)
+    failure_stage = str(item.get("failure_stage") or "UNKNOWN").upper()
+    time_stuck_seconds = float(item.get("time_stuck_seconds") or 0.0)
+    correlation_complete = bool(item.get("correlation_complete", bool(item.get("correlation_id") and item.get("intent_id"))))
+
+    severity_payload = _calculate_severity(
+        blocker_type=blocker_type,
+        mismatch_severity=mismatch_severity,
+        retry_count=retry_count,
+        failure_stage=failure_stage,
+        time_stuck_seconds=time_stuck_seconds,
+        correlation_complete=correlation_complete,
+    )
+    recommended_actions = _build_recommended_actions(
+        anomaly_type=str(item.get("type") or ""),
+        severity_level=severity_payload["severity_level"],
+        reconcile_result=str(item.get("reconcile_result") or ""),
+        failure_reason=str(item.get("reason") or ""),
+    )
+
+    return {
+        **item,
+        "blocker_type": blocker_type,
+        "mismatch_severity": mismatch_severity,
+        "severity_score": severity_payload["severity_score"],
+        "severity_level": severity_payload["severity_level"],
+        "impact": severity_payload["impact"],
+        "priority": severity_payload["priority"],
+        "severity_explanation": severity_payload["severity_explanation"],
+        "recommended_actions": recommended_actions,
+        "severity": severity_payload["severity_level"],
+        "risk_score": severity_payload["severity_score"],
+    }
+
+
+def _analytics_csv_payload(dataset: str, payload: dict) -> tuple[list[str], list[dict], str]:
+    normalized_dataset = str(dataset or "").strip().lower()
+    if normalized_dataset == "gate_failures":
+        columns = ["timestamp", "blocked_count", "ready_count", "degraded_count", "total_count"]
+        rows = [
+            {
+                "timestamp": f"{item.get('date')}T00:00:00Z",
+                "blocked_count": item.get("blocked", 0),
+                "ready_count": item.get("ready", 0),
+                "degraded_count": item.get("degraded", 0),
+                "total_count": item.get("total", 0),
+            }
+            for item in (payload.get("timeseries") or [])
+        ]
+        return columns, rows, "execution_safety_gate_failures.csv"
+
+    if normalized_dataset == "blockers":
+        columns = ["timestamp", "blocker_code", "count"]
+        rows: list[dict] = []
+        for day_row in payload.get("distribution") or []:
+            day = day_row.get("date")
+            blockers = dict(day_row.get("blockers") or {})
+            for code, count in sorted(blockers.items()):
+                rows.append(
+                    {
+                        "timestamp": f"{day}T00:00:00Z",
+                        "blocker_code": code,
+                        "count": count,
+                    }
+                )
+        if not rows:
+            rows = [
+                {
+                    "timestamp": "",
+                    "blocker_code": item.get("code", "unknown"),
+                    "count": item.get("count", 0),
+                }
+                for item in (payload.get("top_blockers") or [])
+            ]
+        return columns, rows, "execution_safety_blockers.csv"
+
+    if normalized_dataset == "recovery":
+        columns = ["timestamp", "retry_success_rate", "reconcile_success_rate", "quarantine_rate", "avg_recovery_time_sec"]
+        rows = [
+            {
+                "timestamp": _normalize_iso_z(_utcnow()),
+                "retry_success_rate": payload.get("retry_success_rate", 0),
+                "reconcile_success_rate": payload.get("reconcile_success_rate", 0),
+                "quarantine_rate": payload.get("quarantine_rate", 0),
+                "avg_recovery_time_sec": payload.get("avg_recovery_time_sec", 0),
+            }
+        ]
+        return columns, rows, "execution_safety_recovery.csv"
+
+    raise ValueError("unsupported_analytics_dataset")
+
+
+def stream_analytics_csv(dataset: str, payload: dict) -> tuple[Iterable[bytes], str]:
+    columns, rows, filename = _analytics_csv_payload(dataset, payload)
+    return _csv_bytes_iterator(columns, rows), filename
+
+
+def get_operator_center_snapshot(db: Session, *, window: str = "7d", limit: int = 10) -> dict:
+    capped_limit = min(max(int(limit or 10), 1), 50)
+    anomalies_payload = detect_false_decisions(db, window=window)
+    anomalies = list(anomalies_payload.get("items") or [])
+    top_risky_intents = sorted(anomalies, key=lambda item: float(item.get("severity_score") or 0.0), reverse=True)[:capped_limit]
+
+    blockers_payload = analytics_blockers(window=window, page=1, page_size=20)
+    recent_failures = (
+        db.query(FailedEvent)
+        .order_by(FailedEvent.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    recent_failure_rows = [
+        {
+            "failure_id": row.id,
+            "entity_id": row.entity_id,
+            "failure_class": row.failure_class,
+            "status": row.status,
+            "retry_count": row.retry_count,
+            "reason": row.error_message,
+            "created_at": _normalize_iso_z(row.created_at),
+        }
+        for row in recent_failures
+    ]
+
+    action_rollup: dict[str, dict] = {}
+    for anomaly in top_risky_intents:
+        for recommendation in anomaly.get("recommended_actions") or []:
+            action = str(recommendation.get("action") or "unknown")
+            bucket = action_rollup.setdefault(action, {"action": action, "count": 0, "avg_confidence": 0.0})
+            bucket["count"] += 1
+            bucket["avg_confidence"] += float(recommendation.get("confidence") or 0.0)
+
+    recommended_actions = []
+    for _, action_row in action_rollup.items():
+        count = max(int(action_row["count"]), 1)
+        recommended_actions.append(
+            {
+                "action": action_row["action"],
+                "count": action_row["count"],
+                "avg_confidence": round(float(action_row["avg_confidence"]) / count, 2),
+            }
+        )
+
+    recommended_actions.sort(key=lambda item: (-item["count"], -item["avg_confidence"]))
+
+    return {
+        "window": window,
+        "generated_at": _normalize_iso_z(_utcnow()),
+        "total_anomalies": anomalies_payload.get("total_anomalies", 0),
+        "top_risky_intents": top_risky_intents,
+        "blocker_breakdown": blockers_payload.get("top_blockers") or [],
+        "recommended_actions": recommended_actions[:6],
+        "recent_failures": recent_failure_rows,
+    }
+
+
+def get_correlation_drilldown(db: Session, *, intent_id: str, limit: int = 120) -> dict:
+    normalized_intent = str(intent_id or "").strip()
+    if not normalized_intent:
+        raise ValueError("intent_id_required")
+
+    intent_row = db.query(ExecutionIntent).filter(ExecutionIntent.intent_id == normalized_intent).first()
+    if not intent_row:
+        raise ValueError("intent_not_found")
+
+    event_rows = (
+        db.query(ExecutionIntentEvent)
+        .filter(ExecutionIntentEvent.intent_id == normalized_intent)
+        .order_by(ExecutionIntentEvent.created_at.asc())
+        .limit(min(max(int(limit or 120), 1), 500))
+        .all()
+    )
+    failed_rows = (
+        db.query(FailedEvent)
+        .filter((FailedEvent.entity_id == normalized_intent) | (FailedEvent.correlation_id == intent_row.correlation_id))
+        .order_by(FailedEvent.created_at.asc())
+        .limit(80)
+        .all()
+    )
+
+    events = [
+        {
+            "event_id": row.id,
+            "event_type": row.event_type,
+            "event_status": row.event_status,
+            "external_order_id": row.external_order_id,
+            "created_at": _normalize_iso_z(row.created_at),
+            "payload": row.payload or {},
+        }
+        for row in event_rows
+    ]
+    failed_events = [
+        {
+            "failure_id": row.id,
+            "failure_class": row.failure_class,
+            "status": row.status,
+            "reason": row.error_message,
+            "retry_count": row.retry_count,
+            "created_at": _normalize_iso_z(row.created_at),
+        }
+        for row in failed_rows
+    ]
+
+    timeline = [
+        {
+            "at": entry["created_at"],
+            "type": "INTENT_EVENT",
+            "status": entry["event_status"],
+            "title": entry["event_type"],
+        }
+        for entry in events
+    ]
+    timeline.extend(
+        {
+            "at": entry["created_at"],
+            "type": "FAILED_EVENT",
+            "status": entry["status"],
+            "title": entry["failure_class"],
+        }
+        for entry in failed_events
+    )
+    timeline.sort(key=lambda item: item.get("at") or "")
+
+    return {
+        "intent_id": normalized_intent,
+        "correlation_id": intent_row.correlation_id,
+        "intent": {
+            "status": intent_row.status,
+            "symbol": intent_row.symbol,
+            "side": intent_row.side,
+            "quantity": intent_row.quantity,
+            "created_at": _normalize_iso_z(intent_row.created_at),
+        },
+        "chain_links": {
+            "intent": "/api/execution-safety/intents?limit=100",
+            "events": f"/api/execution-safety/intents/{normalized_intent}/timeline",
+            "artifact": f"/api/execution-safety/artifacts/{normalized_intent}",
+            "reconcile": f"/api/execution-safety/intents/{normalized_intent}/reconcile",
+            "quarantine": "/api/execution-safety/quarantine?limit=200",
+        },
+        "events": events,
+        "failed_events": failed_events,
+        "timeline": timeline,
+    }
+
+
+def detect_false_decisions(
+    db: Session,
+    *,
+    window: str = "7d",
+    severity: str | None = None,
+    anomaly_type: str | None = None,
+    page: int = 1,
+    page_size: int = 200,
+) -> dict:
     rows = _read_manifest("/app/artifacts/manifests/execution_safety_gate_manifest.jsonl", window=window)
     items: list[dict] = []
 
@@ -212,16 +668,31 @@ def detect_false_decisions(db: Session, *, window: str = "7d", severity: str | N
             reason = "blocker_present_but_allowed"
             risk = 0.93
         if decision_type:
-            sev = "HIGH" if risk >= 0.9 else "MEDIUM"
+            correlation_id = (payload.get("gate") or {}).get("correlation_id") or payload.get("correlation_id")
+            intent_id = (payload.get("gate") or {}).get("intent_id") or payload.get("intent_id")
+            event_ts = row.get("created_at")
+            event_dt = _utcnow()
+            if isinstance(event_ts, str) and event_ts:
+                try:
+                    event_dt = _as_utc(datetime.fromisoformat(event_ts.replace("Z", "+00:00"))) or _utcnow()
+                except Exception:
+                    event_dt = _utcnow()
+            age_seconds = max((_utcnow() - (event_dt or _utcnow())).total_seconds(), 0.0)
             items.append(
                 {
-                    "intent_id": (payload.get("gate") or {}).get("correlation_id"),
+                    "intent_id": intent_id,
+                    "correlation_id": correlation_id,
                     "type": decision_type,
                     "reason": reason,
                     "risk_score": risk,
-                    "severity": sev,
+                    "severity": "HIGH" if risk >= 0.9 else "MEDIUM",
                     "requires_manual_intervention": True,
                     "detected_at": row.get("created_at"),
+                    "retry_count": int(payload.get("retry_count") or 0),
+                    "failure_stage": str(payload.get("failure_stage") or "RISK").upper(),
+                    "time_stuck_seconds": round(age_seconds, 2),
+                    "correlation_complete": bool(correlation_id and intent_id),
+                    "reconcile_result": str(payload.get("reconcile_result") or ""),
                 }
             )
 
@@ -233,27 +704,62 @@ def detect_false_decisions(db: Session, *, window: str = "7d", severity: str | N
         .all()
     )
     for row in corr_failures:
+        event_dt = _as_utc(row.created_at) or _utcnow()
         items.append(
             {
                 "intent_id": row.entity_id,
+                "correlation_id": row.correlation_id,
                 "type": "CORRELATION_BREACH",
                 "reason": row.error_message,
                 "risk_score": 0.91,
                 "severity": "HIGH",
                 "requires_manual_intervention": True,
-                "detected_at": _as_utc(row.created_at).isoformat() if _as_utc(row.created_at) else None,
+                "detected_at": _normalize_iso_z(row.created_at),
+                "retry_count": row.retry_count,
+                "failure_stage": str((row.error_details or {}).get("failure_stage") or "CORRELATION").upper(),
+                "time_stuck_seconds": round(max((_utcnow() - event_dt).total_seconds(), 0.0), 2),
+                "correlation_complete": bool(row.correlation_id and row.entity_id),
+                "reconcile_result": str((row.error_details or {}).get("reconcile_result") or ""),
             }
         )
 
+    unresolved_correlation_ids = {
+        str(item.get("correlation_id"))
+        for item in items
+        if not item.get("intent_id") and item.get("correlation_id")
+    }
+    if unresolved_correlation_ids:
+        mapping_rows = (
+            db.query(ExecutionIntent.intent_id, ExecutionIntent.correlation_id)
+            .filter(ExecutionIntent.correlation_id.in_(list(unresolved_correlation_ids)))
+            .all()
+        )
+        correlation_to_intent = {row.correlation_id: row.intent_id for row in mapping_rows if row.correlation_id and row.intent_id}
+        for item in items:
+            if not item.get("intent_id") and item.get("correlation_id"):
+                item["intent_id"] = correlation_to_intent.get(str(item.get("correlation_id")))
+
+    items = [_enrich_anomaly_item(item) for item in items]
+
     if severity:
-        items = [item for item in items if str(item.get("severity") or "").upper() == str(severity).upper()]
+        items = [item for item in items if str(item.get("severity_level") or item.get("severity") or "").upper() == str(severity).upper()]
     if anomaly_type:
         items = [item for item in items if str(item.get("type") or "").upper() == str(anomaly_type).upper()]
+
+    items.sort(
+        key=lambda item: (
+            int(item.get("priority") or 99),
+            -float(item.get("severity_score") or 0.0),
+            str(item.get("detected_at") or ""),
+        )
+    )
+    paginated_items, pagination = _paginate_rows(items, page=page, page_size=page_size)
 
     return {
         "window": window,
         "total_anomalies": len(items),
-        "items": items[:500],
+        "items": paginated_items,
+        "pagination": pagination,
     }
 
 

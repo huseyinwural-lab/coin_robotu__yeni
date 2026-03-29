@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -39,7 +40,10 @@ from services.execution_safety_p1_service import (
     analytics_gate_failures,
     analytics_recovery,
     detect_false_decisions,
+    get_correlation_drilldown,
+    get_operator_center_snapshot,
     run_execution_simulation,
+    stream_analytics_csv,
 )
 
 
@@ -95,29 +99,62 @@ def execution_safety_gate_explain(
 @router.get("/analytics/gate-failures")
 def execution_safety_analytics_gate_failures(
     window: str = Query(default="7d"),
+    format: str = Query(default="json"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=200, ge=1, le=2000),
     current_user: User = Depends(require_admin),
 ):
     _ = current_user
-    return analytics_gate_failures(window=window)
+    payload = analytics_gate_failures(window=window, page=page, page_size=page_size)
+    if str(format).lower() == "csv":
+        iterator, filename = stream_analytics_csv("gate_failures", payload)
+        return StreamingResponse(
+            iterator,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    return payload
 
 
 @router.get("/analytics/blockers")
 def execution_safety_analytics_blockers(
     window: str = Query(default="7d"),
+    format: str = Query(default="json"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=200, ge=1, le=2000),
     current_user: User = Depends(require_admin),
 ):
     _ = current_user
-    return analytics_blockers(window=window)
+    payload = analytics_blockers(window=window, page=page, page_size=page_size)
+    if str(format).lower() == "csv":
+        iterator, filename = stream_analytics_csv("blockers", payload)
+        return StreamingResponse(
+            iterator,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    return payload
 
 
 @router.get("/analytics/recovery")
 def execution_safety_analytics_recovery(
     window: str = Query(default="7d"),
+    format: str = Query(default="json"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=200, ge=1, le=2000),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    return analytics_recovery(db, window=window)
+    payload = analytics_recovery(db, window=window, page=page, page_size=page_size)
+    if str(format).lower() == "csv":
+        iterator, filename = stream_analytics_csv("recovery", payload)
+        return StreamingResponse(
+            iterator,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    return payload
 
 
 @router.get("/anomalies/false-decisions")
@@ -125,11 +162,40 @@ def execution_safety_anomalies_false_decisions(
     window: str = Query(default="7d"),
     severity: str | None = Query(default=None),
     type: str | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=200, ge=1, le=500),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    return detect_false_decisions(db, window=window, severity=severity, anomaly_type=type)
+    return detect_false_decisions(db, window=window, severity=severity, anomaly_type=type, page=page, page_size=page_size)
+
+
+@router.get("/operator-center")
+def execution_safety_operator_center(
+    window: str = Query(default="7d"),
+    limit: int = Query(default=10, ge=1, le=50),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_operator_center_snapshot(db, window=window, limit=limit)
+
+
+@router.get("/anomalies/drilldown/{intent_id}")
+def execution_safety_correlation_drilldown(
+    intent_id: str,
+    limit: int = Query(default=120, ge=1, le=500),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    try:
+        return get_correlation_drilldown(db, intent_id=intent_id, limit=limit)
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if detail == "intent_not_found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
 @router.post("/execution/dry-run")

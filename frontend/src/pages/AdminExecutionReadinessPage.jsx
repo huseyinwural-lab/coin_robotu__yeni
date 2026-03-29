@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiClient } from "@/lib/api";
 
 export const AdminExecutionReadinessPage = () => {
@@ -62,6 +63,9 @@ export const AdminExecutionReadinessPage = () => {
   const [dryRunSide, setDryRunSide] = useState("BUY");
   const [dryRunResult, setDryRunResult] = useState(null);
   const [shadowResult, setShadowResult] = useState(null);
+  const [p1PanelError, setP1PanelError] = useState("");
+  const [selectedAnomalyIntentIds, setSelectedAnomalyIntentIds] = useState([]);
+  const [quickActionModal, setQuickActionModal] = useState({ open: false, action: "", intentIds: [] });
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const previousFailCountRef = useRef(0);
@@ -78,6 +82,7 @@ export const AdminExecutionReadinessPage = () => {
 
   const load = useCallback(async (refreshChecks = false) => {
     setLoading(true);
+    setP1PanelError("");
     try {
       const anomalyParams = new URLSearchParams({ window: analyticsWindow });
       if (anomalySeverityFilter !== "ALL") {
@@ -147,6 +152,8 @@ export const AdminExecutionReadinessPage = () => {
       setAnalyticsBlockers(analyticsBlockersPayload || null);
       setAnalyticsRecovery(analyticsRecoveryPayload || null);
       setAnomalies(anomaliesPayload || null);
+      const refreshedIntentIds = new Set((anomaliesPayload?.items || []).map((item) => item.intent_id).filter(Boolean));
+      setSelectedAnomalyIntentIds((prev) => prev.filter((id) => refreshedIntentIds.has(id)));
 
       const flappingConfig = historyData?.flapping_config || {};
       if (flappingConfig.window_sec) setFlappingWindowSec(Number(flappingConfig.window_sec));
@@ -158,7 +165,9 @@ export const AdminExecutionReadinessPage = () => {
       }
       previousFailCountRef.current = nextFailCount;
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Production Gate verisi alınamadı");
+      const message = error?.response?.data?.detail || "Production Gate verisi alınamadı";
+      setP1PanelError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -401,11 +410,128 @@ export const AdminExecutionReadinessPage = () => {
       }
       const { data } = await apiClient.get(`/execution-safety/anomalies/false-decisions?${params.toString()}`);
       setAnomalies(data || null);
+      const visibleIntentIds = new Set((data?.items || []).map((item) => item.intent_id).filter(Boolean));
+      setSelectedAnomalyIntentIds((prev) => prev.filter((intentId) => visibleIntentIds.has(intentId)));
       toast.success("Anomaly filtreleri uygulandı");
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Anomaly filtreleri uygulanamadı");
     }
   }, [analyticsWindow, anomalySeverityFilter, anomalyTypeFilter]);
+
+  const handleAnalyticsCsvExport = useCallback(
+    async (dataset) => {
+      const endpointMap = {
+        gate: "/execution-safety/analytics/gate-failures",
+        blockers: "/execution-safety/analytics/blockers",
+        recovery: "/execution-safety/analytics/recovery",
+      };
+      const targetEndpoint = endpointMap[dataset];
+      if (!targetEndpoint) {
+        toast.error("Geçersiz analytics export tipi");
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({
+          window: analyticsWindow,
+          format: "csv",
+          page: "1",
+          page_size: "2000",
+        });
+        const response = await apiClient.get(`${targetEndpoint}?${params.toString()}`, { responseType: "blob" });
+        const blob = new Blob([response.data], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `execution-safety-${dataset}-${analyticsWindow}-${Date.now()}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast.success("CSV export hazır");
+      } catch (error) {
+        toast.error(error?.response?.data?.detail || "CSV export alınamadı");
+      }
+    },
+    [analyticsWindow]
+  );
+
+  const resolveAnomalySelection = useCallback(
+    (intentIds = []) => {
+      const provided = Array.isArray(intentIds) ? intentIds.filter(Boolean) : [];
+      if (provided.length) {
+        return Array.from(new Set(provided));
+      }
+      return Array.from(new Set(selectedAnomalyIntentIds.filter(Boolean)));
+    },
+    [selectedAnomalyIntentIds]
+  );
+
+  const executeAnomalyQuickAction = useCallback(
+    async (actionKey, rawIntentIds = []) => {
+      const endpointMap = {
+        retry: "/execution-safety/recovery/bulk-retry",
+        reconcile: "/execution-safety/recovery/bulk-reconcile",
+        cancel: "/execution-safety/recovery/bulk-cancel",
+        escalate: "/execution-safety/recovery/bulk-move-to-quarantine",
+      };
+      const endpoint = endpointMap[actionKey];
+      if (!endpoint) {
+        toast.error("Geçersiz quick action");
+        return;
+      }
+
+      const intentIds = resolveAnomalySelection(rawIntentIds);
+      if (!intentIds.length) {
+        toast.error("Quick action için intent seçin");
+        return;
+      }
+
+      const matchedItems = anomaliesList.filter((item) => intentIds.includes(item.intent_id));
+      const hasHighSeverity = matchedItems.some((item) => String(item.severity_level || item.severity || "").toUpperCase() === "HIGH");
+      if (hasHighSeverity && !quickActionModal.open) {
+        setQuickActionModal({ open: true, action: actionKey, intentIds });
+        return;
+      }
+      if (!hasHighSeverity) {
+        toast.info("MEDIUM/LOW aksiyon direkt çalışır; kayıt audit trail'e yazılır.");
+      }
+
+      await runAction(async () => {
+        const payload = {
+          selection_mode: "explicit_ids",
+          intent_ids: intentIds,
+          limit: Math.max(intentIds.length, 1),
+          reason: `anomaly_quick_action_${actionKey}`,
+          requested_by: "admin-ui",
+        };
+        await apiClient.post(endpoint, payload);
+        setQuickActionModal({ open: false, action: "", intentIds: [] });
+        setSelectedAnomalyIntentIds([]);
+      }, `${actionKey.toUpperCase()} aksiyonu uygulandı`);
+    },
+    [anomaliesList, quickActionModal.open, resolveAnomalySelection, runAction]
+  );
+
+  const handleAnomalyRowSelect = useCallback((intentId, checked) => {
+    if (!intentId) return;
+    setSelectedAnomalyIntentIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(intentId);
+      else next.delete(intentId);
+      return Array.from(next);
+    });
+  }, []);
+
+  const handleAnomalySelectAll = useCallback(
+    (checked) => {
+      if (!checked) {
+        setSelectedAnomalyIntentIds([]);
+        return;
+      }
+      const visibleIds = anomaliesList.map((item) => item.intent_id).filter(Boolean);
+      setSelectedAnomalyIntentIds(Array.from(new Set(visibleIds)));
+    },
+    [anomaliesList]
+  );
 
   const handleExecutionSimulation = useCallback(
     async (mode) => {
@@ -475,6 +601,14 @@ export const AdminExecutionReadinessPage = () => {
     () => ["ALL", "FALSE_READY", "FALSE_ALLOW", "CORRELATION_BREACH"],
     []
   );
+  const selectableAnomalyIntentIds = useMemo(
+    () => anomaliesList.map((item) => item.intent_id).filter(Boolean),
+    [anomaliesList]
+  );
+  const allVisibleAnomaliesSelected = useMemo(() => {
+    if (!selectableAnomalyIntentIds.length) return false;
+    return selectableAnomalyIntentIds.every((intentId) => selectedAnomalyIntentIds.includes(intentId));
+  }, [selectableAnomalyIntentIds, selectedAnomalyIntentIds]);
 
   const reasonPieStyle = useMemo(() => {
     const entries = Object.entries(reasonDistribution);
@@ -814,8 +948,55 @@ export const AdminExecutionReadinessPage = () => {
             >
               Analytics Yenile
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleAnalyticsCsvExport("gate")}
+              disabled={loading || actionLoading}
+              data-testid="execution-safety-p1-export-gate-csv-button"
+            >
+              Gate CSV
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleAnalyticsCsvExport("blockers")}
+              disabled={loading || actionLoading}
+              data-testid="execution-safety-p1-export-blockers-csv-button"
+            >
+              Blockers CSV
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleAnalyticsCsvExport("recovery")}
+              disabled={loading || actionLoading}
+              data-testid="execution-safety-p1-export-recovery-csv-button"
+            >
+              Recovery CSV
+            </Button>
           </div>
         </div>
+
+        {loading && !analyticsGateFailures && !analyticsBlockers && !analyticsRecovery && (
+          <div className="grid gap-4 lg:grid-cols-3" data-testid="execution-safety-p1-loading-skeleton-grid">
+            <Skeleton className="h-28 w-full bg-slate-800" data-testid="execution-safety-p1-loading-skeleton-item-0" />
+            <Skeleton className="h-28 w-full bg-slate-800" data-testid="execution-safety-p1-loading-skeleton-item-1" />
+            <Skeleton className="h-28 w-full bg-slate-800" data-testid="execution-safety-p1-loading-skeleton-item-2" />
+          </div>
+        )}
+
+        {!!p1PanelError && (
+          <div className="rounded border border-red-700/50 bg-red-950/20 p-3" data-testid="execution-safety-p1-error-state">
+            <p className="text-xs text-red-200" data-testid="execution-safety-p1-error-message">{p1PanelError}</p>
+            <Button
+              variant="outline"
+              className="mt-2"
+              onClick={() => load(true)}
+              disabled={loading || actionLoading}
+              data-testid="execution-safety-p1-error-retry-button"
+            >
+              Yeniden Dene
+            </Button>
+          </div>
+        )}
 
         <div className="grid gap-4 lg:grid-cols-3" data-testid="execution-safety-p1-metrics-grid">
           <article className="rounded-lg border border-slate-700 bg-slate-950 p-3" data-testid="execution-safety-p1-gate-failure-card">
@@ -920,15 +1101,111 @@ export const AdminExecutionReadinessPage = () => {
                 </Button>
               </div>
             </div>
+            <div className="mt-2 rounded border border-slate-700/70 bg-slate-900/80 p-2" data-testid="execution-safety-p1-anomaly-quick-actions-panel">
+              <div className="flex flex-wrap items-center justify-between gap-2" data-testid="execution-safety-p1-anomaly-quick-actions-header">
+                <label className="flex items-center gap-2 text-xs text-slate-300" data-testid="execution-safety-p1-anomaly-select-all-wrapper">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleAnomaliesSelected}
+                    onChange={(event) => handleAnomalySelectAll(event.target.checked)}
+                    data-testid="execution-safety-p1-anomaly-select-all-checkbox"
+                  />
+                  Tümünü seç ({selectedAnomalyIntentIds.length})
+                </label>
+                <p className="text-[11px] text-slate-400" data-testid="execution-safety-p1-anomaly-high-modal-rule">HIGH aksiyonlarda onay modalı zorunlu.</p>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2" data-testid="execution-safety-p1-anomaly-quick-actions-buttons">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => executeAnomalyQuickAction("retry")}
+                  disabled={actionLoading}
+                  data-testid="execution-safety-p1-anomaly-quick-action-retry-button"
+                >
+                  Retry
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => executeAnomalyQuickAction("reconcile")}
+                  disabled={actionLoading}
+                  data-testid="execution-safety-p1-anomaly-quick-action-reconcile-button"
+                >
+                  Reconcile
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => executeAnomalyQuickAction("cancel")}
+                  disabled={actionLoading}
+                  data-testid="execution-safety-p1-anomaly-quick-action-cancel-button"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => executeAnomalyQuickAction("escalate")}
+                  disabled={actionLoading}
+                  data-testid="execution-safety-p1-anomaly-quick-action-escalate-button"
+                >
+                  Escalate
+                </Button>
+              </div>
+            </div>
             <div className="mt-3 max-h-64 space-y-2 overflow-y-auto" data-testid="execution-safety-p1-anomaly-items-list">
               {anomaliesList.slice(0, 20).map((item, index) => (
-                <div key={`${item.intent_id || "unknown"}-${index}`} className="rounded border border-rose-800/40 bg-rose-950/20 p-2" data-testid={`execution-safety-p1-anomaly-item-${index}`}>
+                <div
+                  key={`${item.intent_id || "unknown"}-${index}`}
+                  className={`rounded border p-2 ${String(item.severity_level || item.severity || "").toUpperCase() === "HIGH" ? "border-rose-500/70 bg-rose-950/30" : "border-rose-800/40 bg-rose-950/20"}`}
+                  data-testid={`execution-safety-p1-anomaly-item-${index}`}
+                >
+                  <div className="mb-1 flex items-start justify-between gap-2" data-testid={`execution-safety-p1-anomaly-item-header-${index}`}>
+                    <label className="flex items-center gap-2 text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-select-wrapper-${index}`}>
+                      <input
+                        type="checkbox"
+                        checked={!!item.intent_id && selectedAnomalyIntentIds.includes(item.intent_id)}
+                        disabled={!item.intent_id}
+                        onChange={(event) => handleAnomalyRowSelect(item.intent_id, event.target.checked)}
+                        data-testid={`execution-safety-p1-anomaly-item-select-checkbox-${index}`}
+                      />
+                      select
+                    </label>
+                    {String(item.severity_level || item.severity || "").toUpperCase() === "HIGH" && (
+                      <span className="rounded bg-rose-600/20 px-2 py-0.5 text-[10px] text-rose-100" data-testid={`execution-safety-p1-anomaly-item-high-highlight-${index}`}>HIGH PRIORITY</span>
+                    )}
+                  </div>
                   <p className="text-xs text-rose-100" data-testid={`execution-safety-p1-anomaly-item-type-${index}`}>type: {item.type}</p>
-                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-severity-${index}`}>severity: {item.severity}</p>
-                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-risk-${index}`}>risk_score: {item.risk_score}</p>
+                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-severity-${index}`}>severity: {item.severity_level || item.severity}</p>
+                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-risk-${index}`}>severity_score: {item.severity_score ?? item.risk_score}</p>
+                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-impact-${index}`}>impact: {item.impact || "-"}</p>
+                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-priority-${index}`}>priority: {item.priority ?? "-"}</p>
                   <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-intent-${index}`}>intent_id: {item.intent_id || "-"}</p>
                   <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-detected-at-${index}`}>detected_at: {item.detected_at || "-"}</p>
                   <p className="text-xs text-amber-200" data-testid={`execution-safety-p1-anomaly-item-reason-${index}`}>reason: {item.reason || "-"}</p>
+                  <div className="mt-1 space-y-1" data-testid={`execution-safety-p1-anomaly-item-recommended-actions-${index}`}>
+                    {(item.recommended_actions || []).slice(0, 2).map((action, actionIdx) => (
+                      <p key={`${action.action}-${actionIdx}`} className="text-[11px] text-cyan-200" data-testid={`execution-safety-p1-anomaly-item-recommended-action-${index}-${actionIdx}`}>
+                        {action.action} ({action.confidence}) - {action.reason}
+                      </p>
+                    ))}
+                    {!(item.recommended_actions || []).length && (
+                      <p className="text-[11px] text-slate-500" data-testid={`execution-safety-p1-anomaly-item-recommended-action-empty-${index}`}>öneri bulunamadı</p>
+                    )}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1" data-testid={`execution-safety-p1-anomaly-item-inline-actions-${index}`}>
+                    <a
+                      href={item.intent_id ? `/admin/execution/operator-center?intent_id=${encodeURIComponent(item.intent_id)}` : "#"}
+                      className={`inline-flex items-center rounded border px-2 py-1 text-xs ${item.intent_id ? "border-slate-600 text-slate-200" : "pointer-events-none border-slate-700 text-slate-500"}`}
+                      data-testid={`execution-safety-p1-anomaly-item-inline-drilldown-${index}`}
+                    >
+                      Drilldown
+                    </a>
+                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("retry", [item.intent_id])} disabled={actionLoading || !item.intent_id} data-testid={`execution-safety-p1-anomaly-item-inline-retry-${index}`}>Retry</Button>
+                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("reconcile", [item.intent_id])} disabled={actionLoading || !item.intent_id} data-testid={`execution-safety-p1-anomaly-item-inline-reconcile-${index}`}>Reconcile</Button>
+                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("cancel", [item.intent_id])} disabled={actionLoading || !item.intent_id} data-testid={`execution-safety-p1-anomaly-item-inline-cancel-${index}`}>Cancel</Button>
+                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("escalate", [item.intent_id])} disabled={actionLoading || !item.intent_id} data-testid={`execution-safety-p1-anomaly-item-inline-escalate-${index}`}>Escalate</Button>
+                  </div>
                 </div>
               ))}
               {anomaliesList.length === 0 && (
@@ -1362,6 +1639,44 @@ export const AdminExecutionReadinessPage = () => {
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={quickActionModal.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setQuickActionModal({ open: false, action: "", intentIds: [] });
+          }
+        }}
+      >
+        <DialogContent data-testid="execution-safety-p1-high-action-confirmation-modal">
+          <DialogHeader>
+            <DialogTitle data-testid="execution-safety-p1-high-action-confirmation-modal-title">HIGH Severity Aksiyon Onayı</DialogTitle>
+            <DialogDescription data-testid="execution-safety-p1-high-action-confirmation-modal-description">
+              HIGH anomaly için {quickActionModal.action?.toUpperCase()} aksiyonu onay gerektirir. Bu işlem audit trail’e yazılır.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1 text-xs text-slate-300" data-testid="execution-safety-p1-high-action-confirmation-modal-body">
+            <p data-testid="execution-safety-p1-high-action-confirmation-modal-action">action: {quickActionModal.action || "-"}</p>
+            <p data-testid="execution-safety-p1-high-action-confirmation-modal-count">intent_count: {quickActionModal.intentIds.length}</p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setQuickActionModal({ open: false, action: "", intentIds: [] })}
+              data-testid="execution-safety-p1-high-action-confirmation-modal-cancel-button"
+            >
+              Vazgeç
+            </Button>
+            <Button
+              onClick={() => executeAnomalyQuickAction(quickActionModal.action, quickActionModal.intentIds)}
+              disabled={actionLoading}
+              data-testid="execution-safety-p1-high-action-confirmation-modal-confirm-button"
+            >
+              Onayla
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={overrideOpen} onOpenChange={setOverrideOpen}>
         <DialogContent data-testid="admin-production-gate-override-modal">

@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "ok": true,
+  "intent_id": "sim-intent-258e052081d64928",
+  "has_chain_links": true,
+  "events_count": 3,
+  "failed_events_count": 1,
+  "timeline_count": 4
+}

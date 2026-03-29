@@ -1403,7 +1403,10 @@ def run_bulk_recovery(
                 )
                 after_state = str(result_payload.get("status"))
         except Exception as exc:
+            db.rollback()
             error = str(exc)
+            if result_state != "skipped":
+                result_state = "failed"
 
         item_result = {
             "target_type": target_type,

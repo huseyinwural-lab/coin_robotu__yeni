@@ -86,6 +86,7 @@ import { AdminUserEconomicsPage } from "@/pages/AdminUserEconomicsPage";
 import { AdminSnapshotsPage } from "@/pages/AdminSnapshotsPage";
 import { AdminCredentialOrchestrationPage } from "@/pages/AdminCredentialOrchestrationPage";
 import { AdminExecutionReadinessPage } from "@/pages/AdminExecutionReadinessPage";
+import { AdminExecutionOperatorCenterPage } from "@/pages/AdminExecutionOperatorCenterPage";
 import { AdminBrandSettingsPage } from "@/pages/AdminBrandSettingsPage";
 import { AdminAnomalyTimelinePage } from "@/pages/AdminAnomalyTimelinePage";
 import { AdminActionAuditPage } from "@/pages/AdminActionAuditPage";
@@ -181,6 +182,7 @@ function App() {
             <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
             <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
             <Route path="execution-readiness" element={<AdminExecutionReadinessPage />} />
+            <Route path="execution/operator-center" element={<AdminExecutionOperatorCenterPage />} />
             <Route path="action-audit" element={<AdminActionAuditPage />} />
             <Route path="pipeline-control" element={<Navigate to="/admin/pipeline-operations" replace />} />
             <Route path="pipeline-monitoring" element={<Navigate to="/admin/pipeline-operations" replace />} />

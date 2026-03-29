@@ -1,0 +1,18 @@
+{
+  "status": 200,
+  "ok": true,
+  "success_count": 0,
+  "failed_count": 1,
+  "result_first": {
+    "target_type": "intent",
+    "target_id": "sim-intent-258e052081d64928",
+    "intent_id": "sim-intent-258e052081d64928",
+    "before_state": "ACKED",
+    "attempted_action": "bulk_reconcile",
+    "result": "failed",
+    "error": "execution_intent_immutable",
+    "after_state": null,
+    "correlation_id": "sim-dry-run-6ec921c7b1b94a89",
+    "payload": null
+  }
+}
