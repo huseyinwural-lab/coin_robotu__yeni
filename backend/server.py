@@ -114,6 +114,7 @@ from services.db_backup_scheduler_service import run_backup_scheduler_loop
 from services.commercial_export_scheduler_service import run_commercial_export_scheduler_loop
 from services.venue_sanity_scheduler_service import run_venue_sanity_scheduler_loop
 from services.readiness_maintenance_scheduler_service import run_readiness_maintenance_scheduler_loop
+from services.execution_microstructure_service import ExecutionMicrostructureRuntime
 from services.commercial_preview_smoke_service import (
     run_commercial_preview_http_gate_once,
     run_commercial_preview_smoke_gate,
@@ -146,6 +147,7 @@ commercial_export_scheduler_task: asyncio.Task | None = None
 preview_smoke_gate_task: asyncio.Task | None = None
 venue_sanity_scheduler_task: asyncio.Task | None = None
 readiness_maintenance_scheduler_task: asyncio.Task | None = None
+execution_microstructure_runtime: ExecutionMicrostructureRuntime | None = None
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
 STARTUP_RUNTIME_STATE = {
     "database_url_valid": False,
@@ -637,10 +639,12 @@ async def startup_event():
         STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
         logger.warning("PIPELINE_RUNTIME_SKIPPED_DATABASE_NOT_READY")
 
-    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task, execution_microstructure_runtime
     if STARTUP_RUNTIME_STATE["database_ready"]:
         from db import SessionLocal
 
+        execution_microstructure_runtime = ExecutionMicrostructureRuntime(redis_client)
+        await execution_microstructure_runtime.start()
         weekly_report_task = asyncio.create_task(run_weekly_report_loop(SessionLocal))
         exchange_health_task = asyncio.create_task(run_exchange_connection_health_loop(SessionLocal))
         backup_scheduler_task = asyncio.create_task(run_backup_scheduler_loop())
@@ -667,7 +671,9 @@ async def startup_event():
 async def shutdown_event():
     if STARTUP_RUNTIME_STATE.get("pipeline_runtime_ok"):
         await pipeline_runtime.stop()
-    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task, execution_microstructure_runtime
+    if execution_microstructure_runtime:
+        await execution_microstructure_runtime.stop()
     if weekly_report_task:
         weekly_report_task.cancel()
     if exchange_health_task:

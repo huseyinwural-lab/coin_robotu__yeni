@@ -17,6 +17,14 @@ def _safe_float(value, default: float = 0.0) -> float:
         return default
 
 
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = max(0, min(len(ordered) - 1, int(round((len(ordered) - 1) * percentile))))
+    return float(ordered[index])
+
+
 def _symbol_drift_alerts(rows: list[TestnetExecutionLog], threshold_bps: float = 25.0) -> list[dict]:
     bucket: dict[str, list[float]] = {}
     for row in rows:
@@ -154,13 +162,27 @@ def build_execution_quality_snapshot(
     rejected = len([row for row in metrics if (row.final_status or "").upper() in {"REJECTED", "EXPIRED"}])
     partial = len([row for row in metrics if (row.final_status or "").upper() == "PARTIALLY_FILLED"])
     success = len([row for row in metrics if (row.final_status or "").upper() in {"FILLED", "PARTIALLY_FILLED"}])
+    filled = len([row for row in metrics if (row.final_status or "").upper() == "FILLED"])
 
     slippage_values = [abs(_safe_float(row.slippage_pct)) for row in metrics if row.slippage_pct is not None]
     expected_slippage = (sum(slippage_values) / len(slippage_values)) if slippage_values else 0.0
     realized_slippage = expected_slippage
+    slippage_error_values = []
+    for row in metrics:
+        raw_status = dict(row.raw_exchange_status or {})
+        predicted_bps = _safe_float(raw_status.get("predicted_slippage_bps"), 0.0)
+        realized_bps = _safe_float(raw_status.get("realized_slippage_bps"), abs(_safe_float(row.slippage_pct)) * 100)
+        slippage_error_values.append(abs(realized_bps - predicted_bps))
 
     latency_values = [_safe_float(row.execution_time_ms) for row in metrics if row.execution_time_ms is not None]
     avg_latency_ms = (sum(latency_values) / len(latency_values)) if latency_values else 0.0
+    ack_latency_values = []
+    end_to_end_latency_values = []
+    for row in metrics:
+        if row.submitted_at and row.ack_at:
+            ack_latency_values.append(max((row.ack_at - row.submitted_at).total_seconds() * 1000, 0.0))
+        if row.submitted_at and row.final_at:
+            end_to_end_latency_values.append(max((row.final_at - row.submitted_at).total_seconds() * 1000, 0.0))
 
     quality_values = [_safe_float(row.execution_quality_score) for row in metrics]
     avg_quality = (sum(quality_values) / len(quality_values)) if quality_values else 0.0
@@ -200,16 +222,31 @@ def build_execution_quality_snapshot(
     return {
         "days": min(days, 7),
         "total_orders": total_orders,
+        "fill_rate": round((filled / total_orders) if total_orders > 0 else 0.0, 4),
         "placement_success_ratio": round((success / total_orders) if total_orders > 0 else 0.0, 4),
         "reject_rate": round((rejected / total_orders) if total_orders > 0 else 0.0, 4),
         "partial_fill_quality": {
             "partial_fill_rate": round((partial / total_orders) if total_orders > 0 else 0.0, 4),
             "partial_fill_count": partial,
         },
+        "ack_latency_ms": {
+            "avg": round((sum(ack_latency_values) / len(ack_latency_values)) if ack_latency_values else 0.0, 2),
+            "p95": round(_percentile(ack_latency_values, 0.95), 2),
+            "p99": round(_percentile(ack_latency_values, 0.99), 2),
+        },
+        "execution_latency_ms": {
+            "avg": round((sum(end_to_end_latency_values) / len(end_to_end_latency_values)) if end_to_end_latency_values else avg_latency_ms, 2),
+            "p95": round(_percentile(end_to_end_latency_values or latency_values, 0.95), 2),
+            "p99": round(_percentile(end_to_end_latency_values or latency_values, 0.99), 2),
+        },
         "slippage_summary": {
             "expected_slippage": round(expected_slippage, 6),
             "realized_slippage": round(realized_slippage, 6),
             "delta": round(realized_slippage - expected_slippage, 6),
+        },
+        "slippage_error_summary": {
+            "avg_abs_error_bps": round((sum(slippage_error_values) / len(slippage_error_values)) if slippage_error_values else 0.0, 6),
+            "p95_abs_error_bps": round(_percentile(slippage_error_values, 0.95), 6),
         },
         "fill_latency_ms": round(avg_latency_ms, 2),
         "execution_quality_score": round(avg_quality, 4),

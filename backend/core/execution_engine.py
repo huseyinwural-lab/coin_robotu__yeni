@@ -18,8 +18,9 @@ from core.safety.canary_mode import evaluate_canary_constraints
 from core.safety.kill_switch import evaluate_auto_kill_switch, get_kill_switch_state, is_kill_switch_active
 from core.risk_engine import evaluate_risk
 from db import redis_client
-from models import ExecutionJob, Order, Position
+from models import ExecutionJob, ExecutionMetric, Order, Position
 from services.audit_service import create_audit_log
+from services.execution_readiness_service import validate_order_precheck
 
 
 EXECUTION_QUEUE_KEY = "execution:jobs:queue"
@@ -175,6 +176,68 @@ def _sync_position_after_fill(db: Session, *, order: Order) -> None:
         row.status = "open"
 
 
+def _record_execution_metric(db: Session, *, job: ExecutionJob, order: Order, exchange_result: dict) -> None:
+    existing = db.query(ExecutionMetric).filter(ExecutionMetric.order_id == order.id).first()
+    if existing is not None:
+        return
+
+    meta = dict(job.meta_payload or {})
+    micro_guard = dict(meta.get("microstructure_guard") or {})
+    mid_price = float(meta.get("mark_price") or 0.0)
+    avg_fill_price = float(order.avg_fill_price or mid_price or 0.0) or None
+    executed_qty = float(order.filled_size or job.size or 0.0) or None
+    submitted_at = job.created_at or _utcnow()
+    ack_at = order.sent_at or job.sent_at
+    final_at = order.filled_at or order.failed_at or order.canceled_at or job.filled_at or job.failed_at or _utcnow()
+    slippage_pct = None
+    realized_slippage_bps = 0.0
+    if avg_fill_price and mid_price > 0:
+        slippage_pct = round((abs(avg_fill_price - mid_price) / mid_price) * 100, 6)
+        realized_slippage_bps = round((abs(avg_fill_price - mid_price) / mid_price) * 10000, 6)
+    predicted_slippage_bps = float(((micro_guard.get("slippage_prediction") or {}).get("expected_slippage_bps") or 0.0))
+    slippage_error_bps = round(abs(realized_slippage_bps - predicted_slippage_bps), 6)
+    quality_score = max(0.0, min(100.0, 100.0 - (realized_slippage_bps * 1.5) - ((job.total_ms or job.execution_ms or 0) / 120.0)))
+    metric = ExecutionMetric(
+        user_id=job.user_id,
+        symbol=job.symbol,
+        order_id=order.id,
+        exchange_order_id=str(order.external_order_id or f"runtime-{job.id}"),
+        client_order_id=job.idempotency_key,
+        order_type="MARKET",
+        exchange=str(micro_guard.get("selected_venue") or "binance"),
+        market_type="futures",
+        environment="paper",
+        side=str(job.side or "BUY"),
+        quote_qty=float((executed_qty or job.size or 0.0) * max(mid_price, 0.0)),
+        mid_price=max(mid_price, 0.0),
+        mid_price_timestamp=submitted_at.isoformat() if submitted_at else _utcnow().isoformat(),
+        price_avg=avg_fill_price,
+        executed_qty=executed_qty,
+        slippage_pct=slippage_pct,
+        execution_time_ms=float(job.total_ms or job.execution_ms or 0.0),
+        status=str(order.state or job.state or "NEW"),
+        final_status=str(order.state or job.state or "NEW"),
+        failure_code=str(order.reject_reason or order.fail_reason or job.reject_reason or job.fail_reason or "") or None,
+        strategy_type=str(job.strategy_name or "runtime_strategy"),
+        volatility_regime="unknown",
+        volatility_pct=0.0,
+        execution_quality_score=round(quality_score, 4),
+        submitted_at=submitted_at,
+        ack_at=ack_at,
+        final_at=final_at,
+        validation_snapshot_id=None,
+        raw_exchange_status={
+            "exchange_result": exchange_result,
+            "microstructure_guard": micro_guard,
+            "predicted_slippage_bps": predicted_slippage_bps,
+            "realized_slippage_bps": realized_slippage_bps,
+            "slippage_error_bps": slippage_error_bps,
+        },
+        state_machine_path=[str(item) for item in (exchange_result.get("states") or [])],
+    )
+    db.add(metric)
+
+
 def handle_execution_result(db: Session, *, job: ExecutionJob, order: Order, exchange_result: dict) -> dict:
     order.external_order_id = exchange_result.get("external_order_id")
     order.avg_fill_price = float(exchange_result.get("avg_fill_price") or 0.0)
@@ -216,6 +279,7 @@ def handle_execution_result(db: Session, *, job: ExecutionJob, order: Order, exc
         )
         previous_state = state
 
+    _record_execution_metric(db, job=job, order=order, exchange_result=exchange_result)
     db.commit()
     return {
         "execution_job_id": job.id,
@@ -251,6 +315,46 @@ def submit_signal(
             "risk": {"allowed": False, "reject_reason": "kill_switch_active", "details": state},
         }
 
+    precheck = validate_order_precheck(
+        db,
+        user_id=user_id,
+        symbol=symbol,
+        market_type="futures",
+        order_type=str(signal.get("order_type") or "market"),
+        side=side,
+        price=float(signal.get("mark_price") or 0.0),
+        size=size,
+        leverage=int(signal.get("leverage") or 1),
+        margin_mode=str(signal.get("margin_mode") or "isolated"),
+    )
+    if not precheck.get("valid"):
+        return {
+            "status": "rejected",
+            "execution_job_id": None,
+            "idempotency_key": None,
+            "state": "FAILED",
+            "risk": {"allowed": False, "reject_reason": "precheck_failed", "details": precheck},
+        }
+    adjusted_size = float((precheck.get("adjustments") or {}).get("adjusted_size") or size)
+    if adjusted_size > 0 and adjusted_size < size:
+        size = adjusted_size
+        signal = {**signal, "size": adjusted_size}
+        create_audit_log(
+            db,
+            action="runtime_execution_microstructure_adjusted",
+            entity_type="execution_job",
+            entity_id=str(idempotency_key or f"{user_id}:{symbol}"),
+            actor_user_id=user_id,
+            actor_role="user",
+            severity="warning",
+            details={
+                "requested_size": float(signal.get("size") or 0.0),
+                "adjusted_size": adjusted_size,
+                "guard_state": (precheck.get("microstructure_guard") or {}).get("state"),
+            },
+            commit=False,
+        )
+
     idem_key = idempotency_key or _build_idempotency_key(
         user_id=user_id,
         symbol=symbol,
@@ -280,6 +384,8 @@ def submit_signal(
             "confidence": float(signal.get("confidence") or 0.0),
             "mark_price": float(signal.get("mark_price") or 1.0),
             "leverage": int(signal.get("leverage") or 1),
+            "microstructure_guard": precheck.get("microstructure_guard") or {},
+            "requested_size": float(signal.get("size") or size),
         },
     )
     db.add(job)

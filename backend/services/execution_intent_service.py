@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from db import redis_client
 from models import AuditLog, BotProfile, PaperPosition, Position, PositionLedgerEvent, User, UserExecutionIntent
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
+from services.audit_service import create_audit_log
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
 from services.execution_pipeline_orchestrator import ExecutionPipelineViolation, run_execution_pipeline
@@ -1224,6 +1225,37 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
             leverage=int((intent.normalized_order_payload or {}).get("leverage") or 1),
             margin_mode=str((intent.normalized_order_payload or {}).get("margin_mode") or "isolated"),
         )
+        normalized_payload = dict(intent.normalized_order_payload or {})
+        normalized_payload["microstructure_guard"] = precheck.get("microstructure_guard") or {}
+        intent.normalized_order_payload = normalized_payload
+        adjusted_size = float((precheck.get("adjustments") or {}).get("adjusted_size") or precheck_size)
+        if adjusted_size > 0 and adjusted_size < precheck_size:
+            reduction_ratio = adjusted_size / max(precheck_size, 1e-6)
+            intent.size = adjusted_size
+            if precheck_price > 0:
+                intent.notional = round(adjusted_size * precheck_price, 8)
+            elif float(intent.notional or 0.0) > 0:
+                intent.notional = round(float(intent.notional or 0.0) * reduction_ratio, 8)
+            flags = list(intent.risk_flags or [])
+            if "microstructure_size_reduced" not in flags:
+                flags.append("microstructure_size_reduced")
+            intent.risk_flags = flags
+            create_audit_log(
+                db,
+                action="execution_microstructure_suitability_logged",
+                entity_type="user_execution_intent",
+                entity_id=intent.id,
+                actor_user_id=user_id,
+                actor_role="USER",
+                severity="warning",
+                details={
+                    "state": (precheck.get("microstructure_guard") or {}).get("state"),
+                    "requested_size": precheck_size,
+                    "adjusted_size": adjusted_size,
+                    "selected_venue": (precheck.get("microstructure_guard") or {}).get("selected_venue"),
+                },
+                commit=False,
+            )
         if not precheck.get("valid"):
             raise ValueError("order_validation_failed")
 
@@ -1602,6 +1634,36 @@ def approve_execution_intent(
             entity_type="user_execution_intent",
             entity_id=intent.id,
         )
+        approval_price = float(intent.price or 0.0)
+        approval_size = float(intent.size or 0.0)
+        approval_notional = float(intent.notional or 0.0)
+        if approval_price <= 0 and approval_notional > 0 and approval_size > 0:
+            approval_price = approval_notional / approval_size
+        approval_precheck = validate_order_precheck(
+            db,
+            user_id=intent.user_id,
+            symbol=str(intent.symbol or "").upper(),
+            market_type=str(intent.market_type or "spot"),
+            order_type=str((intent.normalized_order_payload or {}).get("order_type") or "market"),
+            side=str(intent.side or "buy"),
+            price=approval_price,
+            size=approval_size,
+            leverage=int((intent.normalized_order_payload or {}).get("leverage") or 1),
+            margin_mode=str((intent.normalized_order_payload or {}).get("margin_mode") or "isolated"),
+        )
+        normalized_payload = dict(intent.normalized_order_payload or {})
+        normalized_payload["microstructure_guard"] = approval_precheck.get("microstructure_guard") or {}
+        intent.normalized_order_payload = normalized_payload
+        approval_adjusted_size = float((approval_precheck.get("adjustments") or {}).get("adjusted_size") or approval_size)
+        if approval_adjusted_size > 0 and approval_adjusted_size < approval_size:
+            reduction_ratio = approval_adjusted_size / max(approval_size, 1e-6)
+            intent.size = approval_adjusted_size
+            if approval_price > 0:
+                intent.notional = round(approval_adjusted_size * approval_price, 8)
+            elif approval_notional > 0:
+                intent.notional = round(approval_notional * reduction_ratio, 8)
+        if not approval_precheck.get("valid"):
+            raise ValueError("order_validation_failed")
 
     normalized = intent.normalized_order_payload or {}
     decision_gate = dict(normalized.get("decision_gate") or {})

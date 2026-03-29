@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
 from models import User
 from services.audit_service import create_audit_log
+from services.execution_microstructure_service import build_microstructure_venue_summary, build_order_microstructure_assessment
 from services.futures_microstructure_service import build_microstructure_status
 from services.pipeline.runtime import pipeline_runtime
 
@@ -29,3 +30,32 @@ def futures_microstructure_status(current_admin: User = Depends(require_admin), 
         },
     )
     return status
+
+
+@router.get("/venues")
+def futures_microstructure_venues(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = (current_admin, db)
+    return build_microstructure_venue_summary(pipeline_runtime.cache if pipeline_runtime else None)
+
+
+@router.get("/guard-preview")
+def futures_microstructure_guard_preview(
+    symbol: str = Query(..., min_length=3),
+    side: str = Query("buy"),
+    size: float = Query(..., gt=0),
+    price: float = Query(..., gt=0),
+    venue: str | None = Query(default=None),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return build_order_microstructure_assessment(
+        db,
+        pipeline_runtime.cache if pipeline_runtime else None,
+        user_id=current_admin.id,
+        symbol=symbol,
+        side=side,
+        price=price,
+        size=size,
+        order_type="market",
+        preferred_venue=venue,
+    )

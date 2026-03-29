@@ -19,6 +19,7 @@ def _parse_ts(value) -> datetime | None:
 class MicrostructureSnapshot:
     symbol: str
     timestamp: str
+    data_state: str
     best_bid: float
     best_ask: float
     mid_price: float
@@ -73,13 +74,9 @@ def build_microstructure_snapshot(
 
     bid_depth_top_n = float(orderbook_payload.get("bid_depth_top_n") or trade_stats_payload.get("bid_depth_top_n") or 0.0)
     ask_depth_top_n = float(orderbook_payload.get("ask_depth_top_n") or trade_stats_payload.get("ask_depth_top_n") or 0.0)
-    if bid_depth_top_n <= 0 or ask_depth_top_n <= 0:
-        quote_volume = float(ticker_payload.get("quote_volume") or 0.0)
-        synthetic_depth = max(quote_volume / 1500, 1.0)
-        if bid_depth_top_n <= 0:
-            bid_depth_top_n = synthetic_depth
-        if ask_depth_top_n <= 0:
-            ask_depth_top_n = synthetic_depth
+    data_state = "VALID" if best_bid > 0 and best_ask > 0 and bid_depth_top_n > 0 and ask_depth_top_n > 0 else "INVALID"
+    if data_state != "VALID":
+        stale_data = True
 
     total_depth = bid_depth_top_n + ask_depth_top_n
     depth_imbalance = ((bid_depth_top_n - ask_depth_top_n) / total_depth) if total_depth > 0 else 0.0
@@ -101,6 +98,7 @@ def build_microstructure_snapshot(
     snapshot = MicrostructureSnapshot(
         symbol=symbol.upper(),
         timestamp=now.isoformat(),
+        data_state=data_state,
         best_bid=round(best_bid, 8),
         best_ask=round(best_ask, 8),
         mid_price=round(mid_price, 8),

@@ -132,9 +132,12 @@ def validate_order_precheck(
     margin_mode: str,
 ) -> dict:
     from services.live_mode_service import get_or_create_live_config
+    from services.execution_microstructure_service import build_order_microstructure_assessment
+    from services.pipeline.runtime import pipeline_runtime
 
     _ = (symbol, order_type, side)
     config = get_or_create_live_config(db)
+    cache = pipeline_runtime.cache if pipeline_runtime else None
 
     leverage_limit = max(int(config.leverage_cap or 1), 1)
     max_exposure = float(config.max_notional_exposure or 0)
@@ -209,11 +212,54 @@ def validate_order_precheck(
             }
         )
 
+    microstructure_guard = build_order_microstructure_assessment(
+        db,
+        cache,
+        user_id=user_id,
+        symbol=symbol,
+        side=side,
+        price=float(price or 0.0),
+        size=requested_size,
+        order_type=order_type,
+    )
+    guard_state = str(microstructure_guard.get("state") or "BLOCK").upper()
+    if guard_state == "BLOCK":
+        violations.append(
+            {
+                "code": "microstructure_guard_blocked",
+                "message": "Microstructure suitability check trade açılmasını engelledi",
+                "details": {
+                    "state": guard_state,
+                    "reasons": microstructure_guard.get("reasons") or [],
+                    "selected_venue": microstructure_guard.get("selected_venue"),
+                },
+            }
+        )
+    elif guard_state == "SWITCH_EXECUTION_MODE" and str(order_type or "market").lower() != "limit":
+        violations.append(
+            {
+                "code": "execution_mode_switch_required",
+                "message": "Fast market nedeniyle execution mode değişimi gerekiyor",
+                "details": {
+                    "state": guard_state,
+                    "recommended_order_type": microstructure_guard.get("recommended_order_type"),
+                    "reasons": microstructure_guard.get("reasons") or [],
+                },
+            }
+        )
+
     readiness = evaluate_execution_readiness(db, user_id=user_id)
+    adjustments = {
+        "adjusted_size": microstructure_guard.get("adjusted_size") if guard_state == "REDUCE_SIZE" else requested_size,
+        "adjusted_notional": microstructure_guard.get("adjusted_notional") if guard_state == "REDUCE_SIZE" else notional,
+        "recommended_order_type": microstructure_guard.get("recommended_order_type"),
+    }
     result = {
         "valid": len(violations) == 0,
         "violations": violations,
         "execution_mode": str(readiness.get("mode") or "MOCKED").lower(),
+        "microstructure_guard": microstructure_guard,
+        "adjustments": adjustments,
         "checks": {
             "leverage_limit": leverage_limit,
             "requested_leverage": int(leverage or 1),
@@ -224,6 +270,7 @@ def validate_order_precheck(
             "min_notional": min_notional,
             "market_type": market,
             "margin_mode": margin,
+            "microstructure_state": guard_state,
         },
     }
     result["explain"] = build_trade_explain(

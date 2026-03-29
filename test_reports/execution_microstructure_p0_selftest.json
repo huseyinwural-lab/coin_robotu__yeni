@@ -1,0 +1,39 @@
+{
+  "login": {
+    "status": 200,
+    "ok": true
+  },
+  "microstructure_status": {
+    "status": 200,
+    "ok": true,
+    "portfolio_state": "SAFE",
+    "binance_status": "READY",
+    "bybit_status": "INVALID"
+  },
+  "microstructure_venues": {
+    "status": 200,
+    "ok": true,
+    "binance_ready_count": 3,
+    "bybit_ready_count": 0
+  },
+  "guard_preview": {
+    "status": 200,
+    "ok": true,
+    "state": "SWITCH_EXECUTION_MODE",
+    "selected_venue": "binance",
+    "predicted_slippage_bps": 7.016249
+  },
+  "runtime_submit_capacity_probe": {
+    "status": 200,
+    "ok": true,
+    "flow_status": "rejected",
+    "reject_reason": "precheck_failed",
+    "guard_state": "BLOCK"
+  },
+  "runtime_submit_small": {
+    "status": 200,
+    "ok": true,
+    "flow_status": "rejected",
+    "job_id": null
+  }
+}

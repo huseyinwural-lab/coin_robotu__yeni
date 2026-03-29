@@ -10,6 +10,7 @@ from core.futures.microstructure.orderbook_thinning_detector import OrderbookThi
 from core.futures.microstructure.quote_stability_detector import QuoteStabilityDetector
 from core.futures.microstructure.slippage_anomaly_estimator import SlippageAnomalyEstimator
 from core.futures.microstructure.spread_shock_detector import SpreadShockDetector
+from services.execution_microstructure_service import build_microstructure_venue_summary
 from services.pipeline.universe_engine import build_effective_universe
 
 
@@ -189,6 +190,8 @@ def build_microstructure_status(db, cache, user_id: str) -> dict:
     if cache:
         cache.set("futures:microstructure:metrics", json.dumps(metrics_payload))
 
+    venue_summary = build_microstructure_venue_summary(cache, symbols) if cache else {"tracked_symbols": symbols, "venues": {}}
+
     return {
         "portfolio_microstructure_state": state,
         "portfolio_microstructure_risk_score": round(risk_score, 4),
@@ -197,5 +200,6 @@ def build_microstructure_status(db, cache, user_id: str) -> dict:
         "execution_suitability": execution_suitability,
         "symbols": symbol_rows,
         "metrics": metrics_payload,
+        "venue_summary": venue_summary,
         "updated_at": symbol_rows[0]["snapshot"]["timestamp"],
     }
