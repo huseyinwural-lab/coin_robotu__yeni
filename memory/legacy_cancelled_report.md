@@ -1,0 +1,118 @@
+# Legacy CANCELLED Tarama Raporu
+
+## Scope
+- Authoritative execution path: execution-safety + execution-readiness + runtime_execution
+
+## Sonuç Özeti
+- Authoritative path eşleşme sayısı: 7
+- Scope dışı eşleşme sayısı: 108
+
+## Scope dışı kalan eşleşmeler
+- /app/backend/runtime_control/override_controller.py:109:    cancelled = None
+- /app/backend/runtime_control/override_controller.py:112:        if item.get("override_id") == override_id and cancelled is None:
+- /app/backend/runtime_control/override_controller.py:113:            item["status"] = "cancelled"
+- /app/backend/runtime_control/override_controller.py:114:            item["cancelled_at"] = now.isoformat()
+- /app/backend/runtime_control/override_controller.py:115:            item["cancelled_by"] = actor_user_id
+- /app/backend/runtime_control/override_controller.py:118:            cancelled = item
+- /app/backend/runtime_control/override_controller.py:123:    if cancelled is None:
+- /app/backend/runtime_control/override_controller.py:124:        return {"cancelled": False, "override_id": override_id}
+- /app/backend/runtime_control/override_controller.py:132:            payload=cancelled,
+- /app/backend/runtime_control/override_controller.py:137:    return {"cancelled": True, "override": cancelled}
+- /app/backend/core/execution/futures_cancel_replace_guard.py:28:            return {"can_replace": True, "reason_code": "CANCELLED_RECONCILED"}
+- /app/backend/core/execution/futures_cancel_replace_guard.py:31:        return {"can_replace": False, "reason_code": "ORDER_NOT_CANCELLED"}
+- /app/backend/core/execution/futures_execution_reconciler.py:14:        elif status in {"CANCELED", "CANCELLED"}:
+- /app/backend/core/execution/futures_execution_reconciler.py:15:            state = "cancelled"
+- /app/backend/core/execution/futures_testnet_adapter.py:32:        return {"status_code": status_code, "payload": payload, "cancelled": status_code == 200}
+- /app/backend/core/readiness/go_live_validator.py:1819:    cancel_ok = cancel_status_raw == "CANCELLED" and not cancel_mocked
+- /app/backend/core/readiness/go_live_validator.py:1847:    cancel_ok = "CANCELLED" in lifecycle_states or "CANCELED" in lifecycle_states
+- /app/backend/services/runtime_ops_service.py:13:TERMINAL_STATES = {"filled", "canceled", "cancelled", "rejected", "expired"}
+- /app/backend/services/runtime_ops_service.py:201:        return {"status": "cancelled", "intent_id": intent_id}
+- /app/backend/services/execution_intent_service.py:46:    "PREVIEWED": {"QUEUED", "REJECTED", "CANCELLED"},
+- /app/backend/services/execution_intent_service.py:47:    "SUBMITTED": {"QUEUED", "REJECTED", "CANCELLED"},
+- /app/backend/services/execution_intent_service.py:48:    "QUEUED": {"APPROVED", "REJECTED", "CANCELLED"},
+- /app/backend/services/execution_intent_service.py:49:    "APPROVED": {"RELEASED", "CANCELLED"},
+- /app/backend/services/execution_intent_service.py:50:    "REJECTED": {"QUEUED", "CANCELLED"},
+- /app/backend/services/execution_intent_service.py:52:    "CANCELLED": set(),
+- /app/backend/services/execution_intent_service.py:304:    if status == "CANCELLED":
+- /app/backend/services/execution_intent_service.py:1300:    if intent.status in {"RELEASED", "REJECTED", "CANCELLED"}:
+- /app/backend/services/execution_intent_service.py:1303:    intent.status = "CANCELLED"
+- /app/backend/services/execution_intent_service.py:1304:    intent.cancelled_at = datetime.now(timezone.utc)
+- /app/backend/services/execution_intent_service.py:1313:        decision_status="CANCELLED",
+- /app/backend/services/execution_intent_service.py:1314:        reason_codes=["execution_intent_cancelled"],
+- /app/backend/services/execution_intent_service.py:1993:    intent.cancelled_at = None
+- /app/backend/services/execution_intent_service.py:2018:        target_status="CANCELLED",
+- /app/backend/services/execution_intent_service.py:2020:        reason="execution_cancelled_by_admin",
+- /app/backend/services/execution_intent_service.py:2022:    intent.cancelled_at = datetime.now(timezone.utc)
+- /app/backend/services/user_live_dashboard_service.py:27:REJECT_STATUSES = {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}
+- /app/backend/services/pipeline/execution_engine.py:45:            path.extend(["cancel_requested", "cancelled", "failed"])
+- /app/backend/services/pipeline/execution_engine.py:68:            path.extend(["cancel_requested", "cancelled", "failed"])
+- /app/backend/services/pipeline/execution_engine.py:87:            path.extend(["cancel_requested", "cancelled", "failed"])
+- /app/backend/services/pipeline/execution_engine.py:91:        path.extend(["cancel_requested", "cancelled", "failed"])
+- /app/backend/services/pipeline/execution_engine.py:187:    if final_state in {"cancelled", "failed", "rejected"}:
+- /app/backend/services/user_scanner_operations_service.py:17:REJECT_STATUSES = {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}
+- /app/backend/services/live_mode_service.py:1513:        "cancelled": 20,
+- /app/backend/services/live_mode_service.py:1536:        return "cancelled"
+- /app/backend/services/live_mode_service.py:1656:        release_gate_status="WARNING" if final_status in {"partial_fill", "cancelled"} else ("PASS" if final_status == "filled" else "BLOCKED"),
+- /app/backend/services/live_mode_service.py:2804:        execution_simulation_pass = bool(latest_exec and latest_exec.status in {"filled", "partial_fill", "cancelled"})
+- /app/backend/services/exchange_adapter_smoke_service.py:95:                if row.get("exchange") == "bybit" and not row.get("mocked") and row.get("status") in {"SUBMITTED", "CANCELLED"}
+- /app/backend/services/strategy_domain_service.py:1509:    rejected_intents = len([row for row in intent_rows if str(row.status or "").lower() in {"rejected", "blocked", "cancelled"}])
+- /app/backend/services/paper_exchange_adapter_service.py:15:            status = "cancelled"
+- /app/backend/services/paper_exchange_adapter_service.py:30:        return {"external_order_id": external_order_id, "status": "cancelled"}
+- /app/backend/services/live_trading_dashboard_service.py:31:REJECT_STATUSES = {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}
+- /app/backend/services/identity_control_service.py:1570:        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invite_cannot_be_cancelled")
+- /app/backend/services/identity_control_service.py:1571:    row.status = "cancelled"
+- /app/backend/services/identity_control_service.py:1572:    row.cancelled_at = _utcnow()
+- /app/backend/services/identity_control_service.py:1575:    return {"invite_id": row.id, "status": row.status, "cancelled_at": row.cancelled_at}
+- /app/backend/routers/admin_live_trading_dashboard.py:528:            cancelled = 0
+- /app/backend/routers/admin_live_trading_dashboard.py:530:                intent.status = "CANCELLED"
+- /app/backend/routers/admin_live_trading_dashboard.py:531:                intent.cancelled_at = now
+- /app/backend/routers/admin_live_trading_dashboard.py:532:                cancelled += 1
+- /app/backend/routers/admin_live_trading_dashboard.py:533:            action_result = {"cancelled_intents": cancelled}
+- /app/backend/routers/identity_control.py:1237:                "cancelled_at": row.cancelled_at,
+- /app/backend/routers/admin_action_center.py:650:            row.cancelled_at = None
+- /app/backend/routers/venues.py:731:        (not bool(row.get("mocked"))) and str(row.get("status") or "") in {"SUBMITTED", "CANCELLED"}
+- /app/backend/routers/venues.py:737:    cancel_ok = any(str((row.get("cancel") or {}).get("status") or "") in {"CANCELLED", "MOCKED"} for row in execution_rows)
+- /app/backend/routers/admin_phase3.py:109:    "cancelled",
+- /app/backend/routers/admin_phase3.py:111:STATUS_ENUM = {"filled", "timeout", "rejected", "failed", "cancelled", "submitted", "pending"}
+- /app/backend/routers/admin_phase3.py:410:        "cancelled": 0,
+- /app/backend/routers/admin_phase3.py:1461:        target_state = "cancelled"
+- /app/backend/routers/admin_phase3_modules/export.py:77:    dead_letter_count = transitions_query.filter(ExecutionStateTransition.state.in_(["failed", "rejected", "cancelled"])).count()
+- /app/backend/routers/admin_phase3_modules/export.py:105:                "cancelled",
+- /app/backend/routers/admin_phase3_modules/export.py:107:            "status": ["filled", "timeout", "rejected", "failed", "cancelled", "submitted", "pending"],
+- /app/backend/routers/admin_execution.py:853:        action="EXECUTION_INTENT_CANCELLED",
+- /app/backend/routers/user_execution.py:602:        action="EXECUTION_INTENT_CANCELLED",
+- /app/backend/routers/user_execution.py:609:    return ExecutionIntentCancelResponse(intent_id=intent.id, intent_status=intent.status, cancelled=True)
+- /app/backend/model_domains/identity_control.py:182:    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+- /app/backend/model_domains/risk_execution_positions.py:232:    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+- /app/backend/migrations/versions/20260329_0097_execution_safety_environment_policy.py:37:        op.execute("UPDATE execution_intents SET status='CANCELED' WHERE upper(status)='CANCELLED'")
+- /app/backend/migrations/versions/20260329_0097_execution_safety_environment_policy.py:40:        op.execute("UPDATE execution_intent_events SET event_status='CANCELED' WHERE upper(event_status)='CANCELLED'")
+- /app/backend/migrations/versions/20260329_0097_execution_safety_environment_policy.py:46:        op.execute("UPDATE execution_intent_events SET event_status='CANCELLED' WHERE upper(event_status)='CANCELED'")
+- /app/backend/migrations/versions/20260329_0097_execution_safety_environment_policy.py:49:        op.execute("UPDATE execution_intents SET status='CANCELLED' WHERE upper(status)='CANCELED'")
+- /app/backend/migrations/versions/20260312_0026_execution_intents.py:48:        sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True),
+- /app/backend/migrations/versions/20260324_0072_identity_control_p1_lifecycle.py:35:    if not _has_column(bind, "user_invite_tokens", "cancelled_at"):
+- /app/backend/migrations/versions/20260324_0072_identity_control_p1_lifecycle.py:36:        op.add_column("user_invite_tokens", sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True))
+- /app/backend/migrations/versions/20260324_0072_identity_control_p1_lifecycle.py:42:        ("user_invite_tokens", "cancelled_at"),
+- /app/backend/tests/test_phase3_iter2_hardening_and_states.py:218:    assert states == ["created", "submitted", "acknowledged", "partially_filled", "cancel_requested", "cancelled"]
+- /app/backend/tests/test_execution_control_recovery_p0.py:596:                "payload": {"to_state": "cancelled"},
+- /app/backend/tests/test_execution_control_recovery_p0.py:604:            assert data.get("current_state") == "cancelled"
+- /app/backend/tests/test_execution_control_recovery_p0.py:633:        assert data.get("current_state") == "cancelled"
+- /app/backend/tests/test_execution_readiness_core_p0.py:224:            expected_states = ["CREATED", "SUBMITTED", "ACKED", "FILLED", "FAILED", "CANCELLED", "QUARANTINED"]
+- /app/backend/tests/test_execution_readiness_core_p0.py:450:        expected_states = ["CREATED", "SUBMITTED", "ACKED", "FILLED", "FAILED", "CANCELLED", "QUARANTINED"]
+- /app/backend/tests/test_execution_readiness_core_p0.py:458:        assert len(INTENT_ALLOWED_TRANSITIONS["CANCELLED"]) == 0, "CANCELLED should be terminal"
+- /app/backend/tests/test_go_live_validator_p0.py:71:            "cancel": {"status": "CANCELLED", "mocked": False},
+- /app/backend/tests/test_execution_decision_gate_p0_p1_p2.py:455:        assert data.get("status") == "CANCELLED"
+- /app/backend/tests/test_runtime_control_endpoints.py:302:        assert cancel_data.get("result", {}).get("cancelled") is True
+- /app/backend/tests/test_runtime_control_endpoints.py:303:        print(f"Override cancelled: id={override_id}")
+- /app/backend/tests/test_p1p2_readiness_validation.py:310:        """Verify lifecycle states include CREATED, PARTIALLY_FILLED, FILLED, REJECTED, CANCELLED"""
+- /app/backend/tests/test_p1p2_readiness_validation.py:346:                "states": ["CREATED", "OPEN", "PARTIALLY_FILLED", "FILLED", "REJECTED", "CANCELLED"],
+- /app/backend/tests/test_p1p2_readiness_validation.py:347:                "events": ["ORDER_CREATED", "ORDER_FILLED", "ORDER_CANCELLED"],
+- /app/backend/tests/test_go_live_validator_p1.py:77:            "cancel": {"status": "CANCELLED", "mocked": False},
+- /app/backend/tests/test_iteration50_comprehensive.py:393:        assert cancel_res.json()["cancelled"] == True
+- /app/backend/tests/test_p0_readiness_invariants.py:79:            "cancel": {"status": "CANCELLED", "mocked": False},
+- /app/backend/tests/test_iteration56_admin_finalization.py:191:    def test_execution_queue_cancelled_filter(self, admin_headers):
+- /app/backend/tests/test_iteration56_admin_finalization.py:192:        """GET /api/admin/execution-queue?status_filter=CANCELLED should return 200"""
+- /app/backend/tests/test_iteration56_admin_finalization.py:194:                               params={"status_filter": "CANCELLED", "limit": 100},
+- /app/backend/tests/test_execution_readiness_core_p0_service.py:192:            expected_states = ["CREATED", "SUBMITTED", "ACKED", "FILLED", "FAILED", "CANCELLED", "QUARANTINED"]
+- /app/backend/tests/test_execution_readiness_core_p0_service.py:399:        expected_states = ["CREATED", "SUBMITTED", "ACKED", "FILLED", "FAILED", "CANCELLED", "QUARANTINED"]
+- /app/backend/tests/test_execution_readiness_core_p0_service.py:410:        terminal_states = ["FILLED", "FAILED", "CANCELLED"]
+- /app/backend/schemas.py:2852:    cancelled: bool

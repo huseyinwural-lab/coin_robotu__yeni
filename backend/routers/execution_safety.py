@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -22,6 +22,16 @@ from services.execution_safety_namespace_service import (
     get_execution_safety_quarantine,
     get_unified_environment_policy,
     update_unified_environment_policy,
+)
+from services.execution_safety_advanced_service import (
+    get_artifact_by_intent,
+    get_intent_reconcile,
+    get_intent_timeline,
+    get_latest_testnet_acceptance,
+    get_quarantine_detail,
+    get_testnet_acceptance_history,
+    run_bulk_recovery,
+    run_testnet_acceptance,
 )
 
 
@@ -66,6 +76,32 @@ def execution_safety_intents(
     )
 
 
+@router.get("/intents/{intent_id}/timeline")
+def execution_safety_intent_timeline(
+    intent_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    try:
+        return get_intent_timeline(db, intent_id=intent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/intents/{intent_id}/reconcile")
+def execution_safety_intent_reconcile(
+    intent_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    try:
+        return get_intent_reconcile(db, intent_id=intent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
 @router.get("/quarantine")
 def execution_safety_quarantine(
     limit: int = Query(default=200, ge=1, le=500),
@@ -74,6 +110,19 @@ def execution_safety_quarantine(
 ):
     _ = current_user
     return get_execution_safety_quarantine(db, limit=limit)
+
+
+@router.get("/quarantine/{quarantine_id}")
+def execution_safety_quarantine_detail(
+    quarantine_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    try:
+        return get_quarantine_detail(db, quarantine_id=quarantine_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.post("/quarantine/{quarantine_id}/{action}")
@@ -132,6 +181,19 @@ def execution_safety_incident_export(
     return export_execution_incident_package(db, include_events=include_events, user_id=user_id)
 
 
+@router.get("/artifacts/{intent_id}")
+def execution_safety_artifact_by_intent(
+    intent_id: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    try:
+        return get_artifact_by_intent(db, intent_id=intent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
 @router.get("/recovery")
 def execution_safety_recovery_overview(
     current_user: User = Depends(require_admin),
@@ -158,6 +220,51 @@ def execution_safety_recovery_batch(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+def _parse_bulk_payload(payload: dict | None) -> dict:
+    source = dict(payload or {})
+    return {
+        "selection_mode": str(source.get("selection_mode") or "explicit_ids"),
+        "intent_ids": list(source.get("intent_ids") or []),
+        "quarantine_ids": list(source.get("quarantine_ids") or []),
+        "filters": dict(source.get("filters") or {}),
+        "reason": str(source.get("reason") or "bulk_action"),
+        "requested_by": str(source.get("requested_by") or "admin"),
+    }
+
+
+@router.post("/recovery/bulk-retry")
+def execution_safety_bulk_retry(
+    payload: dict = Body(default={}),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    parsed = _parse_bulk_payload(payload)
+    return run_bulk_recovery(db, action="bulk_retry", **parsed)
+
+
+@router.post("/recovery/bulk-cancel")
+def execution_safety_bulk_cancel(
+    payload: dict = Body(default={}),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    parsed = _parse_bulk_payload(payload)
+    return run_bulk_recovery(db, action="bulk_cancel", **parsed)
+
+
+@router.post("/recovery/bulk-reconcile")
+def execution_safety_bulk_reconcile(
+    payload: dict = Body(default={}),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    parsed = _parse_bulk_payload(payload)
+    return run_bulk_recovery(db, action="bulk_reconcile", **parsed)
 
 
 @router.get("/recovery/policy")
@@ -212,6 +319,33 @@ def execution_safety_recovery_action(
         detail = str(exc)
         status_code = status.HTTP_404_NOT_FOUND if detail == "intent_not_found" else status.HTTP_400_BAD_REQUEST
         raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.post("/acceptance/testnet/run")
+def execution_safety_acceptance_run(
+    symbol: str = Query(default="BTCUSDT"),
+    qty: float = Query(default=0.001),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return run_testnet_acceptance(db, symbol=symbol, qty=qty, requested_by=current_user.id)
+
+
+@router.get("/acceptance/testnet/latest")
+def execution_safety_acceptance_latest(
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    return get_latest_testnet_acceptance()
+
+
+@router.get("/acceptance/testnet/history")
+def execution_safety_acceptance_history(
+    limit: int = Query(default=50, ge=1, le=500),
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    return get_testnet_acceptance_history(limit=limit)
 
 
 @router.get("/observability")

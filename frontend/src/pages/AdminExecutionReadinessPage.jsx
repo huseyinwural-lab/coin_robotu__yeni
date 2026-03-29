@@ -48,6 +48,7 @@ export const AdminExecutionReadinessPage = () => {
   const [reconciliationSummary, setReconciliationSummary] = useState(null);
   const [gateTrend, setGateTrend] = useState(null);
   const [interventionTrail, setInterventionTrail] = useState(null);
+  const [acceptanceLatest, setAcceptanceLatest] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const previousFailCountRef = useRef(0);
@@ -79,6 +80,7 @@ export const AdminExecutionReadinessPage = () => {
         { data: reconciliationPayload },
         { data: trendPayload },
         { data: interventionPayload },
+        { data: acceptanceLatestPayload },
       ] = await Promise.all([
         apiClient.get(`/phase4/admin/production-gate?refresh_checks=${refreshChecks ? "true" : "false"}`),
         apiClient.get("/admin/execution-readiness"),
@@ -93,6 +95,7 @@ export const AdminExecutionReadinessPage = () => {
         apiClient.get("/execution-safety/recovery/reconciliation-summary?limit=600"),
         apiClient.get("/execution-safety/recovery/gate-trends?days=14"),
         apiClient.get("/execution-safety/recovery/intervention-audit?limit=120"),
+        apiClient.get("/execution-safety/acceptance/testnet/latest"),
       ]);
       setGate(gateData);
       setReadiness(readinessData);
@@ -107,6 +110,7 @@ export const AdminExecutionReadinessPage = () => {
       setReconciliationSummary(reconciliationPayload || null);
       setGateTrend(trendPayload || null);
       setInterventionTrail(interventionPayload || null);
+      setAcceptanceLatest(acceptanceLatestPayload?.latest || null);
 
       const flappingConfig = historyData?.flapping_config || {};
       if (flappingConfig.window_sec) setFlappingWindowSec(Number(flappingConfig.window_sec));
@@ -178,6 +182,15 @@ export const AdminExecutionReadinessPage = () => {
       await runAction(async () => {
         await apiClient.post(`/execution-safety/recovery/batch?action=${action}&limit=50`);
       }, `Batch ${action} tamamlandı`);
+    },
+    [runAction]
+  );
+
+  const handleRunAcceptance = useCallback(
+    async () => {
+      await runAction(async () => {
+        await apiClient.post("/execution-safety/acceptance/testnet/run?symbol=BTCUSDT&qty=0.001");
+      }, "Testnet acceptance run tamamlandı");
     },
     [runAction]
   );
@@ -410,6 +423,7 @@ export const AdminExecutionReadinessPage = () => {
             <Button variant="outline" onClick={() => setNewFailPulse(false)} data-testid="admin-production-gate-clear-fail-pulse-button">Yeni FAIL işaretini temizle</Button>
             <Button variant="outline" onClick={handleExportJson} data-testid="admin-production-gate-export-json-button">JSON Export</Button>
             <Button variant="outline" onClick={handleIncidentPackageExport} data-testid="admin-production-gate-export-incident-package-button">Incident Paketi Export</Button>
+            <Button variant="outline" onClick={handleRunAcceptance} data-testid="admin-production-gate-run-testnet-acceptance-button">Testnet Acceptance Run</Button>
             <Button onClick={() => handleRerun()} disabled={actionLoading} data-testid="admin-production-gate-rerun-all-button">Tüm Checkleri Rerun</Button>
           </div>
         </div>
@@ -629,7 +643,7 @@ export const AdminExecutionReadinessPage = () => {
         </article>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3" data-testid="execution-safety-p1-analytics-grid">
+      <div className="grid gap-4 lg:grid-cols-4" data-testid="execution-safety-p1-analytics-grid">
         <article className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="execution-safety-reconciliation-card">
           <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-reconciliation-title">Reconciliation Özeti</h3>
           <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-reconciliation-duplicate-count">
@@ -662,6 +676,13 @@ export const AdminExecutionReadinessPage = () => {
               {item.action} / {item.actor_role} / {item.entity_id}
             </p>
           ))}
+        </article>
+
+        <article className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="execution-safety-acceptance-card">
+          <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-acceptance-title">Testnet Acceptance</h3>
+          <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-acceptance-latest-id">latest_run: {acceptanceLatest?.payload?.acceptance_run_id || acceptanceLatest?.artifact_id || "-"}</p>
+          <p className="text-xs text-slate-300" data-testid="execution-safety-acceptance-latest-proof-type">proof_type: {acceptanceLatest?.payload?.proof_type || "-"}</p>
+          <p className="text-xs text-slate-300" data-testid="execution-safety-acceptance-latest-created-at">created_at: {acceptanceLatest?.created_at || "-"}</p>
         </article>
       </div>
 

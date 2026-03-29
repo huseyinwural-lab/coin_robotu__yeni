@@ -563,6 +563,11 @@ def apply_execution_safety_quarantine_action(
     mapped = action_map.get(str(action or "").strip().lower())
     if mapped is None:
         raise ValueError("invalid_action")
+    row = db.query(FailedEvent).filter(FailedEvent.id == quarantine_id).first()
+    if row is None:
+        row = db.query(FailedEvent).filter(FailedEvent.entity_id == quarantine_id).first()
+    before_state = str((row.status if row else "unknown") or "unknown")
+
     result = apply_runtime_quarantine_action(
         db,
         event_id=quarantine_id,
@@ -570,7 +575,29 @@ def apply_execution_safety_quarantine_action(
         actor_user_id=actor_user_id,
         actor_role=actor_role,
     )
+    create_audit_log(
+        db,
+        action="execution_quarantine_recovery_action",
+        entity_type="failed_event",
+        entity_id=str(result.get("id") or quarantine_id),
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        severity="warning",
+        details={
+            "actor_type": "user",
+            "actor_id": actor_user_id,
+            "action": action,
+            "target_type": "failed_event",
+            "target_id": str(result.get("id") or quarantine_id),
+            "reason": "manual_quarantine_action",
+            "before_state": before_state,
+            "after_state": str(result.get("status") or "unknown"),
+            "correlation_id": (result.get("payload") or {}).get("correlation_id"),
+        },
+    )
     result["requested_action"] = action
+    result["before_state"] = before_state
+    result["after_state"] = str(result.get("status") or "unknown")
     return result
 
 
@@ -617,6 +644,37 @@ def create_execution_attempt_artifact(
         or _normalize_code(row.get("event_status")) in {"RECONCILING", "RECONCILED"}
     ]
 
+    correlation_spine = {
+        "request_id": str(request_id or ((order_events[0].get("payload") or {}).get("request_id") if order_events else "")),
+        "intent_id": intent.intent_id,
+        "order_id": str((order_events[-1].get("external_order_id") if order_events else "") or ""),
+        "execution_id": str(execution_id or ((order_events[-1].get("payload") or {}).get("execution_id") if order_events else "")),
+        "session_id": str(session_id or ((order_events[0].get("payload") or {}).get("session_id") if order_events else "")),
+        "correlation_id": intent.correlation_id,
+    }
+    missing_spine = [key for key, value in correlation_spine.items() if not str(value or "").strip()]
+    if missing_spine:
+        upsert_failed_event(
+            db,
+            event_type="execution.artifact.correlation_missing",
+            entity_type="execution_intent",
+            entity_id=intent.intent_id,
+            payload={
+                "intent_id": intent.intent_id,
+                "correlation_id": intent.correlation_id,
+                "reason_code": "correlation_spine_missing",
+                "failure_stage": "artifact_finalize",
+                "missing_fields": missing_spine,
+            },
+            correlation_id=intent.correlation_id,
+            error_message="correlation_spine_missing",
+            status="quarantined",
+            retry_count=0,
+            max_retry=3,
+        )
+        db.commit()
+        raise ValueError("artifact_correlation_missing")
+
     payload = {
         "schema_version": "1.0",
         "proof_type": "execution_attempt_artifact",
@@ -657,14 +715,7 @@ def create_execution_attempt_artifact(
             }
             for row in failures
         ],
-        "correlation_spine": {
-            "request_id": str(request_id or ((order_events[0].get("payload") or {}).get("request_id") if order_events else "")),
-            "intent_id": intent.intent_id,
-            "order_id": str((order_events[-1].get("external_order_id") if order_events else "") or ""),
-            "execution_id": str(execution_id or ((order_events[-1].get("payload") or {}).get("execution_id") if order_events else "")),
-            "session_id": str(session_id or ((order_events[0].get("payload") or {}).get("session_id") if order_events else "")),
-            "correlation_id": intent.correlation_id,
-        },
+        "correlation_spine": correlation_spine,
     }
 
     artifact = persist_execution_safety_artifact(payload)
@@ -695,6 +746,8 @@ def apply_intent_recovery_action(
     normalized = str(action or "").strip().lower()
     if normalized not in {"retry", "cancel", "reconcile", "quarantine"}:
         raise ValueError("invalid_action")
+
+    before_state = _canonical_intent_state(intent.status)
 
     if normalized == "retry":
         publish_runtime_event(
@@ -772,7 +825,17 @@ def apply_intent_recovery_action(
         actor_user_id=actor_user_id,
         actor_role=actor_role,
         severity="warning",
-        details={"action": normalized, "new_status": intent.status, "correlation_id": intent.correlation_id},
+        details={
+            "actor_type": "user",
+            "actor_id": actor_user_id,
+            "action": normalized,
+            "target_type": "execution_intent",
+            "target_id": intent.intent_id,
+            "reason": "manual_recovery",
+            "before_state": before_state,
+            "after_state": _canonical_intent_state(intent.status),
+            "correlation_id": intent.correlation_id,
+        },
     )
 
     artifact = create_execution_attempt_artifact(db, intent_id=intent.intent_id)
@@ -780,6 +843,8 @@ def apply_intent_recovery_action(
         "intent_id": intent.intent_id,
         "status": intent.status,
         "action": normalized,
+        "before_state": before_state,
+        "after_state": _canonical_intent_state(intent.status),
         "correlation_id": intent.correlation_id,
         "artifact": artifact,
     }

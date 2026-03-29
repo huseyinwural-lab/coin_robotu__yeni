@@ -172,7 +172,7 @@ class ExchangeExecutionAdapter:
                 "exchange": exchange_code,
                 "symbol": exchange_symbol,
                 "order_id": str(order_id),
-                "status": "CANCELLED",
+                "status": "CANCELED",
                 "mocked": False,
                 "mode": "api_validated",
                 "provider": probe,
@@ -197,7 +197,7 @@ class ExchangeExecutionAdapter:
             "exchange": exchange_code,
             "symbol": exchange_symbol,
             "order_id": str(order_id),
-            "status": "CANCELLED",
+            "status": "CANCELED",
             "mocked": False,
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
         }

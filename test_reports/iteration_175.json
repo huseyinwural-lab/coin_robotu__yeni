@@ -1,0 +1,127 @@
+{
+  "summary": "Execution Safety Advanced P0 Testing Complete - All endpoints verified via curl, unit tests pass, correlation enforcement behavior confirmed",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/execution-safety/acceptance/testnet/run",
+        "issue": "Returns BLOCKED due to hard gate (Bybit 403 from this runtime) - expected per main agent context, not a code defect"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_execution_safety_advanced_p0.py",
+    "/app/backend/tests/test_execution_safety_advanced_unit.py",
+    "/app/test_reports/pytest/execution_safety_advanced_p0.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "All requested endpoints verified working via curl with proper auth",
+    "Acceptance testnet run: acceptance_run_id/correlation_id generated correctly, ack->fill sequence implemented (fill skipped when ack fails)",
+    "BLOCKED verdict still produces artifact manifest and audit record - fail-safe behavior confirmed",
+    "Canonical CANCELED state verified (not CANCELLED) in state_counts",
+    "Correlation enforcement unit tests pass: critical stages -> quarantine, non-critical -> blocked",
+    "Bulk recovery endpoints (bulk-retry, bulk-cancel, bulk-reconcile) return item-level results with before/after states",
+    "Selection modes verified: explicit_ids, by_state, by_failure_stage, by_reason_code",
+    "Detail endpoints return 404 for missing resources as expected"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_execution_safety_advanced_p0.py"
+  ],
+  "success_rate": {
+    "backend": "100% - All execution-safety advanced endpoints verified via curl",
+    "frontend": "100% - Frontend loads correctly"
+  },
+  "test_credentials": "canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "None required",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All execution-safety advanced endpoints verified. Bybit testnet returns 403 from this runtime (external blocker), but failure path produces artifacts correctly. Unit tests confirm correlation enforcement behavior.",
+  "verified_contracts": {
+    "acceptance_testnet_run": {
+      "endpoint": "POST /api/execution-safety/acceptance/testnet/run",
+      "required_fields": ["acceptance_run_id", "correlation_id", "final_verdict"],
+      "verdict_values": ["PASS", "FAILED", "BLOCKED"],
+      "ack_fill_sequence": "fill_mode SKIPPED when ack_mode fails",
+      "artifact_on_blocked": true,
+      "audit_record_produced": true
+    },
+    "acceptance_testnet_latest": {
+      "endpoint": "GET /api/execution-safety/acceptance/testnet/latest",
+      "returns": {"latest": "object or null"}
+    },
+    "acceptance_testnet_history": {
+      "endpoint": "GET /api/execution-safety/acceptance/testnet/history",
+      "returns": {"items": "array", "total": "number"}
+    },
+    "intent_timeline": {
+      "endpoint": "GET /api/execution-safety/intents/{intent_id}/timeline",
+      "404_on_missing": true,
+      "required_fields": ["intent_id", "correlation_id", "current_status", "timeline"]
+    },
+    "intent_reconcile": {
+      "endpoint": "GET /api/execution-safety/intents/{intent_id}/reconcile",
+      "404_on_missing": true,
+      "required_fields": ["intent_id", "correlation_id", "current_status", "latest_reconcile"]
+    },
+    "artifacts_by_intent": {
+      "endpoint": "GET /api/execution-safety/artifacts/{intent_id}",
+      "404_on_missing": true
+    },
+    "quarantine_detail": {
+      "endpoint": "GET /api/execution-safety/quarantine/{quarantine_id}",
+      "404_on_missing": true,
+      "required_fields": ["quarantine_id", "correlation_id", "intent_id", "reason", "failure_stage", "retry_count", "first_seen_at", "last_seen_at", "payload_snapshot", "error_snapshot", "status", "entity_type", "event_type", "max_retry"]
+    },
+    "bulk_recovery_endpoints": {
+      "bulk_retry": {
+        "endpoint": "POST /api/execution-safety/recovery/bulk-retry",
+        "returns": {"action": "bulk_retry", "total": "number", "success_count": "number", "failed_count": "number", "items": "array"}
+      },
+      "bulk_cancel": {
+        "endpoint": "POST /api/execution-safety/recovery/bulk-cancel",
+        "returns": {"action": "bulk_cancel", "total": "number", "success_count": "number", "failed_count": "number", "items": "array"}
+      },
+      "bulk_reconcile": {
+        "endpoint": "POST /api/execution-safety/recovery/bulk-reconcile",
+        "returns": {"action": "bulk_reconcile", "total": "number", "success_count": "number", "failed_count": "number", "items": "array"}
+      },
+      "item_level_results": {
+        "fields": ["target_type", "target_id", "before_state", "after_state", "result", "attempted_action"]
+      }
+    },
+    "selection_modes": {
+      "explicit_ids": "verified",
+      "by_state": "verified",
+      "by_failure_stage": "verified",
+      "by_reason_code": "verified"
+    },
+    "correlation_enforcement": {
+      "critical_stages_quarantine": ["order_submit", "exchange_ack_fill_ingestion", "reconcile_execution", "artifact_finalize", "lifecycle_transition_persist"],
+      "non_critical_stages_blocked": true,
+      "unit_tests_pass": true
+    },
+    "canonical_canceled_state": {
+      "state_counts_keys": ["ACKED", "CANCELED", "CREATED", "FAILED", "FILLED", "PARTIALLY_FILLED", "RECONCILED", "RECONCILING", "SUBMITTED"],
+      "no_cancelled": true
+    }
+  },
+  "environment_limitations": {
+    "bybit_testnet": "HTTP 403 from this runtime - expected per main agent context (external blocker)",
+    "acceptance_verdict": "BLOCKED due to hard gate, but artifact path verified working"
+  },
+  "unit_tests_passed": [
+    "test_normalize_state_cancelled_to_canceled",
+    "test_correlation_enforcement_critical_quarantine",
+    "test_correlation_enforcement_noncritical_blocked",
+    "test_acceptance_blocked_by_gate",
+    "test_reconcile_missing_intent_raises",
+    "test_acceptance_history_empty_when_manifest_missing",
+    "test_bulk_recovery_invalid_action_raises"
+  ]
+}
