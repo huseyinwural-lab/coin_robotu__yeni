@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiClient, setAuthToken } from "@/lib/api";
 
@@ -36,11 +36,14 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(readStoredUser);
   const [token, setToken] = useState(localStorage.getItem(AUTH_TOKEN_KEY));
   const [loading, setLoading] = useState(true);
+  const lastHydratedTokenRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
 
     const hydrate = async () => {
+      const hydrateToken = token;
+      lastHydratedTokenRef.current = hydrateToken;
       if (!token) {
         setAuthToken(null);
         if (!cancelled) {
@@ -85,6 +88,13 @@ export const AuthProvider = ({ children }) => {
           }
         }
         if (status === 401) {
+          const latestStoredToken = localStorage.getItem(AUTH_TOKEN_KEY);
+          if (latestStoredToken && latestStoredToken !== hydrateToken) {
+            if (!cancelled) {
+              setLoading(false);
+            }
+            return;
+          }
           clearAuthSession();
           setAuthToken(null);
           if (!cancelled) {
@@ -136,6 +146,8 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async ({ email, password, panel = "user" }) => {
+    clearAuthSession();
+    setAuthToken(null);
     const panelPath = panel === "admin" ? "/auth/login/admin" : panel === "user" ? "/auth/login/user" : "/auth/login";
     const { data } = await apiClient.post(panelPath, { email, password });
     if (data?.mfa_required) {
