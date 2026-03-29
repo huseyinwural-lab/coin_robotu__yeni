@@ -1,18 +1,27 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
-from models import CanonicalStrategyRegistry, LearningRecommendation, User
+from models import LearningRecommendation, User
 from schemas import LearningImpactSimulationRequest, LearningImpactSimulationResponse
 from schemas import UserLearningSuggestionResponse
 from services.audit_service import create_audit_log
 from services.learning_memory_service import (
+    apply_learning_recommendation,
+    approve_learning_recommendation,
     get_learning_overview,
+    get_learning_post_change_monitoring,
+    get_learning_version_history,
     list_learning_events,
+    mark_learning_recommendation_simulated,
+    reject_learning_recommendation,
     refresh_learning_memory,
+    rollback_learning_recommendation,
+    serialize_learning_recommendation,
     simulate_learning_recommendation_impact,
     simulate_recommendation_row_impact,
 )
@@ -20,6 +29,18 @@ from services.user_learning_simulator_service import list_admin_learning_suggest
 
 
 router = APIRouter(prefix="/admin/learning", tags=["admin_learning"])
+
+
+class LearningRecommendationDecisionRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=400)
+
+
+class LearningRecommendationApplyRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=400)
+
+
+class LearningRecommendationRollbackRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=400)
 
 
 @router.get("/overview")
@@ -56,49 +77,31 @@ def admin_learning_refresh(
 @router.post("/recommendations/{recommendation_id}/apply")
 def admin_apply_learning_recommendation(
     recommendation_id: str,
+    payload: LearningRecommendationApplyRequest,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    recommendation = db.query(LearningRecommendation).filter(LearningRecommendation.id == recommendation_id).first()
-    if recommendation is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="learning_recommendation_not_found")
-
-    if recommendation.strategy_id:
-        strategy = (
-            db.query(CanonicalStrategyRegistry)
-            .filter(CanonicalStrategyRegistry.strategy_id == recommendation.strategy_id)
-            .first()
-        )
-        if strategy is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found_for_recommendation")
-
-        rec_type = recommendation.recommendation_type
-        rec_val = recommendation.recommendation_value or {}
-        if rec_type == "disable_recommendation":
-            strategy.is_enabled = bool(rec_val.get("suggested_is_enabled", False))
-        elif rec_type in {
-            "auto_throttle_recommendation",
-            "weight_boost_recommendation",
-            "decrease_weight_recommendation",
-            "increase_weight_recommendation",
-        }:
-            multiplier = float(rec_val.get("suggested_weight_multiplier", 1.0))
-            strategy.weight = max(0.0, round(float(strategy.weight or 1.0) * multiplier, 4))
-
-    recommendation.is_applied = True
-    recommendation.applied_at = datetime.now(timezone.utc)
-    db.commit()
+    try:
+        response = apply_learning_recommendation(db, recommendation_id=recommendation_id, actor=current_admin.id, reason=payload.reason)
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if detail in {"learning_recommendation_not_found", "strategy_not_found_for_recommendation"} else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
     create_audit_log(
         db,
         action="learning_recommendation_applied",
         entity_type="learning_recommendation",
-        entity_id=recommendation.id,
+        entity_id=recommendation_id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         details={
-            "strategy_id": recommendation.strategy_id,
-            "recommendation_type": recommendation.recommendation_type,
+            "recommendation_id": recommendation_id,
+            "reason": payload.reason,
+            "lifecycle": response.get("lifecycle"),
+            "version_ref": (response.get("version") or {}).get("current_version"),
+            "before_payload": (response.get("status_history") or [{}])[-1].get("before_payload", {}),
+            "after_payload": (response.get("status_history") or [{}])[-1].get("after_payload", {}),
         },
     )
     return {
@@ -106,7 +109,7 @@ def admin_apply_learning_recommendation(
         "schema_version": "learning.v1",
         "engine_version": "learning-engine.v1",
         "generated_at": datetime.now(timezone.utc),
-        "recommendation_id": recommendation.id,
+        "recommendation_id": recommendation_id,
         "applied": True,
         "guardrail": {
             "auto_change_forbidden": True,
@@ -141,7 +144,30 @@ def admin_simulate_learning_recommendation(
     recommendation = db.query(LearningRecommendation).filter(LearningRecommendation.id == recommendation_id).first()
     if recommendation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="learning_recommendation_not_found")
-    return simulate_recommendation_row_impact(db, recommendation=recommendation)
+    simulation = simulate_recommendation_row_impact(db, recommendation=recommendation)
+    updated = mark_learning_recommendation_simulated(
+        db,
+        recommendation_id=recommendation_id,
+        actor=current_admin.id,
+        reason="row_simulation",
+        simulation_payload=simulation,
+    )
+    create_audit_log(
+        db,
+        action="learning_recommendation_simulated",
+        entity_type="learning_recommendation",
+        entity_id=recommendation_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "reason": "row_simulation",
+            "recommendation_id": recommendation_id,
+            "version_ref": (updated.get("version") or {}).get("current_version"),
+            "before_payload": {},
+            "after_payload": {"simulation_scope": simulation.get("scope")},
+        },
+    )
+    return simulation
 
 
 @router.post("/simulate-impact", response_model=LearningImpactSimulationResponse)
@@ -158,6 +184,127 @@ def admin_simulate_learning_impact(
         recommendation_type=payload.recommendation_type,
         suggested_weight_multiplier=payload.suggested_weight_multiplier,
     )
+
+
+@router.post("/recommendations/{recommendation_id}/approve")
+def admin_approve_learning_recommendation(
+    recommendation_id: str,
+    payload: LearningRecommendationDecisionRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        response = approve_learning_recommendation(db, recommendation_id=recommendation_id, actor=current_admin.id, reason=payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    create_audit_log(
+        db,
+        action="learning_recommendation_approved",
+        entity_type="learning_recommendation",
+        entity_id=recommendation_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "actor": current_admin.id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "reason": payload.reason,
+            "recommendation_id": recommendation_id,
+            "version_ref": (response.get("version") or {}).get("current_version"),
+            "before_payload": (response.get("status_history") or [{}])[-1].get("before_payload", {}),
+            "after_payload": (response.get("status_history") or [{}])[-1].get("after_payload", {}),
+        },
+    )
+    return {"recommendation": response}
+
+
+@router.post("/recommendations/{recommendation_id}/reject")
+def admin_reject_learning_recommendation(
+    recommendation_id: str,
+    payload: LearningRecommendationDecisionRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        response = reject_learning_recommendation(db, recommendation_id=recommendation_id, actor=current_admin.id, reason=payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    create_audit_log(
+        db,
+        action="learning_recommendation_rejected",
+        entity_type="learning_recommendation",
+        entity_id=recommendation_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "actor": current_admin.id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "reason": payload.reason,
+            "recommendation_id": recommendation_id,
+            "version_ref": (response.get("version") or {}).get("current_version"),
+            "before_payload": (response.get("status_history") or [{}])[-1].get("before_payload", {}),
+            "after_payload": (response.get("status_history") or [{}])[-1].get("after_payload", {}),
+        },
+    )
+    return {"recommendation": response}
+
+
+@router.post("/recommendations/{recommendation_id}/rollback")
+def admin_rollback_learning_recommendation(
+    recommendation_id: str,
+    payload: LearningRecommendationRollbackRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        response = rollback_learning_recommendation(db, recommendation_id=recommendation_id, actor=current_admin.id, reason=payload.reason)
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if detail == "learning_recommendation_not_found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    create_audit_log(
+        db,
+        action="learning_recommendation_rolled_back",
+        entity_type="learning_recommendation",
+        entity_id=recommendation_id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "actor": current_admin.id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "reason": payload.reason,
+            "recommendation_id": recommendation_id,
+            "version_ref": (response.get("version") or {}).get("current_version"),
+            "before_payload": (response.get("status_history") or [{}])[-1].get("before_payload", {}),
+            "after_payload": (response.get("status_history") or [{}])[-1].get("after_payload", {}),
+        },
+    )
+    return {"recommendation": response}
+
+
+@router.get("/recommendations/{recommendation_id}/version-history")
+def admin_learning_recommendation_version_history(
+    recommendation_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    try:
+        return get_learning_version_history(db, recommendation_id=recommendation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/recommendations/{recommendation_id}/post-change-monitoring")
+def admin_learning_recommendation_post_change_monitoring(
+    recommendation_id: str,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_admin
+    try:
+        return get_learning_post_change_monitoring(db, recommendation_id=recommendation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("/user-suggestions", response_model=list[UserLearningSuggestionResponse])

@@ -4079,7 +4079,14 @@ class LearningImpactSimulationResponse(BaseModel):
     expected_avg_return_delta: float
     allocation_drift_delta: float
     hedge_effect_score: float
+    baseline_metrics: dict = Field(default_factory=dict)
+    projected_metrics: dict = Field(default_factory=dict)
+    delta_metrics: dict = Field(default_factory=dict)
+    sample_coverage: dict = Field(default_factory=dict)
     baseline: dict = Field(default_factory=dict)
+    counterfactual_replay: dict = Field(default_factory=dict)
+    portfolio_impact: dict = Field(default_factory=dict)
+    risk_aware_view: dict = Field(default_factory=dict)
     assumptions: list[str] = Field(default_factory=list)
 
 

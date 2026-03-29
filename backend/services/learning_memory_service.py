@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 import uuid
 
@@ -6,6 +6,7 @@ from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from models import (
+    CanonicalStrategyRegistry,
     FamilyOutcomeMemory,
     LearningDecisionEvent,
     LearningRecommendation,
@@ -23,6 +24,20 @@ LEARNING_ENGINE_VERSION_V15 = "learning-engine.v1.5"
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _json_safe(value):
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
 
 
 def _safe_float(value, fallback: float = 0.0) -> float:
@@ -93,6 +108,36 @@ def _decision_quality_breakdown(events: list[LearningDecisionEvent]) -> dict:
         "rejected_rate": round(decisions.get("REJECTED", 0) / total, 6),
         "manual_cancel_rate": round(decisions.get("MANUAL_CANCELLED", 0) / total, 6),
         "no_trade_rate": round(decisions.get("NO_TRADE", 0) / total, 6),
+    }
+
+
+def _rolling_window_summary(rows: list[LearningDecisionEvent]) -> dict:
+    now = _utcnow()
+    windows = {}
+    for label, days in [("7d", 7), ("30d", 30), ("90d", 90)]:
+        scoped = [row for row in rows if row.created_at and row.created_at >= now - timedelta(days=days)]
+        windows[label] = _window_metrics(scoped)
+    return windows
+
+
+def _decay_and_drift(rows: list[LearningDecisionEvent]) -> dict:
+    rolling = _rolling_window_summary(rows)
+    short_term = rolling.get("7d") or {}
+    medium_term = rolling.get("30d") or {}
+    long_term = rolling.get("90d") or medium_term
+    decay_score = max(0.0, round((_safe_float(long_term.get("avg_return"), 0.0) - _safe_float(short_term.get("avg_return"), 0.0)) * 1000, 6))
+    regimes_short = Counter(_canonical_regime(row.regime_snapshot) for row in rows if row.created_at and row.created_at >= _utcnow() - timedelta(days=7))
+    regimes_long = Counter(_canonical_regime(row.regime_snapshot) for row in rows if row.created_at and row.created_at >= _utcnow() - timedelta(days=90))
+    top_short = regimes_short.most_common(1)[0][0] if regimes_short else "unknown"
+    top_long = regimes_long.most_common(1)[0][0] if regimes_long else "unknown"
+    regime_drift_flag = top_short != top_long and top_short != "unknown" and top_long != "unknown"
+    confidence_degradation = round(max(0.0, (_safe_float(long_term.get("hit_rate"), 0.0) - _safe_float(short_term.get("hit_rate"), 0.0)) / 100.0), 6)
+    return {
+        "rolling_windows": rolling,
+        "decay_score": decay_score,
+        "regime_drift_flag": regime_drift_flag,
+        "confidence_degradation": confidence_degradation,
+        "actionability_flag": bool(decay_score > 0.01 or regime_drift_flag),
     }
 
 
@@ -315,7 +360,7 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
                     id=str(uuid.uuid4()),
                     strategy_id=strategy_id,
                     family=None,
-                    recommendation_type="strategy_disable_suggestion",
+                    recommendation_type="strategy_disable",
                     recommendation_value={
                         "suggested_is_enabled": False,
                         "scope": "strategy",
@@ -336,7 +381,7 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
                     id=str(uuid.uuid4()),
                     strategy_id=strategy_id,
                     family=None,
-                    recommendation_type="strategy_weight_decrease_recommendation",
+                    recommendation_type="strategy_weight_down",
                     recommendation_value={
                         "suggested_weight_multiplier": 0.7,
                         "scope": "strategy",
@@ -357,7 +402,7 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
                     id=str(uuid.uuid4()),
                     strategy_id=strategy_id,
                     family=None,
-                    recommendation_type="strategy_weight_increase_recommendation",
+                    recommendation_type="strategy_weight_up",
                     recommendation_value={
                         "suggested_weight_multiplier": 1.1,
                         "scope": "strategy",
@@ -378,7 +423,7 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
                     id=str(uuid.uuid4()),
                     strategy_id=strategy_id,
                     family=None,
-                    recommendation_type="threshold_tune_recommendation",
+                    recommendation_type="threshold_tune",
                     recommendation_value={
                         "suggested_threshold_delta": -0.05 if avg_mae < -0.01 else 0.03,
                         "scope": "strategy",
@@ -420,6 +465,38 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
     for recommendation in recommendations:
         _ensure_recommendation_defaults(recommendation)
         db.add(recommendation)
+
+    for family, events in family_buckets.items():
+        if len(events) < 10:
+            continue
+        rolling = _rolling_window_summary(events)
+        drift = _decay_and_drift(events)
+        family_conflict = len([e for e in events if _false_flags(e.outcome_label, e.decision)[0]]) / max(len(events), 1)
+        if drift["actionability_flag"] or family_conflict > 0.25:
+            rec = LearningRecommendation(
+                id=str(uuid.uuid4()),
+                strategy_id=None,
+                family=family,
+                recommendation_type="family_weight_down",
+                recommendation_value={
+                    "suggested_weight_multiplier": 0.85,
+                    "scope": "family",
+                    "reason": "family rolling window decay / regime drift tespit edildi",
+                    "confidence": round(min(0.55 + family_conflict, 0.92), 6),
+                    "evidence_summary": {"rolling_windows": rolling, "drift": drift},
+                    "risk_impact": {
+                        "tail_impact": round(abs(rolling.get("30d", {}).get("drawdown", 0.0)), 6),
+                        "cluster_impact": round(family_conflict, 6),
+                        "capital_impact": round(abs(rolling.get("30d", {}).get("avg_return", 0.0)), 6),
+                    },
+                    "symbol_cluster": sorted({str(e.symbol or "unknown") for e in events[:20]}),
+                    "regime": Counter(_canonical_regime(e.regime_snapshot) for e in events).most_common(1)[0][0],
+                },
+                note="family/regime drift recommendation",
+                severity="medium",
+            )
+            _ensure_recommendation_defaults(rec)
+            db.add(rec)
     db.commit()
 
     trade_linked = len([row for row in recent_events if row.position_id])
@@ -495,6 +572,7 @@ def get_learning_overview(db: Session) -> dict:
             "false_reject_trend": {
                 "count": len([e for e in payload["events"] if _false_flags(e.outcome_label, e.decision)[1]]),
             },
+            **_decay_and_drift(payload["events"]),
         }
 
     return {
@@ -528,6 +606,11 @@ def get_learning_overview(db: Session) -> dict:
                 "decision_quality_breakdown": ((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("decision_quality_breakdown")) or {},
                 "false_allow_trend": ((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("false_allow_trend")) or {},
                 "false_reject_trend": ((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("false_reject_trend")) or {},
+                "rolling_windows": ((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("rolling_windows")) or {},
+                "decay_score": _safe_float((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("decay_score"), 0.0),
+                "regime_drift_flag": bool((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("regime_drift_flag", False)),
+                "confidence_degradation": _safe_float((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("confidence_degradation"), 0.0),
+                "actionability_flag": bool((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("actionability_flag", False)),
                 "recent_performance": {
                     "hit_rate": row.hit_rate,
                     "avg_return": row.avg_return,
@@ -773,6 +856,29 @@ def simulate_learning_recommendation_impact(
     tail_impact = round(abs(projected_drawdown) * 0.8, 6)
     cluster_impact = round(abs(concentration_delta) * 0.7, 6)
     capital_impact = round(abs(projected_capital_usage_delta) * 0.6, 6)
+    baseline_metrics = {
+        "hit_rate": round(baseline_hit_rate, 6),
+        "avg_return": round(baseline_avg_return, 8),
+        "drawdown": round(abs(base_risk_score) * 0.1, 6),
+        "risk_score": round(base_risk_score, 6),
+    }
+    projected_metrics = {
+        "hit_rate": round(projected_hit_rate, 6),
+        "avg_return": round(projected_avg_return, 8),
+        "drawdown": round(projected_drawdown, 6),
+        "risk_score": round(projected_risk_score, 6),
+    }
+    delta_metrics = {
+        "hit_rate_delta": round(projected_metrics["hit_rate"] - baseline_metrics["hit_rate"], 6),
+        "avg_return_delta": round(projected_metrics["avg_return"] - baseline_metrics["avg_return"], 8),
+        "drawdown_delta": round(projected_metrics["drawdown"] - baseline_metrics["drawdown"], 6),
+        "risk_delta": round(projected_metrics["risk_score"] - baseline_metrics["risk_score"], 6),
+    }
+    sample_coverage = {
+        "sample_size": len(sample_rows),
+        "trade_linked": len(replay_sample),
+        "coverage_ratio": round(len(replay_sample) / coverage, 6),
+    }
 
     return {
         "schema_version": LEARNING_SCHEMA_VERSION,
@@ -789,17 +895,17 @@ def simulate_learning_recommendation_impact(
         "expected_avg_return_delta": round(expected_avg_return_delta, 8),
         "allocation_drift_delta": round(allocation_drift_delta, 6),
         "hedge_effect_score": round(_clamp(hedge_effect_score, 0.0, 1.0), 6),
+        "baseline_metrics": baseline_metrics,
+        "projected_metrics": projected_metrics,
+        "delta_metrics": delta_metrics,
+        "sample_coverage": sample_coverage,
         "counterfactual_replay": {
             "baseline_vs_projected": {
-                "hit_rate": {"baseline": round(baseline_hit_rate, 6), "projected": round(projected_hit_rate, 6)},
-                "avg_return": {"baseline": round(baseline_avg_return, 8), "projected": round(projected_avg_return, 8)},
-                "drawdown": {"baseline": round(abs(base_risk_score) * 0.1, 6), "projected": round(projected_drawdown, 6)},
+                "hit_rate": {"baseline": baseline_metrics["hit_rate"], "projected": projected_metrics["hit_rate"]},
+                "avg_return": {"baseline": baseline_metrics["avg_return"], "projected": projected_metrics["avg_return"]},
+                "drawdown": {"baseline": baseline_metrics["drawdown"], "projected": projected_metrics["drawdown"]},
             },
-            "sample_coverage": {
-                "sample_size": len(sample_rows),
-                "trade_linked": len(replay_sample),
-                "coverage_ratio": round(len(replay_sample) / coverage, 6),
-            },
+            "sample_coverage": sample_coverage,
         },
         "portfolio_impact": {
             "net_pnl_delta": round(expected_avg_return_delta * max(len(replay_sample), 1), 8),
@@ -839,3 +945,292 @@ def simulate_recommendation_row_impact(db: Session, *, recommendation: LearningR
         recommendation_type=recommendation.recommendation_type,
         suggested_weight_multiplier=rec_value.get("suggested_weight_multiplier"),
     )
+
+
+def _append_status_history(payload: dict, *, state: str, actor: str, reason: str, version_ref: str | None, before_payload: dict | None = None, after_payload: dict | None = None) -> dict:
+    next_payload = dict(payload or {})
+    history = list(next_payload.get("status_history") or [])
+    history.append(
+        {
+            "state": state,
+            "actor": actor,
+            "timestamp": _utcnow().isoformat(),
+            "reason": reason,
+            "version_ref": version_ref,
+            "before_payload": before_payload or {},
+            "after_payload": after_payload or {},
+        }
+    )
+    next_payload["status_history"] = history
+    next_payload["lifecycle"] = state
+    return next_payload
+
+
+def _recommendation_by_id(db: Session, recommendation_id: str) -> LearningRecommendation | None:
+    return db.query(LearningRecommendation).filter(LearningRecommendation.id == recommendation_id).first()
+
+
+def _monitoring_windows() -> list[tuple[str, timedelta]]:
+    return [("1h", timedelta(hours=1)), ("24h", timedelta(hours=24)), ("7d", timedelta(days=7))]
+
+
+def _event_scope_filter(rows: list[LearningDecisionEvent], recommendation: LearningRecommendation) -> list[LearningDecisionEvent]:
+    if recommendation.strategy_id:
+        return [row for row in rows if str(row.strategy_id or "") == str(recommendation.strategy_id)]
+    if recommendation.family:
+        return [row for row in rows if str(row.strategy_family or "") == str(recommendation.family)]
+    return rows
+
+
+def _window_metrics(rows: list[LearningDecisionEvent]) -> dict:
+    sample = len(rows)
+    closed = [row for row in rows if str(row.outcome_label or "") in {"WIN", "LOSS", "BREAKEVEN"}]
+    wins = [row for row in closed if str(row.outcome_label or "") == "WIN"]
+    avg_return = sum(float(row.pnl_normalized or 0.0) for row in closed) / len(closed) if closed else 0.0
+    cumulative = 0.0
+    peak = 0.0
+    drawdown = 0.0
+    for row in closed:
+        cumulative += float(row.pnl_normalized or 0.0)
+        peak = max(peak, cumulative)
+        drawdown = min(drawdown, cumulative - peak)
+    return {
+        "sample_count": sample,
+        "hit_rate": round((len(wins) / len(closed) * 100) if closed else 0.0, 6),
+        "avg_return": round(avg_return, 8),
+        "drawdown": round(drawdown, 6),
+        "false_allow_rate": round((len([row for row in rows if _false_flags(row.outcome_label, row.decision)[0]]) / max(sample, 1) * 100), 6),
+        "false_reject_rate": round((len([row for row in rows if _false_flags(row.outcome_label, row.decision)[1]]) / max(sample, 1) * 100), 6),
+    }
+
+
+def _current_version_ref(payload: dict, recommendation_id: str) -> str:
+    version = dict((payload or {}).get("version") or {})
+    return str(version.get("current_version") or f"learning-rec-{recommendation_id[:8]}")
+
+
+def approve_learning_recommendation(db: Session, *, recommendation_id: str, actor: str, reason: str) -> dict:
+    recommendation = _recommendation_by_id(db, recommendation_id)
+    if recommendation is None:
+        raise ValueError("learning_recommendation_not_found")
+    payload = _ensure_recommendation_defaults(recommendation)
+    version_ref = _current_version_ref(payload, recommendation.id)
+    before_payload = dict(payload)
+    payload = _append_status_history(payload, state="approved", actor=actor, reason=reason, version_ref=version_ref, before_payload=before_payload, after_payload={"approved": True})
+    recommendation.recommendation_value = payload
+    db.commit()
+    db.refresh(recommendation)
+    return serialize_learning_recommendation(recommendation)
+
+
+def reject_learning_recommendation(db: Session, *, recommendation_id: str, actor: str, reason: str) -> dict:
+    recommendation = _recommendation_by_id(db, recommendation_id)
+    if recommendation is None:
+        raise ValueError("learning_recommendation_not_found")
+    payload = _ensure_recommendation_defaults(recommendation)
+    version_ref = _current_version_ref(payload, recommendation.id)
+    before_payload = dict(payload)
+    payload = _append_status_history(payload, state="rejected", actor=actor, reason=reason, version_ref=version_ref, before_payload=before_payload, after_payload={"rejected": True})
+    recommendation.recommendation_value = payload
+    db.commit()
+    db.refresh(recommendation)
+    return serialize_learning_recommendation(recommendation)
+
+
+def _apply_recommendation_change(db: Session, recommendation: LearningRecommendation) -> tuple[dict, dict, str | None]:
+    before_payload = {}
+    after_payload = {}
+    version_ref = None
+    rec_value = dict(recommendation.recommendation_value or {})
+    rec_type = str(recommendation.recommendation_type or "")
+    if recommendation.strategy_id:
+        strategy = db.query(CanonicalStrategyRegistry).filter(CanonicalStrategyRegistry.strategy_id == recommendation.strategy_id).first()
+        if strategy is None:
+            raise ValueError("strategy_not_found_for_recommendation")
+        before_payload = {
+            "strategy_id": strategy.strategy_id,
+            "is_enabled": bool(strategy.is_enabled),
+            "weight": float(strategy.weight or 0.0),
+            "entry_long": dict(strategy.entry_long or {}),
+            "entry_short": dict(strategy.entry_short or {}),
+        }
+        if rec_type in {"strategy_disable", "strategy_disable_suggestion", "disable_recommendation"}:
+            strategy.is_enabled = bool(rec_value.get("suggested_is_enabled", False))
+        elif rec_type in {"strategy_weight_down", "strategy_weight_decrease_recommendation", "decrease_weight_recommendation", "auto_throttle_recommendation"}:
+            strategy.weight = max(0.0, round(float(strategy.weight or 1.0) * float(rec_value.get("suggested_weight_multiplier", 1.0)), 4))
+        elif rec_type in {"strategy_weight_up", "strategy_weight_increase_recommendation", "increase_weight_recommendation", "weight_boost_recommendation"}:
+            strategy.weight = max(0.0, round(float(strategy.weight or 1.0) * float(rec_value.get("suggested_weight_multiplier", 1.0)), 4))
+        elif rec_type in {"threshold_tune", "threshold_tune_recommendation"}:
+            threshold_delta = float(rec_value.get("suggested_threshold_delta") or 0.0)
+            entry_long = dict(strategy.entry_long or {})
+            entry_short = dict(strategy.entry_short or {})
+            entry_long["adaptive_threshold_delta"] = round(float(entry_long.get("adaptive_threshold_delta") or 0.0) + threshold_delta, 6)
+            entry_short["adaptive_threshold_delta"] = round(float(entry_short.get("adaptive_threshold_delta") or 0.0) + threshold_delta, 6)
+            strategy.entry_long = entry_long
+            strategy.entry_short = entry_short
+        after_payload = {
+            "strategy_id": strategy.strategy_id,
+            "is_enabled": bool(strategy.is_enabled),
+            "weight": float(strategy.weight or 0.0),
+            "entry_long": dict(strategy.entry_long or {}),
+            "entry_short": dict(strategy.entry_short or {}),
+        }
+        version_ref = f"strategy:{strategy.strategy_id}:{_utcnow().strftime('%Y%m%d%H%M%S')}"
+    return before_payload, after_payload, version_ref
+
+
+def _build_post_change_monitoring(db: Session, *, recommendation: LearningRecommendation, since_at: datetime) -> dict:
+    rows = db.query(LearningDecisionEvent).filter(LearningDecisionEvent.created_at >= since_at - timedelta(days=7)).all()
+    scoped = _event_scope_filter(rows, recommendation)
+    baseline_rows = [row for row in scoped if row.created_at < since_at]
+    baseline_metrics = _window_metrics(baseline_rows)
+    windows = {}
+    for label, delta in _monitoring_windows():
+        current_rows = [row for row in scoped if row.created_at >= since_at and row.created_at <= since_at + delta]
+        current_metrics = _window_metrics(current_rows)
+        deterioration = current_metrics["avg_return"] < baseline_metrics["avg_return"] or current_metrics["drawdown"] < baseline_metrics["drawdown"]
+        windows[label] = {
+            "baseline": baseline_metrics,
+            "current": current_metrics,
+            "deterioration_flag": bool(deterioration),
+            "rollback_recommendation": bool(deterioration and current_metrics["sample_count"] >= 3),
+        }
+    return {"generated_at": _utcnow().isoformat(), "windows": windows}
+
+
+def apply_learning_recommendation(db: Session, *, recommendation_id: str, actor: str, reason: str) -> dict:
+    recommendation = _recommendation_by_id(db, recommendation_id)
+    if recommendation is None:
+        raise ValueError("learning_recommendation_not_found")
+    payload = _ensure_recommendation_defaults(recommendation)
+    lifecycle = str(payload.get("lifecycle") or "recommendation_created")
+    if lifecycle not in {"approved", "simulated", "recommendation_created"}:
+        raise ValueError("learning_recommendation_not_approvable")
+    before_change, after_change, version_ref = _apply_recommendation_change(db, recommendation)
+    version = dict(payload.get("version") or {})
+    current_version = str(version.get("current_version") or f"learning-rec-{recommendation.id[:8]}")
+    next_version = f"{current_version}-applied-{_utcnow().strftime('%H%M%S')}"
+    version_history = list(payload.get("version_history") or [])
+    version_history.append({
+        "previous_version": current_version,
+        "current_version": next_version,
+        "changed_by": actor,
+        "changed_reason": reason,
+        "rollback_target": current_version,
+        "changed_at": _utcnow().isoformat(),
+        "version_ref": version_ref,
+    })
+    payload["version"] = {
+        "previous_version": current_version,
+        "current_version": next_version,
+        "changed_by": actor,
+        "changed_reason": reason,
+        "rollback_target": current_version,
+    }
+    payload["version_history"] = version_history
+    payload = _append_status_history(payload, state="applied", actor=actor, reason=reason, version_ref=version_ref or next_version, before_payload=before_change, after_payload=after_change)
+    recommendation.recommendation_value = payload
+    recommendation.is_applied = True
+    recommendation.applied_at = _utcnow()
+    payload["post_change_monitoring"] = _build_post_change_monitoring(db, recommendation=recommendation, since_at=recommendation.applied_at)
+    recommendation.recommendation_value = payload
+    db.commit()
+    db.refresh(recommendation)
+    return serialize_learning_recommendation(recommendation)
+
+
+def rollback_learning_recommendation(db: Session, *, recommendation_id: str, actor: str, reason: str) -> dict:
+    recommendation = _recommendation_by_id(db, recommendation_id)
+    if recommendation is None:
+        raise ValueError("learning_recommendation_not_found")
+    payload = _ensure_recommendation_defaults(recommendation)
+    history = list(payload.get("status_history") or [])
+    applied_entry = next((item for item in reversed(history) if item.get("state") == "applied"), None)
+    if applied_entry is None:
+        raise ValueError("learning_recommendation_not_applied")
+    before_payload = dict(applied_entry.get("before_payload") or {})
+    after_payload = dict(applied_entry.get("after_payload") or {})
+    if recommendation.strategy_id:
+        strategy = db.query(CanonicalStrategyRegistry).filter(CanonicalStrategyRegistry.strategy_id == recommendation.strategy_id).first()
+        if strategy is None:
+            raise ValueError("strategy_not_found_for_recommendation")
+        strategy.is_enabled = bool(before_payload.get("is_enabled", strategy.is_enabled))
+        strategy.weight = float(before_payload.get("weight", strategy.weight or 1.0))
+        if before_payload.get("entry_long") is not None:
+            strategy.entry_long = dict(before_payload.get("entry_long") or {})
+        if before_payload.get("entry_short") is not None:
+            strategy.entry_short = dict(before_payload.get("entry_short") or {})
+    payload = _append_status_history(payload, state="rolled_back", actor=actor, reason=reason, version_ref=str((payload.get("version") or {}).get("rollback_target") or recommendation.id), before_payload=after_payload, after_payload=before_payload)
+    recommendation.recommendation_value = payload
+    recommendation.is_applied = False
+    db.commit()
+    db.refresh(recommendation)
+    return serialize_learning_recommendation(recommendation)
+
+
+def get_learning_version_history(db: Session, *, recommendation_id: str) -> dict:
+    recommendation = _recommendation_by_id(db, recommendation_id)
+    if recommendation is None:
+        raise ValueError("learning_recommendation_not_found")
+    payload = _ensure_recommendation_defaults(recommendation)
+    return {
+        "recommendation_id": recommendation.id,
+        "current_version": (payload.get("version") or {}).get("current_version"),
+        "items": list(payload.get("version_history") or []),
+    }
+
+
+def get_learning_post_change_monitoring(db: Session, *, recommendation_id: str) -> dict:
+    recommendation = _recommendation_by_id(db, recommendation_id)
+    if recommendation is None:
+        raise ValueError("learning_recommendation_not_found")
+    payload = _ensure_recommendation_defaults(recommendation)
+    monitoring = payload.get("post_change_monitoring") or {}
+    if recommendation.applied_at:
+        monitoring = _build_post_change_monitoring(db, recommendation=recommendation, since_at=recommendation.applied_at)
+        payload["post_change_monitoring"] = monitoring
+        recommendation.recommendation_value = payload
+        db.commit()
+        db.refresh(recommendation)
+    return {"recommendation_id": recommendation.id, **(monitoring or {"windows": {}})}
+
+
+def mark_learning_recommendation_simulated(db: Session, *, recommendation_id: str, actor: str, reason: str, simulation_payload: dict) -> dict:
+    recommendation = _recommendation_by_id(db, recommendation_id)
+    if recommendation is None:
+        raise ValueError("learning_recommendation_not_found")
+    payload = _ensure_recommendation_defaults(recommendation)
+    version_ref = _current_version_ref(payload, recommendation.id)
+    safe_simulation_payload = _json_safe(simulation_payload)
+    payload["last_simulation"] = safe_simulation_payload
+    payload = _append_status_history(payload, state="simulated", actor=actor, reason=reason, version_ref=version_ref, before_payload={}, after_payload={"simulation_scope": safe_simulation_payload.get("scope")})
+    recommendation.recommendation_value = payload
+    db.commit()
+    db.refresh(recommendation)
+    return serialize_learning_recommendation(recommendation)
+
+
+def serialize_learning_recommendation(row: LearningRecommendation) -> dict:
+    payload = _ensure_recommendation_defaults(row)
+    return {
+        "id": row.id,
+        "strategy_id": row.strategy_id,
+        "family": row.family,
+        "recommendation_type": row.recommendation_type,
+        "recommendation_value": payload,
+        "note": row.note,
+        "severity": row.severity,
+        "is_applied": row.is_applied,
+        "reason": payload.get("reason"),
+        "confidence": payload.get("confidence"),
+        "evidence_summary": payload.get("evidence_summary"),
+        "recommendation_scope": payload.get("scope"),
+        "risk_impact": payload.get("risk_impact"),
+        "lifecycle": payload.get("lifecycle"),
+        "status_history": payload.get("status_history") or [],
+        "version": payload.get("version") or {},
+        "version_history": payload.get("version_history") or [],
+        "post_change_monitoring": payload.get("post_change_monitoring") or {},
+        "created_at": row.created_at,
+        "applied_at": row.applied_at,
+    }
