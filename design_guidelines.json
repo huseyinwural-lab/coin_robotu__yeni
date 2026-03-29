@@ -1,126 +1,122 @@
 {
-  "identity": {
-    "persona": "E1: The Anti-AI Designer",
-    "theme_name": "The Industrial Cockpit",
-    "core_philosophy": "Precision over Decoration. Data over Fluff.",
-    "visual_metaphor": "High-Frequency Trading Engine Room"
+  "project_name": "Incident Intelligence Core",
+  "file_type_target": ".js (React Javascript)",
+  "theme_and_archetype": {
+    "theme": "light",
+    "archetype": "4_swiss_high_contrast",
+    "description": "Authority, clarity, and truth. Objective, rigid, and highly functional control room for system operators.",
+    "design_principles": [
+      "Color is Function Only: 95% monochrome. Color exists only to guide action.",
+      "Density and Scanability: Every pixel utilized. Control Room Grid mode.",
+      "Expose the Skeleton: Visible grid borders, technical look.",
+      "No Decorative Graphics: Data is the UI."
+    ]
   },
   "typography": {
-    "font_family_heading": "Chivo, sans-serif",
-    "font_family_body": "Manrope, sans-serif",
-    "font_family_code": "JetBrains Mono, monospace",
-    "import_url": "https://fonts.googleapis.com/css2?family=Chivo:wght@400;700;900&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;700&display=swap",
-    "rules": {
-      "headings": "Uppercase, Tracking-tight, High Contrast",
-      "body": "High legibility, especially for numerals",
-      "data": "Monospace for all financial figures and logs"
-    }
+    "fonts": [
+      {
+        "family": "Chivo",
+        "usage": "Headings (H1, H2, H3)",
+        "weights": ["400", "700", "900"],
+        "classes": "font-sans tracking-tight"
+      },
+      {
+        "family": "IBM Plex Sans",
+        "usage": "Body text, generic UI labels",
+        "weights": ["400", "500"],
+        "classes": "font-sans"
+      },
+      {
+        "family": "JetBrains Mono",
+        "usage": "Data points, Timestamps, Incident IDs, PnL, Metrics",
+        "weights": ["400", "600"],
+        "classes": "font-mono tracking-tight"
+      }
+    ],
+    "scale_rules": "H1 max text-3xl. Subheadings text-lg. Heavy use of uppercase, wide-tracking labels for metadata (text-xs uppercase tracking-widest)."
   },
   "colors": {
-    "primary": {
-      "name": "Safety Orange",
-      "hex": "#FF5F00",
-      "usage": "CTAs, Active States, Live Indicators, Warnings"
-    },
-    "secondary": {
-      "name": "Deep Slate",
-      "hex": "#020617",
-      "usage": "Global Background (Dark Mode)"
-    },
-    "surface": {
-      "name": "Panel Slate",
-      "hex": "#0F172A",
-      "usage": "Cards, Sidebars"
+    "background": {
+      "primary": "#F9FAFB",
+      "surface": "#FFFFFF",
+      "surface_alt": "#F3F4F6",
+      "border": "#E5E7EB",
+      "border_dark": "#D1D5DB"
     },
     "text": {
-      "primary": "#F8FAFC",
-      "secondary": "#94A3B8",
-      "muted": "#475569"
+      "primary": "#111827",
+      "secondary": "#4B5563",
+      "tertiary": "#6B7280"
     },
-    "border": {
-      "default": "#1E293B",
-      "active": "#FF5F00"
-    },
-    "status": {
-      "critical": "#DC2626",
-      "success": "#10B981",
-      "warning": "#F59E0B",
-      "info": "#3B82F6"
-    },
-    "admin_specific": {
-      "base": "#1E293B",
-      "accent_critical": "#EF4444",
-      "accent_normal": "#3B82F6"
+    "semantic_signals": {
+      "critical_error": "#DC2626",
+      "warning": "#D97706",
+      "success": "#059669",
+      "investigating_info": "#2563EB",
+      "action_primary": "#0A0A0A"
     }
   },
-  "layout_strategies": {
-    "landing_page": {
-      "grid_system": "Bento Grid (Asymmetric)",
-      "spacing": "Generous (p-12 to p-24)",
-      "alignment": "Left aligned text, Grid aligned visuals",
-      "hero_style": "Split screen or Heavy Typography with abstract background"
-    },
-    "dashboard": {
-      "grid_system": "High Density 12-col Grid",
-      "spacing": "Tight (p-3 to p-4)",
-      "container_style": "Full height (h-screen), Scrollable panes",
-      "visual_style": "Cardless or Border-only cards. No shadows."
-    }
+  "layout_and_grids": {
+    "strategy": "MODE B: THE CONTROL ROOM GRID",
+    "structure": "Base grid grid-cols-1 md:grid-cols-4 xl:grid-cols-12. Tight gaps (gap-4). Every pixel utilized.",
+    "surfaces": "Grid Borders (Technical Look). Container uses pure HTML/Tailwind with border-collapse or distinct 1px border-gray-200. No glassmorphism. Flat solid backgrounds. Sharp edges (rounded-none or max rounded-sm).",
+    "spacing": "Dense internal padding (p-4 or p-6) inside widgets to prevent text collision."
   },
   "components": {
-    "buttons": {
-      "style": "Sharp or Rounded-sm (2px)",
-      "animation": "Instant snap or slight lift",
-      "primary": "bg-[#FF5F00] text-white hover:bg-[#CC4C00]",
-      "secondary": "border border-slate-700 hover:border-[#FF5F00] hover:text-[#FF5F00]"
+    "incident_stream": {
+      "role": "Real-time active incident list",
+      "design": "Vertical list, compact rows. Left-aligned border indicating severity color (e.g., 4px red border for critical). Hover state: bg-gray-50, cursor-pointer. Selected state must have a distinct background shift."
     },
-    "cards": {
-      "style": "Flat, Border-only (border-slate-800)",
-      "radius": "rounded-sm"
+    "timeline_view": {
+      "role": "Chronological drillable timeline",
+      "design": "Vertical stepper layout. Monospace timestamps. Small circular nodes. Connecting line using border-gray-200. Staggered fade-in for new stream events."
     },
-    "inputs": {
-      "style": "bg-slate-900 border-slate-700 focus:border-[#FF5F00] focus:ring-0",
-      "radius": "rounded-sm"
+    "root_cause_panel": {
+      "role": "Inferred cause and confidence score",
+      "design": "Highlight box. High contrast text-lg font-bold text-gray-900. Confidence score in large mono font (e.g., text-3xl text-emerald-600). Neo-brutalist sharp 1px border."
     },
-    "tables": {
-      "style": "Dense, Sticky Header, Row Hover (bg-white/5)",
-      "font": "font-mono for data cells"
+    "action_panel": {
+      "role": "Proposed actions, manual trigger, history",
+      "design": "Square corners. Primary action: bg-black text-white hover:bg-gray-800. Critical Action (e.g., block trading): bg-red-600 text-white hover:bg-red-700. Explicit separation from analytical views."
+    },
+    "impact_panel": {
+      "role": "PNL, Exposure, Availability",
+      "design": "Data-heavy metric cards. Big Monospace numbers. Red/Green text for negative/positive PNL impact."
+    },
+    "policy_engine_panel": {
+      "role": "Manage execution, risk, system policies",
+      "design": "Table or rule-builder interface. IF/THEN block structures using monospace fonts for attributes (anomaly.type, severity). Tight layout."
+    },
+    "prediction_trend_panel": {
+      "role": "Incident frequency, recurrence patterns",
+      "library_recommendation": "Recharts",
+      "design": "Time-series line or bar charts. Minimal grid lines (only horizontal, stroke-dasharray). Tooltips must have sharp corners and solid backgrounds."
+    },
+    "graph_drilldown": {
+      "role": "Multi-signal graph, node selection",
+      "library_recommendation": "visx or react-force-graph-2d",
+      "design": "Stark geometry for nodes (squares/circles). Monochrome links. Highlighted paths use semantic colors (blue/red). Black-and-white base aesthetic until a node is active."
     }
   },
-  "image_assets": {
-    "hero_background": {
-      "url": "https://images.unsplash.com/photo-1762278805112-a0f50365845e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwyfHxhYnN0cmFjdCUyMGdlb21ldHJpYyUyMG9yYW5nZSUyMGJsYWNrJTIwZGlnaXRhbHxlbnwwfHx8fDE3NzMxODM1Njh8MA&ixlib=rb-4.1.0&q=85",
-      "alt": "Abstract Orange Data Flow",
-      "usage": "Hero Section Background (Low opacity overlay)"
-    },
-    "auth_background": {
-      "url": "https://images.unsplash.com/photo-1634549709262-508c47d4c229?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA3MDR8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGdlb21ldHJpYyUyMG9yYW5nZSUyMGJsYWNrJTIwZGlnaXRhbHxlbnwwfHx8fDE3NzMxODM1Njh8MA&ixlib=rb-4.1.0&q=85",
-      "alt": "Geometric Dark Curve",
-      "usage": "Login/Register Split Screen Image"
-    },
-    "feature_tech": {
-      "url": "https://images.unsplash.com/photo-1744113439895-14529bb2f6e6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njl8MHwxfHNlYXJjaHwzfHx0ZWNobm9sb2d5JTIwY2lyY3VpdCUyMGJvYXJkJTIwb3JhbmdlfGVufDB8fHx8MTc3MzE4MzU3MXww&ixlib=rb-4.1.0&q=85",
-      "alt": "Industrial Control Panel",
-      "usage": "Strategy Engine Feature Section"
-    },
-    "infrastructure": {
-      "url": "https://images.unsplash.com/photo-1680992046626-418f7e910589?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTJ8MHwxfHNlYXJjaHw0fHxzZXJ2ZXIlMjByb29tJTIwbGlnaHRzJTIwZGFyayUyMG9yYW5nZXxlbnwwfHx8fDE3NzMxODM1NzB8MA&ixlib=rb-4.1.0&q=85",
-      "alt": "Dark Server Rack",
-      "usage": "Infrastructure/Low Latency Section"
-    }
+  "motion": {
+    "philosophy": "Minimalist and precise.",
+    "rules": [
+      "Micro-interactions only (hover states, click feedback).",
+      "Real-time event streams should flash softly (e.g., bg-blue-50 to transparent over 1s) to indicate new data.",
+      "No bouncy or playful animations."
+    ]
   },
-  "universal_guidelines": [
-    "Do NOT use gradients for backgrounds. Use solid colors or noise textures.",
-    "Do NOT use rounded-xl or rounded-2xl. Keep it sharp (rounded-none or rounded-sm).",
-    "Always use 'Inter' or 'Manrope' for UI text, but 'JetBrains Mono' for ANY number or code.",
-    "Dashboard must be high density. No wasted whitespace in the trading panel.",
-    "Use 'Safety Orange' (#FF5F00) sparingly but boldly (Primary Buttons, Active Tabs, Alerts).",
-    "Ensure 100% viewport height layouts for dashboard (no scroll on body, scroll inside panels).",
-    "Use 'sonner' for toast notifications.",
-    "Use 'recharts' for data visualization.",
-    "All interactive elements must have data-testid attributes.",
-    "Dark Mode is the default for User Dashboard. Admin Dashboard can use a 'Navy/Blue' theme to differentiate.",
-    "Login/Auth pages should be split-screen (Image Left/Right, Form Opposite)."
-  ],
-  "instructions_to_main_agent": "Initialize the Shadcn configuration with Slate as base color. Install 'recharts' and 'lucide-react'. Set up the font imports in index.css immediately. Configure Tailwind colors to match the 'colors' section exactly."
+  "icons": {
+    "library": "Phosphor Icons (@phosphor-icons/react)",
+    "style": "Regular or Bold weight. Consistent line thickness."
+  },
+  "testing_and_accessibility": {
+    "data_testid_rules": "MANDATORY. All interactive and key informational elements MUST include a data-testid attribute. Use kebab-case, role-based naming (e.g., data-testid='incident-item-INC-123', data-testid='trigger-action-restart-worker', data-testid='timeline-view-node').",
+    "contrast": "Ensure minimum 4.5:1 ratio for normal text. Explicitly set hover text colors."
+  },
+  "tech_stack_overrides": {
+    "files": ".js (React Javascript) only. Do not generate .tsx.",
+    "ui_library": "Shadcn UI (customized for sharp edges and density), Recharts for time-series.",
+    "empty_states": "Use typography and borders. Do not use placeholder images."
+  }
 }
