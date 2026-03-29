@@ -346,6 +346,62 @@ def evaluate_execution_safety_gate(
     return payload
 
 
+def get_execution_safety_gate_explain(
+    db: Session,
+    *,
+    force_refresh: bool = False,
+    user_id: str | None = None,
+    request_id: str | None = None,
+    session_id: str | None = None,
+    correlation_id: str | None = None,
+) -> dict:
+    gate = evaluate_execution_safety_gate(
+        db,
+        force_refresh=force_refresh,
+        user_id=user_id,
+        request_id=request_id,
+        session_id=session_id,
+        correlation_id=correlation_id,
+    )
+    blockers = list(gate.get("blockers") or [])
+    score = float(gate.get("score") or 0.0)
+    legacy = dict(gate.get("legacy_gate") or {})
+    bybit = dict(legacy.get("bybit_order_smoke") or {})
+
+    market_score = 0.2 if "stale_market_data" in blockers else 0.95
+    exchange_score = 0.15 if "stale_exchange_data" in blockers else (0.85 if str(bybit.get("status") or "").upper() == "PASS" else 0.25)
+    permission_score = 0.2 if "permission_check_failed" in blockers else 0.95
+    proof_score = 0.25 if "missing_required_proof" in blockers else 0.9
+    path_score = 0.2 if "execution_path_closed" in blockers else 0.9
+
+    components = [
+        {"name": "market_data", "weight": 0.2, "score": round(market_score, 3)},
+        {"name": "exchange_health", "weight": 0.3, "score": round(exchange_score, 3)},
+        {"name": "permission_check", "weight": 0.15, "score": round(permission_score, 3)},
+        {"name": "proof_quality", "weight": 0.2, "score": round(proof_score, 3)},
+        {"name": "execution_path", "weight": 0.15, "score": round(path_score, 3)},
+    ]
+
+    computed = sum(component["weight"] * component["score"] for component in components) * 100
+    confidence_band = "HIGH"
+    if blockers:
+        confidence_band = "LOW" if len(blockers) >= 2 else "MEDIUM"
+    elif score < 80 or computed < 80:
+        confidence_band = "MEDIUM"
+
+    return {
+        "score": round(score if score > 0 else computed, 2),
+        "state": gate.get("state"),
+        "confidence_band": confidence_band,
+        "components": components,
+        "blockers": blockers,
+        "override_reason": "hard_blocker" if blockers else "score_based",
+        "warnings": gate.get("warnings") or [],
+        "correlation_id": gate.get("correlation_id"),
+        "evaluated_at": gate.get("evaluated_at"),
+    }
+
+
 def _intent_state_from_event(current_state: str, event: ExecutionIntentEvent) -> tuple[str, str | None]:
     event_type = _normalize_code(event.event_type)
     event_status = _canonical_intent_state(event.event_status)
@@ -517,15 +573,21 @@ def get_execution_safety_quarantine(db: Session, *, limit: int = 200) -> dict:
         .all()
     )
     items: list[dict] = []
+    status_summary: dict[str, int] = {}
+    stage_summary: dict[str, int] = {}
     for row in rows:
         payload = dict(row.payload or {})
+        resolution_history = list(payload.get("resolution_history") or [])
+        stage_value = payload.get("failure_stage") or payload.get("state") or row.event_type
+        status_summary[row.status] = status_summary.get(row.status, 0) + 1
+        stage_summary[str(stage_value)] = stage_summary.get(str(stage_value), 0) + 1
         items.append(
             {
                 "quarantine_id": row.id,
                 "correlation_id": row.correlation_id or payload.get("correlation_id"),
                 "intent_id": payload.get("intent_id") or (row.entity_id if row.entity_type == "execution_intent" else None),
                 "reason": payload.get("reason_code") or row.dead_letter_reason or row.error_message,
-                "failure_stage": payload.get("failure_stage") or payload.get("state") or row.event_type,
+                "failure_stage": stage_value,
                 "retry_count": row.retry_count,
                 "max_retry": row.max_retry,
                 "first_seen_at": _as_utc(row.created_at).isoformat() if _as_utc(row.created_at) else None,
@@ -537,12 +599,17 @@ def get_execution_safety_quarantine(db: Session, *, limit: int = 200) -> dict:
                     "failure_class": row.failure_class,
                 },
                 "status": row.status,
+                "resolution_history": resolution_history,
                 "entity_type": row.entity_type,
                 "event_type": row.event_type,
                 "entity_id": row.entity_id,
             }
         )
-    return {"total": len(items), "items": items}
+    return {
+        "total": len(items),
+        "summary": {"by_status": status_summary, "by_failure_stage": stage_summary},
+        "items": items,
+    }
 
 
 def apply_execution_safety_quarantine_action(
@@ -552,29 +619,133 @@ def apply_execution_safety_quarantine_action(
     action: str,
     actor_user_id: str,
     actor_role: str,
+    note: str | None = None,
 ) -> dict:
+    normalized_action = str(action or "").strip().lower()
     action_map = {
         "replay": "replay",
         "reprocess": "replay",
         "manual_resolve": "dismiss",
-        "mark_failed": "mark_failed",
+        "mark_resolved": "dismiss",
         "dismiss": "dismiss",
+        "mark_failed": "mark_failed",
+        "escalate": "escalate",
+        "attach_note": "attach_note",
+        "release_from_quarantine": "release_from_quarantine",
     }
-    mapped = action_map.get(str(action or "").strip().lower())
+    mapped = action_map.get(normalized_action)
     if mapped is None:
         raise ValueError("invalid_action")
     row = db.query(FailedEvent).filter(FailedEvent.id == quarantine_id).first()
     if row is None:
         row = db.query(FailedEvent).filter(FailedEvent.entity_id == quarantine_id).first()
+    if row is None:
+        raise ValueError("quarantine_event_not_found")
     before_state = str((row.status if row else "unknown") or "unknown")
 
-    result = apply_runtime_quarantine_action(
-        db,
-        event_id=quarantine_id,
-        action=mapped,
-        actor_user_id=actor_user_id,
-        actor_role=actor_role,
-    )
+    result: dict
+    if mapped in {"replay", "dismiss", "mark_failed"}:
+        if mapped == "replay":
+            payload = dict(row.payload or {})
+            previous_correlation_id = str(row.correlation_id or payload.get("correlation_id") or "")
+            replay_correlation_id = f"replay-{uuid.uuid4().hex[:20]}"
+            payload["correlation_id"] = replay_correlation_id
+            payload["replay_context"] = {
+                "previous_correlation_id": previous_correlation_id,
+                "new_correlation_id": replay_correlation_id,
+                "replayed_at": _utcnow().isoformat(),
+            }
+            row.payload = payload
+            row.correlation_id = replay_correlation_id
+            db.commit()
+            db.refresh(row)
+        result = apply_runtime_quarantine_action(
+            db,
+            event_id=quarantine_id,
+            action=mapped,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+        )
+    elif mapped == "escalate":
+        row.status = "escalated"
+        row.last_action_by = actor_user_id
+        row.updated_at = _utcnow()
+        db.commit()
+        db.refresh(row)
+        result = {
+            "id": row.id,
+            "event_id": row.entity_id,
+            "entity_type": row.entity_type,
+            "status": row.status,
+            "retry_count": row.retry_count,
+            "max_retry": row.max_retry,
+            "payload": dict(row.payload or {}),
+        }
+    elif mapped == "release_from_quarantine":
+        row.status = "pending"
+        row.next_retry_at = _utcnow()
+        row.updated_at = _utcnow()
+        db.commit()
+        db.refresh(row)
+        result = {
+            "id": row.id,
+            "event_id": row.entity_id,
+            "entity_type": row.entity_type,
+            "status": row.status,
+            "retry_count": row.retry_count,
+            "max_retry": row.max_retry,
+            "payload": dict(row.payload or {}),
+        }
+    else:
+        payload = dict(row.payload or {})
+        notes = list(payload.get("notes") or [])
+        if note:
+            notes.append(
+                {
+                    "note": note,
+                    "actor_id": actor_user_id,
+                    "actor_role": actor_role,
+                    "created_at": _utcnow().isoformat(),
+                }
+            )
+        payload["notes"] = notes
+        row.payload = payload
+        row.updated_at = _utcnow()
+        db.commit()
+        db.refresh(row)
+        result = {
+            "id": row.id,
+            "event_id": row.entity_id,
+            "entity_type": row.entity_type,
+            "status": row.status,
+            "retry_count": row.retry_count,
+            "max_retry": row.max_retry,
+            "payload": dict(row.payload or {}),
+        }
+
+    post_row = db.query(FailedEvent).filter(FailedEvent.id == str(result.get("id") or quarantine_id)).first()
+    if post_row is not None:
+        payload = dict(post_row.payload or {})
+        resolution_history = list(payload.get("resolution_history") or [])
+        resolution_history.append(
+            {
+                "action": normalized_action,
+                "actor_id": actor_user_id,
+                "actor_role": actor_role,
+                "note": note,
+                "before_state": before_state,
+                "after_state": str(result.get("status") or "unknown"),
+                "created_at": _utcnow().isoformat(),
+            }
+        )
+        payload["resolution_history"] = resolution_history
+        post_row.payload = payload
+        post_row.last_action_by = actor_user_id
+        post_row.updated_at = _utcnow()
+        db.commit()
+        db.refresh(post_row)
+        result["payload"] = payload
+
     create_audit_log(
         db,
         action="execution_quarantine_recovery_action",
@@ -586,16 +757,16 @@ def apply_execution_safety_quarantine_action(
         details={
             "actor_type": "user",
             "actor_id": actor_user_id,
-            "action": action,
+            "action": normalized_action,
             "target_type": "failed_event",
             "target_id": str(result.get("id") or quarantine_id),
-            "reason": "manual_quarantine_action",
+            "reason": note or "manual_quarantine_action",
             "before_state": before_state,
             "after_state": str(result.get("status") or "unknown"),
             "correlation_id": (result.get("payload") or {}).get("correlation_id"),
         },
     )
-    result["requested_action"] = action
+    result["requested_action"] = normalized_action
     result["before_state"] = before_state
     result["after_state"] = str(result.get("status") or "unknown")
     return result

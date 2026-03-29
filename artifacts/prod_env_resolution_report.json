@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_1",
   "status": "FAIL",
-  "generated_at": "2026-03-27T20:38:28.039816+00:00",
+  "generated_at": "2026-03-29T10:11:40.619369+00:00",
   "checks": [
     {
       "key": "DATABASE_URL",
@@ -27,7 +27,7 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "frontend/.env",
-      "value_preview": "https://governance-builder.preview.emergentagent.com",
+      "value_preview": "https://quarantine-pipeline.preview.emergentagent.com",
       "status": "PASS"
     }
   ],

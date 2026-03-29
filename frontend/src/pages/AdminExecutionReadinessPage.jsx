@@ -49,6 +49,7 @@ export const AdminExecutionReadinessPage = () => {
   const [gateTrend, setGateTrend] = useState(null);
   const [interventionTrail, setInterventionTrail] = useState(null);
   const [acceptanceLatest, setAcceptanceLatest] = useState(null);
+  const [gateExplain, setGateExplain] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const previousFailCountRef = useRef(0);
@@ -81,6 +82,7 @@ export const AdminExecutionReadinessPage = () => {
         { data: trendPayload },
         { data: interventionPayload },
         { data: acceptanceLatestPayload },
+        { data: explainPayload },
       ] = await Promise.all([
         apiClient.get(`/phase4/admin/production-gate?refresh_checks=${refreshChecks ? "true" : "false"}`),
         apiClient.get("/admin/execution-readiness"),
@@ -96,6 +98,7 @@ export const AdminExecutionReadinessPage = () => {
         apiClient.get("/execution-safety/recovery/gate-trends?days=14"),
         apiClient.get("/execution-safety/recovery/intervention-audit?limit=120"),
         apiClient.get("/execution-safety/acceptance/testnet/latest"),
+        apiClient.get(`/execution-safety/gate/explain?force_refresh=${refreshChecks ? "true" : "false"}`),
       ]);
       setGate(gateData);
       setReadiness(readinessData);
@@ -111,6 +114,7 @@ export const AdminExecutionReadinessPage = () => {
       setGateTrend(trendPayload || null);
       setInterventionTrail(interventionPayload || null);
       setAcceptanceLatest(acceptanceLatestPayload?.latest || null);
+      setGateExplain(explainPayload || null);
 
       const flappingConfig = historyData?.flapping_config || {};
       if (flappingConfig.window_sec) setFlappingWindowSec(Number(flappingConfig.window_sec));
@@ -683,6 +687,21 @@ export const AdminExecutionReadinessPage = () => {
           <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-acceptance-latest-id">latest_run: {acceptanceLatest?.payload?.acceptance_run_id || acceptanceLatest?.artifact_id || "-"}</p>
           <p className="text-xs text-slate-300" data-testid="execution-safety-acceptance-latest-proof-type">proof_type: {acceptanceLatest?.payload?.proof_type || "-"}</p>
           <p className="text-xs text-slate-300" data-testid="execution-safety-acceptance-latest-created-at">created_at: {acceptanceLatest?.created_at || "-"}</p>
+        </article>
+
+        <article className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="execution-safety-gate-explain-card">
+          <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-gate-explain-title">Gate Explainability</h3>
+          <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-gate-explain-score">score: {gateExplain?.score ?? "-"}</p>
+          <p className="text-xs text-slate-300" data-testid="execution-safety-gate-explain-state">state: {gateExplain?.state || "-"}</p>
+          <p className="text-xs text-slate-300" data-testid="execution-safety-gate-explain-confidence">confidence_band: {gateExplain?.confidence_band || "-"}</p>
+          <p className="text-xs text-slate-300" data-testid="execution-safety-gate-explain-override">override_reason: {gateExplain?.override_reason || "-"}</p>
+          <div className="mt-2 space-y-1" data-testid="execution-safety-gate-explain-components-list">
+            {(gateExplain?.components || []).map((item, idx) => (
+              <p key={`${item.name}-${idx}`} className="text-xs text-slate-400" data-testid={`execution-safety-gate-explain-component-${idx}`}>
+                {item.name}: weight={item.weight} score={item.score}
+              </p>
+            ))}
+          </div>
         </article>
       </div>
 

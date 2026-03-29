@@ -14,7 +14,7 @@ import httpx
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from models import ExecutionIntent, ExecutionIntentEvent, FailedEvent
+from models import AuditLog, ExecutionIntent, ExecutionIntentEvent, FailedEvent
 from services.admin_exchange_credentials_service import execution_credentials_for_adapter
 from services.artifact_service import write_signed_artifact
 from services.audit_service import create_audit_log
@@ -301,10 +301,74 @@ def get_quarantine_detail(db: Session, *, quarantine_id: str) -> dict:
     if row is None:
         raise ValueError("quarantine_event_not_found")
     payload = dict(row.payload or {})
+    intent_id = payload.get("intent_id") or (row.entity_id if row.entity_type == "execution_intent" else None)
+    correlation_id = row.correlation_id or payload.get("correlation_id")
+    resolution_history = list(payload.get("resolution_history") or [])
+    related_events = []
+    if intent_id:
+        intent_events = (
+            db.query(ExecutionIntentEvent)
+            .filter(ExecutionIntentEvent.intent_id == intent_id)
+            .order_by(ExecutionIntentEvent.created_at.asc())
+            .limit(200)
+            .all()
+        )
+        related_events = [
+            {
+                "event_type": event.event_type,
+                "event_status": _normalize_state(event.event_status),
+                "external_order_id": event.external_order_id,
+                "created_at": _as_utc(event.created_at).isoformat() if _as_utc(event.created_at) else None,
+            }
+            for event in intent_events
+        ]
+
+    audit_rows = (
+        db.query(AuditLog)
+        .filter(AuditLog.entity_id.in_([str(intent_id or ""), str(row.id)]))
+        .order_by(AuditLog.created_at.asc())
+        .limit(300)
+        .all()
+    )
+    if correlation_id:
+        audit_rows = [
+            entry
+            for entry in audit_rows
+            if str((entry.details or {}).get("correlation_id") or correlation_id) == str(correlation_id)
+        ]
+
+    failure_timeline = [
+        {
+            "type": "quarantine_created",
+            "at": _as_utc(row.created_at).isoformat() if _as_utc(row.created_at) else None,
+            "status": row.status,
+            "reason": row.error_message,
+        }
+    ]
+    for hist in resolution_history:
+        failure_timeline.append(
+            {
+                "type": "resolution_action",
+                "at": hist.get("created_at"),
+                "status": hist.get("after_state"),
+                "reason": hist.get("action"),
+                "note": hist.get("note"),
+            }
+        )
+    for audit in audit_rows:
+        failure_timeline.append(
+            {
+                "type": "audit",
+                "at": _as_utc(audit.created_at).isoformat() if _as_utc(audit.created_at) else None,
+                "status": audit.action,
+                "reason": (audit.details or {}).get("reason"),
+            }
+        )
+
     return {
         "quarantine_id": row.id,
-        "correlation_id": row.correlation_id or payload.get("correlation_id"),
-        "intent_id": payload.get("intent_id") or (row.entity_id if row.entity_type == "execution_intent" else None),
+        "correlation_id": correlation_id,
+        "intent_id": intent_id,
         "reason": payload.get("reason_code") or row.dead_letter_reason or row.error_message,
         "failure_stage": payload.get("failure_stage") or payload.get("state") or row.event_type,
         "retry_count": row.retry_count,
@@ -320,6 +384,16 @@ def get_quarantine_detail(db: Session, *, quarantine_id: str) -> dict:
         "status": row.status,
         "entity_type": row.entity_type,
         "event_type": row.event_type,
+        "resolution_history": resolution_history,
+        "correlation_chain_link": {
+            "intent_timeline": f"/api/execution-safety/intents/{intent_id}/timeline" if intent_id else None,
+            "intent_reconcile": f"/api/execution-safety/intents/{intent_id}/reconcile" if intent_id else None,
+            "intent_artifact": f"/api/execution-safety/artifacts/{intent_id}" if intent_id else None,
+            "quarantine_detail": f"/api/execution-safety/quarantine/{row.id}",
+            "correlation_id": correlation_id,
+        },
+        "failure_timeline": failure_timeline,
+        "related_intent_events": related_events,
     }
 
 
@@ -437,6 +511,24 @@ def reconcile_intent_with_exchange(
         mismatch_flags.append("local_submitted_exchange_no_trace")
         resolution_reason = "missing_external_order_id"
 
+    severity = "LOW"
+    high_flags = {
+        "ghost_fill_detection",
+        "canceled_locally_filled_remotely",
+        "order_exists_exchange_local_missing",
+        "missing_fill_detection",
+    }
+    medium_flags = {"partial_fill_mismatch_detection", "late_ack_detection", "local_submitted_exchange_no_trace"}
+    if any(flag in high_flags for flag in mismatch_flags):
+        severity = "HIGH"
+    elif any(flag in medium_flags for flag in mismatch_flags):
+        severity = "MEDIUM"
+    confidence = 0.9
+    if not external_order_id:
+        confidence = 0.35
+    elif mismatch_flags:
+        confidence = 0.55 if severity == "MEDIUM" else 0.4
+
     result = {
         "intent_id": intent.intent_id,
         "correlation_id": intent.correlation_id,
@@ -446,6 +538,9 @@ def reconcile_intent_with_exchange(
         "detected_fill_qty": detected_fill_qty,
         "detected_avg_price": round(detected_avg_price, 8),
         "mismatch_flags": sorted(set(mismatch_flags)),
+        "mismatch_severity": severity,
+        "confidence": round(confidence, 2),
+        "requires_manual_intervention": bool(mismatch_flags),
         "resolution_action": resolution_action,
         "resolution_reason": resolution_reason,
         "reconciled_at": _utcnow().isoformat(),
@@ -988,69 +1083,102 @@ def get_testnet_acceptance_history(limit: int = 50) -> dict:
     return {"items": _acceptance_manifest_items(limit=limit), "total": len(_acceptance_manifest_items(limit=5000))}
 
 
-def _select_bulk_targets(db: Session, *, action: str, selection_mode: str, intent_ids: list[str], quarantine_ids: list[str], filters: dict) -> list[dict]:
+def _select_bulk_targets(
+    db: Session,
+    *,
+    action: str,
+    selection_mode: str,
+    intent_ids: list[str],
+    quarantine_ids: list[str],
+    filters: dict,
+    limit: int,
+) -> list[dict]:
     mode = str(selection_mode or "explicit_ids").strip().lower()
+    normalized_filters = dict(filters or {})
     targets: list[dict] = []
 
-    if mode == "explicit_ids":
+    if mode in {"explicit_ids", "explicit ids"}:
         for intent_id in intent_ids:
             targets.append({"target_type": "intent", "target_id": intent_id})
         for quarantine_id in quarantine_ids:
             targets.append({"target_type": "quarantine", "target_id": quarantine_id})
-        return targets
+        return targets[:limit]
 
-    if mode == "by_state":
-        states = {str(item).strip().upper() for item in (filters.get("states") or [])}
-        rows = db.query(ExecutionIntent).all()
-        for row in rows:
-            if _normalize_state(row.status) in states:
-                targets.append({"target_type": "intent", "target_id": row.intent_id})
-        return targets
+    states = {str(item).strip().upper() for item in (normalized_filters.get("states") or normalized_filters.get("state") or [])}
+    reason_codes = {str(item).strip() for item in (normalized_filters.get("reason_codes") or normalized_filters.get("reason_code") or [])}
+    failure_stages = {str(item).strip() for item in (normalized_filters.get("failure_stages") or normalized_filters.get("failure_stage") or [])}
+    environment = str(normalized_filters.get("environment") or "").lower().strip()
+    age_minutes = _safe_int(normalized_filters.get("age_minutes"), 0)
+    age_cutoff = _utcnow() - timedelta(minutes=age_minutes) if age_minutes > 0 else None
+
+    if mode in {"by_filter", "by_state", "by_age_window", "by_environment"}:
+        intent_rows = db.query(ExecutionIntent).order_by(ExecutionIntent.created_at.asc()).all()
+        for row in intent_rows:
+            if states and _normalize_state(row.status) not in states:
+                continue
+            if environment and str((row.metadata or {}).get("environment") or "testnet").lower() != environment:
+                continue
+            created_at = _as_utc(row.created_at)
+            if age_cutoff and created_at and created_at > age_cutoff:
+                continue
+            targets.append({"target_type": "intent", "target_id": row.intent_id})
+            if len(targets) >= limit:
+                return targets
+
+        if action in {"bulk_retry", "bulk_release_from_quarantine"}:
+            quarantine_rows = db.query(FailedEvent).order_by(FailedEvent.updated_at.asc()).all()
+            for row in quarantine_rows:
+                payload = dict(row.payload or {})
+                stage = payload.get("failure_stage") or payload.get("state") or row.event_type
+                reason = payload.get("reason_code") or row.dead_letter_reason
+                if failure_stages and stage not in failure_stages:
+                    continue
+                if reason_codes and reason not in reason_codes:
+                    continue
+                if age_cutoff:
+                    updated_at = _as_utc(row.updated_at)
+                    if updated_at and updated_at > age_cutoff:
+                        continue
+                targets.append({"target_type": "quarantine", "target_id": row.id})
+                if len(targets) >= limit:
+                    return targets
+        return targets[:limit]
 
     if mode == "by_failure_stage":
-        stages = {str(item).strip() for item in (filters.get("failure_stages") or [])}
-        rows = db.query(FailedEvent).all()
+        rows = db.query(FailedEvent).order_by(FailedEvent.updated_at.asc()).all()
         for row in rows:
             payload = dict(row.payload or {})
             stage = payload.get("failure_stage") or payload.get("state") or row.event_type
-            if stage in stages:
-                targets.append({"target_type": "quarantine", "target_id": row.id})
-        return targets
-
-    if mode == "by_age_window":
-        minutes = _safe_int(filters.get("age_minutes"), 30)
-        cutoff = _utcnow() - timedelta(minutes=max(minutes, 1))
-        for row in db.query(ExecutionIntent).all():
-            created_at = _as_utc(row.created_at)
-            if created_at and created_at <= cutoff:
-                targets.append({"target_type": "intent", "target_id": row.intent_id})
+            if failure_stages and stage not in failure_stages:
+                continue
+            targets.append({"target_type": "quarantine", "target_id": row.id})
+            if len(targets) >= limit:
+                break
         return targets
 
     if mode == "by_reason_code":
-        reasons = {str(item).strip() for item in (filters.get("reason_codes") or [])}
-        for row in db.query(FailedEvent).all():
+        rows = db.query(FailedEvent).order_by(FailedEvent.updated_at.asc()).all()
+        for row in rows:
             payload = dict(row.payload or {})
             code = payload.get("reason_code") or row.dead_letter_reason
-            if code in reasons:
-                targets.append({"target_type": "quarantine", "target_id": row.id})
+            if reason_codes and code not in reason_codes:
+                continue
+            targets.append({"target_type": "quarantine", "target_id": row.id})
+            if len(targets) >= limit:
+                break
         return targets
 
     if mode == "by_retry_exhaustion":
-        exhausted = bool(filters.get("exhausted", True))
+        exhausted = bool(normalized_filters.get("exhausted", True))
         for row in db.query(FailedEvent).all():
             is_exhausted = int(row.retry_count or 0) >= int(row.max_retry or 0)
             if is_exhausted == exhausted:
                 targets.append({"target_type": "quarantine", "target_id": row.id})
+            if len(targets) >= limit:
+                break
         return targets
 
-    if mode == "by_environment":
-        env = str(filters.get("environment") or "").lower().strip()
-        for row in db.query(ExecutionIntent).all():
-            if str((row.metadata or {}).get("environment") or "testnet").lower() == env:
-                targets.append({"target_type": "intent", "target_id": row.intent_id})
-        return targets
-
-    return targets
+    return targets[:limit]
 
 
 def run_bulk_recovery(
@@ -1063,9 +1191,19 @@ def run_bulk_recovery(
     filters: dict,
     reason: str,
     requested_by: str,
+    limit: int,
 ) -> dict:
-    if action not in {"bulk_retry", "bulk_cancel", "bulk_reconcile"}:
+    if action not in {
+        "bulk_retry",
+        "bulk_cancel",
+        "bulk_reconcile",
+        "bulk_force_reconcile",
+        "bulk_move_to_quarantine",
+        "bulk_release_from_quarantine",
+    }:
         raise ValueError("invalid_bulk_action")
+
+    capped_limit = min(max(int(limit or 1), 1), 500)
 
     targets = _select_bulk_targets(
         db,
@@ -1074,6 +1212,7 @@ def run_bulk_recovery(
         intent_ids=intent_ids,
         quarantine_ids=quarantine_ids,
         filters=filters,
+        limit=capped_limit,
     )
     results: list[dict] = []
 
@@ -1084,6 +1223,8 @@ def run_bulk_recovery(
         after_state = None
         error = None
         result_payload = None
+        result_state = "success"
+        correlation_id = None
 
         try:
             if target_type == "intent":
@@ -1091,9 +1232,11 @@ def run_bulk_recovery(
                 if intent is None:
                     raise ValueError("intent_not_found")
                 before_state = _normalize_state(intent.status)
+                correlation_id = intent.correlation_id
 
                 if action == "bulk_retry":
                     if before_state not in {"CREATED", "SUBMITTED", "ACKED", "PARTIALLY_FILLED", "RECONCILING"}:
+                        result_state = "skipped"
                         raise ValueError("non_retryable_intent")
                     result_payload = apply_intent_recovery_action(
                         db,
@@ -1104,6 +1247,7 @@ def run_bulk_recovery(
                     )
                 elif action == "bulk_cancel":
                     if before_state in {"FILLED", "FAILED", "CANCELED", "RECONCILED"}:
+                        result_state = "skipped"
                         raise ValueError("non_cancelable_intent")
                     latest_order_event = (
                         db.query(ExecutionIntentEvent)
@@ -1131,7 +1275,7 @@ def run_bulk_recovery(
                         actor_user_id=requested_by,
                         actor_role="user",
                     )
-                else:
+                elif action == "bulk_reconcile":
                     result_payload = reconcile_intent_with_exchange(
                         db,
                         intent_id=target_id,
@@ -1139,21 +1283,90 @@ def run_bulk_recovery(
                         actor_id=requested_by,
                         reason=reason or "bulk_reconcile",
                     )
+                elif action == "bulk_force_reconcile":
+                    result_payload = reconcile_intent_with_exchange(
+                        db,
+                        intent_id=target_id,
+                        actor_type="user",
+                        actor_id=requested_by,
+                        reason=reason or "bulk_force_reconcile",
+                    )
+                    rec = dict(result_payload.get("reconcile_result") or {})
+                    if rec.get("requires_manual_intervention"):
+                        intent.status = "RECONCILED"
+                        _append_intent_event(
+                            db,
+                            intent_id=intent.intent_id,
+                            event_type="EXECUTION_RECONCILE_FORCED",
+                            event_status="RECONCILED",
+                            payload={
+                                "reason": reason or "bulk_force_reconcile",
+                                "forced_by": requested_by,
+                                "mismatch_flags": rec.get("mismatch_flags") or [],
+                            },
+                        )
+                        db.commit()
+                        db.refresh(intent)
+                elif action == "bulk_move_to_quarantine":
+                    existing = (
+                        db.query(FailedEvent)
+                        .filter(FailedEvent.entity_type == "execution_intent", FailedEvent.entity_id == intent.intent_id)
+                        .filter(FailedEvent.status.in_(["quarantined", "pending", "retrying", "escalated"]))
+                        .first()
+                    )
+                    if existing:
+                        result_state = "skipped"
+                        raise ValueError("already_quarantined")
+                    quarantine_row = upsert_failed_event(
+                        db,
+                        event_type="execution.intent.manual_quarantine",
+                        entity_type="execution_intent",
+                        entity_id=intent.intent_id,
+                        payload={
+                            "intent_id": intent.intent_id,
+                            "correlation_id": intent.correlation_id,
+                            "reason_code": "bulk_move_to_quarantine",
+                            "failure_stage": before_state,
+                        },
+                        error_message="bulk_move_to_quarantine",
+                        status="quarantined",
+                        retry_count=0,
+                        max_retry=5,
+                        correlation_id=intent.correlation_id,
+                    )
+                    result_payload = {
+                        "quarantine_id": quarantine_row.id,
+                        "status": quarantine_row.status,
+                    }
+                else:
+                    result_state = "skipped"
+                    raise ValueError("invalid_action_for_intent")
 
                 db.refresh(intent)
                 after_state = _normalize_state(intent.status)
             else:
                 before = get_quarantine_detail(db, quarantine_id=target_id)
                 before_state = str(before.get("status"))
+                correlation_id = before.get("correlation_id")
                 if action == "bulk_reconcile":
+                    result_state = "skipped"
                     raise ValueError("bulk_reconcile_not_supported_for_quarantine")
-                q_action = "replay" if action == "bulk_retry" else "manual_resolve"
+                if action == "bulk_retry":
+                    q_action = "replay"
+                elif action == "bulk_release_from_quarantine":
+                    q_action = "release_from_quarantine"
+                elif action == "bulk_cancel":
+                    q_action = "mark_resolved"
+                else:
+                    result_state = "skipped"
+                    raise ValueError("invalid_action_for_quarantine")
                 result_payload = apply_execution_safety_quarantine_action(
                     db,
                     quarantine_id=target_id,
                     action=q_action,
                     actor_user_id=requested_by,
                     actor_role="user",
+                    note=reason,
                 )
                 after_state = str(result_payload.get("status"))
         except Exception as exc:
@@ -1162,11 +1375,13 @@ def run_bulk_recovery(
         item_result = {
             "target_type": target_type,
             "target_id": target_id,
+            "intent_id": target_id if target_type == "intent" else (result_payload or {}).get("intent_id"),
             "before_state": before_state,
             "attempted_action": action,
-            "result": "success" if error is None else "failed",
+            "result": result_state if error is not None and result_state == "skipped" else ("success" if error is None else "failed"),
             "error": error,
             "after_state": after_state,
+            "correlation_id": correlation_id or ((result_payload or {}).get("payload") or {}).get("correlation_id"),
             "payload": result_payload,
         }
         results.append(item_result)
@@ -1188,7 +1403,7 @@ def run_bulk_recovery(
                 "reason": reason,
                 "before_state": before_state,
                 "after_state": after_state,
-                "correlation_id": ((result_payload or {}).get("correlation_id") if isinstance(result_payload, dict) else None),
+                "correlation_id": correlation_id or ((result_payload or {}).get("correlation_id") if isinstance(result_payload, dict) else None),
                 "error": error,
             },
         )
@@ -1200,6 +1415,8 @@ def run_bulk_recovery(
         "reason": reason,
         "total": len(results),
         "success_count": len([row for row in results if row["result"] == "success"]),
+        "skipped_count": len([row for row in results if row["result"] == "skipped"]),
         "failed_count": len([row for row in results if row["result"] == "failed"]),
+        "results": results,
         "items": results,
     }

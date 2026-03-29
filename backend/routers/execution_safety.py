@@ -14,6 +14,7 @@ from services.execution_safety_namespace_service import (
     evaluate_execution_safety_gate,
     export_execution_incident_package,
     get_execution_gate_trends,
+    get_execution_safety_gate_explain,
     get_execution_intervention_audit,
     get_execution_observability_snapshot,
     get_execution_reconciliation_summary,
@@ -50,6 +51,27 @@ def execution_safety_gate(
 ):
     _ = current_user
     return evaluate_execution_safety_gate(
+        db,
+        force_refresh=force_refresh,
+        user_id=user_id,
+        request_id=request_id,
+        session_id=session_id,
+        correlation_id=correlation_id,
+    )
+
+
+@router.get("/gate/explain")
+def execution_safety_gate_explain(
+    force_refresh: bool = Query(default=False),
+    user_id: str | None = Query(default=None),
+    request_id: str | None = Query(default=None),
+    session_id: str | None = Query(default=None),
+    correlation_id: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_execution_safety_gate_explain(
         db,
         force_refresh=force_refresh,
         user_id=user_id,
@@ -129,6 +151,7 @@ def execution_safety_quarantine_detail(
 def execution_safety_quarantine_action(
     quarantine_id: str,
     action: str,
+    payload: dict = Body(default={}),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -139,6 +162,7 @@ def execution_safety_quarantine_action(
             action=action,
             actor_user_id=current_user.id,
             actor_role=current_user.role.value,
+            note=str((payload or {}).get("note") or "").strip() or None,
         )
     except ValueError as exc:
         detail = str(exc)
@@ -229,6 +253,7 @@ def _parse_bulk_payload(payload: dict | None) -> dict:
         "intent_ids": list(source.get("intent_ids") or []),
         "quarantine_ids": list(source.get("quarantine_ids") or []),
         "filters": dict(source.get("filters") or {}),
+        "limit": int(source.get("limit") or 100),
         "reason": str(source.get("reason") or "bulk_action"),
         "requested_by": str(source.get("requested_by") or "admin"),
     }
@@ -265,6 +290,39 @@ def execution_safety_bulk_reconcile(
     _ = current_user
     parsed = _parse_bulk_payload(payload)
     return run_bulk_recovery(db, action="bulk_reconcile", **parsed)
+
+
+@router.post("/recovery/bulk-force-reconcile")
+def execution_safety_bulk_force_reconcile(
+    payload: dict = Body(default={}),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    parsed = _parse_bulk_payload(payload)
+    return run_bulk_recovery(db, action="bulk_force_reconcile", **parsed)
+
+
+@router.post("/recovery/bulk-move-to-quarantine")
+def execution_safety_bulk_move_to_quarantine(
+    payload: dict = Body(default={}),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    parsed = _parse_bulk_payload(payload)
+    return run_bulk_recovery(db, action="bulk_move_to_quarantine", **parsed)
+
+
+@router.post("/recovery/bulk-release-from-quarantine")
+def execution_safety_bulk_release_from_quarantine(
+    payload: dict = Body(default={}),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    parsed = _parse_bulk_payload(payload)
+    return run_bulk_recovery(db, action="bulk_release_from_quarantine", **parsed)
 
 
 @router.get("/recovery/policy")

@@ -40,6 +40,14 @@ def test_execution_safety_gate_schema(client, auth_headers):
     assert isinstance(data["warnings"], list)
 
 
+def test_execution_safety_gate_explain_schema(client, auth_headers):
+    response = client.get("/api/execution-safety/gate/explain", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    for key in ["score", "state", "confidence_band", "components", "blockers", "override_reason"]:
+        assert key in data
+
+
 def test_execution_safety_gate_blocker_override(client, auth_headers):
     response = client.get("/api/execution-safety/gate", headers=auth_headers)
     assert response.status_code == 200
@@ -132,6 +140,9 @@ def test_execution_safety_bulk_endpoints(client, auth_headers):
         "/api/execution-safety/recovery/bulk-retry",
         "/api/execution-safety/recovery/bulk-cancel",
         "/api/execution-safety/recovery/bulk-reconcile",
+        "/api/execution-safety/recovery/bulk-force-reconcile",
+        "/api/execution-safety/recovery/bulk-move-to-quarantine",
+        "/api/execution-safety/recovery/bulk-release-from-quarantine",
     ]:
         response = client.post(endpoint, headers=auth_headers, json=payload)
         assert response.status_code == 200

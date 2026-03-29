@@ -119,4 +119,5 @@ def test_bulk_recovery_invalid_action_raises():
             filters={},
             reason="test",
             requested_by="tester",
+            limit=10,
         )
