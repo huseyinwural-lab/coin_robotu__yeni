@@ -10,7 +10,7 @@
     "design_issues": [
       {
         "screen": "AdminExchangesPage",
-        "issues": ["Preview environment URL (https://dry-run-shadow.preview.emergentagent.com) was not responding during initial testing - had to test against localhost:8001"]
+        "issues": ["Preview environment URL (https://unified-orchestrator.preview.emergentagent.com) was not responding during initial testing - had to test against localhost:8001"]
       }
     ]
   },

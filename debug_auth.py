@@ -6,7 +6,7 @@ Debug script for Trading Lifecycle Debugger authentication issue
 import requests
 import json
 
-BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
+BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

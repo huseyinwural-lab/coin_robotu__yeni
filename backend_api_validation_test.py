@@ -10,7 +10,7 @@ import time
 from typing import Dict, Any, Tuple
 
 # Test configuration
-BASE_URL = "https://dry-run-shadow.preview.emergentagent.com/api"
+BASE_URL = "https://unified-orchestrator.preview.emergentagent.com/api"
 CREDENTIALS = {
     "super_admin": {
         "email": "canary.admin@platform.local",

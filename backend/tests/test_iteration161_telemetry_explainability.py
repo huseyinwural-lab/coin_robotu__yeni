@@ -24,7 +24,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
+    BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
 
 ADMIN_EMAIL = "admin@platform.local"
 ADMIN_PASSWORD = "Admin12345!"

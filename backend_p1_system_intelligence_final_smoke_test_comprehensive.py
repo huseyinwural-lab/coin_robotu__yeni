@@ -3,7 +3,7 @@
 P1 System Intelligence Final Backend Smoke Test - Comprehensive
 Turkish Review Request: P1 System Intelligence final backend smoke.
 
-Test Environment: https://dry-run-shadow.preview.emergentagent.com
+Test Environment: https://unified-orchestrator.preview.emergentagent.com
 Admin Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Requirements:
@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 import sys
 
 # Test Configuration
-BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
+BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

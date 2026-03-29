@@ -19,6 +19,7 @@ SCENARIO_PACK_FILE = Path("/app/artifacts/manifests/unified_risk_scenario_packs.
 CALIBRATION_FILE = Path("/app/artifacts/manifests/unified_risk_calibration.json")
 BENCHMARK_DIR = Path("/app/artifacts/risk_benchmark")
 BENCHMARK_MANIFEST = Path("/app/artifacts/manifests/unified_risk_benchmark_runs.jsonl")
+POLICY_HISTORY_FILE = Path("/app/artifacts/manifests/unified_policy_history.jsonl")
 
 DEFAULT_THRESHOLDS = {
     "var_limit": 0.05,
@@ -1665,6 +1666,36 @@ def _policy_score(
     }
 
 
+def _append_policy_history_rows(rows: list[dict]) -> None:
+    if not rows:
+        return
+    POLICY_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with POLICY_HISTORY_FILE.open("a", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def get_policy_history(*, policy_id: str | None = None, regime: str | None = None, limit: int = 1000) -> dict:
+    if not POLICY_HISTORY_FILE.exists():
+        return {"items": []}
+    rows = []
+    for raw in POLICY_HISTORY_FILE.read_text(encoding="utf-8").splitlines():
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            row = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if policy_id and str(row.get("policy_id")) != str(policy_id):
+            continue
+        if regime and str(row.get("regime")) != str(regime):
+            continue
+        rows.append(row)
+    rows = rows[-max(1, min(limit, 5000)) :]
+    return {"items": rows}
+
+
 def run_policy_benchmark(
     *,
     db: Session | None,
@@ -1811,8 +1842,11 @@ def run_policy_benchmark(
         )
 
     policy_rows = []
+    history_rows: list[dict] = []
     for policy_id, payload in policy_rollup.items():
         avg_score = statistics.mean(payload["scores"]) if payload["scores"] else 0.0
+        variance = statistics.pvariance(payload["scores"]) if len(payload["scores"]) > 1 else 0.0
+        stability = max(0.0, min(1.0, 1.0 - min(variance * 4.0, 1.0)))
         metrics = {
             key: round(statistics.mean(values), 6) if values else 0.0
             for key, values in payload["metrics_acc"].items()
@@ -1821,10 +1855,27 @@ def run_policy_benchmark(
             regime: round(statistics.mean(values), 6)
             for regime, values in payload["regime_scores"].items()
         }
+        for scenario_row in scenario_results:
+            selected = next((item for item in scenario_row["policies"] if item["id"] == policy_id), None)
+            if not selected:
+                continue
+            history_rows.append(
+                {
+                    "timestamp": _iso(),
+                    "run_id": None,  # run_id eklendikten sonra doldurulur
+                    "policy_id": policy_id,
+                    "score": selected["score"],
+                    "regime": scenario_row["regime"],
+                    "scenario": scenario_row["scenario"],
+                    "strategy_class": strategy_class,
+                }
+            )
         policy_rows.append(
             {
                 "id": policy_id,
                 "score": round(avg_score, 6),
+                "stability": round(stability, 6),
+                "variance": round(variance, 6),
                 "metrics": metrics,
                 "regime_scores": regime_scores,
             }
@@ -1833,11 +1884,21 @@ def run_policy_benchmark(
     policy_rows.sort(key=lambda item: item["score"], reverse=True)
     best_policy = policy_rows[0] if policy_rows else None
     second_score = policy_rows[1]["score"] if len(policy_rows) > 1 else 0.0
-    confidence = max(min((best_policy["score"] - second_score) + 0.5 if best_policy else 0.0, 0.99), 0.5) if best_policy else 0.0
+    bootstrap_samples = []
+    if best_policy:
+        best_scores = policy_rollup.get(best_policy["id"], {}).get("scores") or []
+        if best_scores:
+            length = len(best_scores)
+            for shift in range(max(length, 5)):
+                rotated = [best_scores[(idx + shift) % length] for idx in range(length)]
+                bootstrap_samples.append(statistics.mean(rotated))
+    bootstrap_variance = statistics.pvariance(bootstrap_samples) if len(bootstrap_samples) > 1 else 0.0
+    confidence = max(min((best_policy["score"] - second_score) + (1.0 - min(bootstrap_variance * 8.0, 1.0)) if best_policy else 0.0, 0.99), 0.5) if best_policy else 0.0
 
     recommended = {
         "recommended_policy": best_policy["id"] if best_policy else None,
         "confidence": round(confidence, 6),
+        "variance": round(bootstrap_variance, 6),
         "based_on": sorted({row["regime"] for row in scenario_results}),
         "auto_apply": False,
     }
@@ -1853,6 +1914,10 @@ def run_policy_benchmark(
         "best_policy": best_policy["id"] if best_policy else None,
         "recommended_policy": recommended,
     }
+
+    for row in history_rows:
+        row["run_id"] = run_id
+
     BENCHMARK_DIR.mkdir(parents=True, exist_ok=True)
     output_path = BENCHMARK_DIR / f"{run_id}.json"
     output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
@@ -1860,6 +1925,8 @@ def run_policy_benchmark(
     BENCHMARK_MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     with BENCHMARK_MANIFEST.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps({"run_id": run_id, "generated_at": output["generated_at"], "path": str(output_path), "best_policy": output["best_policy"]}) + "\n")
+
+    _append_policy_history_rows(history_rows)
 
     return {**output, "output_path": str(output_path)}
 
@@ -1896,12 +1963,16 @@ def benchmark_report(run_id: str | None = None) -> dict:
     if best.get("metrics", {}).get("missed_risk_rate", 0.0) <= worst.get("metrics", {}).get("missed_risk_rate", 0.0):
         insights.append("Best policy missed-risk oranını düşürdü.")
 
+    trend_payload = policy_trends()
+    insights.extend(trend_payload.get("insight") or [])
+
     return {
         "run_id": run.get("run_id"),
         "summary": f"Best policy {best['id']} score={best['score']}",
         "best_policy": best,
         "worst_policy": worst,
-        "insights": insights,
+        "insights": sorted(set(insights)),
+        "transitions": trend_payload.get("transitions") or [],
         "recommended_policy": run.get("recommended_policy"),
     }
 
@@ -1930,6 +2001,128 @@ def benchmark_compare(run_id: str, left_policy_id: str | None = None, right_poli
     return {
         "run_id": run_id,
         "policies": ordered,
+    }
+
+
+def policy_leaderboard(*, limit: int = 20) -> dict:
+    history = get_policy_history(limit=5000).get("items") or []
+    buckets: dict[str, list[float]] = {}
+    for row in history:
+        pid = str(row.get("policy_id") or "unknown")
+        buckets.setdefault(pid, []).append(_safe_float(row.get("score"), 0.0))
+
+    leaderboard = []
+    for policy_id, scores in buckets.items():
+        mean_score = statistics.mean(scores) if scores else 0.0
+        variance = statistics.pvariance(scores) if len(scores) > 1 else 0.0
+        stability = max(0.0, min(1.0, 1.0 - min(variance * 4.0, 1.0)))
+        leaderboard.append(
+            {
+                "policy_id": policy_id,
+                "score": round(mean_score, 6),
+                "stability": round(stability, 6),
+                "sample_size": len(scores),
+            }
+        )
+    leaderboard.sort(key=lambda item: (item["score"], item["stability"]), reverse=True)
+    for idx, row in enumerate(leaderboard, start=1):
+        row["rank"] = idx
+    return {"leaderboard": leaderboard[: max(1, min(limit, 200))]}
+
+
+def policy_decay(*, window: int = 20, drop_threshold: float = 0.15) -> dict:
+    history = get_policy_history(limit=5000).get("items") or []
+    grouped: dict[str, list[dict]] = {}
+    for row in history:
+        grouped.setdefault(str(row.get("policy_id") or "unknown"), []).append(row)
+
+    rows = []
+    for policy_id, samples in grouped.items():
+        ordered = sorted(samples, key=lambda item: str(item.get("timestamp") or ""))
+        if len(ordered) < 4:
+            continue
+        win = min(window, len(ordered) // 2)
+        prev = ordered[-(2 * win) : -win]
+        recent = ordered[-win:]
+        prev_mean = statistics.mean([_safe_float(item.get("score"), 0.0) for item in prev])
+        recent_mean = statistics.mean([_safe_float(item.get("score"), 0.0) for item in recent])
+        drop = (recent_mean - prev_mean) / max(abs(prev_mean), 1e-6)
+        rows.append(
+            {
+                "policy": policy_id,
+                "status": "DEGRADING" if drop <= -abs(drop_threshold) else "STABLE",
+                "drop": round(drop, 6),
+                "prev_mean": round(prev_mean, 6),
+                "recent_mean": round(recent_mean, 6),
+            }
+        )
+    return {"items": rows}
+
+
+def policy_portfolio(*, top_k: int = 2) -> dict:
+    leaderboard = policy_leaderboard(limit=max(top_k, 2)).get("leaderboard") or []
+    top = leaderboard[: max(1, min(top_k, len(leaderboard)))]
+    if not top:
+        return {"policy_portfolio": []}
+    weighted_scores = [max(_safe_float(item.get("score"), 0.0) * _safe_float(item.get("stability"), 0.0), 0.0001) for item in top]
+    total = sum(weighted_scores)
+    portfolio = []
+    for idx, item in enumerate(top):
+        weight = weighted_scores[idx] / max(total, 1e-6)
+        portfolio.append({"policy": item.get("policy_id"), "weight": round(weight, 6)})
+    return {"policy_portfolio": portfolio}
+
+
+def policy_trends() -> dict:
+    history = get_policy_history(limit=5000).get("items") or []
+    if not history:
+        return {"insight": [], "transitions": []}
+
+    grouped: dict[str, dict[str, list[float]]] = {}
+    transition_map: dict[str, dict[str, list[float]]] = {}
+    ordered = sorted(history, key=lambda item: str(item.get("timestamp") or ""))
+    for row in ordered:
+        pid = str(row.get("policy_id") or "unknown")
+        regime = str(row.get("regime") or "sideways")
+        grouped.setdefault(pid, {}).setdefault(regime, []).append(_safe_float(row.get("score"), 0.0))
+
+    for idx in range(1, len(ordered)):
+        prev = ordered[idx - 1]
+        curr = ordered[idx]
+        if str(prev.get("policy_id")) != str(curr.get("policy_id")):
+            continue
+        prev_regime = str(prev.get("regime") or "sideways")
+        curr_regime = str(curr.get("regime") or "sideways")
+        if prev_regime == curr_regime:
+            continue
+        transition_key = f"{prev_regime}_to_{curr_regime}"
+        pid = str(curr.get("policy_id") or "unknown")
+        delta = _safe_float(curr.get("score"), 0.0) - _safe_float(prev.get("score"), 0.0)
+        transition_map.setdefault(transition_key, {}).setdefault(pid, []).append(delta)
+
+    transitions = []
+    for transition, payload in transition_map.items():
+        failures = [pid for pid, deltas in payload.items() if statistics.mean(deltas) < -0.1]
+        transitions.append(
+            {
+                "transition": transition,
+                "policy_failure": failures,
+            }
+        )
+
+    insights = []
+    for policy_id, regime_scores in grouped.items():
+        if "high_volatility" in regime_scores and "bull" in regime_scores:
+            hv = statistics.mean(regime_scores["high_volatility"])
+            bull = statistics.mean(regime_scores["bull"])
+            if hv < bull - 0.08:
+                insights.append(f"Policy {policy_id} volatility döneminde düşüyor")
+        if "bear" in regime_scores and statistics.mean(regime_scores["bear"]) > 0.7:
+            insights.append(f"Policy {policy_id} bear markette dominant")
+
+    return {
+        "insight": sorted(set(insights)),
+        "transitions": transitions,
     }
 
 

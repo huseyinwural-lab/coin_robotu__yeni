@@ -12,7 +12,7 @@ Focus Areas:
 6. TestClient tabanlı doğrulama (TestClient-based validation)
 7. Preview URL 502 handling with infrastructure notes
 
-Base URL: https://dry-run-shadow.preview.emergentagent.com
+Base URL: https://unified-orchestrator.preview.emergentagent.com
 """
 
 import sys
@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 
 # Backend URL from frontend/.env
-BACKEND_URL = "https://dry-run-shadow.preview.emergentagent.com"
+BACKEND_URL = "https://unified-orchestrator.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials

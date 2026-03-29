@@ -11,7 +11,7 @@ Test Requirements:
 5) readiness pass
 
 Credentials: canary.admin@platform.local / CanaryAdmin123!
-Target: https://dry-run-shadow.preview.emergentagent.com
+Target: https://unified-orchestrator.preview.emergentagent.com
 """
 
 import requests
@@ -22,7 +22,7 @@ from datetime import datetime
 import sys
 
 # Configuration
-BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
+BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

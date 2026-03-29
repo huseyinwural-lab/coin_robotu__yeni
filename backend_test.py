@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any, List, Optional
 
 # Configuration
-BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
+BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

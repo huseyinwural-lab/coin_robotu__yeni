@@ -8,7 +8,7 @@ Test Requirements:
 2. User response enrichment (effective_source, routing_preview, environment_valid)
 3. P0 testnet closure chain (spot+futures)
 
-Base URL: https://dry-run-shadow.preview.emergentagent.com
+Base URL: https://unified-orchestrator.preview.emergentagent.com
 Admin: canary.admin@platform.local / CanaryAdmin123!
 User: huseyinwural@gmail.com
 """
@@ -19,7 +19,7 @@ import sys
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
+BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 USER_EMAIL = "huseyinwural@gmail.com"

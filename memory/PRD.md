@@ -1,3 +1,37 @@
+## 2026-03-29 — UNIFIED RISK CORE Sprint-5 (Policy Evolution Layer)
+
+### Sprint-5 odakları (tamamlandı)
+- Policy leaderboard (rank + score + stability)
+- Rolling benchmark history persistence
+- Policy decay detection
+- Regime transition tracking
+- Policy portfolio recommendation (offline)
+- Confidence hardening (bootstrap variance)
+- Benchmark trend insights
+
+### Yeni API’ler
+- `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/leaderboard`
+- `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/history`
+- `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/decay`
+- `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/portfolio`
+- `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/trends`
+
+### Veri katmanı
+- Policy history dataset: `/app/artifacts/manifests/unified_policy_history.jsonl`
+- Benchmark run artefact’ları ile entegre, zaman serisi policy performansı üretiliyor.
+
+### Sprint-5 test doğrulaması
+- Pytest: sprint1+sprint3+sprint4+sprint5 test seti
+- API self-test: benchmark + policy evolution + drift endpointleri
+
+### Acceptance karşılığı
+- Policy ranking çalışıyor
+- Geçmiş performans saklanıyor
+- Decay tespiti otomatik işaretleniyor
+- Regime transition etkisi üretiliyor
+- Confidence bootstrap varyansla hesaplanıyor
+- Policy portfolio önerisi üretiliyor (auto-apply yok)
+
 ## 2026-03-29 — UNIFIED RISK CORE Sprint-4 (Policy Benchmark + Drift Control)
 
 ### Sprint-4 odakları (tamamlandı)
@@ -3625,7 +3659,7 @@
 - Unit test: `pytest -q /app/backend/tests/test_commercial_ops_p0_service.py` → **3 passed**
 - Lint: yeni/edilen backend dosyaları için **pass**
 - `deep_testing_backend_v2` sonucu: **ENV BLOCKER**
-  - Preview URL `https://dry-run-shadow.preview.emergentagent.com` üzerinde `/api/health` dahil 502
+  - Preview URL `https://unified-orchestrator.preview.emergentagent.com` üzerinde `/api/health` dahil 502
   - Kök neden (lokal teşhis): `postgres.internal` bu runtime’da çözümlenmiyor (`Name or service not known`)
   - Bu nedenle canlı endpoint E2E/curl doğrulaması bu turda tamamlanamadı.
 

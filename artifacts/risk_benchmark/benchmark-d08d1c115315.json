@@ -1,0 +1,175 @@
+{
+  "run_id": "benchmark-d08d1c115315",
+  "generated_at": "2026-03-29T13:02:55Z",
+  "ruleset": "binance",
+  "strategy_class": "default",
+  "scenarios": [
+    {
+      "scenario": "bear_regime_v1",
+      "regime": "bear",
+      "policies": [
+        {
+          "id": "A",
+          "score": 0.909732,
+          "metrics": {
+            "max_drawdown": 0.090268,
+            "liquidation_proximity": 46.952146,
+            "kill_switch_frequency": 0.0,
+            "false_positive_rate": 0.0,
+            "missed_risk_rate": 0.0,
+            "pnl_impact": -1083.2128
+          },
+          "score_components": {
+            "drawdown_penalty": 0.257908,
+            "liquidation_penalty": 0.0,
+            "false_positive": 0.0,
+            "missed_risk": 0.0,
+            "weights": {
+              "w1": 0.35,
+              "w2": 0.25,
+              "w3": 0.2,
+              "w4": 0.2
+            }
+          },
+          "risk_state": "BLOCKED",
+          "decision": "PAUSE_STRATEGY"
+        },
+        {
+          "id": "B",
+          "score": 0.909732,
+          "metrics": {
+            "max_drawdown": 0.090268,
+            "liquidation_proximity": 46.952146,
+            "kill_switch_frequency": 0.0,
+            "false_positive_rate": 0.0,
+            "missed_risk_rate": 0.0,
+            "pnl_impact": -1083.2128
+          },
+          "score_components": {
+            "drawdown_penalty": 0.257908,
+            "liquidation_penalty": 0.0,
+            "false_positive": 0.0,
+            "missed_risk": 0.0,
+            "weights": {
+              "w1": 0.35,
+              "w2": 0.25,
+              "w3": 0.2,
+              "w4": 0.2
+            }
+          },
+          "risk_state": "BLOCKED",
+          "decision": "PAUSE_STRATEGY"
+        }
+      ],
+      "best_policy": "A"
+    },
+    {
+      "scenario": "sideways_regime_v1",
+      "regime": "sideways",
+      "policies": [
+        {
+          "id": "A",
+          "score": 0.692333,
+          "metrics": {
+            "max_drawdown": 0.107667,
+            "liquidation_proximity": 18.634076,
+            "kill_switch_frequency": 0.0,
+            "false_positive_rate": 1.0,
+            "missed_risk_rate": 0.0,
+            "pnl_impact": -1292.0
+          },
+          "score_components": {
+            "drawdown_penalty": 0.307619,
+            "liquidation_penalty": 0.0,
+            "false_positive": 1.0,
+            "missed_risk": 0.0,
+            "weights": {
+              "w1": 0.35,
+              "w2": 0.25,
+              "w3": 0.2,
+              "w4": 0.2
+            }
+          },
+          "risk_state": "CRITICAL",
+          "decision": "PAUSE_STRATEGY"
+        },
+        {
+          "id": "B",
+          "score": 0.692333,
+          "metrics": {
+            "max_drawdown": 0.107667,
+            "liquidation_proximity": 18.634076,
+            "kill_switch_frequency": 0.0,
+            "false_positive_rate": 1.0,
+            "missed_risk_rate": 0.0,
+            "pnl_impact": -1292.0
+          },
+          "score_components": {
+            "drawdown_penalty": 0.307619,
+            "liquidation_penalty": 0.0,
+            "false_positive": 1.0,
+            "missed_risk": 0.0,
+            "weights": {
+              "w1": 0.35,
+              "w2": 0.25,
+              "w3": 0.2,
+              "w4": 0.2
+            }
+          },
+          "risk_state": "CRITICAL",
+          "decision": "PAUSE_STRATEGY"
+        }
+      ],
+      "best_policy": "A"
+    }
+  ],
+  "policies": [
+    {
+      "id": "A",
+      "score": 0.801033,
+      "stability": 0.952738,
+      "variance": 0.011816,
+      "metrics": {
+        "max_drawdown": 0.098967,
+        "liquidation_proximity": 32.793111,
+        "kill_switch_frequency": 0.0,
+        "false_positive_rate": 0.5,
+        "missed_risk_rate": 0.0,
+        "pnl_impact": -1187.6064
+      },
+      "regime_scores": {
+        "bear": 0.909732,
+        "sideways": 0.692333
+      }
+    },
+    {
+      "id": "B",
+      "score": 0.801033,
+      "stability": 0.952738,
+      "variance": 0.011816,
+      "metrics": {
+        "max_drawdown": 0.098967,
+        "liquidation_proximity": 32.793111,
+        "kill_switch_frequency": 0.0,
+        "false_positive_rate": 0.5,
+        "missed_risk_rate": 0.0,
+        "pnl_impact": -1187.6064
+      },
+      "regime_scores": {
+        "bear": 0.909732,
+        "sideways": 0.692333
+      }
+    }
+  ],
+  "best_policy": "A",
+  "recommended_policy": {
+    "recommended_policy": "A",
+    "confidence": 0.99,
+    "variance": 0.0,
+    "based_on": [
+      "bear",
+      "sideways"
+    ],
+    "auto_apply": false
+  }
+}

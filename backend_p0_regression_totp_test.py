@@ -14,7 +14,7 @@ from typing import Dict, Any, Optional
 
 class P0RegressionTesterWithTOTP:
     def __init__(self):
-        self.base_url = "https://dry-run-shadow.preview.emergentagent.com"
+        self.base_url = "https://unified-orchestrator.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.session = requests.Session()

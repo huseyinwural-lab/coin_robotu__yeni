@@ -37,7 +37,7 @@
   "resolved_values_preview": {
     "DATABASE_URL": "postgresql+psycopg2://postgres.wpaejjyirhblphihxnli:iY9yPPYAe4dLU3+@aws-1-eu-wes...",
     "REDIS_URL": "redis://localhost:6379/0",
-    "REACT_APP_BACKEND_URL": "https://dry-run-shadow.preview.emergentagent.com",
+    "REACT_APP_BACKEND_URL": "https://unified-orchestrator.preview.emergentagent.com",
     "JWT_SECRET_length": 64
   }
 }

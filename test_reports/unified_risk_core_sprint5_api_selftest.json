@@ -1,0 +1,54 @@
+{
+  "login": {
+    "status": 200,
+    "ok": true
+  },
+  "benchmark_run": {
+    "status": 200,
+    "ok": true,
+    "run_id": "benchmark-8ae7abaa1b47"
+  },
+  "policy_leaderboard": {
+    "status": 404,
+    "ok": false,
+    "keys": [
+      "detail"
+    ]
+  },
+  "policy_history": {
+    "status": 404,
+    "ok": false,
+    "keys": [
+      "detail"
+    ]
+  },
+  "policy_decay": {
+    "status": 404,
+    "ok": false,
+    "keys": [
+      "detail"
+    ]
+  },
+  "policy_portfolio": {
+    "status": 404,
+    "ok": false,
+    "keys": [
+      "detail"
+    ]
+  },
+  "policy_trends": {
+    "status": 404,
+    "ok": false,
+    "keys": [
+      "detail"
+    ]
+  },
+  "benchmark_report": {
+    "status": 200,
+    "ok": true
+  },
+  "benchmark_compare": {
+    "status": 200,
+    "ok": true
+  }
+}

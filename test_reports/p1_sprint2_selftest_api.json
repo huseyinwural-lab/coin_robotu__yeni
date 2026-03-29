@@ -1,5 +1,5 @@
 {
-  "base_url": "https://dry-run-shadow.preview.emergentagent.com",
+  "base_url": "https://unified-orchestrator.preview.emergentagent.com",
   "tests": {
     "login_admin": {
       "status": 200,

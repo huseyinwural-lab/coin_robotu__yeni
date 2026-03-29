@@ -185,6 +185,11 @@ from services.unified_risk_core_service import (
     run_policy_benchmark,
     run_unified_risk_orchestrator,
     simulate_pre_trade_risk,
+    policy_decay,
+    policy_leaderboard,
+    policy_portfolio,
+    policy_trends,
+    get_policy_history,
     upsert_scenario_pack,
 )
 
@@ -2665,6 +2670,51 @@ def admin_unified_risk_drift_status(
 ):
     _ = current_admin
     return drift_status(tolerance_pct=tolerance_pct)
+
+
+@router.get("/admin/risk-orchestrator/unified-core/policy/leaderboard")
+def admin_unified_risk_policy_leaderboard(
+    limit: int = 20,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    return policy_leaderboard(limit=limit)
+
+
+@router.get("/admin/risk-orchestrator/unified-core/policy/history")
+def admin_unified_risk_policy_history(
+    policy_id: str | None = None,
+    regime: str | None = None,
+    limit: int = 1000,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    return get_policy_history(policy_id=policy_id, regime=regime, limit=limit)
+
+
+@router.get("/admin/risk-orchestrator/unified-core/policy/decay")
+def admin_unified_risk_policy_decay(
+    window: int = 20,
+    drop_threshold: float = 0.15,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    return policy_decay(window=window, drop_threshold=drop_threshold)
+
+
+@router.get("/admin/risk-orchestrator/unified-core/policy/portfolio")
+def admin_unified_risk_policy_portfolio(
+    top_k: int = 2,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    return policy_portfolio(top_k=top_k)
+
+
+@router.get("/admin/risk-orchestrator/unified-core/policy/trends")
+def admin_unified_risk_policy_trends(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return policy_trends()
 
 
 @router.get("/admin/risk-orchestrator/analytics", response_model=RiskOrchestratorAnalyticsResponse)

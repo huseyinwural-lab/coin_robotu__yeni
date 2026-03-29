@@ -3,7 +3,7 @@
 Backend Regression Test for Phase-1 Anomaly Stabilization
 Testing anomaly event submission with guardrail suppression, cooldown, and validation logic.
 
-Base URL: https://dry-run-shadow.preview.emergentagent.com
+Base URL: https://unified-orchestrator.preview.emergentagent.com
 Test credentials: canary_1774010877@example.com / TestPass123!
 """
 
@@ -13,7 +13,7 @@ import time
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
+BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 TEST_EMAIL = "canary_1774010877@example.com"
 TEST_PASSWORD = "TestPass123!"

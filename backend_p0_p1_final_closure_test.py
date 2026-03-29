@@ -3,7 +3,7 @@
 P0+P1 FINAL CLOSURE VALIDATION TEST
 Turkish Review Request: P0+P1 FINAL closure doğrulaması yap (backend + frontend smoke + rapor dosyaları)
 
-Test URL: https://dry-run-shadow.preview.emergentagent.com
+Test URL: https://unified-orchestrator.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Requirements to validate:
@@ -24,7 +24,7 @@ from datetime import datetime
 
 class P0P1FinalClosureValidator:
     def __init__(self):
-        self.base_url = "https://dry-run-shadow.preview.emergentagent.com"
+        self.base_url = "https://unified-orchestrator.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.token = None

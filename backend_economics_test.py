@@ -25,7 +25,7 @@ from typing import Dict, Any, List, Optional
 import time
 
 # Get backend URL from frontend env
-BACKEND_URL = "https://dry-run-shadow.preview.emergentagent.com"
+BACKEND_URL = "https://unified-orchestrator.preview.emergentagent.com"
 API_BASE = f"{BACKEND_URL}/api"
 
 # Test credentials

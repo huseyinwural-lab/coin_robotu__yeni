@@ -95,6 +95,31 @@
 - Benchmark report + compare fonksiyonları
 - Sprint-4 test seti (`test_unified_risk_core_sprint4.py`)
 
+## Epic URC-P3 Policy Evolution Layer ✅ Done in Sprint-5
+- URC-61 Policy leaderboard (score + rank + stability)
+- URC-62 Rolling benchmark history persistence
+- URC-63 Policy decay detection
+- URC-64 Regime transition tracking
+- URC-65 Policy portfolio recommendation (offline)
+- URC-66 Confidence hardening (bootstrap variance)
+- URC-67 Benchmark trend insights
+
+## Component Map (Sprint-5)
+
+### Reused modüller
+- Sprint-4 benchmark artefact akışı (`run_policy_benchmark`)
+- Replay/scenario/calibration altyapısı
+
+### Refactor edilenler
+- Benchmark runner çıktılarına stability/variance/recommendation confidence alanları eklendi
+- Benchmark report trend + transition insight ile genişletildi
+
+### Yeni eklenenler
+- Policy history dataset (`/app/artifacts/manifests/unified_policy_history.jsonl`)
+- Leaderboard/History/Decay/Portfolio/Trends fonksiyonları
+- Yeni API’ler: `/policy/leaderboard`, `/policy/history`, `/policy/decay`, `/policy/portfolio`, `/policy/trends`
+- Sprint-5 test seti (`test_unified_risk_core_sprint5.py`)
+
 ## Hard Constraints (Locked)
 - No module can emit execution decision directly.
 - All risk decisions must pass through `risk_orchestrator`.

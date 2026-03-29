@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Faz-1 Strategy Control Backend Validation
-Target: https://dry-run-shadow.preview.emergentagent.com
+Target: https://unified-orchestrator.preview.emergentagent.com
 Tests: Strategy control endpoints, authentication, and security controls
 """
 
@@ -16,7 +16,7 @@ def test_faz1_strategy_control():
     Tests authentication, strategy control endpoints, and security controls.
     """
     
-    BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
+    BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
     
     print("=" * 80)
     print("FAZ-1 STRATEGY CONTROL BACKEND VALIDATION")

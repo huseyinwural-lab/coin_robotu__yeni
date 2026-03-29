@@ -1,0 +1,368 @@
+{
+  "artifact_id": "risk-snapshot-pre-trade-after-acb93ec91152",
+  "generated_at": "2026-03-29T13:02:55Z",
+  "snapshot_type": "post-trade",
+  "stage": "pre-trade-after",
+  "payload": {
+    "user_id": "test-user",
+    "generated_at": "2026-03-29T13:02:55Z",
+    "ruleset": "binance",
+    "account": {
+      "equity": 10000.0,
+      "used_margin": 0.0,
+      "free_collateral": 10000.0,
+      "portfolio_id": "simulated-portfolio"
+    },
+    "positions": [
+      {
+        "symbol": "ETHUSDT",
+        "side": "LONG",
+        "quantity": 8.0,
+        "entry_price": 3300.0,
+        "mark_price": 3300.0,
+        "leverage": 8,
+        "margin_mode": "cross",
+        "strategy_id": "combo-94c7d84f",
+        "isolated_margin": 0.0
+      }
+    ],
+    "liquidation": {
+      "positions": [
+        {
+          "symbol": "ETHUSDT",
+          "side": "LONG",
+          "margin_mode": "cross",
+          "leverage": 8,
+          "effective_leverage": 8,
+          "entry_price": 3300.0,
+          "mark_price": 3300.0,
+          "quantity": 8.0,
+          "notional": 26400.0,
+          "initial_margin": 3300.0,
+          "maintenance_margin": 132.0,
+          "maintenance_margin_rate": 0.005,
+          "collateral_haircut": 0.975,
+          "unrealized_pnl": 0.0,
+          "margin_ratio": 73.243636,
+          "liquidation_price": 2107.98,
+          "liquidation_buffer_pct": 36.121818
+        }
+      ],
+      "min_liquidation_buffer_pct": 36.121818,
+      "avg_margin_ratio": 73.243636
+    },
+    "portfolio": {
+      "gross_exposure": 26400.0,
+      "net_exposure": 26400.0,
+      "directional_exposure": {
+        "long": 26400.0,
+        "short": 0,
+        "hedged_notional": 0,
+        "hedged_ratio": 0.0
+      },
+      "effective_leverage": 2.64,
+      "symbol_exposure": [
+        {
+          "symbol": "ETHUSDT",
+          "notional": 26400.0
+        }
+      ],
+      "strategy_exposure": [
+        {
+          "strategy_id": "combo-94c7d84f",
+          "notional": 26400.0
+        }
+      ]
+    },
+    "capital": {
+      "equity": 10000.0,
+      "used_margin": 3300.0,
+      "free_collateral": 6700.0,
+      "margin_usage_pct": 33.0,
+      "strategy_allocation": [
+        {
+          "strategy_id": "combo-94c7d84f",
+          "capital_share_pct": 264.0,
+          "risk_budget_pct": 25.0,
+          "breach": true
+        }
+      ],
+      "risk_budget_breach_count": 1
+    },
+    "cluster_risk": {
+      "windows": [
+        30,
+        60,
+        120
+      ],
+      "correlation_matrix": {
+        "30": {},
+        "60": {},
+        "120": {}
+      },
+      "clusters": [
+        {
+          "cluster_id": "base:ETH",
+          "symbols": [
+            "ETHUSDT"
+          ],
+          "cluster_exposure": 26400.0,
+          "concentration_ratio": 1.0,
+          "avg_correlation": 0.0,
+          "directional_bias": 1.0,
+          "concentration_score": 0.75
+        },
+        {
+          "cluster_id": "sector:majors",
+          "symbols": [
+            "ETHUSDT"
+          ],
+          "cluster_exposure": 26400.0,
+          "concentration_ratio": 1.0,
+          "avg_correlation": 0.0,
+          "directional_bias": 1.0,
+          "concentration_score": 0.75
+        }
+      ],
+      "concentration_score": 0.75,
+      "dominant_cluster": {
+        "cluster_id": "base:ETH",
+        "symbols": [
+          "ETHUSDT"
+        ],
+        "cluster_exposure": 26400.0,
+        "concentration_ratio": 1.0,
+        "avg_correlation": 0.0,
+        "directional_bias": 1.0,
+        "concentration_score": 0.75
+      },
+      "risk_flag": "WARN"
+    },
+    "tail_risk": {
+      "var": 0.001372,
+      "cvar": 0.001361,
+      "stress_loss": 3960.0,
+      "worst_scenario": "market_wide_drawdown",
+      "risk_flag": "LOW",
+      "stress_scenarios": [
+        {
+          "name": "market_wide_drawdown",
+          "portfolio_loss": 3960.0
+        },
+        {
+          "name": "altcoin_correlation_spike",
+          "portfolio_loss": 2376.0
+        },
+        {
+          "name": "liquidity_drop",
+          "portfolio_loss": 2112.0
+        },
+        {
+          "name": "btc_-20",
+          "portfolio_loss": 0.0
+        }
+      ],
+      "liquidation_proximity_change": 30.703545
+    },
+    "strategy_risk": {
+      "strategies": [
+        {
+          "strategy_id": "combo-94c7d84f",
+          "usage_pct": 1056.0,
+          "risk_budget_pct": 25.0,
+          "capital_share_pct": 264.0,
+          "repeated_breach_count": 0,
+          "action": "PAUSE",
+          "breach": true
+        }
+      ],
+      "breached_strategies": [
+        {
+          "strategy_id": "combo-94c7d84f",
+          "usage_pct": 1056.0,
+          "risk_budget_pct": 25.0,
+          "capital_share_pct": 264.0,
+          "repeated_breach_count": 0,
+          "action": "PAUSE",
+          "breach": true
+        }
+      ],
+      "actions": [
+        {
+          "strategy_id": "combo-94c7d84f",
+          "action": "PAUSE"
+        }
+      ]
+    },
+    "kill_switch": {
+      "triggered": false,
+      "level": "NONE",
+      "reason": []
+    },
+    "thresholds": {
+      "var_limit": 0.085,
+      "cvar_limit": 0.1,
+      "cluster_limit": 0.78,
+      "cluster_critical_limit": 0.8,
+      "margin_high_limit": 92.0,
+      "margin_critical_limit": 96.0,
+      "margin_blocked_limit": 98.0,
+      "liquidation_warn_limit": 10.0,
+      "liquidation_high_limit": 5.0,
+      "liquidation_critical_limit": 3.0,
+      "liquidation_blocked_limit": 1.5,
+      "stress_loss_ratio_limit": 0.18,
+      "hysteresis_buffer": 0.05
+    },
+    "scenario_context": null,
+    "cluster": {
+      "windows": [
+        30,
+        60,
+        120
+      ],
+      "correlation_matrix": {
+        "30": {},
+        "60": {},
+        "120": {}
+      },
+      "clusters": [
+        {
+          "cluster_id": "base:ETH",
+          "symbols": [
+            "ETHUSDT"
+          ],
+          "cluster_exposure": 26400.0,
+          "concentration_ratio": 1.0,
+          "avg_correlation": 0.0,
+          "directional_bias": 1.0,
+          "concentration_score": 0.75
+        },
+        {
+          "cluster_id": "sector:majors",
+          "symbols": [
+            "ETHUSDT"
+          ],
+          "cluster_exposure": 26400.0,
+          "concentration_ratio": 1.0,
+          "avg_correlation": 0.0,
+          "directional_bias": 1.0,
+          "concentration_score": 0.75
+        }
+      ],
+      "concentration_score": 0.75,
+      "dominant_cluster": {
+        "cluster_id": "base:ETH",
+        "symbols": [
+          "ETHUSDT"
+        ],
+        "cluster_exposure": 26400.0,
+        "concentration_ratio": 1.0,
+        "avg_correlation": 0.0,
+        "directional_bias": 1.0,
+        "concentration_score": 0.75
+      },
+      "risk_flag": "WARN"
+    },
+    "tail": {
+      "var": 0.001372,
+      "cvar": 0.001361,
+      "stress_loss": 3960.0,
+      "worst_scenario": "market_wide_drawdown",
+      "risk_flag": "LOW",
+      "stress_scenarios": [
+        {
+          "name": "market_wide_drawdown",
+          "portfolio_loss": 3960.0
+        },
+        {
+          "name": "altcoin_correlation_spike",
+          "portfolio_loss": 2376.0
+        },
+        {
+          "name": "liquidity_drop",
+          "portfolio_loss": 2112.0
+        },
+        {
+          "name": "btc_-20",
+          "portfolio_loss": 0.0
+        }
+      ],
+      "liquidation_proximity_change": 30.703545
+    },
+    "global_risk_state": "CRITICAL",
+    "state_machine": [
+      "NORMAL",
+      "WARN",
+      "HIGH",
+      "CRITICAL",
+      "BLOCKED"
+    ],
+    "execution_policy": {
+      "state": "CRITICAL",
+      "block_new_orders": true,
+      "reduce_size_multiplier": 0.0,
+      "reduce_leverage_to": 2,
+      "pause_strategy": true,
+      "kill_switch_triggered": false,
+      "decision": "PAUSE_STRATEGY"
+    },
+    "explainability": {
+      "decision": "PAUSE_STRATEGY",
+      "triggers": [
+        "liquidation_buffer_critical",
+        "liquidation_buffer_high",
+        "risk_budget_breach",
+        "strategy_pause_triggered"
+      ],
+      "reason": [
+        "liquidation_buffer_critical",
+        "liquidation_buffer_high",
+        "risk_budget_breach",
+        "strategy_pause_triggered"
+      ],
+      "metrics": {
+        "cluster_score": 0.75,
+        "tail_var": 0.001372,
+        "tail_cvar": 0.001361,
+        "margin_usage_pct": 33.0,
+        "strategy_actions": [
+          {
+            "strategy_id": "combo-94c7d84f",
+            "action": "PAUSE"
+          }
+        ],
+        "min_liquidation_buffer_pct": 36.121818,
+        "stress_loss_ratio": 0.15
+      },
+      "input_summary": {
+        "position_count": 1,
+        "equity": 10000.0,
+        "ruleset": "binance",
+        "snapshot_type": "post-trade",
+        "stage": "pre-trade-after"
+      },
+      "policy_result": {
+        "state": "CRITICAL",
+        "block_new_orders": true,
+        "reduce_size_multiplier": 0.0,
+        "reduce_leverage_to": 2,
+        "pause_strategy": true,
+        "kill_switch_triggered": false,
+        "decision": "PAUSE_STRATEGY"
+      },
+      "timestamp": "2026-03-29T13:02:55Z",
+      "root_cause": "composite risk interaction",
+      "chain": [
+        "liquidation_buffer_critical",
+        "liquidation_buffer_high",
+        "risk_budget_breach",
+        "strategy_pause_triggered"
+      ]
+    },
+    "orchestrator_contract": {
+      "single_entry": "risk_orchestrator",
+      "hard_rule": "no_module_can_emit_execution_policy_directly"
+    }
+  }
+}

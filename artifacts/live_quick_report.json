@@ -1,7 +1,7 @@
 {
   "ok": true,
   "mode": "quick",
-  "base_url": "https://dry-run-shadow.preview.emergentagent.com",
+  "base_url": "https://unified-orchestrator.preview.emergentagent.com",
   "execution_mode": "live",
   "micro_trade": {
     "symbol": "ETHUSDT",

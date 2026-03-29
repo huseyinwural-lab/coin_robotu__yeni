@@ -13,7 +13,7 @@ import time
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://dry-run-shadow.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://unified-orchestrator.preview.emergentagent.com").rstrip("/")
 
 # Test credentials
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"

@@ -12,7 +12,7 @@
     "pnl": {
       "status": "FAIL",
       "detail": {
-        "error": "404 Client Error: Not Found for url: https://dry-run-shadow.preview.emergentagent.com/api/admin/commercial/p0/pnl/latest?environment=live&lookback_hours=24",
+        "error": "404 Client Error: Not Found for url: https://unified-orchestrator.preview.emergentagent.com/api/admin/commercial/p0/pnl/latest?environment=live&lookback_hours=24",
         "step": "pnl"
       },
       "latency_ms": 702
@@ -20,7 +20,7 @@
     "reconciliation": {
       "status": "FAIL",
       "detail": {
-        "error": "422 Client Error: Unprocessable Entity for url: https://dry-run-shadow.preview.emergentagent.com/api/admin/commercial/p0/reconciliation/run?environment=live&lookback_hours=24",
+        "error": "422 Client Error: Unprocessable Entity for url: https://unified-orchestrator.preview.emergentagent.com/api/admin/commercial/p0/reconciliation/run?environment=live&lookback_hours=24",
         "step": "reconciliation"
       },
       "latency_ms": 664

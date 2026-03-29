@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P0 Final Closure Validation Test - Turkish Review Request (Simple)
-URL: https://dry-run-shadow.preview.emergentagent.com
+URL: https://unified-orchestrator.preview.emergentagent.com
 Creds: canary.admin@platform.local / CanaryAdmin123!
 """
 
@@ -12,7 +12,7 @@ import sys
 
 def test_p0_final_closure():
     """Test P0 final closure validation requirements"""
-    base_url = "https://dry-run-shadow.preview.emergentagent.com"
+    base_url = "https://unified-orchestrator.preview.emergentagent.com"
     admin_email = "canary.admin@platform.local"
     admin_password = "CanaryAdmin123!"
     

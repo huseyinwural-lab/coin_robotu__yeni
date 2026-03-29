@@ -7,7 +7,7 @@ import requests
 import json
 
 def debug_strategy_structure():
-    BASE_URL = "https://dry-run-shadow.preview.emergentagent.com"
+    BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
     
     session = requests.Session()
     session.timeout = 15
