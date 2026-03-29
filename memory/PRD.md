@@ -1,3 +1,87 @@
+## 2026-03-29 — OBSERVABILITY & INCIDENT INTELLIGENCE CORE (P0 + P1 + P2)
+
+### Uygulanan çekirdek mimari
+- Yeni backend servis: `/app/backend/services/incident_intelligence_service.py`
+- Yeni admin router: `/app/backend/routers/incident_intelligence.py`
+- Mevcut audit/system_alert/debug_incident tabloları korunarak unified anomaly modeli service katmanında üretildi.
+
+### P0 — Incident Intelligence çekirdeği
+- Tek anomaly modeli aktif:
+  - `id`
+  - `type`
+  - `source`
+  - `domain`
+  - `severity`
+  - `state`
+  - `owner`
+  - `linked_events`
+  - `linked_artefacts`
+  - `impact { pnl, exposure, availability }`
+- Anomaly engine v1 aktif:
+  - z-score
+  - baseline deviation
+  - burst detection
+  - repeated pattern detection
+- Event → anomaly mapping merkezi kuralla üretiliyor.
+- Timeline zinciri aktif:
+  - raw_event → anomaly → incident → remediation → resolution
+- Incident lifecycle state seti aktif:
+  - `OPEN`
+  - `INVESTIGATING`
+  - `MITIGATED`
+  - `RESOLVED`
+  - `FALSE_POSITIVE`
+- KPI hesapları gerçek timestamp’ten üretiliyor:
+  - `mttd_seconds`
+  - `mttr_seconds`
+  - `incident_count`
+  - `repeat_incident_rate`
+
+### P1 — Akıl ve operasyon katmanı
+- Root cause engine v1 aktif (`root_cause` + `confidence_score`)
+- Noise reduction aktif:
+  - deduplication
+  - grouping
+  - burst collapse
+- Action engine aktif:
+  - `retry`
+  - `block_trading`
+  - `reduce_leverage`
+  - `restart_worker`
+  - `inspect_reconcile`
+- Weekly incident summary endpoint eklendi.
+
+### P2 — Otonom incident intelligence
+- Adaptive threshold aktif (`context {volatility, load, regime}` + dinamik threshold seti)
+- Multi-signal correlation graph aktif (`nodes`, `edges`)
+- Cross-domain recurrence/prediction katmanı aktif
+- Auto-remediation engine aktif ama **safe/mock-oriented** uygulanıyor
+- Prediction endpoint aktif:
+  - `fingerprint`
+  - `recurrence_count`
+  - `predicted_risk`
+  - `risk_trend`
+
+### Yeni endpointler
+- `POST /api/admin/incident-intelligence/engine/run`
+- `GET /api/admin/incident-intelligence/anomalies`
+- `GET /api/admin/incident-intelligence/incidents`
+- `GET /api/admin/incident-intelligence/incidents/{incident_id}`
+- `PATCH /api/admin/incident-intelligence/incidents/{incident_id}`
+- `GET /api/admin/incident-intelligence/kpis`
+- `GET /api/admin/incident-intelligence/weekly-summary`
+- `GET /api/admin/incident-intelligence/graph`
+- `GET /api/admin/incident-intelligence/predictions`
+
+### Test / doğrulama
+- Unit/service pytest: `3 passed`
+- Testing agent: `/app/test_reports/iteration_180.json` → **36/37 PASS, 1 skipped, 0 failed**
+- Backend self-test: `/app/test_reports/incident_intelligence_selftest.json`
+
+### Operasyonel gerçeklik
+- Preview URL bu turda dalgalı olduğundan ana doğrulama local TestClient/self-test ile tamamlandı.
+- Auto-remediation tarafı **MOCKED/SAFE-ORIENTED** state/history aksiyonlarıyla uygulanıyor; live external action execution yok.
+
 ## 2026-03-29 — EXECUTION QUALITY & MICROSTRUCTURE CORE P2
 
 ### P2.1 — Non-linear impact model
