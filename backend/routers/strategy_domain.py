@@ -171,7 +171,10 @@ from services.strategy_domain_service import (
     validate_strategy_version_config,
 )
 from services.unified_risk_core_service import (
+    benchmark_compare,
+    benchmark_report,
     calibrate_thresholds,
+    drift_status,
     export_replay_timeline,
     get_calibrated_thresholds,
     get_scenario_pack_library,
@@ -179,6 +182,7 @@ from services.unified_risk_core_service import (
     list_risk_snapshot_manifest,
     list_rulesets,
     run_replay_timeline,
+    run_policy_benchmark,
     run_unified_risk_orchestrator,
     simulate_pre_trade_risk,
     upsert_scenario_pack,
@@ -2598,6 +2602,69 @@ def admin_unified_risk_replay(
     )
     export_meta = export_replay_timeline(timeline_payload)
     return {**timeline_payload, "export": export_meta}
+
+
+@router.post("/admin/risk-orchestrator/unified-core/benchmark/run")
+def admin_unified_risk_benchmark_run(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    target_user_id = str(payload.get("user_id") or current_admin.id)
+    try:
+        return run_policy_benchmark(
+            db=db,
+            cache=redis_client,
+            user_id=target_user_id,
+            scenario_ids=payload.get("scenario_ids") if isinstance(payload.get("scenario_ids"), list) else None,
+            policy_sets=payload.get("policy_sets") if isinstance(payload.get("policy_sets"), list) else None,
+            strategy_class=str(payload.get("strategy_class") or "default"),
+            ruleset=str(payload.get("ruleset") or "binance"),
+            base_input_state=payload.get("base_input_state") if isinstance(payload.get("base_input_state"), dict) else None,
+            actor_id=current_admin.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/admin/risk-orchestrator/unified-core/benchmark/report")
+def admin_unified_risk_benchmark_report(
+    run_id: str | None = None,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    try:
+        return benchmark_report(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/admin/risk-orchestrator/unified-core/benchmark/compare")
+def admin_unified_risk_benchmark_compare(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    run_id = str(payload.get("run_id") or "").strip()
+    if not run_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="run_id_required")
+    try:
+        return benchmark_compare(
+            run_id=run_id,
+            left_policy_id=str(payload.get("left_policy_id")) if payload.get("left_policy_id") else None,
+            right_policy_id=str(payload.get("right_policy_id")) if payload.get("right_policy_id") else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/admin/risk-orchestrator/unified-core/drift/status")
+def admin_unified_risk_drift_status(
+    tolerance_pct: float = 10.0,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    return drift_status(tolerance_pct=tolerance_pct)
 
 
 @router.get("/admin/risk-orchestrator/analytics", response_model=RiskOrchestratorAnalyticsResponse)

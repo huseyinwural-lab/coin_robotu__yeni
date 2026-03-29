@@ -70,6 +70,31 @@
 - Multi-factor kill-switch matrix
 - Sprint-3 scenario test seti (`test_unified_risk_core_sprint3.py`)
 
+## Epic URC-P2 Policy Benchmark + Drift Control ✅ Done in Sprint-4
+- URC-51 Policy benchmark runner (A/B/C)
+- URC-52 Policy scoring model (strategy-class aware)
+- URC-53 Drift monitor (threshold + kill-switch frequency)
+- URC-54 Regime-aware benchmark results
+- URC-55 Offline recommended policy output
+- URC-56 Benchmark report/compare API
+
+## Component Map (Sprint-4)
+
+### Reused modüller
+- `run_unified_risk_orchestrator` (benchmark evaluate çekirdeği)
+- Scenario pack / calibration dosya altyapısı (Sprint-3)
+
+### Refactor edilenler
+- Unified service içinde threshold/metric tüketimi benchmark scoring’e bağlandı
+- Router’da unified-core benchmark/drift endpointleri eklendi
+
+### Yeni eklenenler
+- Policy benchmark runner + persisted benchmark run artefact
+- Policy scoring fonksiyonu (regime/strategy-class aware)
+- Drift monitor raporu (`/drift/status`)
+- Benchmark report + compare fonksiyonları
+- Sprint-4 test seti (`test_unified_risk_core_sprint4.py`)
+
 ## Hard Constraints (Locked)
 - No module can emit execution decision directly.
 - All risk decisions must pass through `risk_orchestrator`.

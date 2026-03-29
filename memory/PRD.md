@@ -1,3 +1,33 @@
+## 2026-03-29 — UNIFIED RISK CORE Sprint-4 (Policy Benchmark + Drift Control)
+
+### Sprint-4 odakları (tamamlandı)
+- Policy benchmark runner (A/B/C threshold set karşılaştırması)
+- Strategy-class aware policy scoring model
+- Drift monitor (threshold kayması + kill-switch frekansı)
+- Regime-aware benchmark sonuçları
+- Offline policy recommendation (auto-apply yok)
+- Benchmark report + compare engine
+
+### Yeni API’ler (unified-core)
+- `POST /api/strategy-domain/admin/risk-orchestrator/unified-core/benchmark/run`
+- `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/benchmark/report`
+- `POST /api/strategy-domain/admin/risk-orchestrator/unified-core/benchmark/compare`
+- `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/drift/status`
+
+### Teknik çıktı
+- Benchmark artefact dizini: `/app/artifacts/risk_benchmark`
+- Benchmark manifest: `/app/artifacts/manifests/unified_risk_benchmark_runs.jsonl`
+- Scoring: drawdown + liquidation + false_positive + missed_risk (strategy class ağırlıkları ile)
+- Recommendation:
+  - `recommended_policy`
+  - `confidence`
+  - `based_on` (regime seti)
+  - `auto_apply=false`
+
+### Sprint-4 test doğrulaması
+- Pytest: `test_unified_risk_core_sprint4.py` dahil çalıştırıldı
+- API self-test: benchmark/drift endpointleri ve çıktıları doğrulandı
+
 ## 2026-03-29 — UNIFIED RISK CORE Sprint-3 (P2 Hardening + Calibration)
 
 ### Sprint-3 odakları (tamamlandı)

@@ -17,6 +17,8 @@ RISK_SNAPSHOT_DIR = Path("/app/artifacts/risk_snapshots")
 RISK_SNAPSHOT_MANIFEST = Path("/app/artifacts/manifests/unified_risk_snapshots.jsonl")
 SCENARIO_PACK_FILE = Path("/app/artifacts/manifests/unified_risk_scenario_packs.json")
 CALIBRATION_FILE = Path("/app/artifacts/manifests/unified_risk_calibration.json")
+BENCHMARK_DIR = Path("/app/artifacts/risk_benchmark")
+BENCHMARK_MANIFEST = Path("/app/artifacts/manifests/unified_risk_benchmark_runs.jsonl")
 
 DEFAULT_THRESHOLDS = {
     "var_limit": 0.05,
@@ -221,6 +223,62 @@ def _resolve_scenario_pack(scenario_id: str | None) -> dict | None:
         if str(scenario.get("scenario_id") or "") == str(scenario_id):
             return scenario
     return None
+
+
+def _scenario_regime(scenario_id: str) -> str:
+    normalized = str(scenario_id or "").lower()
+    if "bull" in normalized:
+        return "bull"
+    if "bear" in normalized:
+        return "bear"
+    if "vol" in normalized:
+        return "high_volatility"
+    if "correlation_breakdown" in normalized:
+        return "sideways"
+    if "correlation_spike" in normalized:
+        return "high_volatility"
+    return "sideways"
+
+
+def _weights_for_strategy_class(strategy_class: str) -> dict:
+    normalized = str(strategy_class or "default").lower()
+    matrix = {
+        "default": {"w1": 0.35, "w2": 0.25, "w3": 0.2, "w4": 0.2},
+        "trend": {"w1": 0.3, "w2": 0.2, "w3": 0.15, "w4": 0.35},
+        "mean_reversion": {"w1": 0.4, "w2": 0.3, "w3": 0.2, "w4": 0.1},
+        "market_maker": {"w1": 0.25, "w2": 0.35, "w3": 0.25, "w4": 0.15},
+    }
+    return matrix.get(normalized, matrix["default"])
+
+
+def _benchmark_base_input_state() -> dict:
+    return {
+        "account": {"equity": 12000.0, "free_collateral": 9000.0, "used_margin": 3000.0},
+        "positions": [
+            {
+                "symbol": "BTCUSDT",
+                "side": "LONG",
+                "quantity": 0.1,
+                "entry_price": 65000.0,
+                "mark_price": 64600.0,
+                "leverage": 8,
+                "margin_mode": "cross",
+                "strategy_id": "benchmark_default",
+            },
+            {
+                "symbol": "ETHUSDT",
+                "side": "SHORT",
+                "quantity": 1.2,
+                "entry_price": 3300.0,
+                "mark_price": 3340.0,
+                "leverage": 7,
+                "margin_mode": "isolated",
+                "isolated_margin": 850,
+                "strategy_id": "benchmark_default",
+            },
+        ],
+        "strategy_risk_budgets": {"benchmark_default": 30.0},
+    }
 
 
 def list_rulesets() -> dict:
@@ -1575,6 +1633,370 @@ def calibrate_thresholds(
     }
 
 
+def _policy_score(
+    *,
+    max_drawdown: float,
+    liquidation_buffer: float,
+    false_positive_rate: float,
+    missed_risk_rate: float,
+    strategy_class: str,
+) -> dict:
+    weights = _weights_for_strategy_class(strategy_class)
+    drawdown_penalty = min(max_drawdown / 0.35, 1.0)
+    liquidation_penalty = 1.0 - min(liquidation_buffer / 15.0, 1.0)
+    fp_penalty = min(max(false_positive_rate, 0.0), 1.0)
+    missed_penalty = min(max(missed_risk_rate, 0.0), 1.0)
+    weighted_penalty = (
+        weights["w1"] * drawdown_penalty
+        + weights["w2"] * liquidation_penalty
+        + weights["w3"] * fp_penalty
+        + weights["w4"] * missed_penalty
+    )
+    score = max(0.0, min(1.0, 1.0 - weighted_penalty))
+    return {
+        "policy_score": round(score, 6),
+        "components": {
+            "drawdown_penalty": round(drawdown_penalty, 6),
+            "liquidation_penalty": round(liquidation_penalty, 6),
+            "false_positive": round(fp_penalty, 6),
+            "missed_risk": round(missed_penalty, 6),
+            "weights": weights,
+        },
+    }
+
+
+def run_policy_benchmark(
+    *,
+    db: Session | None,
+    cache,
+    user_id: str,
+    scenario_ids: list[str] | None,
+    policy_sets: list[dict] | None,
+    strategy_class: str = "default",
+    ruleset: str = "binance",
+    base_input_state: dict | None = None,
+    actor_id: str | None = None,
+) -> dict:
+    scenarios = scenario_ids or [item.get("scenario_id") for item in (get_scenario_pack_library().get("scenarios") or [])]
+    scenarios = [str(item) for item in scenarios if item]
+    if not scenarios:
+        raise ValueError("scenario_ids_required")
+
+    default_policies = [
+        {"id": "A", "thresholds": _normalize_thresholds(None)},
+        {
+            "id": "B",
+            "thresholds": _normalize_thresholds(
+                {
+                    "var_limit": 0.055,
+                    "cluster_limit": 0.65,
+                    "margin_high_limit": 70,
+                    "margin_critical_limit": 83,
+                    "margin_blocked_limit": 92,
+                }
+            ),
+        },
+        {
+            "id": "C",
+            "thresholds": _normalize_thresholds(
+                {
+                    "var_limit": 0.045,
+                    "cluster_limit": 0.55,
+                    "margin_high_limit": 60,
+                    "margin_critical_limit": 75,
+                    "margin_blocked_limit": 88,
+                }
+            ),
+        },
+    ]
+    policies = policy_sets or default_policies
+    normalized_policies = [
+        {
+            "id": str(item.get("id") or f"policy-{idx}"),
+            "thresholds": _normalize_thresholds(item.get("thresholds") if isinstance(item.get("thresholds"), dict) else None),
+        }
+        for idx, item in enumerate(policies)
+    ]
+
+    seed_input = base_input_state or _benchmark_base_input_state()
+    scenario_results: list[dict] = []
+    policy_rollup: dict[str, dict] = {
+        row["id"]: {
+            "id": row["id"],
+            "scores": [],
+            "metrics_acc": {
+                "max_drawdown": [],
+                "liquidation_proximity": [],
+                "kill_switch_frequency": [],
+                "false_positive_rate": [],
+                "missed_risk_rate": [],
+                "pnl_impact": [],
+            },
+            "regime_scores": {},
+        }
+        for row in normalized_policies
+    }
+
+    for scenario_id in scenarios:
+        scenario_regime = _scenario_regime(scenario_id)
+        expected_risk = scenario_regime in {"bear", "high_volatility"}
+        per_policy_rows = []
+        for policy in normalized_policies:
+            result = run_unified_risk_orchestrator(
+                db=db,
+                cache=cache,
+                user_id=user_id,
+                ruleset=ruleset,
+                input_state=seed_input,
+                snapshot_type="portfolio-level",
+                stage=f"benchmark-{scenario_id}-{policy['id']}",
+                actor_id=actor_id,
+                persist_artifact=False,
+                scenario_id=scenario_id,
+                thresholds_override=policy["thresholds"],
+                use_calibrated_thresholds=False,
+            )
+
+            liquidation_buffer = _safe_float((result.get("liquidation") or {}).get("min_liquidation_buffer_pct"), 0.0)
+            equity = _safe_float((result.get("account") or {}).get("equity"), 1.0)
+            stress_loss = _safe_float((result.get("tail_risk") or {}).get("stress_loss"), 0.0)
+            max_drawdown = min(stress_loss / max(equity, 1e-6), 1.0)
+            risk_state = str(result.get("global_risk_state") or "NORMAL")
+            predicted_risk = risk_state in {"HIGH", "CRITICAL", "BLOCKED"}
+
+            false_positive = 1.0 if predicted_risk and not expected_risk else 0.0
+            missed_risk = 1.0 if expected_risk and not predicted_risk else 0.0
+            kill_freq = 1.0 if bool((result.get("kill_switch") or {}).get("triggered")) else 0.0
+            pnl_impact = -stress_loss
+
+            scoring = _policy_score(
+                max_drawdown=max_drawdown,
+                liquidation_buffer=liquidation_buffer,
+                false_positive_rate=false_positive,
+                missed_risk_rate=missed_risk,
+                strategy_class=strategy_class,
+            )
+
+            row = {
+                "id": policy["id"],
+                "score": scoring["policy_score"],
+                "metrics": {
+                    "max_drawdown": round(max_drawdown, 6),
+                    "liquidation_proximity": round(liquidation_buffer, 6),
+                    "kill_switch_frequency": kill_freq,
+                    "false_positive_rate": false_positive,
+                    "missed_risk_rate": missed_risk,
+                    "pnl_impact": round(pnl_impact, 6),
+                },
+                "score_components": scoring["components"],
+                "risk_state": risk_state,
+                "decision": (result.get("execution_policy") or {}).get("decision"),
+            }
+            per_policy_rows.append(row)
+
+            bucket = policy_rollup[policy["id"]]
+            bucket["scores"].append(row["score"])
+            for metric_key in bucket["metrics_acc"].keys():
+                bucket["metrics_acc"][metric_key].append(row["metrics"][metric_key])
+            bucket["regime_scores"].setdefault(scenario_regime, []).append(row["score"])
+
+        best = max(per_policy_rows, key=lambda item: item["score"])
+        scenario_results.append(
+            {
+                "scenario": scenario_id,
+                "regime": scenario_regime,
+                "policies": per_policy_rows,
+                "best_policy": best["id"],
+            }
+        )
+
+    policy_rows = []
+    for policy_id, payload in policy_rollup.items():
+        avg_score = statistics.mean(payload["scores"]) if payload["scores"] else 0.0
+        metrics = {
+            key: round(statistics.mean(values), 6) if values else 0.0
+            for key, values in payload["metrics_acc"].items()
+        }
+        regime_scores = {
+            regime: round(statistics.mean(values), 6)
+            for regime, values in payload["regime_scores"].items()
+        }
+        policy_rows.append(
+            {
+                "id": policy_id,
+                "score": round(avg_score, 6),
+                "metrics": metrics,
+                "regime_scores": regime_scores,
+            }
+        )
+
+    policy_rows.sort(key=lambda item: item["score"], reverse=True)
+    best_policy = policy_rows[0] if policy_rows else None
+    second_score = policy_rows[1]["score"] if len(policy_rows) > 1 else 0.0
+    confidence = max(min((best_policy["score"] - second_score) + 0.5 if best_policy else 0.0, 0.99), 0.5) if best_policy else 0.0
+
+    recommended = {
+        "recommended_policy": best_policy["id"] if best_policy else None,
+        "confidence": round(confidence, 6),
+        "based_on": sorted({row["regime"] for row in scenario_results}),
+        "auto_apply": False,
+    }
+
+    run_id = f"benchmark-{uuid.uuid4().hex[:12]}"
+    output = {
+        "run_id": run_id,
+        "generated_at": _iso(),
+        "ruleset": ruleset,
+        "strategy_class": strategy_class,
+        "scenarios": scenario_results,
+        "policies": policy_rows,
+        "best_policy": best_policy["id"] if best_policy else None,
+        "recommended_policy": recommended,
+    }
+    BENCHMARK_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = BENCHMARK_DIR / f"{run_id}.json"
+    output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
+
+    BENCHMARK_MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+    with BENCHMARK_MANIFEST.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps({"run_id": run_id, "generated_at": output["generated_at"], "path": str(output_path), "best_policy": output["best_policy"]}) + "\n")
+
+    return {**output, "output_path": str(output_path)}
+
+
+def load_benchmark_run(run_id: str | None = None) -> dict:
+    if run_id:
+        path = BENCHMARK_DIR / f"{run_id}.json"
+        if not path.exists():
+            raise ValueError("benchmark_run_not_found")
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    if not BENCHMARK_MANIFEST.exists():
+        raise ValueError("benchmark_run_not_found")
+    rows = [json.loads(row) for row in BENCHMARK_MANIFEST.read_text(encoding="utf-8").splitlines() if row.strip()]
+    if not rows:
+        raise ValueError("benchmark_run_not_found")
+    latest = rows[-1]
+    path = Path(str(latest.get("path") or ""))
+    if not path.exists():
+        raise ValueError("benchmark_run_not_found")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def benchmark_report(run_id: str | None = None) -> dict:
+    run = load_benchmark_run(run_id)
+    policies = list(run.get("policies") or [])
+    if not policies:
+        raise ValueError("benchmark_empty")
+    best = max(policies, key=lambda item: item.get("score", 0.0))
+    worst = min(policies, key=lambda item: item.get("score", 0.0))
+    insights = []
+    if best.get("metrics", {}).get("kill_switch_frequency", 0.0) < worst.get("metrics", {}).get("kill_switch_frequency", 0.0):
+        insights.append("Best policy daha az kill-switch tetikledi.")
+    if best.get("metrics", {}).get("missed_risk_rate", 0.0) <= worst.get("metrics", {}).get("missed_risk_rate", 0.0):
+        insights.append("Best policy missed-risk oranını düşürdü.")
+
+    return {
+        "run_id": run.get("run_id"),
+        "summary": f"Best policy {best['id']} score={best['score']}",
+        "best_policy": best,
+        "worst_policy": worst,
+        "insights": insights,
+        "recommended_policy": run.get("recommended_policy"),
+    }
+
+
+def benchmark_compare(run_id: str, left_policy_id: str | None = None, right_policy_id: str | None = None) -> dict:
+    run = load_benchmark_run(run_id)
+    policies = {str(item.get("id")): item for item in (run.get("policies") or [])}
+    if left_policy_id and right_policy_id:
+        left = policies.get(left_policy_id)
+        right = policies.get(right_policy_id)
+        if not left or not right:
+            raise ValueError("policy_not_found")
+        return {
+            "run_id": run_id,
+            "left": left,
+            "right": right,
+            "delta_score": round(float(left.get("score", 0.0)) - float(right.get("score", 0.0)), 6),
+            "delta_kill_switch_frequency": round(
+                float(left.get("metrics", {}).get("kill_switch_frequency", 0.0))
+                - float(right.get("metrics", {}).get("kill_switch_frequency", 0.0)),
+                6,
+            ),
+        }
+
+    ordered = sorted(policies.values(), key=lambda item: item.get("score", 0.0), reverse=True)
+    return {
+        "run_id": run_id,
+        "policies": ordered,
+    }
+
+
+def drift_status(tolerance_pct: float = 10.0) -> dict:
+    baseline = _normalize_thresholds(DEFAULT_THRESHOLDS)
+    current = _normalize_thresholds(get_calibrated_thresholds())
+    tracked_keys = ["var_limit", "cluster_limit", "margin_high_limit"]
+    drifts = []
+    for key in tracked_keys:
+        base = float(baseline.get(key) or 0.0)
+        curr = float(current.get(key) or 0.0)
+        delta_pct = ((curr - base) / max(abs(base), 1e-6)) * 100
+        detected = abs(delta_pct) >= tolerance_pct
+        drifts.append(
+            {
+                "metric": key,
+                "baseline": round(base, 6),
+                "current": round(curr, 6),
+                "delta_pct": round(delta_pct, 6),
+                "detected": detected,
+            }
+        )
+
+    kill_switch_frequency = 0.0
+    snapshots = list_risk_snapshot_manifest(limit=200).get("items") or []
+    if snapshots:
+        triggered = 0
+        total = 0
+        for row in snapshots:
+            path = Path(str(row.get("artifact_path") or ""))
+            if not path.exists():
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            total += 1
+            if bool(((payload.get("payload") or {}).get("kill_switch") or {}).get("triggered")):
+                triggered += 1
+        kill_switch_frequency = (triggered / total) if total else 0.0
+
+    kill_switch_drift = {
+        "metric": "kill_switch_frequency",
+        "current": round(kill_switch_frequency, 6),
+        "detected": kill_switch_frequency > 0.35,
+        "tolerance": 0.35,
+    }
+
+    detected = any(item["detected"] for item in drifts) or kill_switch_drift["detected"]
+    primary = next((item for item in drifts if item["detected"]), None)
+    if not primary and kill_switch_drift["detected"]:
+        primary = {"metric": "kill_switch_frequency", "delta_pct": round((kill_switch_frequency - 0.35) * 100, 6)}
+
+    return {
+        "drift": {
+            "detected": detected,
+            "metric": (primary or {}).get("metric"),
+            "delta": (primary or {}).get("delta_pct"),
+        },
+        "baseline_thresholds": baseline,
+        "current_thresholds": current,
+        "threshold_drifts": drifts,
+        "kill_switch_frequency": kill_switch_drift,
+        "updated_at": _iso(),
+    }
+
+
 def jira_epic_breakdown() -> dict:
     return {
         "epics": [
@@ -1623,6 +2045,18 @@ def jira_epic_breakdown() -> dict:
                     "URC-44 Replay timeline engine + export",
                     "URC-45 Policy stability guard (hysteresis)",
                     "URC-46 Root-cause level explainability",
+                ],
+            },
+            {
+                "epic": "URC-P2 Policy Benchmark + Drift Control",
+                "status": "done_in_sprint_4",
+                "items": [
+                    "URC-51 Policy benchmark runner (A/B/C)",
+                    "URC-52 Strategy-class aware policy scoring model",
+                    "URC-53 Drift monitor (threshold + kill-switch frequency)",
+                    "URC-54 Regime-aware benchmark aggregation",
+                    "URC-55 Offline auto policy recommendation",
+                    "URC-56 Benchmark report + compare APIs",
                 ],
             },
         ],
