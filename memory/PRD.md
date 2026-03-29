@@ -1,3 +1,90 @@
+## 2026-03-29 — FINAL PROGRAM CLOSURE (Unified Control Room + Production Activation Prep)
+
+### P0 — Global production hardening
+- Auth/session hardening önceki fazlardaki düzeltmelerle korunup final fazda mevcut unified ekranlarla birlikte doğrulandı.
+- Ortak kritik aksiyon audit standardı eklendi:
+  - yeni helper: `/app/backend/services/audit_service.py` → `build_critical_action_details(...)`
+  - ortak alanlar:
+    - `actor`
+    - `reason`
+    - `timestamp`
+    - `scope`
+    - `before_state`
+    - `after_state`
+    - `rollback_ref`
+    - `incident_ref`
+    - `recommendation_ref`
+    - `execution_ref`
+    - `action_ref`
+- Bu standart şu modüllere bağlandı:
+  - Incident actions / rollback
+  - Learning approval/apply/reject/rollback/simulate auditleri
+  - Execution bulk recovery item auditleri
+
+### P1 — Unified Control Room
+- Yeni backend aggregator servis:
+  - `/app/backend/services/unified_control_room_service.py`
+- Yeni backend route:
+  - `GET /api/admin/unified-control-room/overview`
+- Yeni admin sayfa:
+  - `/app/frontend/src/pages/AdminUnifiedControlRoomPage.jsx`
+- Yeni route:
+  - `/admin/unified-control-room`
+- Sidebar link eklendi.
+
+### Unified Control Room blokları
+- **Live Operations**
+  - active incidents
+  - execution alerts
+  - quarantined runtime
+- **Learning & Adaptation**
+  - actionable recommendations
+  - adaptive summary
+  - simulation delta
+- **Risk & Market Context**
+  - cluster risk
+  - tail risk
+  - capital pressure
+  - microstructure stress
+- **Action Center**
+  - incident preview action
+  - learning approve/reject/apply/rollback
+- **Explainability**
+  - why
+  - evidence
+  - recommended_action
+  - what_if
+  - rollback_ready
+- **Stage Activation**
+  - checklist
+  - stage_1 / stage_2 / stage_3 config görünürlüğü
+
+### P2 — Controlled self-improvement prep
+- Learning payload tarafındaki mevcut alanlar unified control room içinde kullanılır hale getirildi:
+  - `decision_candidate`
+  - `auto_apply_eligible`
+  - `post_change_monitoring`
+  - `rollback_recommendation`
+- Stage activation mantığı görünür ama güvenli varsayılanlarla bırakıldı:
+  - Stage 1: enabled / read_only / no live action
+  - Stage 2: disabled by default
+  - Stage 3: disabled by default
+
+### Test / doğrulama
+- Pytest:
+  - `/app/backend/tests/test_unified_control_room.py`
+  - `/app/backend/tests/test_unified_control_room_comprehensive.py` (testing agent tarafından eklendi)
+- Testing agent raporu:
+  - `/app/test_reports/iteration_185.json`
+  - backend: **15/15 PASS**
+- Local self-test:
+  - unified control room overview endpoint → 200 ve tüm ana bölümler mevcut
+
+### Açık kalan operasyonel not
+- Preview URL’de admin login timeout / network dalgalanması sürüyor.
+- Testing agent bunu **preview infrastructure issue** olarak işaretledi; backend/local ve frontend code review tarafında engel görünmedi.
+- Bu nedenle unified control room frontend’i kod ve selector seviyesinde hazır, fakat preview browser tam uçtan uca doğrulama bu altyapı dalgalanması nedeniyle kısmen bloklu.
+
 ## 2026-03-29 — LEARNING CONTROL UI HİZALAMA VE OPERATÖR GÖRÜNÜRLÜĞÜ
 
 ### Kapsam
