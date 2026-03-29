@@ -7,7 +7,8 @@ import statistics
 
 import httpx
 
-from models import PaperPosition, UserExchangeConnection, UserRiskSetting
+from core.simulation.liquidity_impact_model import estimate_liquidity_impact
+from models import ExecutionMetric, PaperPosition, UserExchangeConnection, UserRiskSetting
 from services.pipeline.cache_store import get_json, set_json
 
 
@@ -380,6 +381,198 @@ def _execution_recommendation(
     }
 
 
+def _hidden_liquidity_estimate(snapshot: dict, buffer_rows: list[dict]) -> dict:
+    visible_depth = min(
+        _safe_float(snapshot.get("visible_bid_depth_notional"), 0.0),
+        _safe_float(snapshot.get("visible_ask_depth_notional"), 0.0),
+    )
+    trade_flow = dict(snapshot.get("trade_flow") or {})
+    recent_flow = _safe_float(trade_flow.get("buy_notional"), 0.0) + _safe_float(trade_flow.get("sell_notional"), 0.0)
+    baseline_flow = []
+    for item in buffer_rows:
+        flow = dict(item.get("trade_flow") or {}) if isinstance(item, dict) else {}
+        baseline_flow.append(_safe_float(flow.get("buy_notional"), 0.0) + _safe_float(flow.get("sell_notional"), 0.0))
+    avg_flow = (sum(baseline_flow) / len(baseline_flow)) if baseline_flow else recent_flow
+    hidden_ratio = max(min(((recent_flow + avg_flow) / max(visible_depth, 1.0)) - 0.25, 1.0), 0.0)
+    state = "HIGH" if hidden_ratio >= 0.55 else "MEDIUM" if hidden_ratio >= 0.25 else "LOW"
+    return {
+        "hidden_liquidity_ratio": round(hidden_ratio, 6),
+        "state": state,
+        "confidence": round(max(min(0.45 + hidden_ratio * 0.5, 0.95), 0.4), 6),
+    }
+
+
+def _depth_decay_assessment(snapshot: dict, buffer_rows: list[dict]) -> dict:
+    depths = [
+        min(_safe_float(item.get("visible_bid_depth_notional"), 0.0), _safe_float(item.get("visible_ask_depth_notional"), 0.0))
+        for item in buffer_rows
+        if isinstance(item, dict)
+    ]
+    current_depth = min(
+        _safe_float(snapshot.get("visible_bid_depth_notional"), 0.0),
+        _safe_float(snapshot.get("visible_ask_depth_notional"), 0.0),
+    )
+    if current_depth > 0:
+        depths.append(current_depth)
+    if len(depths) < 2:
+        return {"decay_ratio": 0.0, "state": "STABLE"}
+    first = max(depths[0], 1.0)
+    last = max(depths[-1], 0.0)
+    decay_ratio = max((first - last) / first, 0.0)
+    state = "RAPID" if decay_ratio >= 0.35 else "ELEVATED" if decay_ratio >= 0.18 else "STABLE"
+    return {"decay_ratio": round(decay_ratio, 6), "state": state}
+
+
+def _impact_assessment(
+    *,
+    requested_notional: float,
+    snapshot: dict,
+    regime: dict,
+    hidden_liquidity: dict,
+    depth_decay: dict,
+) -> dict:
+    visible_depth = min(
+        _safe_float(snapshot.get("visible_bid_depth_notional"), 0.0),
+        _safe_float(snapshot.get("visible_ask_depth_notional"), 0.0),
+    )
+    hidden_multiplier = 1.0 + _safe_float(hidden_liquidity.get("hidden_liquidity_ratio"), 0.0) * 0.35
+    decay_penalty = 1.0 + _safe_float(depth_decay.get("decay_ratio"), 0.0) * 0.75
+    liquidity_tier = "HIGH" if regime.get("liquidity") == "high_liquidity" else "LOW"
+    model = estimate_liquidity_impact(
+        order_size=requested_notional,
+        market_depth=max(visible_depth * hidden_multiplier / decay_penalty, 1.0),
+        spread_width_bps=_safe_float(snapshot.get("spread_bps"), 0.0),
+        liquidity_tier=liquidity_tier,
+    )
+    model["adjusted_market_depth"] = round(max(visible_depth * hidden_multiplier / decay_penalty, 1.0), 6)
+    model["hidden_liquidity_multiplier"] = round(hidden_multiplier, 6)
+    model["depth_decay_penalty"] = round(decay_penalty, 6)
+    return model
+
+
+def _portfolio_capacity_assessment(
+    db,
+    *,
+    user_id: str,
+    symbol: str,
+    strategy_binding: str | None,
+    requested_notional: float,
+    impact_model: dict,
+    snapshot: dict,
+) -> dict:
+    open_positions = db.query(PaperPosition).filter(PaperPosition.user_id == user_id, PaperPosition.status == "open").all()
+    same_symbol_notional = sum(abs(_safe_float(row.entry_price) * _safe_float(row.quantity)) for row in open_positions if str(row.symbol or "").upper() == symbol)
+    same_strategy_notional = sum(
+        abs(_safe_float(row.entry_price) * _safe_float(row.quantity))
+        for row in open_positions
+        if strategy_binding and str(row.strategy_id or "") == str(strategy_binding)
+    )
+    combined_load = requested_notional + same_symbol_notional + same_strategy_notional
+    symbol_capacity = min(
+        _safe_float(snapshot.get("visible_bid_depth_notional"), 0.0),
+        _safe_float(snapshot.get("visible_ask_depth_notional"), 0.0),
+    ) * _env_float("MICROSTRUCTURE_PORTFOLIO_LOAD_CAPACITY_RATIO", 0.30)
+    combined_load_ratio = combined_load / max(symbol_capacity, 1.0)
+    performance_degradation_pct = _safe_float(impact_model.get("performance_degradation_pct"), 0.0) * (1 + min(combined_load_ratio, 3.0) * 0.35)
+    return {
+        "same_symbol_open_notional": round(same_symbol_notional, 8),
+        "same_strategy_open_notional": round(same_strategy_notional, 8),
+        "combined_load_notional": round(combined_load, 8),
+        "combined_load_ratio": round(combined_load_ratio, 6),
+        "performance_degradation_pct": round(performance_degradation_pct, 6),
+    }
+
+
+def _execution_budget_assessment(
+    db,
+    *,
+    user_id: str,
+    symbol: str,
+    strategy_binding: str | None,
+    requested_notional: float,
+    impact_model: dict,
+) -> dict:
+    now = _utcnow()
+    day_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+    risk_setting = db.query(UserRiskSetting).filter(UserRiskSetting.user_id == user_id).first()
+    base_capital = _safe_float(getattr(risk_setting, "base_capital", None), 10000.0)
+    symbol_budget_notional = base_capital * _env_float("MICROSTRUCTURE_SYMBOL_DAILY_BUDGET_RATIO", 0.35)
+    strategy_budget_notional = base_capital * _env_float("MICROSTRUCTURE_STRATEGY_DAILY_BUDGET_RATIO", 0.45)
+    impact_budget_bps = _env_float("MICROSTRUCTURE_DAILY_IMPACT_BUDGET_BPS", 22.0)
+
+    today_metrics = db.query(ExecutionMetric).filter(ExecutionMetric.user_id == user_id, ExecutionMetric.created_at >= day_start).all()
+    symbol_budget_used = sum(_safe_float(row.quote_qty) for row in today_metrics if str(row.symbol or "").upper() == symbol)
+    strategy_budget_used = sum(
+        _safe_float(row.quote_qty)
+        for row in today_metrics
+        if strategy_binding and str(row.strategy_type or "") == str(strategy_binding)
+    )
+    projected_symbol_used = symbol_budget_used + requested_notional
+    projected_strategy_used = strategy_budget_used + requested_notional
+
+    state = "ALLOW"
+    reasons = []
+    allowed_notional = requested_notional
+    if _safe_float(impact_model.get("square_root_impact"), 0.0) * 100 > impact_budget_bps:
+        state = "BLOCK"
+        reasons.append("impact_budget_exceeded")
+        allowed_notional = 0.0
+    elif projected_symbol_used > symbol_budget_notional or (strategy_binding and projected_strategy_used > strategy_budget_notional):
+        remaining_symbol = max(symbol_budget_notional - symbol_budget_used, 0.0)
+        remaining_strategy = max(strategy_budget_notional - strategy_budget_used, 0.0) if strategy_binding else requested_notional
+        allowed_notional = max(min(remaining_symbol, remaining_strategy), 0.0)
+        state = "REDUCE_SIZE" if allowed_notional > 0 else "BLOCK"
+        reasons.append("daily_execution_budget_exceeded")
+
+    return {
+        "state": state,
+        "symbol_budget_notional": round(symbol_budget_notional, 8),
+        "strategy_budget_notional": round(strategy_budget_notional, 8),
+        "impact_budget_bps": round(impact_budget_bps, 6),
+        "symbol_budget_used": round(symbol_budget_used, 8),
+        "strategy_budget_used": round(strategy_budget_used, 8),
+        "allowed_notional": round(allowed_notional, 8),
+        "reasons": reasons,
+    }
+
+
+def _adaptive_slicing_plan(
+    *,
+    state: str,
+    requested_notional: float,
+    adjusted_notional: float,
+    regime: dict,
+    venue_health: dict,
+    impact_model: dict,
+    budget: dict,
+) -> dict:
+    slice_count = 1
+    performance_hit = _safe_float(impact_model.get("performance_degradation_pct"), 0.0)
+    impact_score = _safe_float(impact_model.get("impact_score"), 0.0)
+    if performance_hit >= 8 or impact_score >= 45:
+        slice_count += 1
+    if performance_hit >= 15 or regime.get("market_speed") == "fast":
+        slice_count += 2
+    if state == "REDUCE_SIZE" or budget.get("state") == "REDUCE_SIZE":
+        slice_count += 1
+    if _safe_float(venue_health.get("liquidity_stress_score"), 0.0) >= 55:
+        slice_count += 1
+    slice_count = max(1, min(slice_count, 8))
+    working_notional = adjusted_notional if adjusted_notional > 0 else requested_notional
+    slice_notional = working_notional / max(slice_count, 1)
+    execution_style = "aggressive" if regime.get("trend") == "bull" and regime.get("market_speed") == "normal" and slice_count <= 2 else "passive"
+    preferred_order_type = "MARKET" if execution_style == "aggressive" and slice_count == 1 else "LIMIT"
+    interval_ms = 0 if slice_count == 1 else int(500 + _safe_float(venue_health.get("liquidity_stress_score"), 0.0) * 12)
+    return {
+        "slice_count": int(slice_count),
+        "slice_notional": round(slice_notional, 8),
+        "interval_ms": interval_ms,
+        "preferred_order_type": preferred_order_type,
+        "execution_style": execution_style,
+        "should_slice": bool(slice_count > 1),
+    }
+
+
 def get_microstructure_replay(*, venue: str | None = None, symbol: str | None = None, limit: int = 100) -> dict:
     if not REPLAY_FILE.exists():
         return {"items": []}
@@ -432,6 +625,7 @@ def build_latest_execution_replay(db, *, symbol: str | None = None) -> dict:
         root_cause = "market_impact"
     elif any(bool(item.get("fast_market")) for item in replay_rows[-5:]):
         root_cause = "fast_market"
+    slicing_plan = dict(guard_payload.get("slicing_plan") or {})
     return {
         "status": "ok",
         "symbol": metric.symbol,
@@ -441,6 +635,8 @@ def build_latest_execution_replay(db, *, symbol: str | None = None) -> dict:
         "realized_slippage_bps": round(realized_bps, 6),
         "slippage_error_bps": round(error_bps, 6),
         "root_cause": root_cause,
+        "should_have_been_sliced": bool(slicing_plan.get("should_slice")),
+        "slicing_plan": slicing_plan,
         "pre_trade_guard": guard_payload,
         "replay_rows": replay_rows,
     }
@@ -792,6 +988,15 @@ def build_order_microstructure_assessment(
     regime = _market_regime(snapshot, buffer_rows)
     venue_health = _venue_health(snapshot, buffer_rows)
     retry_cost_bps = round(_safe_float(venue_health.get("retry_ratio"), 0.0) * _env_float("MICROSTRUCTURE_RETRY_COST_FACTOR_BPS", 6.0), 6)
+    hidden_liquidity = _hidden_liquidity_estimate(snapshot, buffer_rows)
+    depth_decay = _depth_decay_assessment(snapshot, buffer_rows)
+    impact_model = _impact_assessment(
+        requested_notional=requested_notional,
+        snapshot=snapshot,
+        regime=regime,
+        hidden_liquidity=hidden_liquidity,
+        depth_decay=depth_decay,
+    )
     if bool(snapshot.get("fast_market")):
         latency_penalty_bps += _env_float("MICROSTRUCTURE_FAST_MARKET_LATENCY_BPS", 4.0)
 
@@ -842,6 +1047,35 @@ def build_order_microstructure_assessment(
             state = "REDUCE_SIZE"
         reasons.extend(capacity.get("reasons") or [])
 
+    portfolio_capacity = _portfolio_capacity_assessment(
+        db,
+        user_id=user_id,
+        symbol=symbol_code,
+        strategy_binding=strategy_binding,
+        requested_notional=requested_notional,
+        impact_model=impact_model,
+        snapshot=snapshot,
+    )
+    execution_budget = _execution_budget_assessment(
+        db,
+        user_id=user_id,
+        symbol=symbol_code,
+        strategy_binding=strategy_binding,
+        requested_notional=requested_notional,
+        impact_model=impact_model,
+    )
+    if execution_budget.get("state") == "BLOCK":
+        state = "BLOCK"
+        adjusted_size = 0.0
+        reasons.extend(execution_budget.get("reasons") or [])
+    elif execution_budget.get("state") == "REDUCE_SIZE":
+        budget_allowed_notional = _safe_float(execution_budget.get("allowed_notional"), 0.0)
+        budget_adjusted_size = (budget_allowed_notional / requested_price) if requested_price > 0 else 0.0
+        adjusted_size = min(adjusted_size, budget_adjusted_size) if adjusted_size > 0 else budget_adjusted_size
+        if state != "BLOCK":
+            state = "REDUCE_SIZE"
+        reasons.extend(execution_budget.get("reasons") or [])
+
     adjusted_size = round(max(adjusted_size, 0.0), 8)
     recommendation = _execution_recommendation(
         state=state,
@@ -851,6 +1085,18 @@ def build_order_microstructure_assessment(
         snapshots=snapshots,
         capacity=capacity,
     )
+    slicing_plan = _adaptive_slicing_plan(
+        state=state,
+        requested_notional=requested_notional,
+        adjusted_notional=adjusted_size * requested_price,
+        regime=regime,
+        venue_health=venue_health,
+        impact_model=impact_model,
+        budget=execution_budget,
+    )
+    if slicing_plan.get("should_slice") and "slice" not in recommendation.get("all", []):
+        recommendation["all"] = ["slice", *(recommendation.get("all") or [])]
+        recommendation["primary"] = recommendation.get("primary") or "slice"
     return {
         "state": state,
         "selected_venue": selected_venue,
@@ -878,6 +1124,9 @@ def build_order_microstructure_assessment(
         "market_regime": regime,
         "venue_health": venue_health,
         "execution_recommendation": recommendation,
+        "impact_model": impact_model,
+        "hidden_liquidity": hidden_liquidity,
+        "depth_decay": depth_decay,
         "market_snapshot": {
             "data_state": snapshot.get("data_state"),
             "venue_readiness": snapshot.get("venue_readiness"),
@@ -890,6 +1139,9 @@ def build_order_microstructure_assessment(
             "fast_market": bool(snapshot.get("fast_market")),
         },
         "capacity": capacity,
+        "portfolio_capacity": portfolio_capacity,
+        "execution_budget": execution_budget,
+        "slicing_plan": slicing_plan,
         "venue_snapshots": {
             venue: {
                 "data_state": row.get("data_state"),

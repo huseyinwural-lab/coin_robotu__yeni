@@ -66,6 +66,70 @@ def futures_microstructure_guard_preview(
     )
 
 
+@router.get("/budget-status")
+def futures_microstructure_budget_status(
+    symbol: str = Query(..., min_length=3),
+    side: str = Query("buy"),
+    size: float = Query(..., gt=0),
+    price: float = Query(..., gt=0),
+    strategy: str | None = Query(default=None),
+    venue: str | None = Query(default=None),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = build_order_microstructure_assessment(
+        db,
+        pipeline_runtime.cache if pipeline_runtime else None,
+        user_id=current_admin.id,
+        symbol=symbol,
+        side=side,
+        price=price,
+        size=size,
+        order_type="market",
+        strategy_binding=strategy,
+        preferred_venue=venue,
+    )
+    return {
+        "state": payload.get("state"),
+        "execution_budget": payload.get("execution_budget") or {},
+        "portfolio_capacity": payload.get("portfolio_capacity") or {},
+        "impact_model": payload.get("impact_model") or {},
+    }
+
+
+@router.get("/slicing-preview")
+def futures_microstructure_slicing_preview(
+    symbol: str = Query(..., min_length=3),
+    side: str = Query("buy"),
+    size: float = Query(..., gt=0),
+    price: float = Query(..., gt=0),
+    strategy: str | None = Query(default=None),
+    venue: str | None = Query(default=None),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    payload = build_order_microstructure_assessment(
+        db,
+        pipeline_runtime.cache if pipeline_runtime else None,
+        user_id=current_admin.id,
+        symbol=symbol,
+        side=side,
+        price=price,
+        size=size,
+        order_type="market",
+        strategy_binding=strategy,
+        preferred_venue=venue,
+    )
+    return {
+        "state": payload.get("state"),
+        "execution_recommendation": payload.get("execution_recommendation") or {},
+        "slicing_plan": payload.get("slicing_plan") or {},
+        "impact_model": payload.get("impact_model") or {},
+        "hidden_liquidity": payload.get("hidden_liquidity") or {},
+        "depth_decay": payload.get("depth_decay") or {},
+    }
+
+
 @router.get("/replay")
 def futures_microstructure_replay(
     symbol: str | None = Query(default=None),

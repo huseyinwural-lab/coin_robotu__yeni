@@ -1,0 +1,66 @@
+{
+  "passed": 0,
+  "failed": 12,
+  "tests": [
+    {
+      "name": "guard_preview_impact_model",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "guard_preview_hidden_liquidity",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "guard_preview_depth_decay",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "guard_preview_portfolio_capacity",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "guard_preview_execution_budget",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "guard_preview_slicing_plan",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "budget_status_endpoint",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "slicing_preview_endpoint",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "execution_replay_latest_p2_fields",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "p0_regression_status",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "p1_regression_venues",
+      "status": "FAIL",
+      "details": "Status 401"
+    },
+    {
+      "name": "p0p1_regression_guard_preview",
+      "status": "FAIL",
+      "details": "Status 401"
+    }
+  ]
+}

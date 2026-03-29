@@ -1,0 +1,95 @@
+{
+  "login": {
+    "status": 200,
+    "ok": true
+  },
+  "guard_preview": {
+    "status": 200,
+    "ok": true,
+    "impact_model_keys": [
+      "impact_ratio",
+      "square_root_impact",
+      "impact_score",
+      "performance_degradation_pct",
+      "liquidity_tier",
+      "adjusted_market_depth",
+      "hidden_liquidity_multiplier",
+      "depth_decay_penalty"
+    ],
+    "hidden_liquidity_keys": [
+      "hidden_liquidity_ratio",
+      "state",
+      "confidence"
+    ],
+    "depth_decay_keys": [
+      "decay_ratio",
+      "state"
+    ],
+    "portfolio_capacity_keys": [
+      "same_symbol_open_notional",
+      "same_strategy_open_notional",
+      "combined_load_notional",
+      "combined_load_ratio",
+      "performance_degradation_pct"
+    ],
+    "execution_budget_keys": [
+      "state",
+      "symbol_budget_notional",
+      "strategy_budget_notional",
+      "impact_budget_bps",
+      "symbol_budget_used",
+      "strategy_budget_used",
+      "allowed_notional",
+      "reasons"
+    ],
+    "slicing_plan_keys": [
+      "slice_count",
+      "slice_notional",
+      "interval_ms",
+      "preferred_order_type",
+      "execution_style",
+      "should_slice"
+    ]
+  },
+  "budget_status": {
+    "status": 200,
+    "ok": true,
+    "keys": [
+      "state",
+      "execution_budget",
+      "portfolio_capacity",
+      "impact_model"
+    ]
+  },
+  "slicing_preview": {
+    "status": 200,
+    "ok": true,
+    "keys": [
+      "state",
+      "execution_recommendation",
+      "slicing_plan",
+      "impact_model",
+      "hidden_liquidity",
+      "depth_decay"
+    ]
+  },
+  "execution_replay_latest": {
+    "status": 200,
+    "ok": true,
+    "keys": [
+      "status",
+      "symbol",
+      "order_id",
+      "exchange",
+      "predicted_slippage_bps",
+      "realized_slippage_bps",
+      "slippage_error_bps",
+      "root_cause",
+      "should_have_been_sliced",
+      "slicing_plan",
+      "pre_trade_guard",
+      "replay_rows"
+    ],
+    "should_have_been_sliced": true
+  }
+}
