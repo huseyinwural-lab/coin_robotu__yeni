@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import hashlib
 import statistics
 import uuid
@@ -7,13 +8,32 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 
 from db import redis_client
-from models import AlertTriageAction, AuditLog, DebugIncident, FailedEvent, SystemAlert
+from models import AlertTriageAction, AuditLog, DebugIncident, FailedEvent, LiveActivationConfig, SystemAlert
+from runtime_control import force_pipeline_resync, restart_runtime_service
+from services.audit_service import create_audit_log
+from services.execution_safety_service import update_execution_safety_state
 from services.execution_microstructure_service import build_microstructure_venue_summary
 
 
 OPEN_INCIDENT_STATES = {"OPEN", "INVESTIGATING", "MITIGATED"}
 ANOMALY_ALERT_PREFIX = "anomaly."
 MAX_SOURCE_ROWS = 1500
+POLICY_KEY = "incident_intelligence:policy:v1"
+
+DEFAULT_POLICY_CONFIG = {
+    "execution": [
+        {"action": "reconcile_trigger", "severity": ["ERROR", "CRITICAL"], "recurrence_min": 1, "approval_mode": "hybrid", "cooldown_seconds": 300, "retry_limit": 2},
+    ],
+    "risk": [
+        {"action": "reduce_leverage", "severity": ["ERROR", "CRITICAL"], "recurrence_min": 1, "approval_mode": "auto", "cooldown_seconds": 600, "retry_limit": 2},
+    ],
+    "system": [
+        {"action": "restart_worker", "severity": ["ERROR", "CRITICAL"], "recurrence_min": 1, "approval_mode": "manual", "cooldown_seconds": 600, "retry_limit": 1},
+    ],
+    "exchange": [
+        {"action": "block_trading", "severity": ["ERROR", "CRITICAL"], "recurrence_min": 1, "approval_mode": "auto", "cooldown_seconds": 900, "retry_limit": 1},
+    ],
+}
 
 
 def _utcnow() -> datetime:
@@ -29,6 +49,20 @@ def _safe_float(value, default: float = 0.0) -> float:
 
 def _safe_iso(value: datetime | None) -> str | None:
     return value.astimezone(timezone.utc).isoformat() if isinstance(value, datetime) else None
+
+
+def _json_safe(value):
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
 
 
 def _parse_iso(value: str | None) -> datetime | None:
@@ -500,17 +534,169 @@ def _upsert_incident_from_anomaly(db, anomaly: SystemAlert) -> DebugIncident:
 
 
 def _auto_remediation_action(incident: DebugIncident) -> dict | None:
-    details = dict(incident.details or {})
-    actions = list(details.get("suggested_actions") or [])
-    if incident.status not in OPEN_INCIDENT_STATES:
+    policy = _policy_for_incident(incident)
+    if not policy or str(policy.get("approval_mode") or "manual") != "auto":
         return None
-    if "restart_worker" in actions:
-        return {"action": "restart_worker", "status": "executed", "safe_mode": True}
-    if "retry" in actions:
-        return {"action": "retry", "status": "executed", "safe_mode": True}
-    if "reduce_leverage" in actions:
-        return {"action": "reduce_leverage", "status": "executed", "safe_mode": True}
+    return {"action": policy.get("action"), "status": "queued", "approval_mode": "auto"}
+
+
+def _read_policy_config() -> dict:
+    raw = redis_client.get(POLICY_KEY)
+    if not raw:
+        return DEFAULT_POLICY_CONFIG
+    raw = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return DEFAULT_POLICY_CONFIG
+    if not isinstance(payload, dict):
+        return DEFAULT_POLICY_CONFIG
+    merged = {**DEFAULT_POLICY_CONFIG}
+    merged.update(payload)
+    return merged
+
+
+def get_incident_policy_config() -> dict:
+    return _read_policy_config()
+
+
+def update_incident_policy_config(payload: dict) -> dict:
+    merged = {**DEFAULT_POLICY_CONFIG, **dict(payload or {})}
+    redis_client.set(POLICY_KEY, json.dumps(merged, ensure_ascii=False))
+    return merged
+
+
+def _policy_for_incident(incident: DebugIncident) -> dict | None:
+    details = dict(incident.details or {})
+    domain = str(details.get("domain") or "system")
+    severity = _normalize_severity(incident.severity)
+    recurrence = int(incident.occurrence_count or 1)
+    policies = list((_read_policy_config().get(domain) or []))
+    for policy in policies:
+        if severity not in set(policy.get("severity") or []):
+            continue
+        if recurrence < int(policy.get("recurrence_min") or 1):
+            continue
+        return policy
     return None
+
+
+def execute_incident_action(
+    db,
+    *,
+    incident_id: str,
+    action: str,
+    actor_user_id: str,
+    actor_role: str,
+    mode: str = "manual",
+) -> dict:
+    incident = db.query(DebugIncident).filter(DebugIncident.incident_id == incident_id).first()
+    if incident is None:
+        raise ValueError("incident_not_found")
+    details = dict(incident.details or {})
+    normalized_action = str(action or "").strip().lower()
+    rollback_payload = None
+    result = {"status": "executed", "action": normalized_action, "mode": mode}
+    if normalized_action == "restart_worker":
+        result["connector_result"] = restart_runtime_service(service="worker")
+    elif normalized_action == "block_trading":
+        safety = update_execution_safety_state(
+            db,
+            trading_enabled=False,
+            reason=f"incident:{incident_id}",
+            requested_by=actor_user_id,
+            effective_at=_utcnow().isoformat(),
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+        )
+        rollback_payload = {"trading_enabled": True}
+        result["connector_result"] = _json_safe(safety)
+    elif normalized_action == "reduce_leverage":
+        config = db.query(LiveActivationConfig).filter(LiveActivationConfig.id == "global").first()
+        if config is None:
+            config = LiveActivationConfig(id="global")
+            db.add(config)
+            db.flush()
+        previous = int(config.leverage_cap or 1)
+        config.leverage_cap = max(1, previous - 1)
+        db.commit()
+        db.refresh(config)
+        rollback_payload = {"leverage_cap": previous}
+        result["connector_result"] = {"previous_leverage_cap": previous, "current_leverage_cap": config.leverage_cap}
+    elif normalized_action == "reconcile_trigger":
+        result["connector_result"] = _json_safe(force_pipeline_resync(redis_client, actor_user_id=actor_user_id, reason=f"incident:{incident_id}", trace_id=str(uuid.uuid4())))
+    else:
+        raise ValueError("invalid_incident_action")
+
+    history = list(details.get("remediation_history") or [])
+    history.append({**_json_safe(result), "executed_at": _utcnow().isoformat(), "rollback_payload": _json_safe(rollback_payload)})
+    details["remediation_history"] = history
+    incident.details = details
+    incident.status = "MITIGATED" if normalized_action in {"block_trading", "reduce_leverage", "restart_worker", "reconcile_trigger"} else incident.status
+    db.add(incident)
+    create_audit_log(
+        db,
+        action="INCIDENT_ACTION_EXECUTED",
+        entity_type="incident_intelligence",
+        entity_id=incident_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        severity="warning",
+        details={"action": normalized_action, "mode": mode, "rollback_payload": rollback_payload},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(incident)
+    return {"incident": serialize_incident_intelligence(incident), "action_result": result}
+
+
+def rollback_incident_action(db, *, incident_id: str, actor_user_id: str, actor_role: str) -> dict:
+    incident = db.query(DebugIncident).filter(DebugIncident.incident_id == incident_id).first()
+    if incident is None:
+        raise ValueError("incident_not_found")
+    details = dict(incident.details or {})
+    history = list(details.get("remediation_history") or [])
+    if not history:
+        raise ValueError("rollback_not_available")
+    latest = history[-1]
+    rollback_payload = dict(latest.get("rollback_payload") or {})
+    if not rollback_payload:
+        raise ValueError("rollback_not_available")
+    if "trading_enabled" in rollback_payload:
+        update_execution_safety_state(
+            db,
+            trading_enabled=bool(rollback_payload.get("trading_enabled")),
+            reason=f"incident_rollback:{incident_id}",
+            requested_by=actor_user_id,
+            effective_at=_utcnow().isoformat(),
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+        )
+    if "leverage_cap" in rollback_payload:
+        config = db.query(LiveActivationConfig).filter(LiveActivationConfig.id == "global").first()
+        if config is None:
+            config = LiveActivationConfig(id="global")
+            db.add(config)
+            db.flush()
+        config.leverage_cap = int(rollback_payload.get("leverage_cap") or config.leverage_cap or 1)
+        db.commit()
+    details.setdefault("rollback_history", []).append({"rolled_back_at": _utcnow().isoformat(), "rollback_payload": rollback_payload})
+    incident.details = details
+    db.add(incident)
+    create_audit_log(
+        db,
+        action="INCIDENT_ACTION_ROLLED_BACK",
+        entity_type="incident_intelligence",
+        entity_id=incident_id,
+        actor_user_id=actor_user_id,
+        actor_role=actor_role,
+        severity="warning",
+        details={"rollback_payload": rollback_payload},
+        commit=False,
+    )
+    db.commit()
+    db.refresh(incident)
+    return {"incident": serialize_incident_intelligence(incident), "rollback_payload": rollback_payload}
 
 
 def run_incident_intelligence_cycle(
@@ -555,16 +741,15 @@ def run_incident_intelligence_cycle(
             if run_auto_remediation:
                 action = _auto_remediation_action(incident)
                 if action:
-                    details = dict(incident.details or {})
-                    history = list(details.get("remediation_history") or [])
-                    history.append({**action, "executed_at": _utcnow().isoformat()})
-                    details["remediation_history"] = history
-                    incident.details = details
-                    incident.status = "MITIGATED"
-                    db.add(incident)
-                    db.commit()
-                    db.refresh(incident)
-                    remediation_events.append({"incident_id": incident.incident_id, **action})
+                    executed = execute_incident_action(
+                        db,
+                        incident_id=incident.incident_id,
+                        action=str(action.get("action") or ""),
+                        actor_user_id="system",
+                        actor_role="system",
+                        mode="auto",
+                    )
+                    remediation_events.append({"incident_id": incident.incident_id, **(executed.get("action_result") or {})})
     return {
         "generated_at": now.isoformat(),
         "context": context,

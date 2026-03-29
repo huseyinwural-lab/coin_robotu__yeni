@@ -12,6 +12,7 @@ from core.config import settings
 from core.observability.http_logging_middleware import RequestObservabilityMiddleware
 from core.structured_logging import configure_structured_logging
 from api import runtime_ws
+from api import incident_ws
 from routers import (
     admin_action_center,
     admin_emergency,
@@ -116,6 +117,8 @@ from services.commercial_export_scheduler_service import run_commercial_export_s
 from services.venue_sanity_scheduler_service import run_venue_sanity_scheduler_loop
 from services.readiness_maintenance_scheduler_service import run_readiness_maintenance_scheduler_loop
 from services.execution_microstructure_service import ExecutionMicrostructureRuntime
+from services.incident_intelligence_service import run_incident_intelligence_cycle
+from core.incident_stream import incident_stream_hub
 from services.commercial_preview_smoke_service import (
     run_commercial_preview_http_gate_once,
     run_commercial_preview_smoke_gate,
@@ -149,6 +152,7 @@ preview_smoke_gate_task: asyncio.Task | None = None
 venue_sanity_scheduler_task: asyncio.Task | None = None
 readiness_maintenance_scheduler_task: asyncio.Task | None = None
 execution_microstructure_runtime: ExecutionMicrostructureRuntime | None = None
+incident_intelligence_task: asyncio.Task | None = None
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
 STARTUP_RUNTIME_STATE = {
     "database_url_valid": False,
@@ -421,6 +425,7 @@ api_router.include_router(export.router)
 api_router.include_router(snapshots.router)
 api_router.include_router(runtime_execution.router)
 api_router.include_router(runtime_ws.router)
+api_router.include_router(incident_ws.router)
 api_router.include_router(admin_closure.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(spot_strategy.router)
@@ -641,9 +646,35 @@ async def startup_event():
         STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
         logger.warning("PIPELINE_RUNTIME_SKIPPED_DATABASE_NOT_READY")
 
-    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task, execution_microstructure_runtime
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task, execution_microstructure_runtime, incident_intelligence_task
     if STARTUP_RUNTIME_STATE["database_ready"]:
         from db import SessionLocal
+
+        async def _incident_intelligence_loop():
+            interval = max(15, int(os.getenv("INCIDENT_INTELLIGENCE_STREAM_INTERVAL_SECONDS", "30") or "30"))
+            while True:
+                session = SessionLocal()
+                try:
+                    payload = run_incident_intelligence_cycle(session, window_minutes=15, create_incidents=True, run_auto_remediation=True)
+                    await incident_stream_hub.publish_event(
+                        {
+                            "event_type": "incident_intelligence_snapshot",
+                            "anomaly_count": len(payload.get("anomalies") or []),
+                            "incident_count": len(payload.get("incidents") or []),
+                            "auto_remediation_count": len(payload.get("auto_remediation") or []),
+                            "context": payload.get("context") or {},
+                        }
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    await incident_stream_hub.publish_event(
+                        {
+                            "event_type": "incident_intelligence_error",
+                            "detail": str(exc)[:240],
+                        }
+                    )
+                finally:
+                    session.close()
+                await asyncio.sleep(interval)
 
         execution_microstructure_runtime = ExecutionMicrostructureRuntime(redis_client)
         await execution_microstructure_runtime.start()
@@ -654,6 +685,7 @@ async def startup_event():
         preview_smoke_gate_task = asyncio.create_task(_run_preview_smoke_gate_job())
         venue_sanity_scheduler_task = asyncio.create_task(run_venue_sanity_scheduler_loop(SessionLocal))
         readiness_maintenance_scheduler_task = asyncio.create_task(run_readiness_maintenance_scheduler_loop(SessionLocal))
+        incident_intelligence_task = asyncio.create_task(_incident_intelligence_loop())
         STARTUP_RUNTIME_STATE["background_loops_started"] = True
     else:
         STARTUP_RUNTIME_STATE["background_loops_started"] = False
@@ -673,7 +705,7 @@ async def startup_event():
 async def shutdown_event():
     if STARTUP_RUNTIME_STATE.get("pipeline_runtime_ok"):
         await pipeline_runtime.stop()
-    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task, execution_microstructure_runtime
+    global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task, execution_microstructure_runtime, incident_intelligence_task
     if execution_microstructure_runtime:
         await execution_microstructure_runtime.stop()
     if weekly_report_task:
@@ -690,6 +722,8 @@ async def shutdown_event():
         venue_sanity_scheduler_task.cancel()
     if readiness_maintenance_scheduler_task:
         readiness_maintenance_scheduler_task.cancel()
+    if incident_intelligence_task:
+        incident_intelligence_task.cancel()
 
 
 app = create_socket_app(fastapi_app)

@@ -89,6 +89,8 @@ import { AdminExecutionReadinessPage } from "@/pages/AdminExecutionReadinessPage
 import { AdminExecutionOperatorCenterPage } from "@/pages/AdminExecutionOperatorCenterPage";
 import { AdminBrandSettingsPage } from "@/pages/AdminBrandSettingsPage";
 import { AdminAnomalyTimelinePage } from "@/pages/AdminAnomalyTimelinePage";
+import AdminIncidentIntelligencePage from "@/pages/AdminIncidentIntelligencePage";
+import AdminIncidentDetailPage from "@/pages/AdminIncidentDetailPage";
 import { AdminActionAuditPage } from "@/pages/AdminActionAuditPage";
 import { PipelineOperationsPage } from "@/pages/PipelineOperationsPage";
 import { MfaSettingsPage } from "@/pages/MfaSettingsPage";
@@ -190,6 +192,8 @@ function App() {
             <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="brand-settings" element={<AdminBrandSettingsPage />} />
             <Route path="anomaly-timeline" element={<AdminAnomalyTimelinePage />} />
+            <Route path="incident-intelligence" element={<AdminIncidentIntelligencePage />} />
+            <Route path="incident-intelligence/:incidentId" element={<AdminIncidentDetailPage />} />
             <Route path="strategy/allocation" element={<AdminStrategyAllocationPage />} />
             <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
             <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />
