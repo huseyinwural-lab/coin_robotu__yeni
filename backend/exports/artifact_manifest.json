@@ -1400,6 +1400,48 @@
       "chain_position": 100,
       "prev_chain_hash": "b0edc6f8ce1ad63b96206019eb72091f52987146bf437979fa37829a1410d1fb",
       "chain_hash": "c832328ffc730cfbc1a43edb9d6ac6fe205da4d1dc040f62609403ac96f6367f"
+    },
+    {
+      "artifact_id": "8c6b97c3-149e-4c19-a333-35cf123a3bf0",
+      "filename": "execution_safety_gate_20260329092810_8c6b97c3.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "14dd0821afcbcf36110c854a972d2ad07f7bdabb992e40e3683d2b60c80e1aa2",
+      "size": 11835,
+      "created_at": "2026-03-29T09:28:10.096711+00:00",
+      "proof_id": "8c6b97c3-149e-4c19-a333-35cf123a3bf0",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 101,
+      "prev_chain_hash": "c832328ffc730cfbc1a43edb9d6ac6fe205da4d1dc040f62609403ac96f6367f",
+      "chain_hash": "7c9b97b90747f341c85a2271436339b8185c1a4be2c690813919da27f93fb08b"
+    },
+    {
+      "artifact_id": "a8614a57-1e9d-4016-bfb1-3a93be6db2d2",
+      "filename": "execution_safety_gate_20260329092825_a8614a57.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "1d28c66c84cf11c4619412edb0fef208042dba465b25c81af2554eba9f8d8f2a",
+      "size": 11835,
+      "created_at": "2026-03-29T09:28:25.730292+00:00",
+      "proof_id": "a8614a57-1e9d-4016-bfb1-3a93be6db2d2",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 102,
+      "prev_chain_hash": "7c9b97b90747f341c85a2271436339b8185c1a4be2c690813919da27f93fb08b",
+      "chain_hash": "5610de223703766ccd4cdd9cc5138454086030cb7a06b209058da49d15c18b7f"
+    },
+    {
+      "artifact_id": "0d92989e-b5b8-4061-8cc8-1565814be864",
+      "filename": "execution_testnet_acceptance_20260329092827_0d92989e.json",
+      "artifact_type": "execution_testnet_acceptance",
+      "sha256": "ff499853741eed0d3abe463ecbc7f058e16adfafa9560913cbc4d378d00e9622",
+      "size": 15699,
+      "created_at": "2026-03-29T09:28:27.235754+00:00",
+      "proof_id": "0d92989e-b5b8-4061-8cc8-1565814be864",
+      "evidence_type": "execution_testnet_acceptance",
+      "status": "generated",
+      "chain_position": 103,
+      "prev_chain_hash": "5610de223703766ccd4cdd9cc5138454086030cb7a06b209058da49d15c18b7f",
+      "chain_hash": "5d2b4bf997b2e2f9c9b9d78532d326be63d4fc3f13d7b31d83f8f00845e539a4"
     }
   ]
 }
