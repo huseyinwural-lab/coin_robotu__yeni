@@ -1,3 +1,101 @@
+## 2026-03-29 — LEARNING CONTROL UI HİZALAMA VE OPERATÖR GÖRÜNÜRLÜĞÜ
+
+### Kapsam
+- Adaptive backend sözleşmesi admin learning ekranlarına taşındı.
+- Learning Memory + Recommendation Simulator artık operator/admin için okunabilir karar destek yüzeyi sunuyor.
+
+### P0 — Learning Memory UI hizalama
+- Learning event tablosu artık kanonik alanları görünür gösteriyor:
+  - `signal`
+  - `decision`
+  - `outcome`
+  - `pnl_norm`
+  - `mfe`
+  - `mae`
+  - `false_allow`
+  - `false_reject`
+  - `regime`
+  - `strategy_id`
+  - `symbol`
+- Strategy performance tablosu genişletildi:
+  - `hit_rate`
+  - `avg_return`
+  - `drawdown`
+  - `pnl_by_regime`
+  - `decision_quality_breakdown`
+  - `rolling_windows`
+  - `window_comparison`
+  - `stability_score`
+  - `decay_score`
+  - `regime_drift_flag`
+  - `drift_confidence`
+  - `confidence_degradation`
+  - `actionability_flag`
+
+### P1 — Recommendation Simulator UI hizalama
+- Recommendation kartlarında görünür hale getirildi:
+  - `reason`
+  - `confidence`
+  - `evidence_summary`
+  - `recommendation_scope`
+  - `recommendation_score`
+  - `actionable_state`
+  - `risk_impact`
+- Simulator formu genişletildi:
+  - `strategy_id`
+  - `strategy_ids`
+  - `family`
+  - `symbol_cluster`
+  - `scenario`
+  - `recommendation_type`
+  - `suggested_weight_multiplier`
+- Simulator output blokları görünür:
+  - `baseline_metrics`
+  - `projected_metrics`
+  - `delta_metrics`
+  - `sample_coverage`
+  - `risk_aware_view`
+  - `portfolio_impact`
+  - `counterfactual_replay`
+  - `interaction_effects`
+
+### P2 — Version history + monitoring görünürlüğü
+- Recommendation kartlarında görünür:
+  - `status_history`
+  - `version`
+  - `version_history`
+  - `last_simulation`
+  - `post_change_monitoring`
+- Monitoring pencereleri backend verisiyle okunur hale getirildi:
+  - `1h`
+  - `24h`
+  - `7d`
+  - `baseline`
+  - `current`
+  - `deterioration_flag`
+  - `rollback_recommendation`
+
+### P3 — Admin action flow UI
+- UI üzerinden çalışır durumda:
+  - `simulate`
+  - `approve`
+  - `reject`
+  - `apply`
+  - `rollback`
+- Her recommendation aksiyonunda `reason` zorunlu textarea ile alınıyor.
+- Aksiyon sonrası overview yenilenerek state anında güncelleniyor.
+
+### Frontend dosyaları
+- `/app/frontend/src/pages/AdminLearningPanelPage.jsx`
+- `/app/frontend/src/pages/AdminLearningImpactSimulatorPage.jsx`
+
+### Test / doğrulama
+- Auto frontend validation PASS (learning panel + simulator görünürlük ve aksiyon varlığı doğrulandı)
+- Testing agent raporu: `/app/test_reports/iteration_184.json`
+  - backend: **100% PASS (3/3)**
+  - frontend: code review PASS
+- Not: preview URL’de aralıklı login timeout görüldü; testing agent bunu infra/network dalgalanması olarak işaretledi, kod kusuru olarak değil.
+
 ## 2026-03-29 — LEARNING & ADAPTIVE CONTROL CORE (Adaptive Logic + Portfolio Simulation)
 
 ### Kapsam
