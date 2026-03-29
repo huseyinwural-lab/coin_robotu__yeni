@@ -82,6 +82,19 @@
   - post-change monitoring
   - baseline/projected/delta simulation blokları
 
+## 2026-03-29 — Review User MFA Disabled
+
+- `review.user@platform.local` için MFA zorlaması kapatıldı.
+- Yapılanlar:
+  - kullanıcı MFA preference kaydı `disabled` yapıldı
+  - bekleyen MFA challenge kayıtları temizlendi
+  - backup code kayıtları temizlendi
+  - preview doğrulaması için `MFA_TEMP_BYPASS_EMAILS` içine kullanıcı eklendi
+- Doğrulama:
+  - preview browser test PASS
+  - user login sonrası MFA paneli çıkmadı
+  - yönlendirme `/user/dashboard` içine başarıyla tamamlandı
+
 ## 2026-03-29 — Test User Credential Added
 
 - Kullanıcı doğrulaması için yeni standart USER hesabı oluşturuldu.
