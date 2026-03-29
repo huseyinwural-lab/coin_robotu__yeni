@@ -11,3 +11,4 @@
 {"run_id": "benchmark-93830317ab6e", "generated_at": "2026-03-29T13:03:25Z", "path": "/app/artifacts/risk_benchmark/benchmark-93830317ab6e.json", "best_policy": "A"}
 {"run_id": "benchmark-418a56324b8d", "generated_at": "2026-03-29T13:03:25Z", "path": "/app/artifacts/risk_benchmark/benchmark-418a56324b8d.json", "best_policy": "P1"}
 {"run_id": "benchmark-8ae7abaa1b47", "generated_at": "2026-03-29T13:03:58Z", "path": "/app/artifacts/risk_benchmark/benchmark-8ae7abaa1b47.json", "best_policy": "PX_A"}
+{"run_id": "benchmark-544ea621dc1a", "generated_at": "2026-03-29T15:57:49Z", "path": "/app/artifacts/risk_benchmark/benchmark-544ea621dc1a.json", "best_policy": "P1"}

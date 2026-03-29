@@ -1,3 +1,24 @@
+## 2026-03-29 — UNIFIED RISK CORE Sprint-5 API Doğrulama (P0 Kapanış)
+
+### Son durum
+- `strategy_domain.py` içinde Sprint-5 policy route blokları mevcut ve aktif doğrulandı:
+  - `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/leaderboard`
+  - `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/history`
+  - `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/decay`
+  - `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/portfolio`
+  - `GET /api/strategy-domain/admin/risk-orchestrator/unified-core/policy/trends`
+- Ek doğrulama olarak benchmark run/report/compare uçları da tekrar 200 ile doğrulandı.
+- Güncel self-test raporu yeniden üretildi: `/app/test_reports/unified_risk_core_sprint5_api_selftest.json`
+
+### Doğrulama özeti
+- Admin login: 200
+- Benchmark run: 200 (`run_id` üretildi)
+- Policy leaderboard/history/decay/portfolio/trends: tamamı 200
+- Benchmark report/compare: tamamı 200
+
+### Not
+- Önceki 404 raporu artık repro edilemedi; mevcut fork durumunda Sprint-5 endpointleri erişilebilir durumda.
+
 ## 2026-03-29 — UNIFIED RISK CORE Sprint-5 (Policy Evolution Layer)
 
 ### Sprint-5 odakları (tamamlandı)

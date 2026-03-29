@@ -1,117 +1,25 @@
 <analysis>### original_problem_statement
-The user mandates the implementation of the EXECUTION SAFETY CORE (P0) and its subsequent Operasyonel Dayanıklılık ve Müdahale Katmanı (P1). The core goals are to enforce a strict pre-trade execution safety gate, implement an immutable intent lifecycle state machine with a correlation spine, build a Runtime Quarantine/DLQ pipeline with S3 artifact storage, and establish operability/analytics (batch recovery, shadow/dry-run execution, anomaly detection).
+The user mandated the implementation of P2 — Operasyonel Zeka ve Müdahale Hızlandırma (Operator Intelligence & Accelerated Intervention) and subsequently the UNIFIED RISK CORE Epic (Sprints 1 to 5). The goal is to evolve the system from an observable execution gate into a proactive, decision-making, and self-calibrating operator platform. The Unified Risk Core strictly refactors fragmented risk components (liquidation, capital, tail, cluster) into a single deterministic orchestrator that dictates execution policy via offline simulations and replay data, without directly sending live exchange orders. 
 
 **User's preferred language**: Turkish (INSTRUCT NEXT AGENT: KULLANICININ BİRİNCİL DİLİ TÜRKÇEDİR. LÜTFEN SADECE TÜRKÇE YANIT VERİNİZ VE İLETİŞİMİ TÜRKÇE SÜRDÜRÜNÜZ.)
 
 **what currently exists?** 
-The P0 Execution Safety Core is fully implemented on the backend under a new canonical namespace (). This includes strict gate evaluation, true reconciliation, correlation envelope enforcement, and S3 artifact generation. P1 Sprint-1 (Batch recovery, explainability, quarantine UI) is also complete. The backend for P1 Sprint-2 (Analytics, Shadow/Dry-run execution, Anomaly detection) has been merged. The agent is currently integrating these P1 Sprint-2 features into the frontend React pages. 
-*(Note: The deployment preview returns 502 Bad Gateway due to the user's strict PostgreSQL requirement, which the Emergent preview environment does not support natively.)*
+The P2 Operational Intelligence features (CSV exports, Incident Severity Scoring, Playbook generation, Operator Center UI, and Auto-Remediation guardrails) are fully implemented and verified. The Unified Risk Core has successfully completed Sprints 1 through 4 (consolidated data model, cluster/tail risk engines, strategy budget governance, multi-factor kill-switch, scenario calibration, policy benchmarking, and drift monitoring). Sprint-5 (Policy Evolution Layer: leaderboard, decay detection, regime transition tracking) logic is implemented and passes unit tests, but the API endpoints are currently missing/unwired and returning 404s.
 
 **Last working item**:
-    - Last item agent was working: Integrating P1 Sprint-2 UI components (Analytics dashboard, Anomaly detection panel, Shadow/Dry-run UI) into .
+    - Last item agent was working: Unified Risk Core - Sprint-5 (Policy Evolution Layer) API endpoint wiring and self-testing.
     - Status: IN PROGRESS
-    - Agent Testing Done: N
-    - Which testing method agent to use? Frontend testing agent (for code validation, keeping in mind the live URL will 502/auth-block)
+    - Agent Testing Done: Y (Pytest passed, but API bash curl tests returned 404 Not Found).
+    - Which testing method agent to use? Backend manual testing by curl / python -c to ensure the newly added Sprint 5 endpoints are reachable.
     - User Testing Done: N
 
-**All Pending/In progress Issue list**:
-  - Issue 1: Bybit Testnet Proxy & Connectivity (403 Forbidden / SSL Error)
-     - Attempted fixes: Updated  to user's provided proxy (), but encountered SSL alternative certificate match errors and 403s on public endpoints.
-     - Next debug checklist: Await a fully functional proxy configuration from the user. Verify with .
-     - Why fix this issue and what will be achieved with the fix? Required to complete the Gerçek testnet acceptance zinciri and unblock actual Bybit order placement.
-     - Status: BLOCKED (Awaiting User Proxy Fix)
-     - Is recurring issue? Y
-     - Should Test frontend/backend/both after fix? backend
-
-  - Issue 2: Preview Environment 502 Bad Gateway (PostgreSQL limitation)
-     - Attempted fixes: Acknowledged as a platform limitation.
-     - Next debug checklist: Cannot fix in preview. Rely on  subagent, unit tests, and .
-     - Why fix this issue and what will be achieved with the fix? N/A
-     - Status: BLOCKED
-     - Is recurring issue? Y
-     - Should Test frontend/backend/both after fix? NA
-
-  - Issue 3: Frontend Auth Flakiness (Cross-origin cookie mismatch)
-     - Attempted fixes: Added fallback device fingerprinting, but SameSite cookie restrictions in the preview iframe block the auth token on subsequent requests.
-     - Next debug checklist: Acknowledge during frontend testing. Use API/backend testing for logical verification.
-     - Why fix this issue and what will be achieved with the fix? Blocks live UI click-testing.
-     - Status: BLOCKED
-     - Is recurring issue? Y
-     - Should Test frontend/backend/both after fix? NA
-
-**In progress Task List**:
-  - Task 1: P1 Sprint-2 Frontend UI Integration
-     - Where to resume: Continue updating  to render the Analytics (7d/30d), False Decision Anomaly panel, and Dry-run/Shadow execution panels based on the newly added backend service .
-     - What will be achieved with this? Closes out the final mandate for P1 (Operational resilience layer).
-     - Status: IN PROGRESS
-     - Should Test frontend/backend/both after fix? Frontend testing agent (code validation mode)
-     - Blocked on something: None
-
-**Upcoming and Future Tasks**:
-    Upcoming Tasks (P2 Priority):
-    - UI Polish (User specified that basic operable UI is enough for P1 closure, visual polish is for later).
-    - CSV Export for Analytics (Currently JSON only, serializer needs to be expanded for CSV).
-    
-    Future Tasks:
-    - Auto-generation of incident severity scoring and recommended recovery playbooks based on observability outputs.
-
-**Completed work in this session**
-- Execution Safety Core API namespace migration () (DONE)
-- AWS S3 artifact upload integration with signature fix (DONE)
-- Canonical intent lifecycle state machine (using ) (DONE)
-- Correlation spine enforcement (request_id, intent_id, correlation_id) (DONE)
-- Batch recovery operations (bulk-retry, bulk-cancel, bulk-reconcile, move-to-quarantine) (DONE)
-- Real reconciliation engine with idempotency and mismatch detection (DONE)
-- P1 Sprint-2 Backend (Analytics, False Ready/Allow anomaly detection, Hybrid Dry-run/Shadow execution) (DONE)
-
-**Earlier issues found/mentioned but not fixed**
-   - None explicitly missed; the proxy issue and 502 issue are recognized environmental blockers.
-
-**Known issue recurrence from previous fork**
-  - Issue recurrence in previous fork: Preview Environment 502 Bad Gateway.
-  - Recurrence count: 2
-  - Status: BLOCKED (Do not attempt to fix by moving to Mongo; user strictly requires PostgreSQL).
-
-**Code Architecture**
-
-
-**Key Technical Concepts**
-- **Execution Safety Gate**: Centralized fail-safe pre-trade evaluation. Default deny on missing context.
-- **Correlation Spine**: Strict validation of context envelopes (intent_id, correlation_id, request_id) before events are written.
-- **Quarantine / DLQ**: Events lacking correlation or hitting max retries are safely isolated into  records for manual replay.
-- **Hybrid Dry-run / Shadow Execution**: Pulls real market data from Bybit but simulates the fill locally without submitting real orders.
-
-**key DB schema**
-  - : Manages testnet/live execution path policies.
-  - : Tracks canonical intent lifecycle.
-  - : Audit trail for operator interventions.
-  - : Stores quarantined items.
-
-**changes in tech stack**
-  - Completely deprecated  API routes in favor of .
-
-**All files of reference**
-1.  (New backend logic for analytics & shadow execution)
-2.  (Currently being edited for UI)
-3.  (Completed Sprint-1 UI)
-
-**Areas that need refactoring**:
-- Legacy string states (e.g., ) exist in older domains, but the  path now strictly uses . A broader repo cleanup was initiated (see ).
-
-**key api endpoints**
-- 
-- 
-- 
-- 
--  (and related bulk endpoints)
-
-**Critical Info for New Agent**
-- **LANGUAGE**: You **MUST** reply in Turkish.
-- **502 PARADOX**: The preview environment will return 502 because it forces MongoDB but the backend is wired for PostgreSQL. Do NOT change to MongoDB. Use isolated ============================= test session starts ==============================
+**All Pending/In progress Issue list**: 
+  - Issue 1: Sprint-5 Policy Evolution Endpoints returning 404 (P0)
+     - Attempted fixes: Agent implemented the logic in  and ran passing ============================= test session starts ==============================
 platform linux -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
 rootdir: /app
 plugins: anyio-4.12.1
-collected 6185 items / 7 errors
+collected 6201 items / 7 errors
 
 ==================================== ERRORS ====================================
 ____ ERROR collecting backend/tests/test_indicator_screener_filter_layer.py ____
@@ -217,38 +125,532 @@ ERROR backend/tests/test_indicator_screener_phase3.py - AssertionError: The p...
 ERROR backend/tests/test_indicator_screener_u_is_filter_layer.py - AssertionE...
 ERROR ui_validation_test.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
-======================== 7 warnings, 7 errors in 12.10s ======================== and  scripts, or backend testing agents. 
-- **PROXY BLOCKER**: Bybit Testnet operations are blocked by an IP ban/403. The user provided  but it is facing SSL issues. You cannot fix the testnet acceptance smoke entirely until the user provides a functioning proxy. Build and test everything up to the network boundary.
-- **AUTH FLAKINESS**: The frontend testing agent will encounter cross-origin session issues. Rely on code-level selector validation for the frontend.
+======================== 7 warnings, 7 errors in 12.90s ========================, but  requests to , , , , and  returned 404 Not Found.
+     - Next debug checklist: Check  (or the specific risk router file) to ensure the Sprint-5 API endpoints are properly defined and mapped to the underlying service functions.
+     - Why fix this issue and what will be achieved with the fix? Completes the Sprint-5 backend mandate to expose the Policy Evolution layer to the system/UI.
+     - Status: IN PROGRESS
+     - Is recurring issue? N
+     - Should Test frontend/backend/both after fix? Backend
+     - Blocked on other issue: None
+
+  - Issue 2: Bybit Testnet Proxy & Connectivity (403 Forbidden / SSL Error)
+     - Attempted fixes: Previously acknowledged proxy SSL/403 limitations.
+     - Next debug checklist: Await a fully functional proxy configuration from the user if live testing is ever requested.
+     - Why fix this issue and what will be achieved with the fix? Unblocks actual Bybit order placement if live trading is permitted later.
+     - Status: BLOCKED (Awaiting User Proxy Fix)
+     - Is recurring issue? Y
+     - Should Test frontend/backend/both after fix? Backend
+
+  - Issue 3: Preview Environment 502 Bad Gateway (PostgreSQL limitation)
+     - Attempted fixes: Acknowledged as a platform limitation due to Emergent forcing MongoDB while the app requires PostgreSQL.
+     - Next debug checklist: Rely purely on  subagent, local ============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: anyio-4.12.1
+collected 6201 items / 7 errors
+
+==================================== ERRORS ====================================
+____ ERROR collecting backend/tests/test_indicator_screener_filter_layer.py ____
+backend/tests/test_indicator_screener_filter_layer.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="filterlayer")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+__ ERROR collecting backend/tests/test_indicator_screener_iq_comprehensive.py __
+backend/tests/test_indicator_screener_iq_comprehensive.py:24: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="iq_comprehensive")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase1.py _______
+backend/tests/test_indicator_screener_phase1.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase1")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase2.py _______
+backend/tests/test_indicator_screener_phase2.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase2")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_______ ERROR collecting backend/tests/test_indicator_screener_phase3.py _______
+backend/tests/test_indicator_screener_phase3.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase3")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+_ ERROR collecting backend/tests/test_indicator_screener_u_is_filter_layer.py __
+backend/tests/test_indicator_screener_u_is_filter_layer.py:30: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="uisfilter")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:51: in ensure_user_headers
+    raise AssertionError(register.text)
+E   AssertionError: The preview environment is not responding. It may be starting up.
+____________________ ERROR collecting ui_validation_test.py ____________________
+ImportError while importing test module '/app/ui_validation_test.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ui_validation_test.py:11: in <module>
+    from bs4 import BeautifulSoup
+E   ModuleNotFoundError: No module named 'bs4'
+=============================== warnings summary ===============================
+../root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12
+  /root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+../root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+backend/routers/admin_execution.py:349
+  /app/backend/routers/admin_execution.py:349: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class PolicyBuilderRequest(BaseModel):
+
+backend/server.py:453
+  /app/backend/server.py:453: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("startup")
+
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+backend/server.py:666
+  /app/backend/server.py:666: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR backend/tests/test_indicator_screener_filter_layer.py - AssertionError:...
+ERROR backend/tests/test_indicator_screener_iq_comprehensive.py - AssertionEr...
+ERROR backend/tests/test_indicator_screener_phase1.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_phase2.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_phase3.py - AssertionError: The p...
+ERROR backend/tests/test_indicator_screener_u_is_filter_layer.py - AssertionE...
+ERROR ui_validation_test.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
+======================== 7 warnings, 7 errors in 8.34s =========================, and . 
+     - Why fix this issue and what will be achieved with the fix? N/A
+     - Status: BLOCKED
+     - Is recurring issue? Y
+     - Should Test frontend/backend/both after fix? NA
+
+**In progress Task List**:
+  - Task 1: Unified Risk Core - Sprint-5 API Routing
+     - Where to resume: Define the FastAPI routes in  for the Sprint-5 functions (leaderboard, decay, regime transition, portfolio, confidence) built in .
+     - What will be achieved with this? Successfully closes out Sprint-5 (Policy Evolution Layer).
+     - Status: IN PROGRESS
+     - Should Test frontend/backend/both after fix? Backend
+     - Blocked on something: None
+
+**Upcoming and Future Tasks**
+    Upcoming Tasks (P1):
+    - Connect unified core output to the Operator Center UI to visualize risk state transitions and policy benchmarks as a time series.
+    - Scenario Calibration Dashboard (UI to tune VaR/CVaR and cluster thresholds interactively on simulation replays).
+    
+    Future Tasks (P2):
+    - Auto remediation policy engine live rollout based on tenant/risk profiles.
+    - Automated real-time policy switching (currently, the system only outputs offline recommendations).
+
+**Completed work in this session**
+- Execution Safety P1 Sprint-2 Frontend UI (Analytics, False Decision Anomaly, Dry-run panels) (DONE)
+- P2 Operasyonel Zeka Sprint-A: CSV Export, Incident Severity Scoring, Recovery Playbook Engine, Quick Actions (DONE)
+- P2 Operasyonel Zeka Sprint-B: Operator Decision Panel UI (), Correlation Drilldown (DONE)
+- P2 Hardening: Auto-remediation policies (tenant-based opt-in), Guard matrices, One-click manual confirmations for HIGH risk (DONE)
+- Unified Risk Core Sprint-1: P0 unified data model, single  entry point, cross/isolated liquidation engine, Binance/Bybit base rulesets (DONE)
+- Unified Risk Core Sprint-2: Cluster risk (rolling correlation), Tail risk (VaR/CVaR), Strategy risk budget governance, ruleset deep abstraction (DONE)
+- Unified Risk Core Sprint-3: Multi-factor kill-switch matrix, Reusable scenario pack engine, Calibration layer, Replay engine hardening, Root-cause explainability (DONE)
+- Unified Risk Core Sprint-4: Policy Benchmark runner, Drift monitor, Regime-aware scoring, Offline policy recommendation (DONE)
+- Unified Risk Core Sprint-5: Policy Leaderboard, decay detection, and portfolio blending service logic and unit tests (DONE - API routes pending)
+
+**Earlier issues found/mentioned but not fixed**
+   - Issue 1: Frontend Auth Flakiness
+     - Debug checklist: Cross-origin cookie mismatch in the preview iframe.
+     - Why to solve this issue and what will be achieved with this: Unblocks flawless live UI click-testing. 
+     - Should Test frontend/backend/both after fix: Frontend
+     - Is recurring issue? Y
+
+**Known issue recurrence from previous fork**
+  - Issue recurrence in previous fork: Preview Environment 502 Bad Gateway.
+  - Recurrence count: 3
+  - Status: BLOCKED (User strictly requires PostgreSQL, preview requires Mongo. Ignore 502s and use backend tests/pytest).
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- **Unified Risk Orchestrator**: Replaces fragmented risk modules. Ensures no module decides execution policy directly; everything flows through a single deterministic orchestrator.
+- **Offline Simulation / Replay**: Validates risk scenarios, policy benchmarks, and calibration using stored artifacts or simulated price ticks without hitting live exchanges.
+- **Policy Drift & Evolution Layer**: Continuously evaluates active thresholds against a library of market scenarios (bear, bull, shock) to recommend policy swaps or detect performance decay.
+- **Multi-factor Kill-Switch**: Aggregates margin ratios, cluster concentrations, and VaR/CVaR breaches into a single decisive, explainable action preventing false positives.
+
+**key DB schema**
+  - : Stores global and tenant-specific execution guardrails and calibration thresholds.
+  - : Stores quarantined items and anomalies with computed severity scores and recovery playbooks.
+  - : Audit trail for operator interventions and kill-switch activations.
+  - : Used as the mock base for the unified risk engine's cross/isolated margin and tail-risk calculations.
+
+**changes in tech stack**
+  - All discrete risk components (, , ) have been structurally subordinated to the new .
+
+**All files of reference**
+1.  (Core file containing all Sprints 1-5 logic)
+2.  (API router for unified core; needs Sprint-5 routes added)
+3.  (New frontend operator panel)
+4.  (Shows 404s for the latest task)
+5.  (Epic breakdown and documentation)
+
+**Areas that need refactoring**:
+- Complete the deprecation of old, loose risk routers (, , etc.) as the  takes full precedence.
+
+**key api endpoints**
+-  (Sprint-1)
+-  (Sprint-1)
+-  (Sprint-3)
+-  (Sprint-3)
+-  (Sprint-4)
+- *PENDING:*  (Sprint-5, throwing 404s)
+
+**Critical Info for New Agent**
+- **LANGUAGE REQUIREMENT**: You **MUST** reply and communicate in Turkish.
+- **502 PARADOX**: The preview deployment will show 502 Bad Gateway because of the Postgres/Mongo limitation on the platform. DO NOT ATTEMPT to migrate to Mongo. Trust backend ============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: anyio-4.12.1
+collected 6201 items / 7 errors
+
+==================================== ERRORS ====================================
+____ ERROR collecting backend/tests/test_indicator_screener_filter_layer.py ____
+backend/tests/test_indicator_screener_filter_layer.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="filterlayer")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"Invalid credentials"}
+__ ERROR collecting backend/tests/test_indicator_screener_iq_comprehensive.py __
+backend/tests/test_indicator_screener_iq_comprehensive.py:24: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="iq_comprehensive")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"Invalid credentials"}
+_______ ERROR collecting backend/tests/test_indicator_screener_phase1.py _______
+backend/tests/test_indicator_screener_phase1.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase1")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"Invalid credentials"}
+_______ ERROR collecting backend/tests/test_indicator_screener_phase2.py _______
+backend/tests/test_indicator_screener_phase2.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase2")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"Invalid credentials"}
+_______ ERROR collecting backend/tests/test_indicator_screener_phase3.py _______
+backend/tests/test_indicator_screener_phase3.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase3")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"Invalid credentials"}
+_ ERROR collecting backend/tests/test_indicator_screener_u_is_filter_layer.py __
+backend/tests/test_indicator_screener_u_is_filter_layer.py:30: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="uisfilter")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"login_account_locked"}
+____________________ ERROR collecting ui_validation_test.py ____________________
+ImportError while importing test module '/app/ui_validation_test.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ui_validation_test.py:11: in <module>
+    from bs4 import BeautifulSoup
+E   ModuleNotFoundError: No module named 'bs4'
+=============================== warnings summary ===============================
+../root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12
+  /root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+../root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+backend/routers/admin_execution.py:349
+  /app/backend/routers/admin_execution.py:349: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class PolicyBuilderRequest(BaseModel):
+
+backend/server.py:453
+  /app/backend/server.py:453: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("startup")
+
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+backend/server.py:666
+  /app/backend/server.py:666: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR backend/tests/test_indicator_screener_filter_layer.py - AssertionError:...
+ERROR backend/tests/test_indicator_screener_iq_comprehensive.py - AssertionEr...
+ERROR backend/tests/test_indicator_screener_phase1.py - AssertionError: {"det...
+ERROR backend/tests/test_indicator_screener_phase2.py - AssertionError: {"det...
+ERROR backend/tests/test_indicator_screener_phase3.py - AssertionError: {"det...
+ERROR backend/tests/test_indicator_screener_u_is_filter_layer.py - AssertionE...
+ERROR ui_validation_test.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
+=================== 7 warnings, 7 errors in 74.41s (0:01:14) =================== and  tests via .
+- **ARCHITECTURE RULE**: No risk module can dictate execution. All risk outputs must be processed by . No live connections or live exchange orders are allowed; simulate/mock everything.
+- **IMMEDIATE FIX**: The last  test revealed that the Sprint 5 endpoints (Leaderboard, Decay, Portfolio, Trends) are throwing . You need to add these routes into  (or the equivalent router) before calling the task finished.
 
 **documents and test reports created in this job**
-  -  to 
   - 
   - 
+  -  (Current 404 errors found here)
 
 **Last 10 User Messages and any pending HUMAN messages** 
-1. (User) P1 - Final Closure Mandate: Add Analytics (7d/30d), Dry-run/Shadow execution, False Decision anomaly detection, audit hardening, UI minimums.
-2. (Agent) Asks for clarifications on default parameters and UI scope.
-3. (User) Confirms: Analytics = JSON+UI, Dry-run = BTCUSDT/0.001/BUY, Anomaly filters = severity/type/time, Delivery = backend + basic operable UI (polish later).
-4. (Agent) Creates  and implements P1 Sprint-2 backend. Starts updating ... *(Session ends here, pending the completion of the UI patching)*.
+1. (User) Finalizes decisions on Auto remediation (retry_count < 2), Tenant rollout (opt-in), and Playbook one-click security (HIGH = manual).
+2. (Agent) Implements P2 hardening, tests UI/backend, finishes.
+3. (User) Gives UNIFIED RISK CORE Epic. Sprint-1: Unified Risk Data Model, Position-level liquidation engine, Portfolio risk engine, Capital governance, Unified state machine, no live orders.
+4. (Agent) Implements Sprint-1.
+5. (User) Gives Sprint-2: Cluster risk hardening, Tail risk engine (VaR/CVaR), Strategy risk budget governance, Ruleset deepening, Explainability expansion.
+6. (Agent) Implements Sprint-2.
+7. (User) Gives Sprint-3: Kill-switch matrix, Scenario pack engine, Calibration layer, Replay engine hardening, Policy stability guard, Root-cause explainability.
+8. (Agent) Implements Sprint-3.
+9. (User) Gives Sprint-4: Policy benchmark runner, Policy scoring model, Drift monitor, Regime-aware benchmark, Auto policy selection (offline).
+10. (Agent) Implements Sprint-4.
+11. (User) Gives Sprint-5: Policy Evolution Layer. Leaderboard, Rolling benchmark history, Policy decay detection, Regime transition tracking, Policy portfolio blending, Confidence bootstrap. API endpoints requested.
+12. (Agent) Implements backend logic, runs tests (pytest passes), but bash  API tests return 404s for the newly requested API routes. *Job stops here*.
 
 **Project Health Check:**
-- App Code: Partially Mocked/Broken on Preview (502 Postgres limitation + 403 Bybit Network ban)
+- App Code: Broken on Preview (502 Postgres). Backend unit tests are passing (16 passing tests for Unified Core). API routing is currently missing the Sprint-5 endpoints (404s).
 
 **3rd Party Integrations** 
 - OpenAI GPT-4o — uses Emergent LLM Key
-- AWS S3 (Storage) — requires User API Key (Configured, working)
-- Bybit Testnet — requires User API Key (Configured, blocked by external IP ban/Proxy SSL issue)
+- AWS S3 (Storage) — requires User API Key
+- Bybit/Binance — Abstraction layers implemented, requires User API Key (Testing relies entirely on mock/simulations per User explicit instructions)
 
 **Testing status**
-  - Testing agent used after significant changes: YES (Heavy backend testing passed)
+  - Testing agent used after significant changes: NO (Heavy usage of self-test via ============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-9.0.2, pluggy-1.6.0
+rootdir: /app
+plugins: anyio-4.12.1
+collected 6201 items / 7 errors
+
+==================================== ERRORS ====================================
+____ ERROR collecting backend/tests/test_indicator_screener_filter_layer.py ____
+backend/tests/test_indicator_screener_filter_layer.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="filterlayer")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"login_account_locked"}
+__ ERROR collecting backend/tests/test_indicator_screener_iq_comprehensive.py __
+backend/tests/test_indicator_screener_iq_comprehensive.py:24: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="iq_comprehensive")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"login_account_locked"}
+_______ ERROR collecting backend/tests/test_indicator_screener_phase1.py _______
+backend/tests/test_indicator_screener_phase1.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase1")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"login_account_locked"}
+_______ ERROR collecting backend/tests/test_indicator_screener_phase2.py _______
+backend/tests/test_indicator_screener_phase2.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase2")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"login_account_locked"}
+_______ ERROR collecting backend/tests/test_indicator_screener_phase3.py _______
+backend/tests/test_indicator_screener_phase3.py:11: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="phase3")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"login_account_locked"}
+_ ERROR collecting backend/tests/test_indicator_screener_u_is_filter_layer.py __
+backend/tests/test_indicator_screener_u_is_filter_layer.py:30: in <module>
+    USER_HEADERS = ensure_user_headers(BASE_URL, suffix="uisfilter")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:53: in ensure_user_headers
+    admin = admin_headers(base_url)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+backend/tests/indicator_screener_test_utils.py:26: in admin_headers
+    assert response.status_code == 200, response.text
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: {"detail":"login_account_locked"}
+____________________ ERROR collecting ui_validation_test.py ____________________
+ImportError while importing test module '/app/ui_validation_test.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/local/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ui_validation_test.py:11: in <module>
+    from bs4 import BeautifulSoup
+E   ModuleNotFoundError: No module named 'bs4'
+=============================== warnings summary ===============================
+../root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12
+  /root/.venv/lib/python3.11/site-packages/starlette/formparsers.py:12: PendingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+../root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854
+  /root/.venv/lib/python3.11/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+backend/routers/admin_execution.py:349
+  /app/backend/routers/admin_execution.py:349: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class PolicyBuilderRequest(BaseModel):
+
+backend/server.py:453
+  /app/backend/server.py:453: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("startup")
+
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+../root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495
+  /root/.venv/lib/python3.11/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)
+
+backend/server.py:666
+  /app/backend/server.py:666: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @fastapi_app.on_event("shutdown")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR backend/tests/test_indicator_screener_filter_layer.py - AssertionError:...
+ERROR backend/tests/test_indicator_screener_iq_comprehensive.py - AssertionEr...
+ERROR backend/tests/test_indicator_screener_phase1.py - AssertionError: {"det...
+ERROR backend/tests/test_indicator_screener_phase2.py - AssertionError: {"det...
+ERROR backend/tests/test_indicator_screener_phase3.py - AssertionError: {"det...
+ERROR backend/tests/test_indicator_screener_u_is_filter_layer.py - AssertionE...
+ERROR ui_validation_test.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!!
+======================== 7 warnings, 7 errors in 29.17s ======================== and JSON  scripts by the main agent).
   - Troubleshoot agent used after agent stuck in loop: NO
-  - Test files created: , 
-  - Known regressions: Preview environment UI is untestable live due to Auth flakiness and Postgres 502.
+  - Test files created: 
+  - Known regressions: Sprint 5 endpoints are not yet mapped to a router (404).
 
 **Credentials to test flow:**
 Admin Email: 
 Admin Password: 
 
 **What agent forgot to execute**
-The agent was in the middle of executing the UI patches for the P1 Sprint-2 features (Analytics, Dry-run, Anomalies) on  when the job was interrupted. This needs to be finished.</analysis>
+The agent implemented the core Python logic for Sprint-5 (Policy Evolution) in  and successfully passed unit tests, but forgot to wire up the actual FastAPI routes in . The resulting API self-test correctly identified 404 Not Found errors for , , , etc., but the agent was interrupted before fixing them.
+
+**Debugging checklist for current issue**
+    Issue: Sprint-5 Endpoints returning 404
+    Backend files to check: 
+    -  (Scroll to bottom, check for  and related routes).
+    - Map them to the corresponding methods in .</analysis>

@@ -85,3 +85,12 @@
 {"timestamp": "2026-03-29T13:03:58Z", "run_id": "benchmark-8ae7abaa1b47", "policy_id": "PX_C", "score": 0.922628, "regime": "bear", "scenario": "bear_regime_v1", "strategy_class": "trend"}
 {"timestamp": "2026-03-29T13:03:58Z", "run_id": "benchmark-8ae7abaa1b47", "policy_id": "PX_C", "score": 0.622314, "regime": "bull", "scenario": "bull_regime_v1", "strategy_class": "trend"}
 {"timestamp": "2026-03-29T13:03:58Z", "run_id": "benchmark-8ae7abaa1b47", "policy_id": "PX_C", "score": 0.913805, "regime": "high_volatility", "scenario": "high_volatility_v1", "strategy_class": "trend"}
+{"timestamp": "2026-03-29T15:57:49Z", "run_id": "benchmark-544ea621dc1a", "policy_id": "P1", "score": 0.922628, "regime": "bear", "scenario": "bear_regime_v1", "strategy_class": "trend"}
+{"timestamp": "2026-03-29T15:57:49Z", "run_id": "benchmark-544ea621dc1a", "policy_id": "P1", "score": 0.622314, "regime": "bull", "scenario": "bull_regime_v1", "strategy_class": "trend"}
+{"timestamp": "2026-03-29T15:57:49Z", "run_id": "benchmark-544ea621dc1a", "policy_id": "P1", "score": 0.913805, "regime": "high_volatility", "scenario": "high_volatility_v1", "strategy_class": "trend"}
+{"timestamp": "2026-03-29T15:57:49Z", "run_id": "benchmark-544ea621dc1a", "policy_id": "P2", "score": 0.922628, "regime": "bear", "scenario": "bear_regime_v1", "strategy_class": "trend"}
+{"timestamp": "2026-03-29T15:57:49Z", "run_id": "benchmark-544ea621dc1a", "policy_id": "P2", "score": 0.622314, "regime": "bull", "scenario": "bull_regime_v1", "strategy_class": "trend"}
+{"timestamp": "2026-03-29T15:57:49Z", "run_id": "benchmark-544ea621dc1a", "policy_id": "P2", "score": 0.913805, "regime": "high_volatility", "scenario": "high_volatility_v1", "strategy_class": "trend"}
+{"timestamp": "2026-03-29T15:57:49Z", "run_id": "benchmark-544ea621dc1a", "policy_id": "P3", "score": 0.922628, "regime": "bear", "scenario": "bear_regime_v1", "strategy_class": "trend"}
+{"timestamp": "2026-03-29T15:57:49Z", "run_id": "benchmark-544ea621dc1a", "policy_id": "P3", "score": 0.622314, "regime": "bull", "scenario": "bull_regime_v1", "strategy_class": "trend"}
+{"timestamp": "2026-03-29T15:57:49Z", "run_id": "benchmark-544ea621dc1a", "policy_id": "P3", "score": 0.913805, "regime": "high_volatility", "scenario": "high_volatility_v1", "strategy_class": "trend"}

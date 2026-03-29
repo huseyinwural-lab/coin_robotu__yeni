@@ -1,54 +1,75 @@
 {
   "login": {
     "status": 200,
-    "ok": true
+    "ok": true,
+    "role": "super_admin"
   },
   "benchmark_run": {
     "status": 200,
     "ok": true,
-    "run_id": "benchmark-8ae7abaa1b47"
+    "run_id": "benchmark-544ea621dc1a",
+    "best_policy": "P1"
   },
   "policy_leaderboard": {
-    "status": 404,
-    "ok": false,
+    "status": 200,
+    "ok": true,
     "keys": [
-      "detail"
-    ]
+      "leaderboard"
+    ],
+    "count": 11
   },
   "policy_history": {
-    "status": 404,
-    "ok": false,
+    "status": 200,
+    "ok": true,
     "keys": [
-      "detail"
-    ]
+      "items"
+    ],
+    "count": 96
   },
   "policy_decay": {
-    "status": 404,
-    "ok": false,
+    "status": 200,
+    "ok": true,
     "keys": [
-      "detail"
-    ]
+      "items"
+    ],
+    "count": 8
   },
   "policy_portfolio": {
-    "status": 404,
-    "ok": false,
+    "status": 200,
+    "ok": true,
     "keys": [
-      "detail"
-    ]
+      "policy_portfolio"
+    ],
+    "count": 2
   },
   "policy_trends": {
-    "status": 404,
-    "ok": false,
+    "status": 200,
+    "ok": true,
     "keys": [
-      "detail"
-    ]
+      "insight",
+      "transitions"
+    ],
+    "transition_count": 3
   },
   "benchmark_report": {
     "status": 200,
-    "ok": true
+    "ok": true,
+    "keys": [
+      "run_id",
+      "summary",
+      "best_policy",
+      "worst_policy",
+      "insights",
+      "transitions",
+      "recommended_policy"
+    ]
   },
   "benchmark_compare": {
     "status": 200,
-    "ok": true
+    "ok": true,
+    "keys": [
+      "run_id",
+      "policies"
+    ]
   }
 }
