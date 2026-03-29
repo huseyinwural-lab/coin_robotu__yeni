@@ -1,0 +1,130 @@
+{
+  "overall_status": "PASS",
+  "success_rate": 92.85714285714286,
+  "passed_tests": 13,
+  "total_tests": 14,
+  "detailed_results": {
+    "run": true,
+    "latest": false,
+    "history": true,
+    "timeline": true,
+    "reconcile": true,
+    "bulk_retry": true,
+    "bulk_cancel": true,
+    "bulk_reconcile": true,
+    "quarantine_detail": true,
+    "artifact_detail": true,
+    "correlation_enforcement": true,
+    "canonical_state": true,
+    "legacy_deprecation": true,
+    "bybit_classification": true
+  },
+  "test_results": [
+    {
+      "test_name": "Admin Authentication",
+      "status": "PASS",
+      "details": "Token obtained (601 chars)",
+      "timestamp": "2026-03-29T09:14:48.082510",
+      "response_data": null
+    },
+    {
+      "test_name": "Acceptance Run Endpoint",
+      "status": "PASS",
+      "details": "HTTP 200, all contract fields present: ['acceptance_run_id', 'correlation_id', 'final_verdict']",
+      "timestamp": "2026-03-29T09:15:05.060793",
+      "response_data": null
+    },
+    {
+      "test_name": "Acceptance Latest Endpoint",
+      "status": "FAIL",
+      "details": "Missing contract fields: ['acceptance_run_id', 'correlation_id', 'final_verdict']",
+      "timestamp": "2026-03-29T09:15:06.241762",
+      "response_data": null
+    },
+    {
+      "test_name": "Acceptance History Endpoint",
+      "status": "PASS",
+      "details": "HTTP 200, returned 0 history items",
+      "timestamp": "2026-03-29T09:15:07.419290",
+      "response_data": null
+    },
+    {
+      "test_name": "Intent Timeline Endpoint",
+      "status": "PASS",
+      "details": "HTTP 404 (expected for test intent ID)",
+      "timestamp": "2026-03-29T09:15:09.988167",
+      "response_data": null
+    },
+    {
+      "test_name": "Intent Reconcile Endpoint",
+      "status": "PASS",
+      "details": "HTTP 404 (expected for test intent ID)",
+      "timestamp": "2026-03-29T09:15:11.260916",
+      "response_data": null
+    },
+    {
+      "test_name": "Bulk Retry Endpoint",
+      "status": "PASS",
+      "details": "HTTP 200, bulk retry processed",
+      "timestamp": "2026-03-29T09:15:16.491370",
+      "response_data": null
+    },
+    {
+      "test_name": "Bulk Cancel Endpoint",
+      "status": "PASS",
+      "details": "HTTP 200, bulk cancel processed",
+      "timestamp": "2026-03-29T09:15:21.718308",
+      "response_data": null
+    },
+    {
+      "test_name": "Bulk Reconcile Endpoint",
+      "status": "PASS",
+      "details": "HTTP 200, bulk reconcile processed",
+      "timestamp": "2026-03-29T09:15:26.936807",
+      "response_data": null
+    },
+    {
+      "test_name": "Quarantine Detail Endpoint",
+      "status": "PASS",
+      "details": "HTTP 404 (expected for test quarantine ID)",
+      "timestamp": "2026-03-29T09:15:28.219581",
+      "response_data": null
+    },
+    {
+      "test_name": "Artifact Detail Endpoint",
+      "status": "PASS",
+      "details": "HTTP 404 (expected for test intent ID)",
+      "timestamp": "2026-03-29T09:15:29.497051",
+      "response_data": null
+    },
+    {
+      "test_name": "Correlation Enforcement",
+      "status": "PASS",
+      "details": "Quarantine system operational, 2 items",
+      "timestamp": "2026-03-29T09:15:30.775417",
+      "response_data": null
+    },
+    {
+      "test_name": "Canonical State Output",
+      "status": "PASS",
+      "details": "CANCELED state present, CANCELLED not emitted",
+      "timestamp": "2026-03-29T09:15:32.090211",
+      "response_data": null
+    },
+    {
+      "test_name": "Legacy Namespace Deprecation",
+      "status": "PASS",
+      "details": "deprecated=true, replacement_namespace=/api/execution-safety/*",
+      "timestamp": "2026-03-29T09:15:47.745641",
+      "response_data": null
+    },
+    {
+      "test_name": "Bybit 403 Classification",
+      "status": "PASS",
+      "details": "Execution gate operational (Bybit status may be OK)",
+      "timestamp": "2026-03-29T09:16:03.013666",
+      "response_data": null
+    }
+  ],
+  "timestamp": "2026-03-29T09:16:03.013746"
+}

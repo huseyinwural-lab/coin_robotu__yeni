@@ -1344,6 +1344,62 @@
       "chain_position": 96,
       "prev_chain_hash": "cfe935ea901492ccac35638f0cb7eb135616e20520b52259571ca5c5adece8ce",
       "chain_hash": "ffd31b8c1f5f75c0f28615c5a2743b8e83fa7af722da19a1ec0095def0437b31"
+    },
+    {
+      "artifact_id": "6c9ca455-bf72-429b-89a1-474b810e7c7b",
+      "filename": "execution_safety_gate_20260329091502_6c9ca455.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "a79949b7ffd1ab78fea14a425b02b61bf7056e9f86c8e0633a26cd7ee8ed41b6",
+      "size": 11835,
+      "created_at": "2026-03-29T09:15:02.056821+00:00",
+      "proof_id": "6c9ca455-bf72-429b-89a1-474b810e7c7b",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 97,
+      "prev_chain_hash": "ffd31b8c1f5f75c0f28615c5a2743b8e83fa7af722da19a1ec0095def0437b31",
+      "chain_hash": "dbe2e13644db4d9ec4987b560bca3f5678939f7cea5ee42d3598ca0e4af35901"
+    },
+    {
+      "artifact_id": "9268ff9e-41b7-49cb-9639-e2a8726ad439",
+      "filename": "execution_testnet_acceptance_20260329091503_9268ff9e.json",
+      "artifact_type": "execution_testnet_acceptance",
+      "sha256": "23a841e0edb7a892911cf14ef07abbbd41a210e23bd9e2c0f2da07f19cdadc21",
+      "size": 15698,
+      "created_at": "2026-03-29T09:15:03.654716+00:00",
+      "proof_id": "9268ff9e-41b7-49cb-9639-e2a8726ad439",
+      "evidence_type": "execution_testnet_acceptance",
+      "status": "generated",
+      "chain_position": 98,
+      "prev_chain_hash": "dbe2e13644db4d9ec4987b560bca3f5678939f7cea5ee42d3598ca0e4af35901",
+      "chain_hash": "5db0d98cc38c626111f75003e0908d23258cfa7e44280938032cfe44a96032c7"
+    },
+    {
+      "artifact_id": "67cde47f-da48-4d17-a14a-1b8bb01a4178",
+      "filename": "execution_safety_gate_20260329091546_67cde47f.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "05d586b5ee2ec0f31e0ae6ab9dc5f09db932d2eaa447f558247bd212ce458a42",
+      "size": 11835,
+      "created_at": "2026-03-29T09:15:46.584605+00:00",
+      "proof_id": "67cde47f-da48-4d17-a14a-1b8bb01a4178",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 99,
+      "prev_chain_hash": "5db0d98cc38c626111f75003e0908d23258cfa7e44280938032cfe44a96032c7",
+      "chain_hash": "b0edc6f8ce1ad63b96206019eb72091f52987146bf437979fa37829a1410d1fb"
+    },
+    {
+      "artifact_id": "b76c49d4-e42f-4207-a95c-111ecce72929",
+      "filename": "execution_safety_gate_20260329091601_b76c49d4.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "eb553f32a12116e207a78384601124ad6f5bf633f51c7aa86024d25857f99419",
+      "size": 11835,
+      "created_at": "2026-03-29T09:16:01.369036+00:00",
+      "proof_id": "b76c49d4-e42f-4207-a95c-111ecce72929",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 100,
+      "prev_chain_hash": "b0edc6f8ce1ad63b96206019eb72091f52987146bf437979fa37829a1410d1fb",
+      "chain_hash": "c832328ffc730cfbc1a43edb9d6ac6fe205da4d1dc040f62609403ac96f6367f"
     }
   ]
 }
