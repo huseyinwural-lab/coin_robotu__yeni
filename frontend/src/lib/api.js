@@ -89,6 +89,7 @@ export const getSessionDeviceId = () => ensureDeviceId();
 apiClient.interceptors.request.use((config) => {
   const nextConfig = config;
   nextConfig.headers = nextConfig.headers || {};
+  nextConfig.__authTokenSnapshot = readStoredToken();
 
   if (!nextConfig.headers.Authorization) {
     const token = readStoredToken();
@@ -151,13 +152,16 @@ apiClient.interceptors.response.use(
 
     const status = Number(error?.response?.status || 0);
     const url = String(config.url || "");
+    const latestStoredToken = readStoredToken();
+    const authSnapshot = String(config.__authTokenSnapshot || "");
     const isLoginLike =
       url.includes("/auth/login") ||
+      url.includes("/auth/me") ||
       url.includes("/auth/mfa/challenge/verify") ||
       url.includes("/auth/mfa/verify") ||
       url.includes("/mfa/verify") ||
       url.includes("/auth/step-up");
-    if (status === 401 && !isLoginLike) {
+    if (status === 401 && !isLoginLike && (!latestStoredToken || latestStoredToken === authSnapshot)) {
       clearStoredAuth();
       setAuthToken(null);
       if (typeof window !== "undefined") {
