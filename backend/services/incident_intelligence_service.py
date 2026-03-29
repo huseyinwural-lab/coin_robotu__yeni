@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from db import redis_client
 from models import AlertTriageAction, AuditLog, DebugIncident, FailedEvent, LiveActivationConfig, SystemAlert
 from runtime_control import force_pipeline_resync, restart_runtime_service
-from services.audit_service import create_audit_log
+from services.audit_service import build_critical_action_details, create_audit_log
 from services.binance_incident_connector_service import (
     execute_cancel_all_open_orders_live,
     execute_reduce_leverage_live,
@@ -616,6 +616,7 @@ def execute_incident_action(
     policy = _policy_for_incident(incident) or {}
     cooldown_seconds = int(policy.get("cooldown_seconds") or 0)
     history = list(details.get("remediation_history") or [])
+    action_ref = f"incident-action:{incident_id}:{normalized_action}:{len(history)+1}"
     if history and cooldown_seconds > 0:
         latest_same = next((item for item in reversed(history) if str(item.get("action") or "") == normalized_action), None)
         latest_same_at = _parse_iso(latest_same.get("executed_at")) if latest_same else None
@@ -673,7 +674,8 @@ def execute_incident_action(
         "trading_enabled": result.get("connector_result", {}).get("trading_enabled") if isinstance(result.get("connector_result"), dict) else None,
         "leverage_cap": result.get("connector_result", {}).get("current_leverage_cap") if isinstance(result.get("connector_result"), dict) else None,
     }
-    history.append({**_json_safe(result), "executed_at": _utcnow().isoformat(), "rollback_payload": _json_safe(rollback_payload), "before_snapshot": _json_safe(before_snapshot), "after_snapshot": _json_safe(after_snapshot), "target": _json_safe(parameters)})
+    rollback_ref = f"incident-rollback:{incident_id}:{normalized_action}:{len(history)+1}" if rollback_payload else None
+    history.append({**_json_safe(result), "executed_at": _utcnow().isoformat(), "rollback_payload": _json_safe(rollback_payload), "before_snapshot": _json_safe(before_snapshot), "after_snapshot": _json_safe(after_snapshot), "target": _json_safe(parameters), "action_ref": action_ref, "rollback_ref": rollback_ref})
     details["remediation_history"] = history
     incident.details = details
     incident.status = "MITIGATED" if normalized_action in {"block_trading", "reduce_leverage", "restart_worker", "reconcile_trigger"} else incident.status
@@ -686,7 +688,17 @@ def execute_incident_action(
         actor_user_id=actor_user_id,
         actor_role=actor_role,
         severity="warning",
-        details={"action": normalized_action, "mode": mode, "reason": normalized_reason, "rollback_payload": rollback_payload, "target": parameters, "before_snapshot": before_snapshot, "after_snapshot": after_snapshot, "result": _json_safe(result)},
+        details=build_critical_action_details(
+            actor=actor_user_id,
+            reason=normalized_reason,
+            scope=f"incident:{normalized_action}",
+            before_state=before_snapshot,
+            after_state=after_snapshot,
+            rollback_ref=rollback_ref,
+            incident_ref=incident_id,
+            action_ref=action_ref,
+            extra={"mode": mode, "target": parameters, "result": _json_safe(result)},
+        ),
         commit=False,
     )
     db.commit()
@@ -727,6 +739,7 @@ def rollback_incident_action(db, *, incident_id: str, actor_user_id: str, actor_
     details.setdefault("rollback_history", []).append({"rolled_back_at": _utcnow().isoformat(), "rollback_payload": rollback_payload})
     incident.details = details
     db.add(incident)
+    rollback_ref = f"incident-rollback:{incident_id}:{len(details.get('rollback_history') or [])}"
     create_audit_log(
         db,
         action="INCIDENT_ACTION_ROLLED_BACK",
@@ -735,7 +748,16 @@ def rollback_incident_action(db, *, incident_id: str, actor_user_id: str, actor_
         actor_user_id=actor_user_id,
         actor_role=actor_role,
         severity="warning",
-        details={"rollback_payload": rollback_payload},
+        details=build_critical_action_details(
+            actor=actor_user_id,
+            reason="rollback",
+            scope="incident:rollback",
+            before_state={},
+            after_state={"rollback_payload": rollback_payload},
+            rollback_ref=rollback_ref,
+            incident_ref=incident_id,
+            action_ref=rollback_ref,
+        ),
         commit=False,
     )
     db.commit()

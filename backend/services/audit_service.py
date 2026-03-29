@@ -197,3 +197,33 @@ def create_guard_audit_event(
         severity=severity,
         details=payload,
     )
+
+
+def build_critical_action_details(
+    *,
+    actor: str,
+    reason: str,
+    scope: str,
+    before_state: dict | str | None = None,
+    after_state: dict | str | None = None,
+    rollback_ref: str | None = None,
+    incident_ref: str | None = None,
+    recommendation_ref: str | None = None,
+    execution_ref: str | None = None,
+    action_ref: str | None = None,
+    extra: dict | None = None,
+) -> dict:
+    return {
+        "actor": actor,
+        "reason": str(reason or "").strip(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "scope": str(scope or "global").strip(),
+        "before_state": before_state or {},
+        "after_state": after_state or {},
+        "rollback_ref": rollback_ref,
+        "incident_ref": incident_ref,
+        "recommendation_ref": recommendation_ref,
+        "execution_ref": execution_ref,
+        "action_ref": action_ref,
+        **(extra or {}),
+    }

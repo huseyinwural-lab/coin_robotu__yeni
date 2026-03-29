@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from models import AuditLog, ExecutionIntent, ExecutionIntentEvent, FailedEvent
 from services.admin_exchange_credentials_service import execution_credentials_for_adapter
 from services.artifact_service import write_signed_artifact
-from services.audit_service import create_audit_log
+from services.audit_service import build_critical_action_details, create_audit_log
 from services.execution_safety_namespace_service import (
     apply_execution_safety_quarantine_action,
     apply_intent_recovery_action,
@@ -1430,18 +1430,21 @@ def run_bulk_recovery(
             actor_user_id=requested_by,
             actor_role="user",
             severity="warning" if error else "info",
-            details={
-                "actor_type": "user",
-                "actor_id": requested_by,
-                "action": action,
-                "target_type": target_type,
-                "target_id": target_id,
-                "reason": reason,
-                "before_state": before_state,
-                "after_state": after_state,
-                "correlation_id": correlation_id or ((result_payload or {}).get("correlation_id") if isinstance(result_payload, dict) else None),
-                "error": error,
-            },
+            details=build_critical_action_details(
+                actor=requested_by,
+                reason=reason,
+                scope=f"execution:{action}",
+                before_state={"state": before_state, "target_type": target_type, "target_id": target_id},
+                after_state={"state": after_state, "result": result_state},
+                rollback_ref=None,
+                execution_ref=target_id if target_type == "intent" else None,
+                action_ref=f"execution-bulk:{action}:{target_id}",
+                extra={
+                    "target_type": target_type,
+                    "correlation_id": correlation_id or ((result_payload or {}).get("correlation_id") if isinstance(result_payload, dict) else None),
+                    "error": error,
+                },
+            ),
         )
 
     return {

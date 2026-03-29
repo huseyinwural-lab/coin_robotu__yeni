@@ -101,6 +101,7 @@ from routers import (
     strategy_templates,
     strategy_domain,
     incident_intelligence,
+    unified_control_room,
     venues,
     audit,
 )
@@ -366,6 +367,7 @@ api_router.include_router(debug_effective_universe.router)
 api_router.include_router(strategy_templates.router)
 api_router.include_router(strategy_domain.router)
 api_router.include_router(incident_intelligence.router)
+api_router.include_router(unified_control_room.router)
 api_router.include_router(audit_logs.router)
 api_router.include_router(alerts.router)
 api_router.include_router(report_archive.router)

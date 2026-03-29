@@ -9,7 +9,7 @@ from deps import require_admin
 from models import LearningRecommendation, User
 from schemas import LearningImpactSimulationRequest, LearningImpactSimulationResponse
 from schemas import UserLearningSuggestionResponse
-from services.audit_service import create_audit_log
+from services.audit_service import build_critical_action_details, create_audit_log
 from services.learning_memory_service import (
     apply_learning_recommendation,
     approve_learning_recommendation,
@@ -95,14 +95,16 @@ def admin_apply_learning_recommendation(
         entity_id=recommendation_id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={
-            "recommendation_id": recommendation_id,
-            "reason": payload.reason,
-            "lifecycle": response.get("lifecycle"),
-            "version_ref": (response.get("version") or {}).get("current_version"),
-            "before_payload": (response.get("status_history") or [{}])[-1].get("before_payload", {}),
-            "after_payload": (response.get("status_history") or [{}])[-1].get("after_payload", {}),
-        },
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="learning:apply",
+            before_state=(response.get("status_history") or [{}])[-1].get("before_payload", {}),
+            after_state=(response.get("status_history") or [{}])[-1].get("after_payload", {}),
+            rollback_ref=(response.get("version") or {}).get("rollback_target"),
+            recommendation_ref=recommendation_id,
+            action_ref=f"learning-apply:{recommendation_id}",
+        ),
     )
     return {
         "status": "ok",
@@ -145,7 +147,7 @@ def admin_simulate_learning_recommendation(
     if recommendation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="learning_recommendation_not_found")
     simulation = simulate_recommendation_row_impact(db, recommendation=recommendation)
-    updated = mark_learning_recommendation_simulated(
+    mark_learning_recommendation_simulated(
         db,
         recommendation_id=recommendation_id,
         actor=current_admin.id,
@@ -159,13 +161,15 @@ def admin_simulate_learning_recommendation(
         entity_id=recommendation_id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={
-            "reason": "row_simulation",
-            "recommendation_id": recommendation_id,
-            "version_ref": (updated.get("version") or {}).get("current_version"),
-            "before_payload": {},
-            "after_payload": {"simulation_scope": simulation.get("scope")},
-        },
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason="row_simulation",
+            scope="learning:simulate",
+            before_state={},
+            after_state={"simulation_scope": simulation.get("scope")},
+            recommendation_ref=recommendation_id,
+            action_ref=f"learning-simulate:{recommendation_id}",
+        ),
     )
     return simulation
 
@@ -207,15 +211,15 @@ def admin_approve_learning_recommendation(
         entity_id=recommendation_id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={
-            "actor": current_admin.id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "reason": payload.reason,
-            "recommendation_id": recommendation_id,
-            "version_ref": (response.get("version") or {}).get("current_version"),
-            "before_payload": (response.get("status_history") or [{}])[-1].get("before_payload", {}),
-            "after_payload": (response.get("status_history") or [{}])[-1].get("after_payload", {}),
-        },
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="learning:approve",
+            before_state=(response.get("status_history") or [{}])[-1].get("before_payload", {}),
+            after_state=(response.get("status_history") or [{}])[-1].get("after_payload", {}),
+            recommendation_ref=recommendation_id,
+            action_ref=f"learning-approve:{recommendation_id}",
+        ),
     )
     return {"recommendation": response}
 
@@ -238,15 +242,15 @@ def admin_reject_learning_recommendation(
         entity_id=recommendation_id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={
-            "actor": current_admin.id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "reason": payload.reason,
-            "recommendation_id": recommendation_id,
-            "version_ref": (response.get("version") or {}).get("current_version"),
-            "before_payload": (response.get("status_history") or [{}])[-1].get("before_payload", {}),
-            "after_payload": (response.get("status_history") or [{}])[-1].get("after_payload", {}),
-        },
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="learning:reject",
+            before_state=(response.get("status_history") or [{}])[-1].get("before_payload", {}),
+            after_state=(response.get("status_history") or [{}])[-1].get("after_payload", {}),
+            recommendation_ref=recommendation_id,
+            action_ref=f"learning-reject:{recommendation_id}",
+        ),
     )
     return {"recommendation": response}
 
@@ -271,15 +275,16 @@ def admin_rollback_learning_recommendation(
         entity_id=recommendation_id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={
-            "actor": current_admin.id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "reason": payload.reason,
-            "recommendation_id": recommendation_id,
-            "version_ref": (response.get("version") or {}).get("current_version"),
-            "before_payload": (response.get("status_history") or [{}])[-1].get("before_payload", {}),
-            "after_payload": (response.get("status_history") or [{}])[-1].get("after_payload", {}),
-        },
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="learning:rollback",
+            before_state=(response.get("status_history") or [{}])[-1].get("before_payload", {}),
+            after_state=(response.get("status_history") or [{}])[-1].get("after_payload", {}),
+            rollback_ref=(response.get("version") or {}).get("rollback_target"),
+            recommendation_ref=recommendation_id,
+            action_ref=f"learning-rollback:{recommendation_id}",
+        ),
     )
     return {"recommendation": response}
 
