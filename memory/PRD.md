@@ -1,3 +1,62 @@
+## 2026-03-29 — INCIDENT INTELLIGENCE (PRODUCTION ACTIVATION PHASE)
+
+### P0 — Preview auth stabilization
+- `session_device_mismatch` dalgalanması için device binding akışı sadeleştirildi:
+  - backend’de header `X-Session-Device` cookie’ye tercih edilir
+  - login sırasında header device id korunur
+  - HTTP + websocket auth aynı `device_id` bağlamını kullanır
+- Frontend auth race kapatıldı:
+  - stale `/auth/me` 401 yanıtlarının yeni token’ı temizlemesi engellendi
+  - `/auth/me` için 401 cleanup akışı güvenli hale getirildi
+  - incident websocket reconnect akışı aynı `device_id` ile tekrar bağlanıyor
+
+### P1 — Gerçek browser operator flow
+- Preview gerçek browser doğrulaması PASS:
+  - login
+  - incident listesi
+  - refresh persistence
+  - incident detail navigation
+- Operator page artık refresh sonrası tekrar login istemiyor.
+
+### P2 — Live action guardrails + audit hardening
+- Controlled external action connector eklendi:
+  - yeni servis: `/app/backend/services/binance_incident_connector_service.py`
+- Binance controlled remediation destekleri:
+  - dry-run cancel-all futures open orders preview
+  - `manual_live` cancel-all futures open orders
+  - dry-run leverage reduce preview
+  - `manual_live` leverage reduce (incident payload target leverage)
+- Yeni guardrail/audit sertleşmeleri:
+  - `reason`
+  - `before_snapshot`
+  - `after_snapshot`
+  - `rollback_payload`
+  - `target`
+  - standardized action result shape
+  - live action rate limit
+  - same-incident cooldown kontrolü
+
+### UI genişletmesi
+- Incident operator center’a controlled external action kontrolleri eklendi:
+  - symbol input
+  - leverage input
+  - Preview Block
+  - Apply Live Block
+  - Preview Leverage
+  - Rollback Last Action
+
+### Test / doğrulama
+- Final testing agent: `/app/test_reports/iteration_182.json` → **backend 52/52 PASS**, frontend operator flow PASS
+- Ek kanıtlar:
+  - `/app/test_reports/incident_activation_phase_selftest.json`
+  - `/app/test_reports/incident_activation_live_selftest.json`
+  - `/app/test_reports/incident_activation_dryrun_selftest.json`
+
+### Operasyonel gerçeklik
+- Auth stabilitesi preview browser akışında doğrulandı.
+- Controlled live action yalnız dar kapsamlı/manual modda test edildi.
+- Auto-remediation external side effects’in geneli hâlâ **SAFE/MOCK-ORIENTED** bırakıldı; kullanıcı talimatı gereği full live rollout yapılmadı.
+
 ## 2026-03-29 — INCIDENT INTELLIGENCE CORE (PRODUCTION HARDENING & OPERATORIZATION)
 
 ### P0 — Operator Center UI
