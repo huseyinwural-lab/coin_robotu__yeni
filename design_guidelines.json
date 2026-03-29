@@ -1,122 +1,104 @@
 {
-  "project_name": "Incident Intelligence Core",
-  "file_type_target": ".js (React Javascript)",
-  "theme_and_archetype": {
-    "theme": "light",
-    "archetype": "4_swiss_high_contrast",
-    "description": "Authority, clarity, and truth. Objective, rigid, and highly functional control room for system operators.",
-    "design_principles": [
-      "Color is Function Only: 95% monochrome. Color exists only to guide action.",
-      "Density and Scanability: Every pixel utilized. Control Room Grid mode.",
-      "Expose the Skeleton: Visible grid borders, technical look.",
-      "No Decorative Graphics: Data is the UI."
-    ]
+  "theme": "dark",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) + Terminal / Retro-Futurism Hybrid",
+  "colors": {
+    "background": "#050505",
+    "surface": "#0F0F13",
+    "surface_hover": "#1A1A24",
+    "border": "rgba(255, 255, 255, 0.12)",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A0A0AB",
+    "text_muted": "#52525E",
+    "accent_primary": "#00E5FF",
+    "accent_secondary": "#FF6B00",
+    "signal_error": "#FF3333",
+    "signal_warning": "#FFD600",
+    "signal_success": "#00FF66",
+    "signal_ai_learning": "#0044FF"
   },
   "typography": {
-    "fonts": [
-      {
-        "family": "Chivo",
-        "usage": "Headings (H1, H2, H3)",
-        "weights": ["400", "700", "900"],
-        "classes": "font-sans tracking-tight"
-      },
-      {
-        "family": "IBM Plex Sans",
-        "usage": "Body text, generic UI labels",
-        "weights": ["400", "500"],
-        "classes": "font-sans"
-      },
-      {
-        "family": "JetBrains Mono",
-        "usage": "Data points, Timestamps, Incident IDs, PnL, Metrics",
-        "weights": ["400", "600"],
-        "classes": "font-mono tracking-tight"
-      }
-    ],
-    "scale_rules": "H1 max text-3xl. Subheadings text-lg. Heavy use of uppercase, wide-tracking labels for metadata (text-xs uppercase tracking-widest)."
-  },
-  "colors": {
-    "background": {
-      "primary": "#F9FAFB",
-      "surface": "#FFFFFF",
-      "surface_alt": "#F3F4F6",
-      "border": "#E5E7EB",
-      "border_dark": "#D1D5DB"
-    },
-    "text": {
-      "primary": "#111827",
-      "secondary": "#4B5563",
-      "tertiary": "#6B7280"
-    },
-    "semantic_signals": {
-      "critical_error": "#DC2626",
-      "warning": "#D97706",
-      "success": "#059669",
-      "investigating_info": "#2563EB",
-      "action_primary": "#0A0A0A"
+    "heading_font": "Cabinet Grotesk",
+    "body_font": "IBM Plex Sans",
+    "mono_font": "JetBrains Mono",
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl font-black tracking-tighter leading-none",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl sm:text-2xl font-semibold",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-base leading-relaxed",
+      "small_label": "text-xs font-mono uppercase tracking-[0.2em]"
     }
   },
-  "layout_and_grids": {
-    "strategy": "MODE B: THE CONTROL ROOM GRID",
-    "structure": "Base grid grid-cols-1 md:grid-cols-4 xl:grid-cols-12. Tight gaps (gap-4). Every pixel utilized.",
-    "surfaces": "Grid Borders (Technical Look). Container uses pure HTML/Tailwind with border-collapse or distinct 1px border-gray-200. No glassmorphism. Flat solid backgrounds. Sharp edges (rounded-none or max rounded-sm).",
-    "spacing": "Dense internal padding (p-4 or p-6) inside widgets to prevent text collision."
+  "spacing_and_layout": {
+    "grid_strategy": "MODE B: THE CONTROL ROOM GRID (Dense, Data-heavy)",
+    "base_grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4",
+    "gap": "gap-4 md:gap-6",
+    "padding_scale": "p-4, p-6, p-8 for standard components. Containers with borders MUST use p-6 internal padding.",
+    "border_radius": "rounded-none or rounded-sm (max 4px). Sharp, brutalist edges."
+  },
+  "surface_strategies": {
+    "header": "Crystal Glass - backdrop-blur-xl bg-[#050505]/60, 1px bottom border border-white/10.",
+    "cards": "Flat background (#0F0F13), 1px solid border (rgba(255,255,255,0.12)), no shadow by default. Hover: border-white/30 and subtle shadow.",
+    "active_incidents": "Grid Borders pattern. Expose the skeleton. Use Tracing Beam effect for critical active incidents.",
+    "buttons": "Neumorphism mix (sharp 1px border) with stark contrast. Primary action (Apply/Rollback) uses accent colors strictly. Normal actions are flat grey."
   },
   "components": {
-    "incident_stream": {
-      "role": "Real-time active incident list",
-      "design": "Vertical list, compact rows. Left-aligned border indicating severity color (e.g., 4px red border for critical). Hover state: bg-gray-50, cursor-pointer. Selected state must have a distinct background shift."
-    },
-    "timeline_view": {
-      "role": "Chronological drillable timeline",
-      "design": "Vertical stepper layout. Monospace timestamps. Small circular nodes. Connecting line using border-gray-200. Staggered fade-in for new stream events."
-    },
-    "root_cause_panel": {
-      "role": "Inferred cause and confidence score",
-      "design": "Highlight box. High contrast text-lg font-bold text-gray-900. Confidence score in large mono font (e.g., text-3xl text-emerald-600). Neo-brutalist sharp 1px border."
-    },
-    "action_panel": {
-      "role": "Proposed actions, manual trigger, history",
-      "design": "Square corners. Primary action: bg-black text-white hover:bg-gray-800. Critical Action (e.g., block trading): bg-red-600 text-white hover:bg-red-700. Explicit separation from analytical views."
-    },
-    "impact_panel": {
-      "role": "PNL, Exposure, Availability",
-      "design": "Data-heavy metric cards. Big Monospace numbers. Red/Green text for negative/positive PNL impact."
-    },
-    "policy_engine_panel": {
-      "role": "Manage execution, risk, system policies",
-      "design": "Table or rule-builder interface. IF/THEN block structures using monospace fonts for attributes (anomaly.type, severity). Tight layout."
-    },
-    "prediction_trend_panel": {
-      "role": "Incident frequency, recurrence patterns",
-      "library_recommendation": "Recharts",
-      "design": "Time-series line or bar charts. Minimal grid lines (only horizontal, stroke-dasharray). Tooltips must have sharp corners and solid backgrounds."
-    },
-    "graph_drilldown": {
-      "role": "Multi-signal graph, node selection",
-      "library_recommendation": "visx or react-force-graph-2d",
-      "design": "Stark geometry for nodes (squares/circles). Monochrome links. Highlighted paths use semantic colors (blue/red). Black-and-white base aesthetic until a node is active."
+    "libraries": [
+      "shadcn/ui (Tables, Tabs, Dialogs, Select, Forms)",
+      "@phosphor-icons/react (for dense technical icons)",
+      "recharts (for data visualization / risk context)"
+    ],
+    "rules": {
+      "cards": "Go cardless or rectangular/dense styles. Overuse of standard rounded cards is forbidden.",
+      "modals": "Use Shadcn Dialog, stripped of Vercel-look. Apply sharp borders, backdrop-blur on overlay.",
+      "forms": "Use Shadcn inputs. No native HTML inputs. Explicit focus states: focus:ring-1 focus:ring-accent_primary focus:border-accent_primary.",
+      "tables": "Dense, technical tables. Use mono_font for all numerical/symbol data."
     }
   },
-  "motion": {
-    "philosophy": "Minimalist and precise.",
-    "rules": [
-      "Micro-interactions only (hover states, click feedback).",
-      "Real-time event streams should flash softly (e.g., bg-blue-50 to transparent over 1s) to indicate new data.",
-      "No bouncy or playful animations."
-    ]
-  },
-  "icons": {
-    "library": "Phosphor Icons (@phosphor-icons/react)",
-    "style": "Regular or Bold weight. Consistent line thickness."
+  "motion_and_interaction": {
+    "hover_states": "ALWAYS explicitly set text color on hover. e.g., hover:bg-[#1A1A24] hover:text-white.",
+    "transitions": "Use specific properties: transition: transform 0.2s ease, border-color 0.2s ease.",
+    "micro_interactions": "Progress bars for cooldowns/rate limits. Status loaders for 'dry-run' and 'simulation' actions."
   },
   "testing_and_accessibility": {
-    "data_testid_rules": "MANDATORY. All interactive and key informational elements MUST include a data-testid attribute. Use kebab-case, role-based naming (e.g., data-testid='incident-item-INC-123', data-testid='trigger-action-restart-worker', data-testid='timeline-view-node').",
-    "contrast": "Ensure minimum 4.5:1 ratio for normal text. Explicitly set hover text colors."
+    "data_testid_requirement": "CRITICAL: All interactive elements (buttons, links, forms, tabs) MUST include a 'data-testid' attribute using kebab-case role-based naming. Example: data-testid='approve-live-action-button'.",
+    "contrast": "Text over backgrounds MUST meet APCA/WCAG AA standards. Interactive elements must have 3:1 contrast against adjacent colors."
   },
-  "tech_stack_overrides": {
-    "files": ".js (React Javascript) only. Do not generate .tsx.",
-    "ui_library": "Shadcn UI (customized for sharp edges and density), Recharts for time-series.",
-    "empty_states": "Use typography and borders. Do not use placeholder images."
-  }
+  "media": {
+    "image_urls": {
+      "login_background": {
+        "url": "https://images.pexels.com/photos/3612932/pexels-photo-3612932.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Abstract dark geometric futuristic pattern. Use as full-screen background for global auth/login with 50% opacity black overlay.",
+        "category": "background"
+      }
+    }
+  },
+  "page_specific_guidelines": {
+    "auth_session": {
+      "layout": "Centered stark login/reconnect terminal. Use login_background image. Clear session/device connection status.",
+      "function": "Must support websocket reconnect visualization (terminal logs style) to address 'preview admin login timeout' and 'auth loss' bugs."
+    },
+    "unified_control_room": {
+      "layout": "Single-page mega-dashboard. 4 major zones: Live Operations, Learning & Adaptation, Risk & Market Context, Action Center.",
+      "live_operations": "List active incidents. Use Signal Red/Warning Yellow borders.",
+      "learning_and_adaptation": "List actionable recommendations and decay/drift metrics.",
+      "risk_context": "Recharts visual area showing cluster risk and tail risk.",
+      "action_center": "Fixed bottom/side panel for preview, approve, reject, apply, rollback."
+    },
+    "explainability_cards": {
+      "design": "Data-heavy nested components. Use JetBrains Mono for 'before_state', 'after_state', 'incident_ref'. Include clear visual diffing (red for removed/before, green for added/after)."
+    },
+    "live_action_guardrails": {
+      "design": "Visual 'locks' on buttons. 'Dry Run' must be visually distinct from 'Live Apply' (e.g., dry run is outline button, live apply is solid). Show cooldown timers."
+    }
+  },
+  "instructions_to_main_agent": [
+    "NOTE: The frontend project uses .js/.jsx files, NOT .tsx. Provide and implement code strictly in JS/JSX.",
+    "Implement the Unified Control Room as a highly dense, tactical 'Command Center' using the specified MODE B grid strategy.",
+    "Ensure global auth stability and shared audit logging is integrated into all actions (Learning, Incident, Execution).",
+    "Integrate 'data-testid' aggressively on all action buttons (approve, reject, rollback, dry-run).",
+    "Do NOT use HTML inputs or selects; strictly use customized shadcn components (adjust shadcn component files to be .js/.jsx).",
+    "Build the Human-in-the-loop policy engine UI (Controlled Auto-Apply) showing confidence, impact, decay, and sample coverage metrics.",
+    "Construct the Production Readiness Checklist as a clear, un-bypassable modal/screen before Stage Activation."
+  ]
 }

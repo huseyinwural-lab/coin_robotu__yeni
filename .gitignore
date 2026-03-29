@@ -89,3 +89,7 @@ google-chrome-stable_current_amd64.deb
 # Environment files
 *.env
 *.env.*
+-e 
+# Environment files
+*.env
+*.env.*
