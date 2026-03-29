@@ -67,6 +67,59 @@
 - Bybit testnet erişimi bu runtime’da hala HTTP 403 (ortam/ağ kısıtı)
 - Bu yüzden gerçek testnet acceptance zinciri (madde 8) son aşamada dış erişim açılınca tamamlanacak
 
+### 2026-03-29 Ek Kapanış (P0 Kalan Eksikler Paketi)
+
+#### Tamamlanan kritik eksikler
+1. **Gerçek acceptance zinciri endpointleri eklendi**
+   - `POST /api/execution-safety/acceptance/testnet/run`
+   - `GET /api/execution-safety/acceptance/testnet/latest`
+   - `GET /api/execution-safety/acceptance/testnet/history`
+   - Akış: ack_mode → (başarırsa) fill_mode; ack fail ise fill skip.
+   - BLOCKED/FAILED durumlarında da artifact + audit üretiliyor (fail-open yok).
+
+2. **Reconcile engine derinleştirildi**
+   - Yeni servis: `backend/services/execution_safety_advanced_service.py`
+   - `reconcile_intent_with_exchange()` gerçek exchange sorgusu deniyor; erişim yoksa sentetik success yazmıyor.
+   - Edge/mismatch flag seti: duplicate, missing fill, ghost fill, partial mismatch, late ack vb.
+   - `RECONCILED` yalnızca deterministic başarılı reconcile’da yazılıyor.
+
+3. **Correlation spine enforcement merkezileştirildi**
+   - `ContextEnvelope` zorunlu alanları: request_id, intent_id, order_id, execution_id, session_id, correlation_id
+   - Kritik stage’lerde eksik envelope => reject + quarantine
+   - Non-critical stage’lerde => reject + blocked
+   - Artifact finalize sırasında correlation eksikse artifact persist engelleniyor + quarantine düşüyor.
+
+4. **Bulk recovery endpointleri görev emrine göre eklendi**
+   - `POST /api/execution-safety/recovery/bulk-retry`
+   - `POST /api/execution-safety/recovery/bulk-cancel`
+   - `POST /api/execution-safety/recovery/bulk-reconcile`
+   - Item bazlı sonuç: `before_state, attempted_action, result, error, after_state`
+   - Selection mode desteği: explicit_ids, by_state, by_failure_stage, by_age_window, by_reason_code, by_retry_exhaustion, by_environment
+
+5. **Recovery audit sertleştirme**
+   - Tekil ve bulk aksiyonlarda audit detayları zenginleştirildi:
+     - actor_type/actor_id, action, target_type/target_id, reason, before_state, after_state, correlation_id
+
+6. **İstenen detail endpointleri tamamlandı**
+   - `GET /api/execution-safety/intents/{intent_id}/timeline`
+   - `GET /api/execution-safety/intents/{intent_id}/reconcile`
+   - `GET /api/execution-safety/artifacts/{intent_id}`
+   - `GET /api/execution-safety/quarantine/{quarantine_id}`
+
+7. **Legacy cleanup (authoritative path)**
+   - Canonical output: `CANCELED`
+   - `execution-safety + execution-readiness + runtime/exchange authoritative path` temizliği uygulandı.
+   - Repo geneli tarama raporu üretildi: `/app/memory/legacy_cancelled_report.md`
+
+#### Test ve doğrulama
+- Testing agent: `/app/test_reports/iteration_175.json` (backend/frontend kontratlar PASS)
+- Deep backend doğrulama: tüm yeni endpoint ve sözleşmeler PASS
+- Unit testler:
+  - `backend/tests/test_execution_safety_advanced_unit.py` (7 PASS)
+  - `backend/tests/test_execution_safety_namespace.py` (7 PASS, auth bağlı testler skip)
+  - `backend/tests/test_execution_safety_advanced_p0.py` lint temizlendi
+
+
 ## 2026-03-28 — Execution Safety Core (P0) İlk Uygulama
 
 ### Uygulanan P0 kapsamı
