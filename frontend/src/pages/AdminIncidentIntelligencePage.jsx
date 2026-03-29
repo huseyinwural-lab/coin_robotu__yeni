@@ -204,7 +204,12 @@ export const AdminIncidentIntelligencePage = () => {
     if (!selectedIncident?.incident_id) return;
     setActionLoading(`${action}-${mode}`);
     try {
-      const { data } = await apiClient.post(`/admin/incident-intelligence/incidents/${encodeURIComponent(selectedIncident.incident_id)}/actions`, { action, mode, parameters });
+      const { data } = await apiClient.post(`/admin/incident-intelligence/incidents/${encodeURIComponent(selectedIncident.incident_id)}/actions`, {
+        action,
+        mode,
+        parameters,
+        reason: `operator_${mode}_${action}`,
+      });
       const actionResult = data?.action_result || {};
       const preview = actionResult.external_preview;
       const live = actionResult.external_live_result;

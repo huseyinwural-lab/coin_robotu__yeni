@@ -596,6 +596,7 @@ def execute_incident_action(
     actor_role: str,
     mode: str = "manual",
     parameters: dict | None = None,
+    reason: str | None = None,
 ) -> dict:
     incident = db.query(DebugIncident).filter(DebugIncident.incident_id == incident_id).first()
     if incident is None:
@@ -604,8 +605,24 @@ def execute_incident_action(
     normalized_action = str(action or "").strip().lower()
     normalized_mode = str(mode or "manual").strip().lower()
     parameters = dict(parameters or {})
+    normalized_reason = str(reason or f"incident:{incident_id}").strip()
     rollback_payload = None
-    result = {"status": "executed", "action": normalized_action, "mode": normalized_mode}
+    before_snapshot = {
+        "incident_state": incident.status,
+        "incident_owner": details.get("owner"),
+        "trading_enabled": details.get("trading_enabled_before"),
+        "leverage_cap": details.get("leverage_cap_before"),
+    }
+    policy = _policy_for_incident(incident) or {}
+    cooldown_seconds = int(policy.get("cooldown_seconds") or 0)
+    history = list(details.get("remediation_history") or [])
+    if history and cooldown_seconds > 0:
+        latest_same = next((item for item in reversed(history) if str(item.get("action") or "") == normalized_action), None)
+        latest_same_at = _parse_iso(latest_same.get("executed_at")) if latest_same else None
+        if latest_same_at and (_utcnow() - latest_same_at).total_seconds() < cooldown_seconds:
+            raise ValueError("incident_action_cooldown_active")
+
+    result = {"status": "executed", "action": normalized_action, "mode": normalized_mode, "reason": normalized_reason}
     if normalized_action == "restart_worker":
         result["connector_result"] = restart_runtime_service(service="worker")
     elif normalized_action == "block_trading":
@@ -618,6 +635,7 @@ def execute_incident_action(
             actor_user_id=actor_user_id,
             actor_role=actor_role,
         )
+        before_snapshot["trading_enabled"] = True
         rollback_payload = {"trading_enabled": True}
         result["connector_result"] = _json_safe(safety)
         if normalized_mode == "dry_run":
@@ -631,6 +649,7 @@ def execute_incident_action(
             db.add(config)
             db.flush()
         previous = int(config.leverage_cap or 1)
+        before_snapshot["leverage_cap"] = previous
         config.leverage_cap = max(1, previous - 1)
         db.commit()
         db.refresh(config)
@@ -648,8 +667,13 @@ def execute_incident_action(
     else:
         raise ValueError("invalid_incident_action")
 
-    history = list(details.get("remediation_history") or [])
-    history.append({**_json_safe(result), "executed_at": _utcnow().isoformat(), "rollback_payload": _json_safe(rollback_payload)})
+    after_snapshot = {
+        "incident_state": "MITIGATED" if normalized_action in {"block_trading", "reduce_leverage", "restart_worker", "reconcile_trigger"} else incident.status,
+        "incident_owner": details.get("owner"),
+        "trading_enabled": result.get("connector_result", {}).get("trading_enabled") if isinstance(result.get("connector_result"), dict) else None,
+        "leverage_cap": result.get("connector_result", {}).get("current_leverage_cap") if isinstance(result.get("connector_result"), dict) else None,
+    }
+    history.append({**_json_safe(result), "executed_at": _utcnow().isoformat(), "rollback_payload": _json_safe(rollback_payload), "before_snapshot": _json_safe(before_snapshot), "after_snapshot": _json_safe(after_snapshot), "target": _json_safe(parameters)})
     details["remediation_history"] = history
     incident.details = details
     incident.status = "MITIGATED" if normalized_action in {"block_trading", "reduce_leverage", "restart_worker", "reconcile_trigger"} else incident.status
@@ -662,7 +686,7 @@ def execute_incident_action(
         actor_user_id=actor_user_id,
         actor_role=actor_role,
         severity="warning",
-        details={"action": normalized_action, "mode": mode, "rollback_payload": rollback_payload},
+        details={"action": normalized_action, "mode": mode, "reason": normalized_reason, "rollback_payload": rollback_payload, "target": parameters, "before_snapshot": before_snapshot, "after_snapshot": after_snapshot, "result": _json_safe(result)},
         commit=False,
     )
     db.commit()

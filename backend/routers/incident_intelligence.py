@@ -35,6 +35,7 @@ class IncidentActionRequest(BaseModel):
     action: str = Field(min_length=2, max_length=80)
     mode: str = Field(default="dry_run", min_length=4, max_length=20)
     parameters: dict | None = None
+    reason: str | None = None
 
 
 class IncidentPolicyUpdateRequest(BaseModel):
@@ -121,6 +122,7 @@ def trigger_incident_action(
             actor_role=current_admin.role.value,
             mode=payload.mode,
             parameters=payload.parameters,
+            reason=payload.reason,
         )
     except ValueError as exc:
         detail = str(exc)
