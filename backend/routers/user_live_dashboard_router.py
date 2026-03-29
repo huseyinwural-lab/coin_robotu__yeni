@@ -9,7 +9,9 @@ from services.user_live_dashboard_service import (
     build_user_live_execution_quality,
     build_user_live_performance,
     build_user_live_positions,
+    build_user_live_queue,
     build_user_live_risk,
+    build_user_live_runtime_snapshot,
     build_user_live_strategies,
     build_user_live_summary,
     build_user_live_trades,
@@ -113,3 +115,21 @@ def user_live_daily_report_export(
             headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
     return report
+
+
+@router.get("/queue")
+def user_live_queue(
+    limit: int = Query(default=20, ge=1, le=200),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_queue(db, current_user.id, limit=limit)
+
+
+@router.get("/runtime-snapshot")
+def user_live_runtime_snapshot(
+    window: str = Query(default="1h", pattern="^(1h|6h|24h)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_live_runtime_snapshot(db, current_user.id, window=window)

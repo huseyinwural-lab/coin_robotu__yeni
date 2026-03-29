@@ -13,6 +13,7 @@ from core.observability.http_logging_middleware import RequestObservabilityMiddl
 from core.structured_logging import configure_structured_logging
 from api import runtime_ws
 from api import incident_ws
+from api import user_live_ws
 from routers import (
     admin_action_center,
     admin_emergency,
@@ -428,6 +429,7 @@ api_router.include_router(snapshots.router)
 api_router.include_router(runtime_execution.router)
 api_router.include_router(runtime_ws.router)
 api_router.include_router(incident_ws.router)
+api_router.include_router(user_live_ws.router)
 api_router.include_router(admin_closure.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(spot_strategy.router)

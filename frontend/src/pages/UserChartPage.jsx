@@ -1,39 +1,35 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-
-const intervalMap = {
-  "1m": "1",
-  "5m": "5",
-  "15m": "15",
-  "1h": "60",
-  "4h": "240",
-  "1d": "D",
-};
+import { UserMarketChartPanel } from "@/components/UserMarketChartPanel";
+import { apiClient } from "@/lib/api";
 
 export const UserChartPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [signals, setSignals] = useState([]);
+  const [trades, setTrades] = useState([]);
 
   const symbol = String(searchParams.get("symbol") || "BTCUSDT").trim().toUpperCase();
   const timeframe = String(searchParams.get("tf") || "1h").trim().toLowerCase();
 
-  const chartUrl = useMemo(() => {
-    const interval = intervalMap[timeframe] || "60";
-    const tvSymbol = `BINANCE:${symbol}`;
-    const params = new URLSearchParams({
-      symbol: tvSymbol,
-      interval,
-      theme: "dark",
-      style: "1",
-      timezone: "Etc/UTC",
-      withdateranges: "1",
-      hide_side_toolbar: "0",
-      allow_symbol_change: "1",
-    });
-    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-  }, [symbol, timeframe]);
+  useEffect(() => {
+    const loadContext = async () => {
+      try {
+        const [signalsRes, tradesRes] = await Promise.all([
+          apiClient.get("/user/signals", { params: { limit: 40 } }),
+          apiClient.get("/user/live/trades", { params: { window: "24h", limit: 40 } }),
+        ]);
+        setSignals((signalsRes.data || []).filter((item) => String(item.symbol || "").toUpperCase() === symbol));
+        setTrades((tradesRes.data?.items || []).filter((item) => String(item.symbol || "").toUpperCase() === symbol));
+      } catch (error) {
+        toast.error(error?.response?.data?.detail || "Chart context yüklenemedi");
+      }
+    };
+    loadContext();
+  }, [symbol]);
 
   return (
     <section className="space-y-4" data-testid="user-chart-page">
@@ -56,16 +52,7 @@ export const UserChartPage = () => {
         </div>
       </header>
 
-      <div className="aspect-[16/9] w-full overflow-hidden rounded border border-slate-800 bg-black" data-testid="user-chart-embed-container">
-        <iframe
-          title={`TradingView-${symbol}-${timeframe}`}
-          src={chartUrl}
-          className="h-full w-full"
-          frameBorder="0"
-          allowFullScreen
-          data-testid="user-chart-tradingview-iframe"
-        />
-      </div>
+      <UserMarketChartPanel symbol={symbol} initialTimeframe={timeframe} signals={signals} trades={trades} testIdPrefix="user-chart-lightweight" />
     </section>
   );
 };

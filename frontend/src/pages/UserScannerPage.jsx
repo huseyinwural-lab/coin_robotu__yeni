@@ -6,6 +6,7 @@ import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { ScannerResultsTable } from "@/components/ScannerResultsTable";
 import { TradeSymbolSelection } from "@/components/TradeSymbolSelection";
 import { Button } from "@/components/ui/button";
+import { UserMarketChartPanel } from "@/components/UserMarketChartPanel";
 import { apiClient } from "@/lib/api";
 import { saveExecutionContext } from "@/lib/userFlowContext";
 import { DecisionCard } from "@/pages/user/components/DecisionCard";
@@ -259,6 +260,8 @@ export const UserScannerPage = () => {
     updatedAt: null,
   });
   const [selectedTrendWindowMinutes, setSelectedTrendWindowMinutes] = useState(5);
+  const [chartSymbol, setChartSymbol] = useState("BTCUSDT");
+  const [chartTimeframe, setChartTimeframe] = useState("1h");
   const [requestTrend, setRequestTrend] = useState(() => buildTrendPoints([], 5));
   const [requestEndpointBreakdown, setRequestEndpointBreakdown] = useState({
     oneMinute: summarizeEndpointBreakdown([], { windowMs: 60_000 }),
@@ -998,7 +1001,8 @@ export const UserScannerPage = () => {
 
   const openChartFromScanner = (item) => {
     const symbol = String(item?.symbol || "BTCUSDT").trim().toUpperCase();
-    navigate(`/user/chart?symbol=${encodeURIComponent(symbol)}&tf=1h`);
+    setChartSymbol(symbol);
+    setChartTimeframe("1h");
   };
 
   const buildIntentPayload = (item) => ({
@@ -1046,6 +1050,18 @@ export const UserScannerPage = () => {
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-scanner-title">Scanner</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
+
+      <div className="col-span-12" data-testid="user-scanner-chart-panel-col">
+        <UserMarketChartPanel
+          symbol={chartSymbol}
+          initialTimeframe={chartTimeframe}
+          signals={(scannerResults || []).filter((item) => String(item.symbol || "").toUpperCase() === chartSymbol)}
+          trades={[]}
+          selectedSignal={(scannerResults || []).find((item) => String(item.symbol || "").toUpperCase() === chartSymbol) || null}
+          onTimeframeChange={setChartTimeframe}
+          testIdPrefix="user-scanner-chart"
+        />
+      </div>
 
       <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-request-health-mini-indicator">
         <div className="flex flex-wrap items-center gap-3" data-testid="user-scanner-request-health-row">

@@ -57,6 +57,8 @@ import { UserExchangeSettingsPage } from "@/pages/UserExchangeSettingsPage";
 import { UserDashboardPage } from "@/pages/UserDashboardPage";
 import { UserPortfolioPage } from "@/pages/UserPortfolioPage";
 import { UserTradesPage } from "@/pages/UserTradesPage";
+import { UserExecutionPage } from "@/pages/UserExecutionPage";
+import { UserAlertCenterPage } from "@/pages/UserAlertCenterPage";
 import { UserScannerPage } from "@/pages/UserScannerPage";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
@@ -240,9 +242,12 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="dashboard" element={<UserDashboardPage />} />
+            <Route path="dashboard" element={<UserLiveTradingDashboardPage />} />
+            <Route path="overview" element={<UserDashboardPage />} />
             <Route path="portfolio" element={<UserPortfolioPage />} />
             <Route path="trades" element={<UserTradesPage />} />
+            <Route path="execution" element={<UserExecutionPage />} />
+            <Route path="alerts" element={<UserAlertCenterPage />} />
             <Route path="scanner" element={<UserScannerPage />} />
             <Route path="indicator-screener" element={<UserIndicatorScreenerPage />} />
             <Route path="signals" element={<UserSignalsPage />} />

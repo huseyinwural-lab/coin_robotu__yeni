@@ -17,6 +17,8 @@ from models import (
     TestnetExecutionLog,
     UserRiskSetting,
 )
+from services.decision_card_service import list_user_decision_cards
+from services.execution_intent_service import list_user_execution_intents
 
 WINDOW_MAP = {
     "1h": timedelta(hours=1),
@@ -523,6 +525,69 @@ def build_user_live_summary(db: Session, user_id: str, *, window: str = "1h") ->
             "recent": list(trades.get("items") or [])[:10],
         },
         "alerts": alerts,
+    }
+
+
+def build_user_live_queue(db: Session, user_id: str, *, limit: int = 20) -> dict:
+    intents = list_user_execution_intents(db, user_id, limit=limit)
+    signal_rows = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.user_id == user_id)
+        .order_by(PendingSignal.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    pending_orders = []
+    for row in intents:
+      pending_orders.append(
+            {
+                "intent_id": row.intent_id,
+                "symbol": str(row.symbol or "").upper(),
+                "intent_type": row.intent_type,
+                "status": row.status,
+                "gate_decision": row.gate_decision,
+                "meta_engine_decision": row.meta_engine_decision,
+                "risk_score": round(_safe_float(row.risk_score), 6),
+                "created_at": _as_aware(row.created_at),
+            }
+        )
+    pending_decisions = []
+    for row in signal_rows:
+        pending_decisions.append(
+            {
+                "signal_id": row.signal_id,
+                "symbol": str(row.symbol or "").upper(),
+                "status": row.status,
+                "blocked_reason_code": row.blocked_reason_code,
+                "strategy_code": row.strategy_code,
+                "confidence": round(_safe_float(row.confidence), 6),
+                "created_at": _as_aware(row.created_at),
+            }
+        )
+    return {
+        "generated_at": datetime.now(timezone.utc),
+        "pending_orders": pending_orders,
+        "pending_decisions": pending_decisions,
+        "queue_depth": len(pending_orders),
+    }
+
+
+def build_user_live_runtime_snapshot(db: Session, user_id: str, *, window: str = "1h") -> dict:
+    summary = build_user_live_summary(db, user_id, window=window)
+    positions = build_user_live_positions(db, user_id, limit=8, offset=0)
+    strategies = build_user_live_strategies(db, user_id, window=window, limit=8, offset=0)
+    trades = build_user_live_trades(db, user_id, window=window, limit=8, offset=0)
+    queue = build_user_live_queue(db, user_id, limit=12)
+    decisions = list_user_decision_cards(db, user_id, limit=8)
+    return {
+        "generated_at": datetime.now(timezone.utc),
+        "summary": summary,
+        "positions": positions,
+        "strategies": strategies,
+        "trades": trades,
+        "queue": queue,
+        "decision_cards": decisions,
+        "alerts": (summary.get("alerts") or {}).get("items") or [],
     }
 
 
