@@ -18,6 +18,11 @@ from models import (
 
 LEARNING_SCHEMA_VERSION = "learning.v1"
 LEARNING_ENGINE_VERSION = "learning-engine.v1"
+LEARNING_ENGINE_VERSION_V15 = "learning-engine.v1.5"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _safe_float(value, fallback: float = 0.0) -> float:
@@ -59,6 +64,58 @@ def _classify_outcome(position: PaperPosition | None, pending: PendingSignal | N
         return "REJECTED", 0.0, 0.0, 0.0, False, False
 
     return "OPEN", 0.0, 0.0, 0.0, False, False
+
+
+def _canonical_signal(row: UserScannerResult | None, payload: dict | None) -> dict:
+    source_payload = payload or {}
+    return {
+        "signal_strength": _safe_float(source_payload.get("signal_strength") or source_payload.get("score") or 0.0),
+        "signal_type": str(source_payload.get("signal_type") or source_payload.get("final_decision") or "none").lower(),
+        "scanner_result_id": str(getattr(row, "id", None) or getattr(row, "scanner_result_id", None) or "") or None,
+    }
+
+
+def _canonical_regime(payload: dict | None) -> str:
+    source_payload = payload or {}
+    regime_payload = source_payload.get("regime_state") or source_payload.get("regime_snapshot") or {}
+    return str(regime_payload.get("market_regime") or source_payload.get("market_regime") or "unknown")
+
+
+def _decision_quality_breakdown(events: list[LearningDecisionEvent]) -> dict:
+    decisions = defaultdict(int)
+    for event in events:
+        decisions[str(event.outcome_label or "OPEN")] += 1
+    total = max(len(events), 1)
+    return {
+        "win_rate": round(decisions.get("WIN", 0) / total, 6),
+        "loss_rate": round(decisions.get("LOSS", 0) / total, 6),
+        "blocked_rate": round(decisions.get("RISK_BLOCKED", 0) / total, 6),
+        "rejected_rate": round(decisions.get("REJECTED", 0) / total, 6),
+        "manual_cancel_rate": round(decisions.get("MANUAL_CANCELLED", 0) / total, 6),
+        "no_trade_rate": round(decisions.get("NO_TRADE", 0) / total, 6),
+    }
+
+
+def _false_flags(outcome_label: str, decision: str) -> tuple[bool, bool]:
+    normalized_outcome = str(outcome_label or "OPEN").upper()
+    normalized_decision = str(decision or "NO_TRADE").upper()
+    false_allow = normalized_decision in {"LONG", "SHORT"} and normalized_outcome in {"LOSS", "REJECTED", "RISK_BLOCKED", "MANUAL_CANCELLED"}
+    false_reject = normalized_decision in {"NO_TRADE", "BLOCKED"} and normalized_outcome in {"MISSED_TRADE", "FALSE_REJECT"}
+    return false_allow, false_reject
+
+
+def _ensure_recommendation_defaults(row: LearningRecommendation) -> dict:
+    payload = dict(row.recommendation_value or {})
+    payload.setdefault("scope", "strategy" if row.strategy_id else "family" if row.family else "portfolio")
+    payload.setdefault("reason", row.note or "learning recommendation")
+    payload.setdefault("confidence", 0.55)
+    payload.setdefault("evidence_summary", {})
+    payload.setdefault("risk_impact", {"tail_impact": 0.0, "cluster_impact": 0.0, "capital_impact": 0.0})
+    payload.setdefault("lifecycle", "recommendation_created")
+    payload.setdefault("status_history", [{"state": "recommendation_created", "at": _utcnow().isoformat()}])
+    payload.setdefault("version", {"previous_version": None, "current_version": f"learning-rec-{row.id[:8]}", "changed_by": None, "changed_reason": row.note or "created", "rollback_target": None})
+    row.recommendation_value = payload
+    return payload
 
 
 def _quality_degradation_flag(decay_quality: float) -> bool:
@@ -116,6 +173,16 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
             position = db.query(PaperPosition).filter(PaperPosition.id == pending.order_position_id).first()
 
         outcome_label, pnl_norm, mfe, mae, stop_hit, tp_hit = _classify_outcome(position, pending, decision)
+        if pending is not None:
+            pending_status = str(pending.status or "").lower()
+            if pending_status in {"risk_blocked", "blocked"}:
+                outcome_label = "RISK_BLOCKED"
+            elif pending_status in {"rejected"}:
+                outcome_label = "REJECTED"
+            elif pending_status in {"cancelled", "canceled"}:
+                outcome_label = "MANUAL_CANCELLED"
+        elif decision in {"NO_TRADE", "BLOCKED"}:
+            outcome_label = "NO_TRADE"
         hold_minutes = 0.0
         closed_at = None
         if position is not None and position.closed_at is not None:
@@ -192,16 +259,37 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
         closed = [e for e in events if e.outcome_label in {"WIN", "LOSS", "BREAKEVEN"}]
         wins = [e for e in closed if e.outcome_label == "WIN"]
         actionable = [e for e in events if e.decision in {"LONG", "SHORT"}]
-        no_trade = [e for e in events if e.decision in {"NO_TRADE", "BLOCKED"}]
+        false_allow_count = len([e for e in actionable if _false_flags(e.outcome_label, e.decision)[0]])
+        false_reject_count = len([e for e in events if _false_flags(e.outcome_label, e.decision)[1]])
 
         hit_rate = (len(wins) / len(closed) * 100) if closed else 0.0
         avg_return = (sum(e.pnl_normalized for e in closed) / len(closed)) if closed else 0.0
         avg_mfe = (sum(e.max_favorable_excursion for e in events) / sample) if sample else 0.0
         avg_mae = (sum(e.max_adverse_excursion for e in events) / sample) if sample else 0.0
-        false_allow_rate = (len([e for e in actionable if e.outcome_label in {"LOSS", "REJECTED"}]) / len(actionable) * 100) if actionable else 0.0
-        false_reject_rate = (len(no_trade) / sample * 100) if sample else 0.0
+        false_allow_rate = (false_allow_count / len(actionable) * 100) if actionable else 0.0
+        false_reject_rate = (false_reject_count / sample * 100) if sample else 0.0
         rolling = (hit_rate * 0.7) + ((avg_return * 100) * 0.3)
         decay_quality = (rolling * 0.8) - (false_allow_rate * 0.2)
+        closed_returns = [e.pnl_normalized for e in closed]
+        cumulative = 0.0
+        peak = 0.0
+        drawdown = 0.0
+        for value in closed_returns:
+            cumulative += value
+            peak = max(peak, cumulative)
+            drawdown = min(drawdown, cumulative - peak)
+
+        pnl_by_regime = defaultdict(float)
+        for event in closed:
+            pnl_by_regime[str((event.regime_snapshot or {}).get("market_regime") or "unknown")] += float(event.pnl_normalized or 0.0)
+        decision_quality = _decision_quality_breakdown(events)
+        perf_payload = {
+            "drawdown": round(drawdown, 6),
+            "pnl_by_regime": {key: round(value, 6) for key, value in pnl_by_regime.items()},
+            "decision_quality_breakdown": decision_quality,
+            "false_allow_trend": {"count": false_allow_count, "rate": round(false_allow_rate, 4)},
+            "false_reject_trend": {"count": false_reject_count, "rate": round(false_reject_rate, 4)},
+        }
 
         db.add(
             StrategyOutcomeMemory(
@@ -223,41 +311,87 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
 
         if sample >= 8:
             if decay_quality < 15:
+                rec = LearningRecommendation(
+                    id=str(uuid.uuid4()),
+                    strategy_id=strategy_id,
+                    family=None,
+                    recommendation_type="strategy_disable_suggestion",
+                    recommendation_value={
+                        "suggested_is_enabled": False,
+                        "scope": "strategy",
+                        "reason": "quality score critically low",
+                        "confidence": round(min(0.6 + abs(decay_quality) / 100.0, 0.95), 6),
+                        "evidence_summary": perf_payload,
+                        "risk_impact": {"tail_impact": round(abs(avg_mae), 6), "cluster_impact": round(false_allow_rate / 100.0, 6), "capital_impact": round(abs(drawdown), 6)},
+                    },
+                    note="quality score critically low, disable önerisi",
+                    severity="high",
+                )
+                _ensure_recommendation_defaults(rec)
                 recommendations.append(
-                    LearningRecommendation(
-                        id=str(uuid.uuid4()),
-                        strategy_id=strategy_id,
-                        family=None,
-                        recommendation_type="disable_recommendation",
-                        recommendation_value={"suggested_is_enabled": False},
-                        note="quality score critically low, disable önerisi",
-                        severity="high",
-                    )
+                    rec
                 )
             elif false_allow_rate > 45:
+                rec = LearningRecommendation(
+                    id=str(uuid.uuid4()),
+                    strategy_id=strategy_id,
+                    family=None,
+                    recommendation_type="strategy_weight_decrease_recommendation",
+                    recommendation_value={
+                        "suggested_weight_multiplier": 0.7,
+                        "scope": "strategy",
+                        "reason": "false allow trend yüksek",
+                        "confidence": round(min(0.55 + false_allow_rate / 100.0, 0.95), 6),
+                        "evidence_summary": perf_payload,
+                        "risk_impact": {"tail_impact": round(abs(avg_mae), 6), "cluster_impact": round(false_allow_rate / 100.0, 6), "capital_impact": round(abs(drawdown), 6)},
+                    },
+                    note="false allow trend yüksek, throttle önerisi",
+                    severity="medium",
+                )
+                _ensure_recommendation_defaults(rec)
                 recommendations.append(
-                    LearningRecommendation(
-                        id=str(uuid.uuid4()),
-                        strategy_id=strategy_id,
-                        family=None,
-                        recommendation_type="decrease_weight_recommendation",
-                        recommendation_value={"suggested_weight_multiplier": 0.7},
-                        note="false allow trend yüksek, throttle önerisi",
-                        severity="medium",
-                    )
+                    rec
                 )
             elif decay_quality > 70:
-                recommendations.append(
-                    LearningRecommendation(
-                        id=str(uuid.uuid4()),
-                        strategy_id=strategy_id,
-                        family=None,
-                        recommendation_type="increase_weight_recommendation",
-                        recommendation_value={"suggested_weight_multiplier": 1.1},
-                        note="son dönem kalite yüksek, sınırlı weight artırımı önerisi",
-                        severity="low",
-                    )
+                rec = LearningRecommendation(
+                    id=str(uuid.uuid4()),
+                    strategy_id=strategy_id,
+                    family=None,
+                    recommendation_type="strategy_weight_increase_recommendation",
+                    recommendation_value={
+                        "suggested_weight_multiplier": 1.1,
+                        "scope": "strategy",
+                        "reason": "son dönem kalite yüksek",
+                        "confidence": round(min(0.55 + decay_quality / 100.0, 0.95), 6),
+                        "evidence_summary": perf_payload,
+                        "risk_impact": {"tail_impact": round(abs(avg_mae), 6), "cluster_impact": round(false_allow_rate / 100.0, 6), "capital_impact": round(abs(drawdown), 6)},
+                    },
+                    note="son dönem kalite yüksek, sınırlı weight artırımı önerisi",
+                    severity="low",
                 )
+                _ensure_recommendation_defaults(rec)
+                recommendations.append(
+                    rec
+                )
+            if sample >= 12 and abs(avg_mae) > 0.01:
+                rec = LearningRecommendation(
+                    id=str(uuid.uuid4()),
+                    strategy_id=strategy_id,
+                    family=None,
+                    recommendation_type="threshold_tune_recommendation",
+                    recommendation_value={
+                        "suggested_threshold_delta": -0.05 if avg_mae < -0.01 else 0.03,
+                        "scope": "strategy",
+                        "reason": "mae/pnl profilinde threshold tune ihtiyacı",
+                        "confidence": round(min(0.5 + sample / 100.0, 0.9), 6),
+                        "evidence_summary": perf_payload,
+                        "risk_impact": {"tail_impact": round(abs(avg_mae), 6), "cluster_impact": round(false_allow_rate / 100.0, 6), "capital_impact": round(abs(drawdown), 6)},
+                    },
+                    note="threshold tune recommendation",
+                    severity="medium",
+                )
+                _ensure_recommendation_defaults(rec)
+                recommendations.append(rec)
 
     for (family, regime), events in family_buckets.items():
         sample = len(events)
@@ -284,18 +418,29 @@ def refresh_learning_memory(db: Session, *, window_days: int = 30) -> dict:
         )
 
     for recommendation in recommendations:
+        _ensure_recommendation_defaults(recommendation)
         db.add(recommendation)
     db.commit()
 
+    trade_linked = len([row for row in recent_events if row.position_id])
+    blocked_rejected = len([row for row in recent_events if row.outcome_label in {"REJECTED", "RISK_BLOCKED", "NO_TRADE", "MANUAL_CANCELLED"}])
+    strategies_covered = sorted({str(row.strategy_id or "unknown") for row in recent_events})
+
     return {
         "schema_version": LEARNING_SCHEMA_VERSION,
-        "engine_version": LEARNING_ENGINE_VERSION,
+        "engine_version": LEARNING_ENGINE_VERSION_V15,
         "generated_at": datetime.now(timezone.utc),
         "window_days": window_days,
         "events_count": len(recent_events),
         "strategy_memory_count": len(strategy_buckets),
         "family_memory_count": len(family_buckets),
         "recommendation_count": len(recommendations),
+        "backfill": {
+            "events_generated": len(recent_events),
+            "trade_linked": trade_linked,
+            "blocked_or_rejected": blocked_rejected,
+            "strategies_covered": strategies_covered,
+        },
     }
 
 
@@ -323,6 +468,35 @@ def get_learning_overview(db: Session) -> dict:
                 }
             )
 
+    event_rows = db.query(LearningDecisionEvent).order_by(LearningDecisionEvent.created_at.desc()).limit(3000).all()
+    strategy_perf = defaultdict(lambda: {"drawdown": 0.0, "pnl_by_regime": defaultdict(float), "events": []})
+    for event in reversed(event_rows):
+        key = str(event.strategy_id or "unknown")
+        bucket = strategy_perf[key]
+        bucket["events"].append(event)
+        regime_key = _canonical_regime(event.regime_snapshot)
+        bucket["pnl_by_regime"][regime_key] += float(event.pnl_normalized or 0.0)
+    strategy_perf_resolved = {}
+    for strategy_id, payload in strategy_perf.items():
+        cumulative = 0.0
+        peak = 0.0
+        drawdown = 0.0
+        for event in payload["events"]:
+            cumulative += float(event.pnl_normalized or 0.0)
+            peak = max(peak, cumulative)
+            drawdown = min(drawdown, cumulative - peak)
+        strategy_perf_resolved[strategy_id] = {
+            "drawdown": round(drawdown, 6),
+            "pnl_by_regime": {key: round(value, 6) for key, value in payload["pnl_by_regime"].items()},
+            "decision_quality_breakdown": _decision_quality_breakdown(payload["events"]),
+            "false_allow_trend": {
+                "count": len([e for e in payload["events"] if _false_flags(e.outcome_label, e.decision)[0]]),
+            },
+            "false_reject_trend": {
+                "count": len([e for e in payload["events"] if _false_flags(e.outcome_label, e.decision)[1]]),
+            },
+        }
+
     return {
         "schema_version": LEARNING_SCHEMA_VERSION,
         "engine_version": LEARNING_ENGINE_VERSION,
@@ -349,6 +523,11 @@ def get_learning_overview(db: Session) -> dict:
                 "recent_rolling_score": row.recent_rolling_score,
                 "decay_adjusted_quality_score": row.decay_adjusted_quality_score,
                 "quality_degradation_flag": _quality_degradation_flag(row.decay_adjusted_quality_score),
+                "drawdown": _safe_float((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("drawdown"), 0.0),
+                "pnl_by_regime": ((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("pnl_by_regime")) or {},
+                "decision_quality_breakdown": ((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("decision_quality_breakdown")) or {},
+                "false_allow_trend": ((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("false_allow_trend")) or {},
+                "false_reject_trend": ((strategy_perf_resolved.get(str(row.strategy_id)) or {}).get("false_reject_trend")) or {},
                 "recent_performance": {
                     "hit_rate": row.hit_rate,
                     "avg_return": row.avg_return,
@@ -382,6 +561,14 @@ def get_learning_overview(db: Session) -> dict:
                 "note": row.note,
                 "severity": row.severity,
                 "is_applied": row.is_applied,
+                "reason": _ensure_recommendation_defaults(row).get("reason"),
+                "confidence": _ensure_recommendation_defaults(row).get("confidence"),
+                "evidence_summary": _ensure_recommendation_defaults(row).get("evidence_summary"),
+                "recommendation_scope": _ensure_recommendation_defaults(row).get("scope"),
+                "risk_impact": _ensure_recommendation_defaults(row).get("risk_impact"),
+                "lifecycle": _ensure_recommendation_defaults(row).get("lifecycle"),
+                "status_history": _ensure_recommendation_defaults(row).get("status_history"),
+                "version": _ensure_recommendation_defaults(row).get("version"),
                 "created_at": row.created_at,
                 "applied_at": row.applied_at,
                 "admin_approval_required": True,
@@ -402,11 +589,21 @@ def list_learning_events(db: Session, *, limit: int = 200) -> list[dict]:
     )
     events: list[dict] = []
     for row in rows:
+        false_allow, false_reject = _false_flags(row.outcome_label, row.decision)
         events.append(
             {
                 "event_id": row.id,
+                "signal": _canonical_signal(None, {"final_decision": row.decision}),
                 "symbol": row.symbol,
                 "decision": row.decision,
+                "outcome": row.outcome_label,
+                "pnl_norm": row.pnl_normalized,
+                "mfe": row.max_favorable_excursion,
+                "mae": row.max_adverse_excursion,
+                "false_allow": false_allow,
+                "false_reject": false_reject,
+                "regime": _canonical_regime(row.regime_snapshot),
+                "strategy_id": row.strategy_id,
                 "strategies": list(row.source_strategies or []),
                 "families": row.family_scores or {},
                 "regime_snapshot": row.regime_snapshot or {},
@@ -559,9 +756,27 @@ def simulate_learning_recommendation_impact(
 
     projected_risk_score = _clamp(base_risk_score + risk_delta, 0.0, 1.0)
 
+    sample_rows = (
+        db.query(LearningDecisionEvent)
+        .filter(LearningDecisionEvent.strategy_id == normalized_strategy if normalized_strategy else True)
+        .order_by(LearningDecisionEvent.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    replay_sample = [row for row in sample_rows if row.outcome_label in {"WIN", "LOSS", "BREAKEVEN"}]
+    coverage = max(len(sample_rows), 1)
+    projected_hit_rate = baseline_hit_rate + expected_hit_rate_delta
+    projected_avg_return = baseline_avg_return + expected_avg_return_delta
+    projected_drawdown = max(0.0, abs(base_risk_score + risk_delta) * 0.12)
+    projected_capital_usage_delta = _clamp(allocation_drift_delta * 0.8, -1.0, 1.0)
+    concentration_delta = _clamp((weight_multiplier - 1.0) * 0.4, -1.0, 1.0)
+    tail_impact = round(abs(projected_drawdown) * 0.8, 6)
+    cluster_impact = round(abs(concentration_delta) * 0.7, 6)
+    capital_impact = round(abs(projected_capital_usage_delta) * 0.6, 6)
+
     return {
         "schema_version": LEARNING_SCHEMA_VERSION,
-        "engine_version": "learning-impact-simulator.v1",
+        "engine_version": "learning-impact-simulator.v1.5",
         "simulated_at": datetime.now(timezone.utc),
         "scope": scope,
         "strategy_id": normalized_strategy,
@@ -574,6 +789,30 @@ def simulate_learning_recommendation_impact(
         "expected_avg_return_delta": round(expected_avg_return_delta, 8),
         "allocation_drift_delta": round(allocation_drift_delta, 6),
         "hedge_effect_score": round(_clamp(hedge_effect_score, 0.0, 1.0), 6),
+        "counterfactual_replay": {
+            "baseline_vs_projected": {
+                "hit_rate": {"baseline": round(baseline_hit_rate, 6), "projected": round(projected_hit_rate, 6)},
+                "avg_return": {"baseline": round(baseline_avg_return, 8), "projected": round(projected_avg_return, 8)},
+                "drawdown": {"baseline": round(abs(base_risk_score) * 0.1, 6), "projected": round(projected_drawdown, 6)},
+            },
+            "sample_coverage": {
+                "sample_size": len(sample_rows),
+                "trade_linked": len(replay_sample),
+                "coverage_ratio": round(len(replay_sample) / coverage, 6),
+            },
+        },
+        "portfolio_impact": {
+            "net_pnl_delta": round(expected_avg_return_delta * max(len(replay_sample), 1), 8),
+            "drawdown_delta": round(projected_drawdown - abs(base_risk_score) * 0.1, 6),
+            "capital_usage_delta": round(projected_capital_usage_delta, 6),
+            "concentration_delta": round(concentration_delta, 6),
+        },
+        "risk_aware_view": {
+            "tail_impact": tail_impact,
+            "cluster_impact": cluster_impact,
+            "capital_impact": capital_impact,
+            "actionability_flag": bool(projected_risk_score < 0.75),
+        },
         "baseline": {
             "hit_rate": round(baseline_hit_rate, 6),
             "avg_return": round(baseline_avg_return, 8),
@@ -585,7 +824,7 @@ def simulate_learning_recommendation_impact(
         },
         "assumptions": [
             "read-only simulation: no production rule changed",
-            "allocation and hedge impact are model-based estimates",
+            "allocation and hedge impact are replay-assisted model estimates",
             "apply action requires explicit admin approval",
         ],
     }
