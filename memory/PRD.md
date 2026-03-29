@@ -1,3 +1,52 @@
+## 2026-03-29 — EXECUTION QUALITY & MICROSTRUCTURE CORE P1
+
+### P1.1 — L2/L3 depth + slippage decomposition
+- Depth ingest genişletildi: depth seviyeleri 20’ye çıkarıldı (L2 derinlik).
+- L3 benzeri execution tape için recent trade akışı tutuluyor ve aggression side ayrıştırılıyor.
+- Slippage decomposition aktif:
+  - `spread_bps`
+  - `impact_bps`
+  - `timing_bps`
+  - `retry_cost_bps`
+
+### P1.2 — Regime-aware execution policy
+- Guard preview artık market rejimi üretiyor:
+  - `trend`: bull / bear / chop
+  - `liquidity`: high_liquidity / low_liquidity
+  - `market_speed`: fast / normal
+- Guard sonucu execution önerisine dönüşüyor:
+  - `aggressive`
+  - `passive`
+  - `reduce-size`
+  - `slice`
+  - `venue-switch-candidate`
+
+### P1.3 — Venue health + liquidity stress
+- Venue summary ve symbol bazında yeni skorlar:
+  - `venue_health_score`
+  - `liquidity_stress_score`
+  - `latency_score`
+  - `retry_score`
+  - `spread_instability`
+  - `depth_instability`
+
+### P1.4 — Historical replay
+- Replay dataset dosyası eklendi: `/app/artifacts/manifests/execution_microstructure_replay.jsonl`
+- Yeni endpointler:
+  - `GET /api/admin/futures/microstructure/replay`
+  - `GET /api/admin/futures/microstructure/execution-replay/latest`
+- Amaç: kötü fill / slippage farkı için root-cause açıklaması üretmek.
+
+### Test / doğrulama
+- Pytest: `9 passed`
+- Testing agent: `/app/test_reports/iteration_178.json` → **29/29 PASS**
+- Local/backend self-test: `/app/test_reports/execution_microstructure_p1_selftest.json`
+
+### Operasyonel gerçeklik
+- Binance canlı market-data proxy üzerinden sağlıklı.
+- Bybit public erişim bu runtime’da 403 döndüğü için readiness `INVALID` ama sistem stabil.
+- Execution yolları halen **MOCKED/PAPER-ORIENTED**; P1 bu gerçeği bozmadı.
+
 ## 2026-03-29 — EXECUTION QUALITY & MICROSTRUCTURE CORE P0 (Backend-first)
 
 ### Tamamlanan P0 çekirdeği
