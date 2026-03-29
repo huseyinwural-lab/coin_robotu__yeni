@@ -11,6 +11,12 @@ from db import redis_client
 from models import AlertTriageAction, AuditLog, DebugIncident, FailedEvent, LiveActivationConfig, SystemAlert
 from runtime_control import force_pipeline_resync, restart_runtime_service
 from services.audit_service import create_audit_log
+from services.binance_incident_connector_service import (
+    execute_cancel_all_open_orders_live,
+    execute_reduce_leverage_live,
+    preview_cancel_all_open_orders,
+    preview_reduce_leverage,
+)
 from services.execution_safety_service import update_execution_safety_state
 from services.execution_microstructure_service import build_microstructure_venue_summary
 
@@ -589,14 +595,17 @@ def execute_incident_action(
     actor_user_id: str,
     actor_role: str,
     mode: str = "manual",
+    parameters: dict | None = None,
 ) -> dict:
     incident = db.query(DebugIncident).filter(DebugIncident.incident_id == incident_id).first()
     if incident is None:
         raise ValueError("incident_not_found")
     details = dict(incident.details or {})
     normalized_action = str(action or "").strip().lower()
+    normalized_mode = str(mode or "manual").strip().lower()
+    parameters = dict(parameters or {})
     rollback_payload = None
-    result = {"status": "executed", "action": normalized_action, "mode": mode}
+    result = {"status": "executed", "action": normalized_action, "mode": normalized_mode}
     if normalized_action == "restart_worker":
         result["connector_result"] = restart_runtime_service(service="worker")
     elif normalized_action == "block_trading":
@@ -611,6 +620,10 @@ def execute_incident_action(
         )
         rollback_payload = {"trading_enabled": True}
         result["connector_result"] = _json_safe(safety)
+        if normalized_mode == "dry_run":
+            result["external_preview"] = preview_cancel_all_open_orders()
+        elif normalized_mode in {"manual_live", "live"}:
+            result["external_live_result"] = execute_cancel_all_open_orders_live()
     elif normalized_action == "reduce_leverage":
         config = db.query(LiveActivationConfig).filter(LiveActivationConfig.id == "global").first()
         if config is None:
@@ -623,6 +636,13 @@ def execute_incident_action(
         db.refresh(config)
         rollback_payload = {"leverage_cap": previous}
         result["connector_result"] = {"previous_leverage_cap": previous, "current_leverage_cap": config.leverage_cap}
+        target_symbol = str(parameters.get("symbol") or details.get("symbol") or "").upper()
+        target_leverage = parameters.get("target_leverage")
+        if target_symbol and target_leverage is not None:
+            if normalized_mode == "dry_run":
+                result["external_preview"] = preview_reduce_leverage(target_symbol, target_leverage)
+            elif normalized_mode in {"manual_live", "live"}:
+                result["external_live_result"] = execute_reduce_leverage_live(target_symbol, target_leverage)
     elif normalized_action == "reconcile_trigger":
         result["connector_result"] = _json_safe(force_pipeline_resync(redis_client, actor_user_id=actor_user_id, reason=f"incident:{incident_id}", trace_id=str(uuid.uuid4())))
     else:
