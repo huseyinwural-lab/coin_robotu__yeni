@@ -1,3 +1,104 @@
+## 2026-03-29 — USER SIDE GAP CLOSURE (P0 Dashboard / Chart / Execution / Alerts / Queue)
+
+### Bu turda tamamlanan P0 blokları
+
+#### 1) Global Dashboard
+- `/user/dashboard` artık gerçek-time odaklı global dashboard’a yönleniyor.
+- Dashboard içinde görünür hale getirildi:
+  - aktif pozisyonlar
+  - PnL today
+  - risk / exposure görünürlüğü
+  - aktif stratejiler
+  - son kararlar (`decision_cards`)
+  - runtime alert snapshot
+  - pending decisions / orders queue
+- Ana sayfa bileşeni:
+  - `/app/frontend/src/pages/user/UserLiveTradingDashboardPage.jsx`
+
+#### 2) Grafik entegrasyonu
+- TradingView embed kaldırıldı, **Lightweight Charts** tabanlı chart panel eklendi.
+- Yeni reusable chart bileşeni:
+  - `/app/frontend/src/components/UserMarketChartPanel.jsx`
+- Yeni market candle endpoint:
+  - `GET /api/market/candles`
+- Desteklenen timeframe’ler:
+  - `5m`
+  - `15m`
+  - `1h`
+  - `4h`
+  - `1d`
+- Scanner içine chart panel eklendi:
+  - seçilen symbol değişince chart güncelleniyor
+  - signal highlight / marker desteği aktif
+- Standalone chart route da Lightweight Charts’a taşındı:
+  - `/user/chart`
+
+#### 3) Execution View birleşimi
+- Yeni birleşik execution sayfası eklendi:
+  - `/user/execution`
+- İçerik:
+  - open positions
+  - pending intents / execution queue
+  - recent trades / order history
+  - execution quality status
+- Sayfa dosyası:
+  - `/app/frontend/src/pages/UserExecutionPage.jsx`
+
+#### 4) Notification / Alert Center
+- Yeni kullanıcı alert merkezi eklendi:
+  - `/user/alerts`
+- Sayfa dosyası:
+  - `/app/frontend/src/pages/UserAlertCenterPage.jsx`
+- Canlı veri akışı için websocket endpoint eklendi:
+  - `/api/user/live/ws/stream`
+
+#### 5) Execution Queue görünürlüğü
+- Yeni backend queue endpoint:
+  - `GET /api/user/live/queue`
+- Yeni runtime snapshot endpoint:
+  - `GET /api/user/live/runtime-snapshot`
+- Queue hem dashboard’da hem execution view’da görünür hale getirildi.
+
+### Backend kullanıcı canlı snapshot katmanı
+- `build_user_live_queue(...)`
+- `build_user_live_runtime_snapshot(...)`
+- Dosya:
+  - `/app/backend/services/user_live_dashboard_service.py`
+
+### Route / navigasyon güncellemeleri
+- Yeni route’lar:
+  - `/user/execution`
+  - `/user/alerts`
+  - `/user/overview` (eski dashboard korunarak)
+- User nav sırası P0 önceliğine göre güncellendi:
+  - Scanner
+  - Dashboard
+  - Execution
+  - Alerts
+  - Trade Entry
+
+### Test / doğrulama
+- Testing agent raporu:
+  - `/app/test_reports/iteration_186.json`
+- Sonuç:
+  - backend: **19/20 PASS**
+  - frontend: dashboard doğrulandı, scanner route/chart entegre, execution ve alerts route’ları doğrulandı
+- Not düşülen konu:
+  - preview URL’de network latency nedeniyle scanner sayfası bazen uzun loading skeleton gösterebiliyor
+  - testing agent bunu altyapı/preview gecikmesi olarak işaretledi
+
+### Henüz yapılmayan sonraki user-side işler
+- P1:
+  - domain bazlı menü mimarisi tam konsolidasyon
+  - indicator screener merge cleanup
+  - settings consolidation
+- P2:
+  - debounce / cancel previous request
+  - auto scan state senkronizasyonu
+  - next scan gerçek cron görünürlüğü
+  - backtest ↔ live strategy bağlantısı
+  - user activity / audit log görünürlüğü
+
 ## 2026-03-29 — FINAL PROGRAM CLOSURE (Unified Control Room + Production Activation Prep)
 
 ### P0 — Global production hardening
