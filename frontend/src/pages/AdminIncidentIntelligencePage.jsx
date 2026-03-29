@@ -55,6 +55,8 @@ export const AdminIncidentIntelligencePage = () => {
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
+  const [liveActionSymbol, setLiveActionSymbol] = useState("BTCUSDT");
+  const [liveTargetLeverage, setLiveTargetLeverage] = useState("1");
   const socketRef = useRef(null);
 
   const selectedIncident = useMemo(
@@ -198,6 +200,45 @@ export const AdminIncidentIntelligencePage = () => {
     }
   }, [loadDashboard, loadIncidentDetail, selectedIncident?.incident_id, selectedIncident?.owner]);
 
+  const runControlledLiveAction = useCallback(async (action, mode, parameters = {}) => {
+    if (!selectedIncident?.incident_id) return;
+    setActionLoading(`${action}-${mode}`);
+    try {
+      const { data } = await apiClient.post(`/admin/incident-intelligence/incidents/${encodeURIComponent(selectedIncident.incident_id)}/actions`, { action, mode, parameters });
+      const actionResult = data?.action_result || {};
+      const preview = actionResult.external_preview;
+      const live = actionResult.external_live_result;
+      if (preview) {
+        toast.success(`Dry-run tamamlandı · open_orders=${preview.open_order_count ?? 0}`);
+      } else if (live) {
+        toast.success(`${action} live uygulandı`);
+      } else {
+        toast.success(`${action} tetiklendi`);
+      }
+      await loadDashboard();
+      await loadIncidentDetail(selectedIncident.incident_id);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Controlled action başarısız");
+    } finally {
+      setActionLoading("");
+    }
+  }, [loadDashboard, loadIncidentDetail, selectedIncident?.incident_id]);
+
+  const rollbackLastAction = useCallback(async () => {
+    if (!selectedIncident?.incident_id) return;
+    setActionLoading("rollback");
+    try {
+      await apiClient.post(`/admin/incident-intelligence/incidents/${encodeURIComponent(selectedIncident.incident_id)}/actions/rollback`);
+      toast.success("Son aksiyon rollback edildi");
+      await loadDashboard();
+      await loadIncidentDetail(selectedIncident.incident_id);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Rollback başarısız");
+    } finally {
+      setActionLoading("");
+    }
+  }, [loadDashboard, loadIncidentDetail, selectedIncident?.incident_id]);
+
   const frequencyChartData = useMemo(
     () => (weeklySummary?.top_root_causes || []).map(([label, value]) => ({ label, value })),
     [weeklySummary],
@@ -334,6 +375,19 @@ export const AdminIncidentIntelligencePage = () => {
               <Button variant="outline" onClick={() => updateState("INVESTIGATING")} disabled={!!actionLoading} data-testid="incident-intelligence-set-investigating-button">Investigating</Button>
               <Button variant="outline" onClick={() => updateState("RESOLVED")} disabled={!!actionLoading} data-testid="incident-intelligence-set-resolved-button">Resolved</Button>
               <Button variant="outline" onClick={() => updateState("FALSE_POSITIVE")} disabled={!!actionLoading} data-testid="incident-intelligence-set-false-positive-button">False Positive</Button>
+            </div>
+            <div className="mt-4 grid gap-2 border border-slate-200 p-3" data-testid="incident-intelligence-live-action-controls">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500" data-testid="incident-intelligence-live-action-kicker">Controlled External Action</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input value={liveActionSymbol} onChange={(event) => setLiveActionSymbol(event.target.value.toUpperCase())} className="border border-slate-300 px-3 py-2 text-sm" data-testid="incident-intelligence-live-symbol-input" />
+                <input value={liveTargetLeverage} onChange={(event) => setLiveTargetLeverage(event.target.value)} className="border border-slate-300 px-3 py-2 text-sm" data-testid="incident-intelligence-live-leverage-input" />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" disabled={!!actionLoading} onClick={() => runControlledLiveAction("block_trading", "dry_run")} data-testid="incident-intelligence-live-block-preview-button">Preview Block</Button>
+                <Button disabled={!!actionLoading} onClick={() => runControlledLiveAction("block_trading", "manual_live")} data-testid="incident-intelligence-live-block-apply-button">Apply Live Block</Button>
+                <Button variant="outline" disabled={!!actionLoading} onClick={() => runControlledLiveAction("reduce_leverage", "dry_run", { symbol: liveActionSymbol, target_leverage: Number(liveTargetLeverage || 1) })} data-testid="incident-intelligence-live-leverage-preview-button">Preview Leverage</Button>
+                <Button variant="outline" disabled={!!actionLoading} onClick={rollbackLastAction} data-testid="incident-intelligence-live-rollback-button">Rollback Last Action</Button>
+              </div>
             </div>
             <div className="mt-4 space-y-2" data-testid="incident-intelligence-action-history-list">
               {(selectedIncident?.remediation_history || []).map((entry, index) => (
