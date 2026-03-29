@@ -1,3 +1,71 @@
+## 2026-03-29 — EXECUTION QUALITY & MICROSTRUCTURE CORE P2
+
+### P2.1 — Non-linear impact model
+- Lineer impact varsayımı kaldırıldı; `square_root_impact` aktif.
+- Yeni impact alanları:
+  - `impact_ratio`
+  - `square_root_impact`
+  - `impact_score`
+  - `performance_degradation_pct`
+- Sistem artık büyük size için “performans %X bozulur” tahmini üretiyor.
+
+### P2.2 — Hidden liquidity + depth decay
+- Hidden liquidity tahmini eklendi:
+  - `hidden_liquidity_ratio`
+  - `state: LOW / MEDIUM / HIGH`
+  - `confidence`
+- Depth decay modeli eklendi:
+  - `decay_ratio`
+  - `state: STABLE / ELEVATED / RAPID`
+
+### P2.3 — Portfolio-level capacity simulation
+- Aynı symbol ve aynı strategy altında açık yükler execution değerlendirmesine katıldı.
+- Yeni alanlar:
+  - `same_symbol_open_notional`
+  - `same_strategy_open_notional`
+  - `combined_load_notional`
+  - `combined_load_ratio`
+  - `performance_degradation_pct`
+
+### P2.4 — Execution budgeting
+- Günlük budget enforcement eklendi:
+  - symbol budget
+  - strategy budget
+  - impact budget
+- Yeni alanlar:
+  - `symbol_budget_notional`
+  - `strategy_budget_notional`
+  - `impact_budget_bps`
+  - `symbol_budget_used`
+  - `strategy_budget_used`
+  - `allowed_notional`
+- Budget breach durumunda sistem artık `REDUCE_SIZE` veya `BLOCK` üretiyor.
+
+### P2.5 — Adaptive slicing engine
+- Slicing plan üretimi aktif:
+  - `slice_count`
+  - `slice_notional`
+  - `interval_ms`
+  - `preferred_order_type`
+  - `execution_style`
+  - `should_slice`
+- Slicing kararı artık impact + regime + liquidity stress + budget ile bağlı.
+
+### Yeni endpointler
+- `GET /api/admin/futures/microstructure/budget-status`
+- `GET /api/admin/futures/microstructure/slicing-preview`
+- `GET /api/admin/futures/microstructure/execution-replay/latest` artık `should_have_been_sliced` + `slicing_plan` döndürüyor.
+
+### Test / doğrulama
+- Pytest: `13 passed`
+- Testing agent: `/app/test_reports/iteration_179.json` → **53/53 PASS**
+- Local/backend self-test: `/app/test_reports/execution_microstructure_p2_selftest.json`
+
+### Operasyonel gerçeklik
+- Binance canlı market-data proxy üzerinden doğrulanmış durumda.
+- Bybit public erişim bu runtime’da `403` verdiği için readiness `INVALID` ama crash yok.
+- Execution yolları halen **MOCKED/PAPER-ORIENTED**.
+
 ## 2026-03-29 — EXECUTION QUALITY & MICROSTRUCTURE CORE P1
 
 ### P1.1 — L2/L3 depth + slippage decomposition
