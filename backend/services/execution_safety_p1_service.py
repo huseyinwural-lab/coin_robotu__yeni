@@ -49,6 +49,15 @@ def _window_delta(window: str) -> timedelta:
     return timedelta(days=7)
 
 
+AUTO_REMEDIATION_POLICY_FILE = Path("/app/artifacts/manifests/execution_safety_auto_remediation_policy.json")
+ACTION_MAP_PLAYBOOK_TO_QUICK = {
+    "bulk_retry": "retry",
+    "bulk_reconcile": "reconcile",
+    "bulk_cancel": "cancel",
+    "escalate": "escalate",
+}
+
+
 def _normalize_iso_z(value: datetime | str | None) -> str:
     if isinstance(value, datetime):
         candidate = _as_utc(value)
@@ -490,6 +499,169 @@ def stream_analytics_csv(dataset: str, payload: dict) -> tuple[Iterable[bytes], 
     return _csv_bytes_iterator(columns, rows), filename
 
 
+def _default_auto_remediation_policy() -> dict:
+    return {
+        "global_default_enabled": False,
+        "low_auto_retry_max_retry_count": 1,
+        "high_requires_manual_confirmation": True,
+        "tenants": {},
+        "updated_at": _normalize_iso_z(_utcnow()),
+    }
+
+
+def get_auto_remediation_policy() -> dict:
+    if not AUTO_REMEDIATION_POLICY_FILE.exists():
+        policy = _default_auto_remediation_policy()
+        AUTO_REMEDIATION_POLICY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        AUTO_REMEDIATION_POLICY_FILE.write_text(json.dumps(policy, indent=2), encoding="utf-8")
+        return policy
+    try:
+        payload = json.loads(AUTO_REMEDIATION_POLICY_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        payload = _default_auto_remediation_policy()
+
+    normalized = _default_auto_remediation_policy()
+    normalized.update({
+        "global_default_enabled": bool(payload.get("global_default_enabled", False)),
+        "low_auto_retry_max_retry_count": min(max(int(payload.get("low_auto_retry_max_retry_count", 1)), 0), 10),
+        "high_requires_manual_confirmation": bool(payload.get("high_requires_manual_confirmation", True)),
+        "tenants": dict(payload.get("tenants") or {}),
+    })
+    normalized["updated_at"] = _normalize_iso_z(payload.get("updated_at") if isinstance(payload, dict) else None)
+    return normalized
+
+
+def _save_auto_remediation_policy(policy: dict) -> dict:
+    normalized = {
+        "global_default_enabled": bool(policy.get("global_default_enabled", False)),
+        "low_auto_retry_max_retry_count": min(max(int(policy.get("low_auto_retry_max_retry_count", 1)), 0), 10),
+        "high_requires_manual_confirmation": bool(policy.get("high_requires_manual_confirmation", True)),
+        "tenants": dict(policy.get("tenants") or {}),
+        "updated_at": _normalize_iso_z(_utcnow()),
+    }
+    AUTO_REMEDIATION_POLICY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    AUTO_REMEDIATION_POLICY_FILE.write_text(json.dumps(normalized, indent=2), encoding="utf-8")
+    return normalized
+
+
+def update_auto_remediation_policy(*, global_default_enabled: bool | None = None, low_auto_retry_max_retry_count: int | None = None, high_requires_manual_confirmation: bool | None = None) -> dict:
+    policy = get_auto_remediation_policy()
+    if global_default_enabled is not None:
+        policy["global_default_enabled"] = bool(global_default_enabled)
+    if low_auto_retry_max_retry_count is not None:
+        policy["low_auto_retry_max_retry_count"] = min(max(int(low_auto_retry_max_retry_count), 0), 10)
+    if high_requires_manual_confirmation is not None:
+        policy["high_requires_manual_confirmation"] = bool(high_requires_manual_confirmation)
+    return _save_auto_remediation_policy(policy)
+
+
+def set_auto_remediation_tenant_opt_in(*, tenant_id: str, enabled: bool) -> dict:
+    normalized_tenant = str(tenant_id or "").strip().lower()
+    if not normalized_tenant:
+        raise ValueError("tenant_id_required")
+    policy = get_auto_remediation_policy()
+    tenants = dict(policy.get("tenants") or {})
+    tenants[normalized_tenant] = {
+        "enabled": bool(enabled),
+        "updated_at": _normalize_iso_z(_utcnow()),
+    }
+    policy["tenants"] = tenants
+    return _save_auto_remediation_policy(policy)
+
+
+def _action_guard_for_intent(*, intent_id: str | None, intent_status: str | None) -> dict:
+    base_actions = ["retry", "reconcile", "cancel", "escalate"]
+    if not intent_id:
+        return {
+            "intent_mutable": False,
+            "reason": "missing_intent",
+            "allowed_actions": [],
+            "blocked_actions": base_actions,
+        }
+
+    # ExecutionIntent modeli platform genelinde immutable listener ile korunuyor.
+    return {
+        "intent_mutable": False,
+        "reason": "execution_intent_immutable",
+        "intent_status": str(intent_status or "UNKNOWN").upper(),
+        "allowed_actions": ["escalate"],
+        "blocked_actions": ["retry", "reconcile", "cancel"],
+    }
+
+
+def _auto_remediation_decision(*, item: dict, policy: dict) -> dict:
+    severity = str(item.get("severity_level") or item.get("severity") or "LOW").upper()
+    retry_count = int(item.get("retry_count") or 0)
+    tenant_id = str(item.get("tenant_id") or "default").strip().lower()
+    tenant_cfg = dict((policy.get("tenants") or {}).get(tenant_id) or {})
+    tenant_enabled = bool(tenant_cfg.get("enabled", bool(policy.get("global_default_enabled", False))))
+    low_retry_threshold = int(policy.get("low_auto_retry_max_retry_count", 1))
+
+    if severity == "HIGH":
+        return {
+            "tenant_id": tenant_id,
+            "eligible": False,
+            "recommended_action": None,
+            "mode": "manual",
+            "reason": "high_manual_required",
+            "policy_snapshot": {
+                "tenant_enabled": tenant_enabled,
+                "retry_threshold": low_retry_threshold,
+            },
+        }
+
+    if severity == "MEDIUM":
+        return {
+            "tenant_id": tenant_id,
+            "eligible": False,
+            "recommended_action": "retry",
+            "mode": "manual",
+            "reason": "medium_manual_recommended",
+            "policy_snapshot": {
+                "tenant_enabled": tenant_enabled,
+                "retry_threshold": low_retry_threshold,
+            },
+        }
+
+    if not tenant_enabled:
+        return {
+            "tenant_id": tenant_id,
+            "eligible": False,
+            "recommended_action": "retry",
+            "mode": "manual",
+            "reason": "tenant_not_opted_in",
+            "policy_snapshot": {
+                "tenant_enabled": tenant_enabled,
+                "retry_threshold": low_retry_threshold,
+            },
+        }
+
+    if retry_count <= low_retry_threshold:
+        return {
+            "tenant_id": tenant_id,
+            "eligible": True,
+            "recommended_action": "retry",
+            "mode": "auto",
+            "reason": f"low_retry_threshold_match({retry_count}<={low_retry_threshold})",
+            "policy_snapshot": {
+                "tenant_enabled": tenant_enabled,
+                "retry_threshold": low_retry_threshold,
+            },
+        }
+
+    return {
+        "tenant_id": tenant_id,
+        "eligible": False,
+        "recommended_action": "retry",
+        "mode": "manual",
+        "reason": f"retry_threshold_exceeded({retry_count}>{low_retry_threshold})",
+        "policy_snapshot": {
+            "tenant_enabled": tenant_enabled,
+            "retry_threshold": low_retry_threshold,
+        },
+    }
+
+
 def get_operator_center_snapshot(db: Session, *, window: str = "7d", limit: int = 10) -> dict:
     capped_limit = min(max(int(limit or 10), 1), 50)
     anomalies_payload = detect_false_decisions(db, window=window)
@@ -537,6 +709,68 @@ def get_operator_center_snapshot(db: Session, *, window: str = "7d", limit: int 
 
     recommended_actions.sort(key=lambda item: (-item["count"], -item["avg_confidence"]))
 
+    cutoff = _utcnow() - _window_delta(window)
+    intervention_audits = (
+        db.query(AuditLog)
+        .filter(AuditLog.created_at >= cutoff)
+        .filter(AuditLog.action == "execution_bulk_recovery_item")
+        .all()
+    )
+    action_totals = len(intervention_audits)
+    action_successes = len([row for row in intervention_audits if not (dict(row.details or {}).get("error"))])
+    success_ratio = round((action_successes / action_totals), 4) if action_totals else 0.0
+
+    action_daily: dict[str, dict] = {}
+    for row in intervention_audits:
+        day = (_as_utc(row.created_at) or _utcnow()).strftime("%Y-%m-%d")
+        bucket = action_daily.setdefault(day, {"total": 0, "success": 0})
+        bucket["total"] += 1
+        if not (dict(row.details or {}).get("error")):
+            bucket["success"] += 1
+    action_success_series = [
+        {
+            "date": day,
+            "total_actions": payload["total"],
+            "successful_actions": payload["success"],
+            "success_ratio": round((payload["success"] / payload["total"]) if payload["total"] else 0.0, 4),
+        }
+        for day, payload in sorted(action_daily.items())
+    ]
+
+    intervention_latencies: list[float] = []
+    mtti_daily: dict[str, list[float]] = {}
+    recent_failed_for_mtti = (
+        db.query(FailedEvent)
+        .filter(FailedEvent.created_at >= cutoff)
+        .order_by(FailedEvent.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    for failed_row in recent_failed_for_mtti:
+        first_action = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "execution_bulk_recovery_item")
+            .filter(AuditLog.created_at >= failed_row.created_at)
+            .filter(AuditLog.entity_id.in_([str(failed_row.entity_id), str(failed_row.id)]))
+            .order_by(AuditLog.created_at.asc())
+            .first()
+        )
+        if not first_action:
+            continue
+        latency = max(((_as_utc(first_action.created_at) or _utcnow()) - (_as_utc(failed_row.created_at) or _utcnow())).total_seconds(), 0.0)
+        intervention_latencies.append(latency)
+        day = (_as_utc(failed_row.created_at) or _utcnow()).strftime("%Y-%m-%d")
+        mtti_daily.setdefault(day, []).append(latency)
+    mean_time_to_intervention = round(sum(intervention_latencies) / len(intervention_latencies), 2) if intervention_latencies else 0.0
+    mtti_series = [
+        {
+            "date": day,
+            "mean_time_to_intervention_sec": round(sum(values) / len(values), 2),
+            "sample_count": len(values),
+        }
+        for day, values in sorted(mtti_daily.items())
+    ]
+
     return {
         "window": window,
         "generated_at": _normalize_iso_z(_utcnow()),
@@ -545,6 +779,13 @@ def get_operator_center_snapshot(db: Session, *, window: str = "7d", limit: int 
         "blocker_breakdown": blockers_payload.get("top_blockers") or [],
         "recommended_actions": recommended_actions[:6],
         "recent_failures": recent_failure_rows,
+        "auto_remediation_policy": get_auto_remediation_policy(),
+        "ops_metrics": {
+            "mean_time_to_intervention_sec": mean_time_to_intervention,
+            "action_success_ratio": success_ratio,
+            "mtti_series": mtti_series,
+            "action_success_series": action_success_series,
+        },
     }
 
 
@@ -682,6 +923,7 @@ def detect_false_decisions(
                 {
                     "intent_id": intent_id,
                     "correlation_id": correlation_id,
+                    "tenant_id": str(payload.get("tenant_id") or payload.get("account_id") or "default").strip().lower(),
                     "type": decision_type,
                     "reason": reason,
                     "risk_score": risk,
@@ -709,6 +951,7 @@ def detect_false_decisions(
             {
                 "intent_id": row.entity_id,
                 "correlation_id": row.correlation_id,
+                "tenant_id": str((row.payload or {}).get("tenant_id") or (row.payload or {}).get("account_id") or "default").strip().lower(),
                 "type": "CORRELATION_BREACH",
                 "reason": row.error_message,
                 "risk_score": 0.91,
@@ -730,7 +973,7 @@ def detect_false_decisions(
     }
     if unresolved_correlation_ids:
         mapping_rows = (
-            db.query(ExecutionIntent.intent_id, ExecutionIntent.correlation_id)
+            db.query(ExecutionIntent.intent_id, ExecutionIntent.correlation_id, ExecutionIntent.status, ExecutionIntent.account_id)
             .filter(ExecutionIntent.correlation_id.in_(list(unresolved_correlation_ids)))
             .all()
         )
@@ -739,7 +982,42 @@ def detect_false_decisions(
             if not item.get("intent_id") and item.get("correlation_id"):
                 item["intent_id"] = correlation_to_intent.get(str(item.get("correlation_id")))
 
-    items = [_enrich_anomaly_item(item) for item in items]
+    intent_ids = [str(item.get("intent_id")) for item in items if item.get("intent_id")]
+    intent_status_map: dict[str, str] = {}
+    intent_account_map: dict[str, str] = {}
+    if intent_ids:
+        intent_rows = (
+            db.query(ExecutionIntent.intent_id, ExecutionIntent.status, ExecutionIntent.account_id)
+            .filter(ExecutionIntent.intent_id.in_(list(set(intent_ids))))
+            .all()
+        )
+        intent_status_map = {row.intent_id: str(row.status or "UNKNOWN").upper() for row in intent_rows if row.intent_id}
+        intent_account_map = {row.intent_id: str(row.account_id or "default").strip().lower() for row in intent_rows if row.intent_id}
+
+    policy = get_auto_remediation_policy()
+    enriched_items: list[dict] = []
+    for item in items:
+        intent_id = str(item.get("intent_id") or "").strip() or None
+        if intent_id and not item.get("tenant_id"):
+            item["tenant_id"] = intent_account_map.get(intent_id, "default")
+        intent_status = intent_status_map.get(intent_id) if intent_id else None
+        item["intent_status"] = intent_status
+
+        enriched = _enrich_anomaly_item(item)
+        action_guard = _action_guard_for_intent(intent_id=intent_id, intent_status=intent_status)
+        enriched["action_guard"] = action_guard
+        enriched["allowed_actions"] = list(action_guard.get("allowed_actions") or [])
+        enriched["blocked_actions"] = list(action_guard.get("blocked_actions") or [])
+        enriched["playbook_primary_action"] = None
+        for recommendation in enriched.get("recommended_actions") or []:
+            mapped_action = ACTION_MAP_PLAYBOOK_TO_QUICK.get(str(recommendation.get("action") or "").strip().lower())
+            if mapped_action:
+                enriched["playbook_primary_action"] = mapped_action
+                break
+        enriched["auto_remediation"] = _auto_remediation_decision(item=enriched, policy=policy)
+        enriched_items.append(enriched)
+
+    items = enriched_items
 
     if severity:
         items = [item for item in items if str(item.get("severity_level") or item.get("severity") or "").upper() == str(severity).upper()]

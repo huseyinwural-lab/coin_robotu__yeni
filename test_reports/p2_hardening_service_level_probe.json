@@ -1,0 +1,48 @@
+{
+  "policy": {
+    "global_default_enabled": false,
+    "low_auto_retry_max_retry_count": 1,
+    "high_requires_manual_confirmation": true,
+    "tenants": {
+      "tenant-alpha": {
+        "enabled": true,
+        "updated_at": "2026-03-29T11:52:11Z"
+      }
+    },
+    "updated_at": "2026-03-29T11:52:11Z"
+  },
+  "anomaly_total": 1,
+  "sample_guard": {
+    "intent_mutable": false,
+    "reason": "execution_intent_immutable",
+    "intent_status": "ACKED",
+    "allowed_actions": [
+      "escalate"
+    ],
+    "blocked_actions": [
+      "retry",
+      "reconcile",
+      "cancel"
+    ]
+  },
+  "sample_auto_remediation": {
+    "tenant_id": "default",
+    "eligible": false,
+    "recommended_action": null,
+    "mode": "manual",
+    "reason": "high_manual_required",
+    "policy_snapshot": {
+      "tenant_enabled": false,
+      "retry_threshold": 1
+    }
+  },
+  "sample_playbook_primary_action": "escalate",
+  "operator_has_ops_metrics": true,
+  "operator_ops_metrics_keys": [
+    "action_success_ratio",
+    "action_success_series",
+    "mean_time_to_intervention_sec",
+    "mtti_series"
+  ],
+  "operator_has_policy": true
+}

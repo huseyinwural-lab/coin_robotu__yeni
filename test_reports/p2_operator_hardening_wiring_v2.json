@@ -1,0 +1,11 @@
+{
+  "total": 4,
+  "passed": 4,
+  "failed": [],
+  "checks": {
+    "playbook_one_click_handler": true,
+    "ops_chart_bar_fill": true,
+    "policy_tenant_list": true,
+    "guard_matrix_note": true
+  }
+}

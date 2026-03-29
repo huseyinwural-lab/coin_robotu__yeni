@@ -1,3 +1,47 @@
+## 2026-03-29 — P2 Hardening + Policy Engine + One-Click Playbook Execution
+
+### Tamamlanan ek kapsam (kullanıcı kilitli politika ile)
+- **Quick Action Guard Matrix (intent-state hardening)**
+  - anomaly payload’ına eklendi: `action_guard`, `allowed_actions`, `blocked_actions`
+  - immutable intent için proaktif koruma: yalnız `escalate` izinli
+  - UI tarafında guard-aware disable + bulk aksiyonda bloklanan intentlerin otomatik elenmesi
+- **Auto Remediation Policy Engine (tenant opt-in)**
+  - politika endpointleri:
+    - `GET /api/execution-safety/auto-remediation/policy`
+    - `POST /api/execution-safety/auto-remediation/policy`
+    - `POST /api/execution-safety/auto-remediation/tenant/{tenant_id}?enabled=true|false`
+  - dosya tabanlı policy store: `/app/artifacts/manifests/execution_safety_auto_remediation_policy.json`
+  - aktif politika:
+    - `global_default_enabled=false` (opt-in)
+    - LOW: `retry_count < 2` eşik mantığı
+    - MEDIUM: öner + manuel
+    - HIGH: manuel zorunlu
+- **Ops metrics (Operator Center)**
+  - `mean_time_to_intervention_sec`
+  - `action_success_ratio`
+  - günlük seriler: `mtti_series`, `action_success_series`
+  - UI’da mini bar chart gösterimi eklendi
+- **One-click Playbook Execution (Operator Center)**
+  - anomaly bazlı `playbook_primary_action`
+  - tek tık çalıştırma butonu (guard ve HIGH onay kuralına uyar)
+
+### Dosya etkileri
+- Backend
+  - `/app/backend/services/execution_safety_p1_service.py`
+  - `/app/backend/routers/execution_safety.py`
+- Frontend
+  - `/app/frontend/src/pages/AdminExecutionOperatorCenterPage.jsx`
+  - `/app/frontend/src/pages/AdminExecutionReadinessPage.jsx`
+
+### Self-test kanıtları (ek)
+- `/app/test_reports/p2_hardening_policy_selftest.json`
+- `/app/test_reports/p2_hardening_service_level_probe.json`
+- `/app/test_reports/p2_hardening_frontend_wiring.json`
+- `/app/test_reports/p2_operator_hardening_wiring_v2.json`
+
+### Not
+- Preview auth/device koruma nedeniyle bazı API çağrılarında `session_device_mismatch` görülebilir; bu yüzden ek doğrulama service-level probe ile de yapılmıştır.
+
 ## 2026-03-29 — P2 Sprint-A + Sprint-B (Operasyonel Zeka ve Müdahale Hızlandırma)
 
 ### Uygulanan kapsam (kilitli scope)

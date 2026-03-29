@@ -15,9 +15,14 @@ export const AdminExecutionOperatorCenterPage = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [playbookLoadingIntentId, setPlaybookLoadingIntentId] = useState("");
+  const [policyTenantIdInput, setPolicyTenantIdInput] = useState("tenant-alpha");
+  const [policyTenantEnabled, setPolicyTenantEnabled] = useState(true);
   const [highConfirmModal, setHighConfirmModal] = useState({ open: false, action: "", intentIds: [] });
 
   const topAnomalies = useMemo(() => centerData?.top_risky_intents || [], [centerData?.top_risky_intents]);
+  const autoPolicy = useMemo(() => centerData?.auto_remediation_policy || null, [centerData?.auto_remediation_policy]);
+  const opsMetrics = useMemo(() => centerData?.ops_metrics || null, [centerData?.ops_metrics]);
 
   const loadOperatorCenter = useCallback(async () => {
     setLoading(true);
@@ -40,13 +45,6 @@ export const AdminExecutionOperatorCenterPage = () => {
     loadOperatorCenter();
   }, [loadOperatorCenter]);
 
-  useEffect(() => {
-    const intentFromQuery = new URLSearchParams(window.location.search).get("intent_id");
-    if (intentFromQuery) {
-      loadDrilldown(intentFromQuery);
-    }
-  }, [loadDrilldown]);
-
   const loadDrilldown = useCallback(async (intentId) => {
     if (!intentId) {
       toast.error("Drilldown için intent_id gerekli");
@@ -62,17 +60,86 @@ export const AdminExecutionOperatorCenterPage = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const intentFromQuery = new URLSearchParams(window.location.search).get("intent_id");
+    if (intentFromQuery) {
+      loadDrilldown(intentFromQuery);
+    }
+  }, [loadDrilldown]);
+
   const selectAll = useMemo(() => {
     const visibleIds = topAnomalies.map((item) => item.intent_id).filter(Boolean);
     if (!visibleIds.length) return false;
     return visibleIds.every((intentId) => selectedIntentIds.includes(intentId));
   }, [topAnomalies, selectedIntentIds]);
+  const selectedRows = useMemo(
+    () => topAnomalies.filter((item) => selectedIntentIds.includes(item.intent_id)),
+    [topAnomalies, selectedIntentIds]
+  );
+  const bulkGuard = useMemo(() => {
+    const resolveAllowed = (actionKey) => {
+      if (!selectedRows.length) return true;
+      return selectedRows.some((row) => (row.allowed_actions || []).includes(actionKey));
+    };
+    return {
+      retry: resolveAllowed("retry"),
+      reconcile: resolveAllowed("reconcile"),
+      cancel: resolveAllowed("cancel"),
+      escalate: resolveAllowed("escalate"),
+    };
+  }, [selectedRows]);
 
   const resolveIntentSelection = useCallback((intentIds = []) => {
     const provided = Array.isArray(intentIds) ? intentIds.filter(Boolean) : [];
     if (provided.length) return Array.from(new Set(provided));
     return Array.from(new Set(selectedIntentIds.filter(Boolean)));
   }, [selectedIntentIds]);
+
+  const getExecutableIntentIds = useCallback((actionKey, intentIds = []) => {
+    const selectedRows = topAnomalies.filter((item) => intentIds.includes(item.intent_id));
+    const executableRows = selectedRows.filter((item) => (item.allowed_actions || []).includes(actionKey));
+    return {
+      executableIds: executableRows.map((row) => row.intent_id).filter(Boolean),
+      selectedRows,
+      blockedCount: selectedRows.length - executableRows.length,
+    };
+  }, [topAnomalies]);
+
+  const handleAutoRemediationPolicySave = useCallback(async () => {
+    if (!autoPolicy) return;
+    setActionLoading(true);
+    try {
+      await apiClient.post("/execution-safety/auto-remediation/policy", {
+        global_default_enabled: false,
+        low_auto_retry_max_retry_count: 1,
+        high_requires_manual_confirmation: true,
+      });
+      toast.success("Auto remediation policy güncellendi");
+      await loadOperatorCenter();
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.detail || "Policy güncellenemedi");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [autoPolicy, loadOperatorCenter]);
+
+  const handleTenantOptInUpdate = useCallback(async () => {
+    const tenantId = String(policyTenantIdInput || "").trim().toLowerCase();
+    if (!tenantId) {
+      toast.error("tenant_id zorunlu");
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await apiClient.post(`/execution-safety/auto-remediation/tenant/${encodeURIComponent(tenantId)}?enabled=${policyTenantEnabled ? "true" : "false"}`);
+      toast.success("Tenant rollout güncellendi");
+      await loadOperatorCenter();
+    } catch (requestError) {
+      toast.error(requestError?.response?.data?.detail || "Tenant rollout güncellenemedi");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [loadOperatorCenter, policyTenantEnabled, policyTenantIdInput]);
 
   const executeQuickAction = useCallback(async (actionKey, directIntentIds = []) => {
     const endpointMap = {
@@ -93,10 +160,18 @@ export const AdminExecutionOperatorCenterPage = () => {
       return;
     }
 
-    const selectedRows = topAnomalies.filter((item) => intentIds.includes(item.intent_id));
+    const { executableIds, selectedRows, blockedCount } = getExecutableIntentIds(actionKey, intentIds);
+    if (blockedCount > 0) {
+      toast.warning(`${blockedCount} intent guard matrisi nedeniyle aksiyondan çıkarıldı.`);
+    }
+    if (!executableIds.length) {
+      toast.error("Seçili intentler için aksiyon izinli değil.");
+      return;
+    }
+
     const hasHigh = selectedRows.some((item) => String(item.severity_level || item.severity || "").toUpperCase() === "HIGH");
     if (hasHigh && !highConfirmModal.open) {
-      setHighConfirmModal({ open: true, action: actionKey, intentIds });
+      setHighConfirmModal({ open: true, action: actionKey, intentIds: executableIds });
       return;
     }
 
@@ -104,8 +179,8 @@ export const AdminExecutionOperatorCenterPage = () => {
     try {
       await apiClient.post(endpoint, {
         selection_mode: "explicit_ids",
-        intent_ids: intentIds,
-        limit: Math.max(intentIds.length, 1),
+        intent_ids: executableIds,
+        limit: Math.max(executableIds.length, 1),
         reason: `operator_center_${actionKey}`,
         requested_by: "admin-ui",
       });
@@ -121,7 +196,40 @@ export const AdminExecutionOperatorCenterPage = () => {
     } finally {
       setActionLoading(false);
     }
-  }, [drilldownIntentId, highConfirmModal.open, loadDrilldown, loadOperatorCenter, resolveIntentSelection, topAnomalies]);
+  }, [drilldownIntentId, getExecutableIntentIds, highConfirmModal.open, loadDrilldown, loadOperatorCenter, resolveIntentSelection]);
+
+  const handlePlaybookOneClick = useCallback(async (anomalyItem) => {
+    const intentId = anomalyItem?.intent_id;
+    if (!intentId) {
+      toast.error("Playbook execute için intent_id gerekli");
+      return;
+    }
+    const primaryAction = String(
+      anomalyItem?.playbook_primary_action
+        || (anomalyItem?.recommended_actions || [])[0]?.action
+        || ""
+    )
+      .replace("bulk_", "")
+      .trim()
+      .toLowerCase();
+
+    if (!primaryAction) {
+      toast.error("Playbook için uygulanabilir aksiyon bulunamadı");
+      return;
+    }
+
+    if (!(anomalyItem?.allowed_actions || []).includes(primaryAction)) {
+      toast.error(`Playbook aksiyonu guard nedeniyle bloklu: ${primaryAction}`);
+      return;
+    }
+
+    setPlaybookLoadingIntentId(intentId);
+    try {
+      await executeQuickAction(primaryAction, [intentId]);
+    } finally {
+      setPlaybookLoadingIntentId("");
+    }
+  }, [executeQuickAction]);
 
   return (
     <section className="space-y-4" data-testid="execution-operator-center-page">
@@ -187,11 +295,14 @@ export const AdminExecutionOperatorCenterPage = () => {
               </label>
               <p className="text-[11px] text-slate-400" data-testid="execution-operator-center-high-confirm-rule">HIGH için modal zorunlu</p>
             </div>
+            <p className="mt-1 text-[11px] text-slate-500" data-testid="execution-operator-center-quick-actions-guard-note">
+              Guard matrix aktif: immutable intentlerde sadece escalate izinli.
+            </p>
             <div className="mt-2 flex flex-wrap gap-2" data-testid="execution-operator-center-quick-actions-buttons">
-              <Button size="sm" variant="outline" disabled={actionLoading} onClick={() => executeQuickAction("retry")} data-testid="execution-operator-center-quick-action-retry-button">Retry</Button>
-              <Button size="sm" variant="outline" disabled={actionLoading} onClick={() => executeQuickAction("reconcile")} data-testid="execution-operator-center-quick-action-reconcile-button">Reconcile</Button>
-              <Button size="sm" variant="outline" disabled={actionLoading} onClick={() => executeQuickAction("cancel")} data-testid="execution-operator-center-quick-action-cancel-button">Cancel</Button>
-              <Button size="sm" variant="outline" disabled={actionLoading} onClick={() => executeQuickAction("escalate")} data-testid="execution-operator-center-quick-action-escalate-button">Escalate</Button>
+              <Button size="sm" variant="outline" disabled={actionLoading || !bulkGuard.retry} onClick={() => executeQuickAction("retry")} data-testid="execution-operator-center-quick-action-retry-button">Retry</Button>
+              <Button size="sm" variant="outline" disabled={actionLoading || !bulkGuard.reconcile} onClick={() => executeQuickAction("reconcile")} data-testid="execution-operator-center-quick-action-reconcile-button">Reconcile</Button>
+              <Button size="sm" variant="outline" disabled={actionLoading || !bulkGuard.cancel} onClick={() => executeQuickAction("cancel")} data-testid="execution-operator-center-quick-action-cancel-button">Cancel</Button>
+              <Button size="sm" variant="outline" disabled={actionLoading || !bulkGuard.escalate} onClick={() => executeQuickAction("escalate")} data-testid="execution-operator-center-quick-action-escalate-button">Escalate</Button>
             </div>
           </div>
 
@@ -227,13 +338,34 @@ export const AdminExecutionOperatorCenterPage = () => {
                 <p className="text-xs text-slate-300" data-testid={`execution-operator-center-top-anomaly-item-score-${index}`}>severity_score: {item.severity_score ?? item.risk_score}</p>
                 <p className="text-xs text-slate-300" data-testid={`execution-operator-center-top-anomaly-item-priority-${index}`}>priority: {item.priority}</p>
                 <p className="text-xs text-slate-300" data-testid={`execution-operator-center-top-anomaly-item-intent-${index}`}>intent_id: {item.intent_id || "-"}</p>
+                <p className="text-xs text-slate-300" data-testid={`execution-operator-center-top-anomaly-item-guard-reason-${index}`}>guard_reason: {item.action_guard?.reason || "-"}</p>
                 <p className="text-xs text-amber-200" data-testid={`execution-operator-center-top-anomaly-item-reason-${index}`}>reason: {item.reason || "-"}</p>
+                <p className="text-xs text-emerald-200" data-testid={`execution-operator-center-top-anomaly-item-auto-remediation-${index}`}>
+                  auto_remediation: {item.auto_remediation?.mode || "manual"} / eligible={String(!!item.auto_remediation?.eligible)} / tenant={item.auto_remediation?.tenant_id || "default"}
+                </p>
                 <div className="mt-1 space-y-1" data-testid={`execution-operator-center-top-anomaly-item-recommended-actions-${index}`}>
                   {(item.recommended_actions || []).map((rec, recIdx) => (
                     <p key={`${rec.action}-${recIdx}`} className="text-[11px] text-cyan-200" data-testid={`execution-operator-center-top-anomaly-item-recommended-action-${index}-${recIdx}`}>
                       {rec.action} ({rec.confidence}) - {rec.reason}
                     </p>
                   ))}
+                </div>
+                <div className="mt-2" data-testid={`execution-operator-center-top-anomaly-item-playbook-wrapper-${index}`}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handlePlaybookOneClick(item)}
+                    disabled={
+                      actionLoading
+                      || playbookLoadingIntentId === item.intent_id
+                      || !item.intent_id
+                      || !item.playbook_primary_action
+                      || !(item.allowed_actions || []).includes(item.playbook_primary_action)
+                    }
+                    data-testid={`execution-operator-center-top-anomaly-item-playbook-button-${index}`}
+                  >
+                    Playbook Tek Tık ({item.playbook_primary_action || "n/a"})
+                  </Button>
                 </div>
               </div>
             ))}
@@ -258,6 +390,78 @@ export const AdminExecutionOperatorCenterPage = () => {
               </p>
             ))}
             {!(centerData?.recommended_actions || []).length && <p className="mt-1 text-xs text-slate-500" data-testid="execution-operator-center-recommendation-rollup-empty">Öneri rollup yok.</p>}
+          </article>
+
+          <article className="rounded-lg border border-slate-700 bg-slate-900 p-3" data-testid="execution-operator-center-ops-metrics-card">
+            <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-operator-center-ops-metrics-title">Ops Metrics</h3>
+            <p className="mt-1 text-xs text-slate-300" data-testid="execution-operator-center-ops-metrics-mtti">mean_time_to_intervention_sec: {opsMetrics?.mean_time_to_intervention_sec ?? 0}</p>
+            <p className="text-xs text-slate-300" data-testid="execution-operator-center-ops-metrics-success-ratio">action_success_ratio: {opsMetrics?.action_success_ratio ?? 0}</p>
+            <div className="mt-2 space-y-1" data-testid="execution-operator-center-ops-metrics-success-series">
+              {(opsMetrics?.action_success_series || []).slice(-5).map((row, index) => (
+                <div key={`${row.date}-${index}`} data-testid={`execution-operator-center-ops-metrics-success-series-item-${index}`}>
+                  <p className="text-[11px] text-cyan-200">{row.date}: ratio={row.success_ratio} ({row.successful_actions}/{row.total_actions})</p>
+                  <div className="h-1.5 w-full rounded bg-slate-800" data-testid={`execution-operator-center-ops-metrics-success-series-bar-track-${index}`}>
+                    <div
+                      className="h-1.5 rounded bg-cyan-400"
+                      style={{ width: `${Math.min(Math.max(Number(row.success_ratio || 0), 0), 1) * 100}%` }}
+                      data-testid={`execution-operator-center-ops-metrics-success-series-bar-fill-${index}`}
+                    />
+                  </div>
+                </div>
+              ))}
+              {!(opsMetrics?.action_success_series || []).length && <p className="text-[11px] text-slate-500" data-testid="execution-operator-center-ops-metrics-success-series-empty">Success ratio serisi yok.</p>}
+            </div>
+            <div className="mt-2 space-y-1" data-testid="execution-operator-center-ops-metrics-mtti-series">
+              {(opsMetrics?.mtti_series || []).slice(-5).map((row, index) => (
+                <div key={`${row.date}-${index}`} data-testid={`execution-operator-center-ops-metrics-mtti-series-item-${index}`}>
+                  <p className="text-[11px] text-amber-200">{row.date}: mtti={row.mean_time_to_intervention_sec}s (samples={row.sample_count})</p>
+                  <div className="h-1.5 w-full rounded bg-slate-800" data-testid={`execution-operator-center-ops-metrics-mtti-series-bar-track-${index}`}>
+                    <div
+                      className="h-1.5 rounded bg-amber-400"
+                      style={{ width: `${Math.min(Number(row.mean_time_to_intervention_sec || 0) / 600, 1) * 100}%` }}
+                      data-testid={`execution-operator-center-ops-metrics-mtti-series-bar-fill-${index}`}
+                    />
+                  </div>
+                </div>
+              ))}
+              {!(opsMetrics?.mtti_series || []).length && <p className="text-[11px] text-slate-500" data-testid="execution-operator-center-ops-metrics-mtti-series-empty">MTTI serisi yok.</p>}
+            </div>
+          </article>
+
+          <article className="rounded-lg border border-slate-700 bg-slate-900 p-3" data-testid="execution-operator-center-auto-remediation-policy-card">
+            <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-operator-center-auto-remediation-policy-title">Auto Remediation Policy</h3>
+            <p className="mt-1 text-xs text-slate-300" data-testid="execution-operator-center-auto-remediation-policy-global-default">global_default_enabled: {String(!!autoPolicy?.global_default_enabled)}</p>
+            <p className="text-xs text-slate-300" data-testid="execution-operator-center-auto-remediation-policy-low-threshold">LOW auto retry threshold: retry_count &lt; 2</p>
+            <p className="text-xs text-slate-300" data-testid="execution-operator-center-auto-remediation-policy-high-manual">HIGH manual confirmation: {String(!!autoPolicy?.high_requires_manual_confirmation)}</p>
+            <Button className="mt-2" size="sm" variant="outline" onClick={handleAutoRemediationPolicySave} disabled={actionLoading} data-testid="execution-operator-center-auto-remediation-policy-save-button">Policy Kaydet</Button>
+
+            <div className="mt-3 space-y-2" data-testid="execution-operator-center-auto-remediation-policy-tenant-form">
+              <label className="text-xs text-slate-300" data-testid="execution-operator-center-auto-remediation-policy-tenant-id-label">tenant_id</label>
+              <input
+                value={policyTenantIdInput}
+                onChange={(event) => setPolicyTenantIdInput(event.target.value)}
+                className="w-full rounded border border-slate-600 bg-slate-950 px-2 py-1 text-xs text-white"
+                data-testid="execution-operator-center-auto-remediation-policy-tenant-id-input"
+              />
+              <label className="flex items-center gap-2 text-xs text-slate-300" data-testid="execution-operator-center-auto-remediation-policy-tenant-enabled-wrapper">
+                <input
+                  type="checkbox"
+                  checked={policyTenantEnabled}
+                  onChange={(event) => setPolicyTenantEnabled(event.target.checked)}
+                  data-testid="execution-operator-center-auto-remediation-policy-tenant-enabled-checkbox"
+                />
+                tenant opt-in enabled
+              </label>
+              <Button size="sm" variant="outline" onClick={handleTenantOptInUpdate} disabled={actionLoading} data-testid="execution-operator-center-auto-remediation-policy-tenant-save-button">Tenant Rollout Güncelle</Button>
+            </div>
+            <div className="mt-3 space-y-1" data-testid="execution-operator-center-auto-remediation-policy-tenant-list">
+              {Object.entries(autoPolicy?.tenants || {}).map(([tenantKey, tenantPayload], index) => (
+                <p key={tenantKey} className="text-[11px] text-slate-300" data-testid={`execution-operator-center-auto-remediation-policy-tenant-item-${index}`}>
+                  {tenantKey}: enabled={String(!!tenantPayload?.enabled)}
+                </p>
+              ))}
+              {!Object.keys(autoPolicy?.tenants || {}).length && <p className="text-[11px] text-slate-500" data-testid="execution-operator-center-auto-remediation-policy-tenant-empty">Henüz opt-in tenant tanımlı değil.</p>}
+            </div>
           </article>
 
           <article className="rounded-lg border border-slate-700 bg-slate-900 p-3" data-testid="execution-operator-center-recent-failures-card">

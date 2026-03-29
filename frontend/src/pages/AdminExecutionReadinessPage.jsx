@@ -486,9 +486,22 @@ export const AdminExecutionReadinessPage = () => {
       }
 
       const matchedItems = anomaliesList.filter((item) => intentIds.includes(item.intent_id));
+      const executableIds = matchedItems
+        .filter((item) => (item.allowed_actions || []).includes(actionKey))
+        .map((item) => item.intent_id)
+        .filter(Boolean);
+      const blockedCount = matchedItems.length - executableIds.length;
+      if (blockedCount > 0) {
+        toast.warning(`${blockedCount} intent için ${actionKey.toUpperCase()} guard nedeniyle bloklandı.`);
+      }
+      if (!executableIds.length) {
+        toast.error("Seçili intentler için bu aksiyon şu an izinli değil.");
+        return;
+      }
+
       const hasHighSeverity = matchedItems.some((item) => String(item.severity_level || item.severity || "").toUpperCase() === "HIGH");
       if (hasHighSeverity && !quickActionModal.open) {
-        setQuickActionModal({ open: true, action: actionKey, intentIds });
+        setQuickActionModal({ open: true, action: actionKey, intentIds: executableIds });
         return;
       }
       if (!hasHighSeverity) {
@@ -498,8 +511,8 @@ export const AdminExecutionReadinessPage = () => {
       await runAction(async () => {
         const payload = {
           selection_mode: "explicit_ids",
-          intent_ids: intentIds,
-          limit: Math.max(intentIds.length, 1),
+          intent_ids: executableIds,
+          limit: Math.max(executableIds.length, 1),
           reason: `anomaly_quick_action_${actionKey}`,
           requested_by: "admin-ui",
         };
@@ -1180,6 +1193,7 @@ export const AdminExecutionReadinessPage = () => {
                   <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-risk-${index}`}>severity_score: {item.severity_score ?? item.risk_score}</p>
                   <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-impact-${index}`}>impact: {item.impact || "-"}</p>
                   <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-priority-${index}`}>priority: {item.priority ?? "-"}</p>
+                  <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-guard-reason-${index}`}>guard_reason: {item.action_guard?.reason || "-"}</p>
                   <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-intent-${index}`}>intent_id: {item.intent_id || "-"}</p>
                   <p className="text-xs text-slate-300" data-testid={`execution-safety-p1-anomaly-item-detected-at-${index}`}>detected_at: {item.detected_at || "-"}</p>
                   <p className="text-xs text-amber-200" data-testid={`execution-safety-p1-anomaly-item-reason-${index}`}>reason: {item.reason || "-"}</p>
@@ -1201,10 +1215,10 @@ export const AdminExecutionReadinessPage = () => {
                     >
                       Drilldown
                     </a>
-                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("retry", [item.intent_id])} disabled={actionLoading || !item.intent_id} data-testid={`execution-safety-p1-anomaly-item-inline-retry-${index}`}>Retry</Button>
-                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("reconcile", [item.intent_id])} disabled={actionLoading || !item.intent_id} data-testid={`execution-safety-p1-anomaly-item-inline-reconcile-${index}`}>Reconcile</Button>
-                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("cancel", [item.intent_id])} disabled={actionLoading || !item.intent_id} data-testid={`execution-safety-p1-anomaly-item-inline-cancel-${index}`}>Cancel</Button>
-                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("escalate", [item.intent_id])} disabled={actionLoading || !item.intent_id} data-testid={`execution-safety-p1-anomaly-item-inline-escalate-${index}`}>Escalate</Button>
+                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("retry", [item.intent_id])} disabled={actionLoading || !item.intent_id || !(item.allowed_actions || []).includes("retry")} data-testid={`execution-safety-p1-anomaly-item-inline-retry-${index}`}>Retry</Button>
+                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("reconcile", [item.intent_id])} disabled={actionLoading || !item.intent_id || !(item.allowed_actions || []).includes("reconcile")} data-testid={`execution-safety-p1-anomaly-item-inline-reconcile-${index}`}>Reconcile</Button>
+                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("cancel", [item.intent_id])} disabled={actionLoading || !item.intent_id || !(item.allowed_actions || []).includes("cancel")} data-testid={`execution-safety-p1-anomaly-item-inline-cancel-${index}`}>Cancel</Button>
+                    <Button size="sm" variant="outline" onClick={() => executeAnomalyQuickAction("escalate", [item.intent_id])} disabled={actionLoading || !item.intent_id || !(item.allowed_actions || []).includes("escalate")} data-testid={`execution-safety-p1-anomaly-item-inline-escalate-${index}`}>Escalate</Button>
                   </div>
                 </div>
               ))}

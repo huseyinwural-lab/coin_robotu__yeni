@@ -40,10 +40,13 @@ from services.execution_safety_p1_service import (
     analytics_gate_failures,
     analytics_recovery,
     detect_false_decisions,
+    get_auto_remediation_policy,
     get_correlation_drilldown,
     get_operator_center_snapshot,
     run_execution_simulation,
+    set_auto_remediation_tenant_opt_in,
     stream_analytics_csv,
+    update_auto_remediation_policy,
 )
 
 
@@ -180,6 +183,40 @@ def execution_safety_operator_center(
 ):
     _ = current_user
     return get_operator_center_snapshot(db, window=window, limit=limit)
+
+
+@router.get("/auto-remediation/policy")
+def execution_safety_auto_remediation_policy(
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    return get_auto_remediation_policy()
+
+
+@router.post("/auto-remediation/policy")
+def execution_safety_auto_remediation_policy_update(
+    payload: dict = Body(default={}),
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    return update_auto_remediation_policy(
+        global_default_enabled=payload.get("global_default_enabled"),
+        low_auto_retry_max_retry_count=payload.get("low_auto_retry_max_retry_count"),
+        high_requires_manual_confirmation=payload.get("high_requires_manual_confirmation"),
+    )
+
+
+@router.post("/auto-remediation/tenant/{tenant_id}")
+def execution_safety_auto_remediation_tenant_update(
+    tenant_id: str,
+    enabled: bool = Query(...),
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    try:
+        return set_auto_remediation_tenant_opt_in(tenant_id=tenant_id, enabled=enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/anomalies/drilldown/{intent_id}")

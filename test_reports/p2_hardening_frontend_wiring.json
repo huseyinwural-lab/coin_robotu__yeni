@@ -1,0 +1,14 @@
+{
+  "total": 7,
+  "passed": 7,
+  "failed": [],
+  "checks": {
+    "operator_guard_note": true,
+    "operator_playbook_button": true,
+    "operator_policy_card": true,
+    "operator_policy_tenant_save": true,
+    "operator_ops_metrics_card": true,
+    "readiness_guard_reason": true,
+    "readiness_bulk_guard_warning": true
+  }
+}
