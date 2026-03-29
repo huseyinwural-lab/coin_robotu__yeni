@@ -1,0 +1,157 @@
+{
+  "artifact_id": "risk-snapshot-pre-trade-after-971d90ab37cb",
+  "generated_at": "2026-03-29T12:03:09Z",
+  "snapshot_type": "post-trade",
+  "stage": "pre-trade-after",
+  "payload": {
+    "user_id": "test-user",
+    "generated_at": "2026-03-29T12:03:09Z",
+    "ruleset": "binance",
+    "account": {
+      "equity": 10000.0,
+      "used_margin": 0.0,
+      "free_collateral": 10000.0,
+      "portfolio_id": "simulated-portfolio"
+    },
+    "positions": [
+      {
+        "symbol": "SOLUSDT",
+        "side": "LONG",
+        "quantity": 25.0,
+        "entry_price": 185.0,
+        "mark_price": 185.0,
+        "leverage": 10,
+        "margin_mode": "cross",
+        "strategy_id": "trend_alpha",
+        "isolated_margin": 0.0
+      }
+    ],
+    "liquidation": {
+      "positions": [
+        {
+          "symbol": "SOLUSDT",
+          "side": "LONG",
+          "margin_mode": "cross",
+          "leverage": 10,
+          "entry_price": 185.0,
+          "mark_price": 185.0,
+          "quantity": 25.0,
+          "notional": 4625.0,
+          "initial_margin": 462.5,
+          "maintenance_margin": 43.9375,
+          "maintenance_margin_rate": 0.0095,
+          "unrealized_pnl": 0.0,
+          "margin_ratio": 227.322333,
+          "liquidation_price": 0.0001,
+          "liquidation_buffer_pct": 99.999946
+        }
+      ],
+      "min_liquidation_buffer_pct": 99.999946,
+      "avg_margin_ratio": 227.322333
+    },
+    "portfolio": {
+      "gross_exposure": 4625.0,
+      "net_exposure": 4625.0,
+      "directional_exposure": {
+        "long": 4625.0,
+        "short": 0,
+        "hedged_notional": 0,
+        "hedged_ratio": 0.0
+      },
+      "effective_leverage": 0.4625,
+      "symbol_exposure": [
+        {
+          "symbol": "SOLUSDT",
+          "notional": 4625.0
+        }
+      ],
+      "strategy_exposure": [
+        {
+          "strategy_id": "trend_alpha",
+          "notional": 4625.0
+        }
+      ]
+    },
+    "capital": {
+      "equity": 10000.0,
+      "used_margin": 462.5,
+      "free_collateral": 9537.5,
+      "margin_usage_pct": 4.625,
+      "strategy_allocation": [
+        {
+          "strategy_id": "trend_alpha",
+          "capital_share_pct": 46.25,
+          "risk_budget_pct": 25.0,
+          "breach": true
+        }
+      ],
+      "risk_budget_breach_count": 1
+    },
+    "cluster": {
+      "risk_state": "NORMAL",
+      "cluster_exposures": [],
+      "cluster_alerts": []
+    },
+    "tail": {
+      "risk_state": "NORMAL",
+      "tail_risk_score": 0.0,
+      "historical_var_95": 0.0,
+      "historical_cvar_95": 0.0,
+      "stress_scenarios": [
+        {
+          "name": "major_coin_shock",
+          "shock_pct": -0.12
+        },
+        {
+          "name": "alt_correlation_spike",
+          "shock_pct": -0.18
+        },
+        {
+          "name": "market_wide_drawdown",
+          "shock_pct": -0.22
+        },
+        {
+          "name": "liquidity_deterioration",
+          "shock_pct": -0.09
+        }
+      ],
+      "active_alerts": []
+    },
+    "global_risk_state": "HIGH",
+    "state_machine": [
+      "NORMAL",
+      "WARN",
+      "HIGH",
+      "CRITICAL",
+      "BLOCKED"
+    ],
+    "execution_policy": {
+      "state": "HIGH",
+      "block_new_orders": false,
+      "reduce_size_multiplier": 0.6,
+      "reduce_leverage_to": 3,
+      "pause_strategy": true,
+      "kill_switch_triggered": false,
+      "decision": "REDUCE_RISK"
+    },
+    "explainability": {
+      "decision": "REDUCE_RISK",
+      "triggers": [
+        "liquidation_buffer_high",
+        "risk_budget_breach"
+      ],
+      "input_summary": {
+        "position_count": 1,
+        "equity": 10000.0,
+        "ruleset": "binance",
+        "snapshot_type": "post-trade",
+        "stage": "pre-trade-after"
+      },
+      "timestamp": "2026-03-29T12:03:09Z"
+    },
+    "orchestrator_contract": {
+      "single_entry": "risk_orchestrator",
+      "hard_rule": "no_module_can_emit_execution_policy_directly"
+    }
+  }
+}

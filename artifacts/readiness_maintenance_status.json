@@ -1,9 +1,9 @@
 {
   "status": "success",
   "trigger": "scheduler",
-  "started_at": "2026-03-29T11:49:29.935296+00:00",
-  "finished_at": "2026-03-29T11:49:31.071487+00:00",
-  "last_success_at": "2026-03-29T11:49:31.071492+00:00",
+  "started_at": "2026-03-29T12:06:03.746506+00:00",
+  "finished_at": "2026-03-29T12:06:04.939458+00:00",
+  "last_success_at": "2026-03-29T12:06:04.939462+00:00",
   "retry_in_seconds": null,
   "reason_code": null,
   "result": {
@@ -13,11 +13,11 @@
       "cleanup_batch_size": 1000
     },
     "dry_run": false,
-    "detail_cutoff": "2026-02-27T11:49:29.935322+00:00",
-    "aggregate_cutoff": "2025-12-29T11:49:29.935322+00:00",
+    "detail_cutoff": "2026-02-27T12:06:03.746537+00:00",
+    "aggregate_cutoff": "2025-12-29T12:06:03.746537+00:00",
     "deleted_detail_rows": 0,
     "deleted_aggregate_rows": 0,
     "daily_summary_rows_upserted": 0,
-    "maintenance_generated_at": "2026-03-29T11:49:29.935322+00:00"
+    "maintenance_generated_at": "2026-03-29T12:06:03.746537+00:00"
   }
 }

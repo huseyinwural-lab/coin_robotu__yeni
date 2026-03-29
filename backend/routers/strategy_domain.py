@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
-from db import get_db
+from db import get_db, redis_client
 from deps import require_admin, require_super_admin
 from models import (
     DecisionTraceCold,
@@ -169,6 +169,13 @@ from services.strategy_domain_service import (
     run_strategy_version_dry_run,
     set_strategy_rollout_stage,
     validate_strategy_version_config,
+)
+from services.unified_risk_core_service import (
+    jira_epic_breakdown,
+    list_risk_snapshot_manifest,
+    list_rulesets,
+    run_unified_risk_orchestrator,
+    simulate_pre_trade_risk,
 )
 
 
@@ -2452,6 +2459,68 @@ def admin_stuck_intent_action(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/admin/risk-orchestrator/unified-core/rulesets")
+def admin_unified_risk_rulesets(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return list_rulesets()
+
+
+@router.post("/admin/risk-orchestrator/unified-core/evaluate")
+def admin_unified_risk_evaluate(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    # Hard rule: execution kararı yalnız risk_orchestrator entrypoint'inden çıkar.
+    target_user_id = str(payload.get("user_id") or current_admin.id)
+    return run_unified_risk_orchestrator(
+        db=db,
+        cache=redis_client,
+        user_id=target_user_id,
+        ruleset=str(payload.get("ruleset") or "binance"),
+        input_state=payload.get("input_state") if isinstance(payload.get("input_state"), dict) else None,
+        snapshot_type=str(payload.get("snapshot_type") or "portfolio-level"),
+        stage=str(payload.get("stage") or "pre-trade"),
+        actor_id=current_admin.id,
+        persist_artifact=bool(payload.get("persist_artifact", True)),
+    )
+
+
+@router.post("/admin/risk-orchestrator/unified-core/pre-trade-simulate")
+def admin_unified_risk_pre_trade_simulation(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    proposed_order = payload.get("proposed_order") if isinstance(payload.get("proposed_order"), dict) else None
+    if not proposed_order:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="proposed_order_required")
+    target_user_id = str(payload.get("user_id") or current_admin.id)
+    return simulate_pre_trade_risk(
+        db=db,
+        cache=redis_client,
+        user_id=target_user_id,
+        proposed_order=proposed_order,
+        ruleset=str(payload.get("ruleset") or "binance"),
+        actor_id=current_admin.id,
+    )
+
+
+@router.get("/admin/risk-orchestrator/unified-core/snapshots")
+def admin_unified_risk_snapshots(
+    limit: int = 100,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    return list_risk_snapshot_manifest(limit=limit)
+
+
+@router.get("/admin/risk-orchestrator/unified-core/jira-breakdown")
+def admin_unified_risk_jira_breakdown(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return jira_epic_breakdown()
 
 
 @router.get("/admin/risk-orchestrator/analytics", response_model=RiskOrchestratorAnalyticsResponse)

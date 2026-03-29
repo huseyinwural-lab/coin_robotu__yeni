@@ -1,3 +1,45 @@
+## 2026-03-29 — UNIFIED RISK CORE Sprint-1 (P0 Full + P2 Orchestrator Skeleton)
+
+### Kilitlenen kararlar (uygulandı)
+- Sprint-1 kapsamı: **P0 full + P2 orchestrator skeleton (erken)**
+- Default ruleset: **Binance-benzeri primary**, Bybit secondary adapter
+- Veri politikası: **önce mevcut artifact/manifest**, eksikse minimal sample
+- Hard constraint: **hiçbir modül execution kararını direkt vermez; tüm kararlar `risk_orchestrator` entrypoint üzerinden çıkar**
+
+### Yeni servis / endpoint teslimi
+- Yeni servis: `/app/backend/services/unified_risk_core_service.py`
+  - Canonical unified risk model (account, position, symbol exposure, capital, risk state)
+  - Position liquidation engine (cross/isolated, maintenance margin, margin ratio, liq price, liq buffer)
+  - Portfolio + capital governance
+  - Cluster/tail skeleton entegrasyonu (replay + mevcut risk servisleri)
+  - Unified risk state machine: NORMAL/WARN/HIGH/CRITICAL/BLOCKED
+  - Risk→execution policy object (block/reduce/pause/kill-switch)
+  - Snapshot artifact üretimi (pre/post/portfolio) + manifest
+  - Pre-trade simulation (before/after impact)
+  - Jira epic/task breakdown üretimi
+
+- Yeni admin endpointleri (`/api/strategy-domain/admin/risk-orchestrator/unified-core/*`):
+  - `GET /rulesets`
+  - `POST /evaluate`
+  - `POST /pre-trade-simulate`
+  - `GET /snapshots`
+  - `GET /jira-breakdown`
+
+- Jira dökümanı: `/app/memory/JIRA_UNIFIED_RISK_CORE.md`
+
+### Test & doğrulama
+- Unit test: `/app/backend/tests/test_unified_risk_core_sprint1.py` (**3 passed**)
+- API self-test: `/app/test_reports/unified_risk_core_api_selftest.json`
+  - rulesets/evaluate/simulate/snapshots/jira endpointleri 200 doğrulandı
+
+### Sprint-1 kabul karşılığı (özet)
+- Pozisyon bazında liquidation price + margin ratio + liquidation buffer üretildi
+- Cross/isolated davranış ayrıştırıldı
+- Portfolio gross/net/directional/effective leverage üretildi
+- Global risk state tek modelden üretildi ve execution policy değişimi sağlandı
+- Pre-trade/post-trade/portfolio snapshot artifact üretimi sağlandı
+- Live exchange / live order olmadan simulation+replay ile doğrulandı
+
 ## 2026-03-29 — P2 Hardening + Policy Engine + One-Click Playbook Execution
 
 ### Tamamlanan ek kapsam (kullanıcı kilitli politika ile)
