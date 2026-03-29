@@ -1,3 +1,87 @@
+## 2026-03-29 — LEARNING & ADAPTIVE CONTROL CORE (Adaptive Logic + Portfolio Simulation)
+
+### Kapsam
+- Bu turda UI’a girilmedi.
+- Öncelik backend karar yaşam döngüsü, replay-assisted simulator ve adaptive recommendation logic oldu.
+
+### Route-level decision lifecycle tamamlandı
+- Yeni / tamamlanan admin learning route’ları:
+  - `POST /api/admin/learning/recommendations/{id}/simulate`
+  - `POST /api/admin/learning/recommendations/{id}/approve`
+  - `POST /api/admin/learning/recommendations/{id}/reject`
+  - `POST /api/admin/learning/recommendations/{id}/apply`
+  - `POST /api/admin/learning/recommendations/{id}/rollback`
+  - `GET /api/admin/learning/recommendations/{id}/version-history`
+  - `GET /api/admin/learning/recommendations/{id}/post-change-monitoring`
+- Her lifecycle adımında route/audit seviyesinde aşağıdaki alanlar taşınıyor:
+  - `actor`
+  - `timestamp`
+  - `reason`
+  - `recommendation_id`
+  - `version_ref`
+  - `before_payload`
+  - `after_payload`
+
+### Replay-assisted simulation contract yükseltildi
+- `simulate-impact` artık portfolio-style input alıyor:
+  - `strategy_ids`
+  - `symbol_cluster`
+  - `scenario` (`base`, `stressed`, `high_volatility`, `low_liquidity`)
+- Yeni response blokları:
+  - `baseline_metrics`
+  - `projected_metrics`
+  - `delta_metrics`
+  - `sample_coverage`
+  - `portfolio_impact`
+  - `interaction_effects`
+  - `risk_aware_view`
+- Amaç: “uygulanmasaydı / uygulansaydı / fark ne olurdu / kaç örnekten üretildi” sorusunu contract seviyesinde cevaplamak.
+
+### Adaptive recommendation logic backend alanları
+- Strategy memory tarafına eklendi:
+  - `rolling_windows` (`7d`, `30d`, `90d`)
+  - `window_comparison`
+  - `stability_score`
+  - `decay_score`
+  - `regime_drift_flag`
+  - `drift_confidence`
+  - `confidence_degradation`
+  - `actionability_flag`
+- Recommendation payload tarafına eklendi:
+  - `actionable_state` (`actionable`, `monitor_only`, `ignore`)
+  - `recommendation_score`
+  - `decision_candidate`
+  - `auto_apply_eligible`
+  - `scope_reason`
+  - `cross_strategy_correlation`
+- Family/regime drift recommendation üretimi genişletildi.
+
+### Adaptive control köprüsü
+- Recommendation payload artık decision-candidate mantığı taşıyor.
+- Monitoring çıktısı lifecycle’a geri bağlanıyor:
+  - `deterioration_flag`
+  - `rollback_recommendation`
+- Apply sonrası `post_change_monitoring` recommendation payload’ına yazılıyor.
+
+### Test / doğrulama
+- Local self-test:
+  - `/app/test_reports/learning_lifecycle_route_selftest.json`
+  - `/app/test_reports/learning_adaptive_backend_selftest.json`
+- Testing agent raporu:
+  - `/app/test_reports/iteration_183.json` → backend adaptive/lifecycle **PASS**
+- Pytest:
+  - `test_learning_lifecycle_routes.py`
+  - `test_learning_adaptive_engine.py`
+
+### Sonraki doğru adım
+- P3 UI hizalaması:
+  - Learning Memory
+  - Recommendation Simulator
+  - lifecycle state
+  - version history
+  - post-change monitoring
+  - baseline/projected/delta simulation blokları
+
 ## 2026-03-29 — Test User Credential Added
 
 - Kullanıcı doğrulaması için yeni standart USER hesabı oluşturuldu.
