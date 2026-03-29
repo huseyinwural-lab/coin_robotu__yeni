@@ -1176,6 +1176,20 @@
       "chain_position": 84,
       "prev_chain_hash": "a62c1bf6b2f78e8e66fe9cb4aa6876aeb3cce5ad249b4fa6dfd6773b5b63a4f8",
       "chain_hash": "c97557c399d5344a822cc2ae9182be38109f2b59db24f19f1e5d6a3a75a0312a"
+    },
+    {
+      "artifact_id": "bf89c0a2-9e4a-424f-967e-aaca941aa38b",
+      "filename": "execution_safety_gate_20260329002609_bf89c0a2.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "0076bdf80bdeb633cea2a0420fc9f201507a3ef8f8c1fd7f924cbf790b3c0db3",
+      "size": 11835,
+      "created_at": "2026-03-29T00:26:09.048653+00:00",
+      "proof_id": "bf89c0a2-9e4a-424f-967e-aaca941aa38b",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 85,
+      "prev_chain_hash": "c97557c399d5344a822cc2ae9182be38109f2b59db24f19f1e5d6a3a75a0312a",
+      "chain_hash": "be8e109bd6fa8efa6e23c0848e74728f8ad5e8c43aa0db4fe86cbd309c126320"
     }
   ]
 }
