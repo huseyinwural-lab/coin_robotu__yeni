@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from models import ExecutionIntent, ExecutionIntentEvent, FailedEvent
@@ -171,6 +172,7 @@ def _enforce_correlation_envelope(
 
 
 def _resolve_bybit_credentials(db: Session) -> tuple[str, str, str]:
+    load_dotenv('/app/backend/.env', override=True)
     cfg = execution_credentials_for_adapter(db)
     bybit = dict((cfg or {}).get("bybit") or {})
     api_key = str(bybit.get("testnet_key") or os.environ.get("BYBIT_TESTNET_API_KEY") or "").strip()
