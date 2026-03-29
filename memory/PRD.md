@@ -1,3 +1,43 @@
+## 2026-03-29 — UNIFIED RISK CORE Sprint-3 (P2 Hardening + Calibration)
+
+### Sprint-3 odakları (tamamlandı)
+- Multi-factor kill-switch matrix
+- Scenario pack engine (reusable/deterministic)
+- Calibration layer (threshold optimization)
+- Replay engine hardening (time-step timeline)
+- Operator visibility data export (timeline artefact)
+- Policy stability guard (hysteresis)
+- Explainability root-cause chain
+
+### Uygulanan çekirdek geliştirmeler
+- `unified_risk_core_service.py` içinde:
+  - `kill_switch` matrisi (margin/liquidation/cluster/var/cvar/stress/strategy kombinasyon tetikleri)
+  - scenario pack storage + yönetim (`SCENARIO_PACK_FILE`)
+  - calibration storage + optimizer (`CALIBRATION_FILE`)
+  - replay timeline + export (`run_replay_timeline`, `export_replay_timeline`)
+  - hysteresis guard (`_apply_hysteresis`) ile state flip-flop azaltma
+  - root-cause explainability (`root_cause`, `chain`)
+
+- `strategy_domain` router’da yeni unified-core endpointleri:
+  - `GET/POST /scenarios`
+  - `GET /thresholds`
+  - `POST /calibrate`
+  - `POST /replay`
+
+### Sprint-3 test doğrulamaları
+- Pytest: `pytest -q /app/backend/tests/test_unified_risk_core_sprint1.py /app/backend/tests/test_unified_risk_core_sprint3.py`
+  - sonuç: **10 passed**
+- API self-test: `/app/test_reports/unified_risk_core_sprint3_api_selftest.json`
+  - scenarios/calibrate/thresholds/replay/evaluate multi-factor kill-switch akışları PASS
+
+### Acceptance karşılığı
+- Kill-switch tek metrik yerine kombinasyonla tetikleniyor
+- Scenario pack tekrar kullanılabilir ve deterministik
+- Calibration threshold üretiyor ve persisted tutuluyor
+- Replay timeline state geçişlerini (t0→t1...) taşıyor
+- Hysteresis ile state stabilizasyonu uygulanıyor
+- Explainability root-cause + chain üretiyor
+
 ## 2026-03-29 — UNIFIED RISK CORE Sprint-2 (P1 FULL)
 
 ### Sprint-2 hedefi (gerçekleşen)

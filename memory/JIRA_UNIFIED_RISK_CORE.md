@@ -44,6 +44,32 @@
 - Symbol-specific ruleset derinliği (binance/bybit)
 - P1 zorunlu scenario testleri (pytest)
 
+## Epic URC-P2 Hardening + Calibration ✅ Done in Sprint-3
+- URC-41 Multi-factor kill-switch matrix
+- URC-42 Scenario pack engine (reusable + deterministic)
+- URC-43 Calibration layer (threshold optimization)
+- URC-44 Replay engine (time-step timeline + export)
+- URC-45 Policy stability guard (hysteresis)
+- URC-46 Explainability root-cause chain
+
+## Component Map (Sprint-3)
+
+### Reused modüller
+- `run_unified_risk_orchestrator` (tek entry kontratı korunarak hardening)
+- Snapshot manifest altyapısı (calibration/replay input kaynağı olarak)
+
+### Refactor edilenler
+- Risk state machine (threshold-driven + hysteresis + kill-switch entegrasyonu)
+- Explainability çıktısı (root_cause + chain)
+- API router (`strategy_domain`) unified-core alt rotaları genişletildi
+
+### Yeni eklenenler
+- Scenario pack kütüphanesi (`SCENARIO_PACK_FILE`)
+- Calibration engine + persisted thresholds (`CALIBRATION_FILE`)
+- Replay timeline + export artefact
+- Multi-factor kill-switch matrix
+- Sprint-3 scenario test seti (`test_unified_risk_core_sprint3.py`)
+
 ## Hard Constraints (Locked)
 - No module can emit execution decision directly.
 - All risk decisions must pass through `risk_orchestrator`.

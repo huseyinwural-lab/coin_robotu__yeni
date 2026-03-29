@@ -171,11 +171,17 @@ from services.strategy_domain_service import (
     validate_strategy_version_config,
 )
 from services.unified_risk_core_service import (
+    calibrate_thresholds,
+    export_replay_timeline,
+    get_calibrated_thresholds,
+    get_scenario_pack_library,
     jira_epic_breakdown,
     list_risk_snapshot_manifest,
     list_rulesets,
+    run_replay_timeline,
     run_unified_risk_orchestrator,
     simulate_pre_trade_risk,
+    upsert_scenario_pack,
 )
 
 
@@ -2485,6 +2491,10 @@ def admin_unified_risk_evaluate(
         stage=str(payload.get("stage") or "pre-trade"),
         actor_id=current_admin.id,
         persist_artifact=bool(payload.get("persist_artifact", True)),
+        scenario_id=str(payload.get("scenario_id")) if payload.get("scenario_id") else None,
+        previous_state=str(payload.get("previous_state")) if payload.get("previous_state") else None,
+        thresholds_override=payload.get("thresholds_override") if isinstance(payload.get("thresholds_override"), dict) else None,
+        use_calibrated_thresholds=bool(payload.get("use_calibrated_thresholds", True)),
     )
 
 
@@ -2505,6 +2515,9 @@ def admin_unified_risk_pre_trade_simulation(
         proposed_order=proposed_order,
         ruleset=str(payload.get("ruleset") or "binance"),
         actor_id=current_admin.id,
+        scenario_id=str(payload.get("scenario_id")) if payload.get("scenario_id") else None,
+        thresholds_override=payload.get("thresholds_override") if isinstance(payload.get("thresholds_override"), dict) else None,
+        use_calibrated_thresholds=bool(payload.get("use_calibrated_thresholds", True)),
     )
 
 
@@ -2521,6 +2534,70 @@ def admin_unified_risk_snapshots(
 def admin_unified_risk_jira_breakdown(current_admin: User = Depends(require_admin)):
     _ = current_admin
     return jira_epic_breakdown()
+
+
+@router.get("/admin/risk-orchestrator/unified-core/scenarios")
+def admin_unified_risk_scenarios(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return get_scenario_pack_library()
+
+
+@router.post("/admin/risk-orchestrator/unified-core/scenarios")
+def admin_unified_risk_upsert_scenario(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    try:
+        return upsert_scenario_pack(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/admin/risk-orchestrator/unified-core/thresholds")
+def admin_unified_risk_thresholds(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return {"calibrated_thresholds": get_calibrated_thresholds()}
+
+
+@router.post("/admin/risk-orchestrator/unified-core/calibrate")
+def admin_unified_risk_calibrate(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    target_user_id = str(payload.get("user_id") or current_admin.id)
+    return calibrate_thresholds(
+        db=db,
+        cache=redis_client,
+        user_id=target_user_id,
+        ruleset=str(payload.get("ruleset") or "binance"),
+        actor_id=current_admin.id,
+    )
+
+
+@router.post("/admin/risk-orchestrator/unified-core/replay")
+def admin_unified_risk_replay(
+    payload: dict,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    steps = payload.get("steps") if isinstance(payload.get("steps"), list) else []
+    if not steps:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="steps_required")
+    target_user_id = str(payload.get("user_id") or current_admin.id)
+    timeline_payload = run_replay_timeline(
+        db=db,
+        cache=redis_client,
+        user_id=target_user_id,
+        steps=steps,
+        ruleset=str(payload.get("ruleset") or "binance"),
+        actor_id=current_admin.id,
+        thresholds_override=payload.get("thresholds_override") if isinstance(payload.get("thresholds_override"), dict) else None,
+        use_calibrated_thresholds=bool(payload.get("use_calibrated_thresholds", True)),
+    )
+    export_meta = export_replay_timeline(timeline_payload)
+    return {**timeline_payload, "export": export_meta}
 
 
 @router.get("/admin/risk-orchestrator/analytics", response_model=RiskOrchestratorAnalyticsResponse)

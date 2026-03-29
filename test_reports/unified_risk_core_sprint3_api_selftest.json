@@ -1,0 +1,96 @@
+{
+  "login": {
+    "status": 200,
+    "ok": true
+  },
+  "scenarios_get": {
+    "status": 200,
+    "ok": true,
+    "count": 8
+  },
+  "scenarios_post": {
+    "status": 200,
+    "ok": true
+  },
+  "calibrate": {
+    "status": 200,
+    "ok": true,
+    "has_var_limit": true
+  },
+  "evaluate_killswitch_rootcause": {
+    "status": 200,
+    "ok": true,
+    "state": "BLOCKED",
+    "kill_switch": {
+      "triggered": false,
+      "level": "NONE",
+      "reason": []
+    },
+    "root_cause": "cluster + tail interaction",
+    "chain": [
+      "correlation spike",
+      "exposure concentration",
+      "VaR breach"
+    ]
+  },
+  "replay_timeline": {
+    "status": 200,
+    "ok": true,
+    "timeline_len": 2,
+    "states": [
+      "BLOCKED",
+      "CRITICAL"
+    ],
+    "has_export": true
+  },
+  "thresholds": {
+    "status": 200,
+    "ok": true,
+    "keys": [
+      "cluster_critical_limit",
+      "cluster_limit",
+      "cvar_limit",
+      "hysteresis_buffer",
+      "liquidation_blocked_limit",
+      "liquidation_critical_limit",
+      "liquidation_high_limit",
+      "liquidation_warn_limit",
+      "margin_blocked_limit",
+      "margin_critical_limit",
+      "margin_high_limit",
+      "stress_loss_ratio_limit",
+      "var_limit"
+    ]
+  },
+  "evaluate_multifactor_killswitch": {
+    "status": 200,
+    "ok": true,
+    "state": "BLOCKED",
+    "kill_switch": {
+      "triggered": true,
+      "level": "BLOCKED",
+      "reason": [
+        "liquidation_near_and_tail_risk_high",
+        "margin_ratio_high_and_cluster_high",
+        "var_breach_and_stress_loss_high"
+      ]
+    },
+    "reasons": [
+      "cluster_concentration_critical",
+      "cluster_concentration_high",
+      "kill_switch_threshold",
+      "liquidation_buffer_critical",
+      "liquidation_buffer_high",
+      "liquidation_buffer_warn",
+      "liquidation_near_and_tail_risk_high",
+      "margin_ratio_high_and_cluster_high",
+      "margin_usage_high",
+      "risk_budget_breach",
+      "strategy_pause_triggered",
+      "stress_loss_breach",
+      "tail_cvar_breach",
+      "tail_var_breach",
+      "var_breach_and_stress_loss_high"
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "user_id": "941ed803-8aae-4015-8482-79c9d089c898",
+  "ruleset": "binance",
+  "timeline": [
+    {
+      "step": 0,
+      "timestamp": "2026-03-29T00:00:00Z",
+      "stage": "t0",
+      "scenario_id": "api_replay_bear_v1",
+      "risk_state": "BLOCKED",
+      "reason": [
+        "cluster_concentration_critical",
+        "cluster_concentration_high",
+        "kill_switch_threshold",
+        "liquidation_buffer_critical",
+        "liquidation_buffer_high",
+        "margin_usage_high",
+        "risk_budget_breach",
+        "strategy_pause_triggered",
+        "tail_cvar_breach",
+        "tail_var_breach"
+      ],
+      "decision": "PAUSE_STRATEGY",
+      "kill_switch": {
+        "triggered": false,
+        "level": "NONE",
+        "reason": []
+      }
+    },
+    {
+      "step": 1,
+      "timestamp": "2026-03-29T00:05:00Z",
+      "stage": "t1",
+      "scenario_id": null,
+      "risk_state": "CRITICAL",
+      "reason": [
+        "cluster_concentration_high",
+        "liquidation_buffer_critical",
+        "liquidation_buffer_high",
+        "risk_budget_breach",
+        "strategy_pause_triggered",
+        "stress_loss_breach"
+      ],
+      "decision": "PAUSE_STRATEGY",
+      "kill_switch": {
+        "triggered": false,
+        "level": "NONE",
+        "reason": []
+      }
+    }
+  ],
+  "final_state": "CRITICAL"
+}

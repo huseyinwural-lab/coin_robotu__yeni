@@ -15,6 +15,57 @@ from services.audit_service import create_audit_log
 
 RISK_SNAPSHOT_DIR = Path("/app/artifacts/risk_snapshots")
 RISK_SNAPSHOT_MANIFEST = Path("/app/artifacts/manifests/unified_risk_snapshots.jsonl")
+SCENARIO_PACK_FILE = Path("/app/artifacts/manifests/unified_risk_scenario_packs.json")
+CALIBRATION_FILE = Path("/app/artifacts/manifests/unified_risk_calibration.json")
+
+DEFAULT_THRESHOLDS = {
+    "var_limit": 0.05,
+    "cvar_limit": 0.10,
+    "cluster_limit": 0.60,
+    "cluster_critical_limit": 0.80,
+    "margin_high_limit": 65.0,
+    "margin_critical_limit": 80.0,
+    "margin_blocked_limit": 90.0,
+    "liquidation_warn_limit": 10.0,
+    "liquidation_high_limit": 5.0,
+    "liquidation_critical_limit": 3.0,
+    "liquidation_blocked_limit": 1.5,
+    "stress_loss_ratio_limit": 0.18,
+    "hysteresis_buffer": 0.05,
+}
+
+DEFAULT_SCENARIO_PACKS = [
+    {
+        "scenario_id": "bull_regime_v1",
+        "description": "Majors uptrend and moderate alt beta",
+        "shocks": {"BTC": 0.08, "ETH": 0.10, "ALT": 0.14, "correlation": 0.45, "liquidity": 0.02},
+    },
+    {
+        "scenario_id": "bear_regime_v1",
+        "description": "Broad risk-off regime",
+        "shocks": {"BTC": -0.20, "ETH": -0.23, "ALT": -0.35, "correlation": 0.80, "liquidity": -0.08},
+    },
+    {
+        "scenario_id": "high_volatility_v1",
+        "description": "Volatility expansion with moderate drawdown",
+        "shocks": {"BTC": -0.10, "ETH": -0.12, "ALT": -0.18, "correlation": 0.70, "liquidity": -0.05},
+    },
+    {
+        "scenario_id": "low_liquidity_v1",
+        "description": "Order book thinning and slippage amplification",
+        "shocks": {"BTC": -0.06, "ETH": -0.08, "ALT": -0.12, "correlation": 0.55, "liquidity": -0.20},
+    },
+    {
+        "scenario_id": "correlation_breakdown_v1",
+        "description": "Cross-asset decorrelation",
+        "shocks": {"BTC": -0.04, "ETH": -0.02, "ALT": -0.10, "correlation": -0.20, "liquidity": -0.03},
+    },
+    {
+        "scenario_id": "correlation_spike_v1",
+        "description": "Systemic selloff with strong correlation",
+        "shocks": {"BTC": -0.14, "ETH": -0.18, "ALT": -0.26, "correlation": 0.90, "liquidity": -0.07},
+    },
+]
 
 RULESETS: dict[str, dict[str, Any]] = {
     "binance": {
@@ -89,6 +140,87 @@ def _now() -> datetime:
 def _iso(value: datetime | None = None) -> str:
     ts = value or _now()
     return ts.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _normalize_thresholds(values: dict | None) -> dict:
+    normalized = dict(DEFAULT_THRESHOLDS)
+    incoming = dict(values or {})
+    for key, default_value in DEFAULT_THRESHOLDS.items():
+        normalized[key] = _safe_float(incoming.get(key), default_value)
+    return normalized
+
+
+def get_calibrated_thresholds() -> dict:
+    if not CALIBRATION_FILE.exists():
+        return _normalize_thresholds(None)
+    try:
+        payload = json.loads(CALIBRATION_FILE.read_text(encoding="utf-8"))
+        return _normalize_thresholds(payload.get("calibrated_thresholds") if isinstance(payload, dict) else None)
+    except Exception:
+        return _normalize_thresholds(None)
+
+
+def _save_calibrated_thresholds(thresholds: dict, *, source: str, metadata: dict | None = None) -> dict:
+    payload = {
+        "updated_at": _iso(),
+        "source": source,
+        "calibrated_thresholds": _normalize_thresholds(thresholds),
+        "metadata": metadata or {},
+    }
+    CALIBRATION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CALIBRATION_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return payload
+
+
+def get_scenario_pack_library() -> dict:
+    if not SCENARIO_PACK_FILE.exists():
+        payload = {"updated_at": _iso(), "scenarios": DEFAULT_SCENARIO_PACKS}
+        SCENARIO_PACK_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SCENARIO_PACK_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return payload
+    try:
+        payload = json.loads(SCENARIO_PACK_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        payload = {"updated_at": _iso(), "scenarios": DEFAULT_SCENARIO_PACKS}
+    scenarios = payload.get("scenarios") if isinstance(payload, dict) else DEFAULT_SCENARIO_PACKS
+    if not isinstance(scenarios, list) or not scenarios:
+        scenarios = DEFAULT_SCENARIO_PACKS
+    return {"updated_at": str(payload.get("updated_at") or _iso()), "scenarios": scenarios}
+
+
+def upsert_scenario_pack(scenario: dict) -> dict:
+    scenario_id = str((scenario or {}).get("scenario_id") or "").strip()
+    if not scenario_id:
+        raise ValueError("scenario_id_required")
+    payload = get_scenario_pack_library()
+    scenarios = list(payload.get("scenarios") or [])
+    normalized = {
+        "scenario_id": scenario_id,
+        "description": str((scenario or {}).get("description") or "").strip(),
+        "shocks": dict((scenario or {}).get("shocks") or {}),
+    }
+    replaced = False
+    for idx, row in enumerate(scenarios):
+        if str(row.get("scenario_id") or "") == scenario_id:
+            scenarios[idx] = normalized
+            replaced = True
+            break
+    if not replaced:
+        scenarios.append(normalized)
+    result = {"updated_at": _iso(), "scenarios": scenarios}
+    SCENARIO_PACK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SCENARIO_PACK_FILE.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    return result
+
+
+def _resolve_scenario_pack(scenario_id: str | None) -> dict | None:
+    if not scenario_id:
+        return None
+    library = get_scenario_pack_library()
+    for scenario in library.get("scenarios") or []:
+        if str(scenario.get("scenario_id") or "") == str(scenario_id):
+            return scenario
+    return None
 
 
 def list_rulesets() -> dict:
@@ -273,6 +405,34 @@ def _default_position_from_input(raw: dict, mark_price_fallback: float) -> dict:
         "strategy_id": strategy_id,
         "isolated_margin": isolated_margin,
     }
+
+
+def _apply_scenario_to_input_state(input_state: dict | None, scenario: dict | None) -> dict | None:
+    if not input_state or not scenario:
+        return input_state
+    shocks = dict((scenario or {}).get("shocks") or {})
+    correlation = _safe_float(shocks.get("correlation"), 0.0)
+    liquidity = _safe_float(shocks.get("liquidity"), 0.0)
+    updated = json.loads(json.dumps(input_state))
+    positions = list(updated.get("positions") or [])
+    for row in positions:
+        symbol = str(row.get("symbol") or "").upper()
+        base = _symbol_base(symbol)
+        base_shock = _safe_float(shocks.get(base), None)
+        if base_shock is None:
+            if base in {"BTC", "ETH"}:
+                base_shock = _safe_float(shocks.get("BTC"), 0.0)
+            else:
+                base_shock = _safe_float(shocks.get("ALT"), 0.0)
+        mark = max(_safe_float(row.get("mark_price"), _safe_float(row.get("entry_price"), 1.0)), 0.0001)
+        effective_shock = base_shock + (correlation * 0.05) + (liquidity * 0.02)
+        row["mark_price"] = max(mark * (1 + effective_shock), 0.0001)
+    updated["positions"] = positions
+    if correlation >= 0.75:
+        updated.setdefault("cluster_override", {})["correlation_spike"] = True
+    if _safe_float(shocks.get("BTC"), 0.0) <= -0.12 or _safe_float(shocks.get("ALT"), 0.0) <= -0.2:
+        updated.setdefault("tail_override", {})["returns"] = [-abs(_safe_float(shocks.get("BTC"), -0.1))] * 80
+    return updated
 
 
 def _load_positions(db: Session | None, user_id: str, input_state: dict | None, mark_price_fallback: float) -> list[dict]:
@@ -690,6 +850,88 @@ def _strategy_risk_governance(strategy_allocation: list[dict]) -> dict:
     }
 
 
+def _kill_switch_matrix(
+    *,
+    margin_usage_pct: float,
+    liquidation_buffer_pct: float,
+    cluster_score: float,
+    var_value: float,
+    cvar_value: float,
+    stress_loss_ratio: float,
+    strategy_actions: list[dict],
+    thresholds: dict,
+) -> dict:
+    reasons: list[str] = []
+    level = "NONE"
+
+    if margin_usage_pct > thresholds["margin_blocked_limit"] and cluster_score >= thresholds["cluster_limit"]:
+        level = "CRITICAL"
+        reasons.append("margin_ratio_high_and_cluster_high")
+
+    if var_value >= thresholds["var_limit"] and stress_loss_ratio >= thresholds["stress_loss_ratio_limit"]:
+        level = "CRITICAL"
+        reasons.append("var_breach_and_stress_loss_high")
+
+    if liquidation_buffer_pct <= thresholds["liquidation_blocked_limit"] and cvar_value >= thresholds["cvar_limit"]:
+        level = "BLOCKED"
+        reasons.append("liquidation_near_and_tail_risk_high")
+
+    if any(item.get("action") == "BLOCK" for item in strategy_actions):
+        level = "BLOCKED"
+        reasons.append("strategy_block_action")
+
+    return {
+        "triggered": bool(reasons),
+        "level": level,
+        "reason": sorted(set(reasons)),
+    }
+
+
+def _apply_hysteresis(previous_state: str | None, candidate_state: str, metrics: dict, thresholds: dict) -> str:
+    if not previous_state:
+        return candidate_state
+
+    state_rank = {"NORMAL": 0, "WARN": 1, "HIGH": 2, "CRITICAL": 3, "BLOCKED": 4}
+    prev_rank = state_rank.get(previous_state, 0)
+    next_rank = state_rank.get(candidate_state, 0)
+    if next_rank >= prev_rank:
+        return candidate_state
+
+    buffer = float(thresholds.get("hysteresis_buffer") or 0.05)
+    margin = _safe_float(metrics.get("margin_usage_pct"), 0.0)
+    cluster = _safe_float(metrics.get("cluster_score"), 0.0)
+    var_value = _safe_float(metrics.get("var"), 0.0)
+
+    if previous_state == "HIGH":
+        if margin > thresholds["margin_high_limit"] - (thresholds["margin_high_limit"] * buffer):
+            return "HIGH"
+        if cluster > thresholds["cluster_limit"] - buffer or var_value > thresholds["var_limit"] - (thresholds["var_limit"] * buffer):
+            return "HIGH"
+
+    if previous_state == "CRITICAL":
+        if margin > thresholds["margin_critical_limit"] - (thresholds["margin_critical_limit"] * buffer):
+            return "CRITICAL"
+        if cluster > thresholds["cluster_critical_limit"] - buffer or var_value > thresholds["var_limit"]:
+            return "CRITICAL"
+
+    if previous_state == "BLOCKED" and next_rank < state_rank["CRITICAL"]:
+        if margin > thresholds["margin_blocked_limit"] - (thresholds["margin_blocked_limit"] * buffer):
+            return "BLOCKED"
+
+    return candidate_state
+
+
+def _root_cause_from_reasons(reasons: list[str]) -> tuple[str, list[str]]:
+    reason_set = set(reasons)
+    if {"cluster_concentration_high", "tail_var_breach"}.issubset(reason_set) or {"cluster_concentration_critical", "tail_cvar_breach"}.issubset(reason_set):
+        return "cluster + tail interaction", ["correlation spike", "exposure concentration", "VaR breach"]
+    if "strategy_block_triggered" in reason_set:
+        return "strategy governance escalation", ["budget breach", "repeated breach", "strategy block"]
+    if "margin_usage_critical" in reason_set or "kill_switch_threshold" in reason_set:
+        return "margin pressure escalation", ["margin usage", "liquidation proximity", "policy escalation"]
+    return "composite risk interaction", sorted(reason_set)
+
+
 def _risk_state_machine(
     *,
     min_liquidation_buffer_pct: float,
@@ -698,37 +940,58 @@ def _risk_state_machine(
     cluster_score: float,
     tail_var: float,
     tail_cvar: float,
+    stress_loss_ratio: float,
     strategy_actions: list[dict],
+    thresholds: dict,
 ) -> tuple[str, list[str]]:
     triggers: list[str] = []
     state = "NORMAL"
 
-    if min_liquidation_buffer_pct < 10:
+    if min_liquidation_buffer_pct < thresholds["liquidation_warn_limit"]:
         state = "WARN"
         triggers.append("liquidation_buffer_warn")
-    if min_liquidation_buffer_pct < 5 or margin_usage_pct > 65 or risk_budget_breaches > 0 or cluster_score >= 0.6 or tail_var >= 0.05:
+    if (
+        min_liquidation_buffer_pct < thresholds["liquidation_high_limit"]
+        or margin_usage_pct > thresholds["margin_high_limit"]
+        or risk_budget_breaches > 0
+        or cluster_score >= thresholds["cluster_limit"]
+        or tail_var >= thresholds["var_limit"]
+    ):
         state = "HIGH"
         triggers.extend(
             [
                 "liquidation_buffer_high",
-                "margin_usage_high" if margin_usage_pct > 65 else "",
+                "margin_usage_high" if margin_usage_pct > thresholds["margin_high_limit"] else "",
                 "risk_budget_breach" if risk_budget_breaches > 0 else "",
-                "cluster_concentration_high" if cluster_score >= 0.6 else "",
-                "tail_var_breach" if tail_var >= 0.05 else "",
+                "cluster_concentration_high" if cluster_score >= thresholds["cluster_limit"] else "",
+                "tail_var_breach" if tail_var >= thresholds["var_limit"] else "",
             ]
         )
-    if min_liquidation_buffer_pct < 3 or margin_usage_pct > 80 or cluster_score >= 0.8 or tail_cvar >= 0.1 or any(item.get("action") == "PAUSE" for item in strategy_actions):
+    if (
+        min_liquidation_buffer_pct < thresholds["liquidation_critical_limit"]
+        or margin_usage_pct > thresholds["margin_critical_limit"]
+        or cluster_score >= thresholds["cluster_critical_limit"]
+        or tail_cvar >= thresholds["cvar_limit"]
+        or stress_loss_ratio >= thresholds["stress_loss_ratio_limit"]
+        or any(item.get("action") == "PAUSE" for item in strategy_actions)
+    ):
         state = "CRITICAL"
         triggers.extend(
             [
                 "liquidation_buffer_critical",
-                "margin_usage_critical" if margin_usage_pct > 80 else "",
-                "cluster_concentration_critical" if cluster_score >= 0.8 else "",
-                "tail_cvar_breach" if tail_cvar >= 0.1 else "",
+                "margin_usage_critical" if margin_usage_pct > thresholds["margin_critical_limit"] else "",
+                "cluster_concentration_critical" if cluster_score >= thresholds["cluster_critical_limit"] else "",
+                "tail_cvar_breach" if tail_cvar >= thresholds["cvar_limit"] else "",
+                "stress_loss_breach" if stress_loss_ratio >= thresholds["stress_loss_ratio_limit"] else "",
                 "strategy_pause_triggered" if any(item.get("action") == "PAUSE" for item in strategy_actions) else "",
             ]
         )
-    if min_liquidation_buffer_pct < 1.5 or margin_usage_pct > 90 or tail_cvar >= 0.16 or any(item.get("action") == "BLOCK" for item in strategy_actions):
+    if (
+        min_liquidation_buffer_pct < thresholds["liquidation_blocked_limit"]
+        or margin_usage_pct > thresholds["margin_blocked_limit"]
+        or tail_cvar >= (thresholds["cvar_limit"] * 1.6)
+        or any(item.get("action") == "BLOCK" for item in strategy_actions)
+    ):
         state = "BLOCKED"
         triggers.extend(["kill_switch_threshold", "strategy_block_triggered" if any(item.get("action") == "BLOCK" for item in strategy_actions) else ""])
 
@@ -819,13 +1082,26 @@ def run_unified_risk_orchestrator(
     stage: str = "pre-trade",
     actor_id: str | None = None,
     persist_artifact: bool = True,
+    scenario_id: str | None = None,
+    previous_state: str | None = None,
+    thresholds_override: dict | None = None,
+    use_calibrated_thresholds: bool = True,
 ) -> dict:
     selected_ruleset = _get_ruleset(ruleset)
+    thresholds = _normalize_thresholds(get_calibrated_thresholds() if use_calibrated_thresholds else DEFAULT_THRESHOLDS)
+    if thresholds_override:
+        thresholds.update(_normalize_thresholds(thresholds_override))
+
+    resolved_input_state = input_state
+    scenario = _resolve_scenario_pack(scenario_id)
+    if scenario:
+        resolved_input_state = _apply_scenario_to_input_state(resolved_input_state or {}, scenario)
+
     replay_prices = _read_execution_manifest_prices(limit=800)
     mark_price_fallback = replay_prices[-1] if replay_prices else 100.0
 
-    account_state = _resolve_account_state(db, user_id, input_state)
-    positions = _load_positions(db, user_id, input_state, mark_price_fallback)
+    account_state = _resolve_account_state(db, user_id, resolved_input_state)
+    positions = _load_positions(db, user_id, resolved_input_state, mark_price_fallback)
 
     cross_positions = [row for row in positions if str(row.get("margin_mode") or "cross").lower() != "isolated"]
     total_cross_notional = sum(abs(_safe_float(row.get("quantity"), 0.0) * _safe_float(row.get("mark_price"), 0.0)) for row in cross_positions)
@@ -840,11 +1116,16 @@ def run_unified_risk_orchestrator(
         liquidation_rows.append(_compute_liquidation(row, cross_collateral_share=cross_share, ruleset=selected_ruleset))
 
     portfolio = _portfolio_metrics(positions, liquidation_rows, float(account_state.get("equity") or 1.0))
-    capital = _capital_governance(account_state, portfolio, liquidation_rows, input_state)
-    symbol_series = _build_symbol_series(positions, replay_prices, input_state)
-    cluster_risk = _build_cluster_risk(positions, symbol_series, float(portfolio.get("gross_exposure") or 0.0), input_state)
-    tail_risk = _build_tail_risk(positions, symbol_series, liquidation_rows, input_state)
+    capital = _capital_governance(account_state, portfolio, liquidation_rows, resolved_input_state)
+    symbol_series = _build_symbol_series(positions, replay_prices, resolved_input_state)
+    cluster_risk = _build_cluster_risk(positions, symbol_series, float(portfolio.get("gross_exposure") or 0.0), resolved_input_state)
+    tail_risk = _build_tail_risk(positions, symbol_series, liquidation_rows, resolved_input_state)
     strategy_risk = _strategy_risk_governance(capital.get("strategy_allocation") or [])
+
+    stress_loss_ratio = (
+        _safe_float(tail_risk.get("stress_loss"), 0.0)
+        / max(_safe_float(portfolio.get("gross_exposure"), 0.0), 1e-6)
+    )
 
     min_liq_buffer = min((row.get("liquidation_buffer_pct") or 999.0) for row in liquidation_rows) if liquidation_rows else 999.0
     state, triggers = _risk_state_machine(
@@ -854,8 +1135,37 @@ def run_unified_risk_orchestrator(
         cluster_score=float(cluster_risk.get("concentration_score") or 0.0),
         tail_var=float(tail_risk.get("var") or 0.0),
         tail_cvar=float(tail_risk.get("cvar") or 0.0),
+        stress_loss_ratio=stress_loss_ratio,
         strategy_actions=strategy_risk.get("actions") or [],
+        thresholds=thresholds,
     )
+
+    kill_switch = _kill_switch_matrix(
+        margin_usage_pct=float(capital.get("margin_usage_pct") or 0.0),
+        liquidation_buffer_pct=float(min_liq_buffer),
+        cluster_score=float(cluster_risk.get("concentration_score") or 0.0),
+        var_value=float(tail_risk.get("var") or 0.0),
+        cvar_value=float(tail_risk.get("cvar") or 0.0),
+        stress_loss_ratio=stress_loss_ratio,
+        strategy_actions=strategy_risk.get("actions") or [],
+        thresholds=thresholds,
+    )
+    if kill_switch.get("triggered"):
+        triggers.extend(kill_switch.get("reason") or [])
+        if kill_switch.get("level") in {"CRITICAL", "BLOCKED"}:
+            state = kill_switch.get("level")
+
+    state = _apply_hysteresis(
+        previous_state=previous_state,
+        candidate_state=state,
+        metrics={
+            "margin_usage_pct": float(capital.get("margin_usage_pct") or 0.0),
+            "cluster_score": float(cluster_risk.get("concentration_score") or 0.0),
+            "var": float(tail_risk.get("var") or 0.0),
+        },
+        thresholds=thresholds,
+    )
+
     execution_policy = _execution_policy_from_state(state)
     if any(item.get("action") == "THROTTLE" for item in (strategy_risk.get("actions") or [])) and execution_policy.get("reduce_size_multiplier", 1.0) > 0.7:
         execution_policy["reduce_size_multiplier"] = 0.7
@@ -886,6 +1196,9 @@ def run_unified_risk_orchestrator(
         "cluster_risk": cluster_risk,
         "tail_risk": tail_risk,
         "strategy_risk": strategy_risk,
+        "kill_switch": kill_switch,
+        "thresholds": thresholds,
+        "scenario_context": scenario,
         "cluster": cluster_risk,
         "tail": tail_risk,
         "global_risk_state": state,
@@ -902,6 +1215,7 @@ def run_unified_risk_orchestrator(
                 "margin_usage_pct": capital.get("margin_usage_pct"),
                 "strategy_actions": strategy_risk.get("actions"),
                 "min_liquidation_buffer_pct": min_liq_buffer,
+                "stress_loss_ratio": round(stress_loss_ratio, 6),
             },
             "input_summary": {
                 "position_count": len(positions),
@@ -918,6 +1232,10 @@ def run_unified_risk_orchestrator(
             "hard_rule": "no_module_can_emit_execution_policy_directly",
         },
     }
+
+    root_cause, chain = _root_cause_from_reasons(canonical_state["explainability"]["reason"])
+    canonical_state["explainability"]["root_cause"] = root_cause
+    canonical_state["explainability"]["chain"] = chain
 
     artifact = None
     if persist_artifact:
@@ -956,6 +1274,9 @@ def simulate_pre_trade_risk(
     proposed_order: dict,
     ruleset: str = "binance",
     actor_id: str | None = None,
+    scenario_id: str | None = None,
+    thresholds_override: dict | None = None,
+    use_calibrated_thresholds: bool = True,
 ) -> dict:
     before_state = run_unified_risk_orchestrator(
         db=db,
@@ -967,6 +1288,9 @@ def simulate_pre_trade_risk(
         stage="pre-trade-before",
         actor_id=actor_id,
         persist_artifact=True,
+        scenario_id=scenario_id,
+        thresholds_override=thresholds_override,
+        use_calibrated_thresholds=use_calibrated_thresholds,
     )
 
     before_positions = list(before_state.get("positions") or [])
@@ -1003,6 +1327,10 @@ def simulate_pre_trade_risk(
         stage="pre-trade-after",
         actor_id=actor_id,
         persist_artifact=True,
+        scenario_id=scenario_id,
+        previous_state=str(before_state.get("global_risk_state") or "NORMAL"),
+        thresholds_override=thresholds_override,
+        use_calibrated_thresholds=use_calibrated_thresholds,
     )
 
     before_portfolio = before_state.get("portfolio") or {}
@@ -1046,6 +1374,7 @@ def simulate_pre_trade_risk(
 
     return {
         "ruleset": ruleset,
+        "scenario_id": scenario_id,
         "proposed_order": proposed_order,
         "before": {
             "global_risk_state": before_state.get("global_risk_state"),
@@ -1070,6 +1399,179 @@ def simulate_pre_trade_risk(
             "artifact": after_state.get("artifact"),
         },
         "impact_delta": delta,
+    }
+
+
+def run_replay_timeline(
+    *,
+    db: Session | None,
+    cache,
+    user_id: str,
+    steps: list[dict],
+    ruleset: str = "binance",
+    actor_id: str | None = None,
+    thresholds_override: dict | None = None,
+    use_calibrated_thresholds: bool = True,
+) -> dict:
+    timeline = []
+    previous_state = None
+    for idx, step in enumerate(steps):
+        stage = str(step.get("stage") or f"replay-t{idx}")
+        scenario_id = step.get("scenario_id")
+        input_state = step.get("input_state") if isinstance(step.get("input_state"), dict) else None
+        result = run_unified_risk_orchestrator(
+            db=db,
+            cache=cache,
+            user_id=user_id,
+            ruleset=ruleset,
+            input_state=input_state,
+            snapshot_type="portfolio-level",
+            stage=stage,
+            actor_id=actor_id,
+            persist_artifact=bool(step.get("persist_artifact", False)),
+            scenario_id=scenario_id,
+            previous_state=previous_state,
+            thresholds_override=thresholds_override,
+            use_calibrated_thresholds=use_calibrated_thresholds,
+        )
+        previous_state = result.get("global_risk_state")
+        timeline.append(
+            {
+                "step": idx,
+                "timestamp": str(step.get("timestamp") or _iso()),
+                "stage": stage,
+                "scenario_id": scenario_id,
+                "risk_state": result.get("global_risk_state"),
+                "reason": (result.get("explainability") or {}).get("reason") or [],
+                "decision": (result.get("execution_policy") or {}).get("decision"),
+                "kill_switch": result.get("kill_switch"),
+            }
+        )
+
+    return {
+        "user_id": user_id,
+        "ruleset": ruleset,
+        "timeline": timeline,
+        "final_state": timeline[-1]["risk_state"] if timeline else "NORMAL",
+    }
+
+
+def export_replay_timeline(timeline_payload: dict) -> dict:
+    export_dir = Path("/app/artifacts/risk_replay")
+    export_dir.mkdir(parents=True, exist_ok=True)
+    export_id = f"risk-replay-{uuid.uuid4().hex[:12]}"
+    export_path = export_dir / f"{export_id}.json"
+    export_path.write_text(json.dumps(timeline_payload, indent=2), encoding="utf-8")
+    return {
+        "export_id": export_id,
+        "export_path": str(export_path),
+        "timeline_length": len(timeline_payload.get("timeline") or []),
+    }
+
+
+def calibrate_thresholds(
+    *,
+    db: Session | None,
+    cache,
+    user_id: str,
+    ruleset: str = "binance",
+    actor_id: str | None = None,
+) -> dict:
+    snapshots = list_risk_snapshot_manifest(limit=300).get("items") or []
+    scenario_library = get_scenario_pack_library().get("scenarios") or []
+
+    candidate_var = [0.04, 0.05, 0.06, 0.08]
+    candidate_cluster = [0.55, 0.60, 0.65, 0.70]
+    candidate_margin = [70.0, 75.0, 80.0, 85.0]
+
+    best = {"score": 10**9, "thresholds": dict(DEFAULT_THRESHOLDS), "stats": {}}
+
+    for var_limit in candidate_var:
+        for cluster_limit in candidate_cluster:
+            for margin_limit in candidate_margin:
+                thresholds = _normalize_thresholds(
+                    {
+                        "var_limit": var_limit,
+                        "cluster_limit": cluster_limit,
+                        "margin_high_limit": margin_limit,
+                        "margin_critical_limit": margin_limit + 10,
+                        "margin_blocked_limit": margin_limit + 20,
+                    }
+                )
+                false_positive = 0
+                missed_risk = 0
+
+                for row in snapshots:
+                    artifact_path = Path(str(row.get("artifact_path") or ""))
+                    if not artifact_path.exists():
+                        continue
+                    try:
+                        artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+                    except Exception:
+                        continue
+                    payload = (artifact.get("payload") or {})
+                    cluster_score = _safe_float((payload.get("cluster_risk") or {}).get("concentration_score"), 0.0)
+                    var_value = _safe_float((payload.get("tail_risk") or {}).get("var"), 0.0)
+                    margin_usage = _safe_float((payload.get("capital") or {}).get("margin_usage_pct"), 0.0)
+                    predicted_risk = bool(cluster_score >= thresholds["cluster_limit"] or var_value >= thresholds["var_limit"] or margin_usage >= thresholds["margin_critical_limit"])
+                    actual_risk = str(payload.get("global_risk_state") or "NORMAL") in {"HIGH", "CRITICAL", "BLOCKED"}
+                    if predicted_risk and not actual_risk:
+                        false_positive += 1
+                    if actual_risk and not predicted_risk:
+                        missed_risk += 1
+
+                scenario_penalty = 0
+                for scenario in scenario_library:
+                    shocks = dict(scenario.get("shocks") or {})
+                    if abs(_safe_float(shocks.get("correlation"), 0.0)) > 0.75 and thresholds["cluster_limit"] > 0.65:
+                        scenario_penalty += 1
+                    if abs(_safe_float(shocks.get("BTC"), 0.0)) > 0.15 and thresholds["var_limit"] > 0.06:
+                        scenario_penalty += 1
+
+                score = (false_positive * 1.0) + (missed_risk * 2.5) + scenario_penalty
+                if score < best["score"]:
+                    best = {
+                        "score": score,
+                        "thresholds": thresholds,
+                        "stats": {
+                            "false_positive": false_positive,
+                            "missed_risk": missed_risk,
+                            "scenario_penalty": scenario_penalty,
+                        },
+                    }
+
+    persisted = _save_calibrated_thresholds(
+        best["thresholds"],
+        source="calibration_engine_v1",
+        metadata={
+            "user_id": user_id,
+            "ruleset": ruleset,
+            "score": best["score"],
+            "snapshot_count": len(snapshots),
+            "scenario_count": len(scenario_library),
+            **best["stats"],
+        },
+    )
+
+    if db is not None and actor_id:
+        try:
+            create_audit_log(
+                db,
+                action="unified_risk_calibration_completed",
+                entity_type="unified_risk_core",
+                entity_id=user_id,
+                actor_user_id=actor_id,
+                actor_role="admin",
+                details=persisted,
+                severity="info",
+            )
+        except Exception:
+            pass
+
+    return {
+        "calibrated_thresholds": persisted["calibrated_thresholds"],
+        "optimization_stats": persisted.get("metadata") or {},
+        "updated_at": persisted.get("updated_at"),
     }
 
 
@@ -1109,6 +1611,18 @@ def jira_epic_breakdown() -> dict:
                     "URC-22 Pre-trade simulation before/after impact",
                     "URC-23 Explainability payload + proof logs",
                     "URC-24 Kill-switch policy mapping",
+                ],
+            },
+            {
+                "epic": "URC-P2 Hardening + Calibration",
+                "status": "done_in_sprint_3",
+                "items": [
+                    "URC-41 Multi-factor kill-switch matrix",
+                    "URC-42 Scenario pack engine (reusable/deterministic)",
+                    "URC-43 Calibration engine for thresholds",
+                    "URC-44 Replay timeline engine + export",
+                    "URC-45 Policy stability guard (hysteresis)",
+                    "URC-46 Root-cause level explainability",
                 ],
             },
         ],

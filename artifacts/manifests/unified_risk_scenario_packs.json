@@ -1,0 +1,91 @@
+{
+  "updated_at": "2026-03-29T12:42:33Z",
+  "scenarios": [
+    {
+      "scenario_id": "bull_regime_v1",
+      "description": "Majors uptrend and moderate alt beta",
+      "shocks": {
+        "BTC": 0.08,
+        "ETH": 0.1,
+        "ALT": 0.14,
+        "correlation": 0.45,
+        "liquidity": 0.02
+      }
+    },
+    {
+      "scenario_id": "bear_regime_v1",
+      "description": "Broad risk-off regime",
+      "shocks": {
+        "BTC": -0.2,
+        "ETH": -0.23,
+        "ALT": -0.35,
+        "correlation": 0.8,
+        "liquidity": -0.08
+      }
+    },
+    {
+      "scenario_id": "high_volatility_v1",
+      "description": "Volatility expansion with moderate drawdown",
+      "shocks": {
+        "BTC": -0.1,
+        "ETH": -0.12,
+        "ALT": -0.18,
+        "correlation": 0.7,
+        "liquidity": -0.05
+      }
+    },
+    {
+      "scenario_id": "low_liquidity_v1",
+      "description": "Order book thinning and slippage amplification",
+      "shocks": {
+        "BTC": -0.06,
+        "ETH": -0.08,
+        "ALT": -0.12,
+        "correlation": 0.55,
+        "liquidity": -0.2
+      }
+    },
+    {
+      "scenario_id": "correlation_breakdown_v1",
+      "description": "Cross-asset decorrelation",
+      "shocks": {
+        "BTC": -0.04,
+        "ETH": -0.02,
+        "ALT": -0.1,
+        "correlation": -0.2,
+        "liquidity": -0.03
+      }
+    },
+    {
+      "scenario_id": "correlation_spike_v1",
+      "description": "Systemic selloff with strong correlation",
+      "shocks": {
+        "BTC": -0.14,
+        "ETH": -0.18,
+        "ALT": -0.26,
+        "correlation": 0.9,
+        "liquidity": -0.07
+      }
+    },
+    {
+      "scenario_id": "pytest_bear_deterministic",
+      "description": "deterministic bear shock",
+      "shocks": {
+        "BTC": -0.2,
+        "ALT": -0.3,
+        "correlation": 0.85,
+        "liquidity": -0.1
+      }
+    },
+    {
+      "scenario_id": "api_replay_bear_v1",
+      "description": "api deterministic bear",
+      "shocks": {
+        "BTC": -0.2,
+        "ALT": -0.32,
+        "correlation": 0.88,
+        "liquidity": -0.1
+      }
+    }
+  ]
+}
