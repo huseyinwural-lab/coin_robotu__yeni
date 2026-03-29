@@ -1,3 +1,59 @@
+## 2026-03-29 — EXECUTION QUALITY & MICROSTRUCTURE CORE P0 (Backend-first)
+
+### Tamamlanan P0 çekirdeği
+- Venue-agnostic microstructure data layer eklendi: Binance + Bybit snapshot/readiness aynı soyutlama altında toplandı.
+- Binance canlı futures market-data ingest proxy üzerinden çalışır hale getirildi; Bybit public erişim 403 döndüğünde sistem crash olmadan `INVALID` readiness üretiyor.
+- Pre-trade microstructure guard zorunlu hale getirildi:
+  - `ALLOW`
+  - `REDUCE_SIZE`
+  - `SWITCH_EXECUTION_MODE`
+  - `BLOCK`
+- Runtime submit ve execution-intent submit akışları artık microstructure precheck’e bağlı.
+- Slippage Prediction v1 alanları eklendi:
+  - `spread_cost_bps`
+  - `depth_impact_bps`
+  - `latency_penalty_bps`
+  - `expected_slippage_bps`
+- Runtime execution metric kaydına şu alanlar eklendi:
+  - `predicted_slippage_bps`
+  - `realized_slippage_bps`
+  - `slippage_error_bps`
+- Execution quality snapshot genişletildi:
+  - `fill_rate`
+  - `ack_latency_ms {avg,p95,p99}`
+  - `execution_latency_ms {avg,p95,p99}`
+  - `slippage_error_summary`
+- Capacity enforcement gerçek microstructure görünür derinliğine bağlandı:
+  - symbol capacity
+  - strategy capacity
+  - max deployable capital
+
+### Yeni / genişletilen backend yüzeyleri
+- `GET /api/admin/futures/microstructure/status`
+- `GET /api/admin/futures/microstructure/venues`
+- `GET /api/admin/futures/microstructure/guard-preview`
+- Alias compatibility:
+  - `GET /api/admin/futures/execution-quality`
+  - `GET /api/admin/execution/metrics`
+
+### Teknik uygulama notları
+- Yeni servis: `/app/backend/services/execution_microstructure_service.py`
+- Startup/shutdown sırasında microstructure polling runtime başlatılıyor.
+- Legacy microstructure cache anahtarları Binance canlı snapshot ile besleniyor; synthetic depth fallback kaldırıldı.
+- `validate_order_precheck(...)` artık microstructure guard + capacity assessment döndürüyor.
+- `core.execution_engine.submit_signal(...)` unsafe order’ları `precheck_failed` ile reddediyor.
+
+### Test / doğrulama
+- Pytest subset: `38 passed, 11 skipped`
+- Focused P0 pytest: `5 passed`
+- Testing agent raporu: `/app/test_reports/iteration_177.json`
+- Live/backend self-test: `/app/test_reports/execution_microstructure_p0_selftest.json`
+
+### Mevcut operasyonel gerçeklik
+- Binance market-data canlı ve doğrulandı.
+- Bybit public market-data bu runtime’da `403` veriyor; sistem bunu `INVALID` readiness olarak güvenli şekilde işliyor.
+- Order placement/execution yolları halen **MOCKED/PAPER-ORIENTED**; bu turda yeni live order placement akışı açılmadı.
+
 ## 2026-03-29 — UNIFIED RISK CORE Sprint-5 API Doğrulama (P0 Kapanış)
 
 ### Son durum

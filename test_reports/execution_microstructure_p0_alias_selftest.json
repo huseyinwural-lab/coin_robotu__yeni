@@ -1,0 +1,31 @@
+{
+  "login": {
+    "status": 200,
+    "ok": true
+  },
+  "admin_futures_execution_quality_alias": {
+    "status": 200,
+    "ok": true,
+    "keys": [
+      "days",
+      "total_orders",
+      "fill_rate",
+      "placement_success_ratio",
+      "reject_rate",
+      "partial_fill_quality",
+      "ack_latency_ms",
+      "execution_latency_ms",
+      "slippage_summary",
+      "slippage_error_summary"
+    ]
+  },
+  "admin_execution_metrics_alias": {
+    "status": 200,
+    "ok": true,
+    "keys": [
+      "alias_of",
+      "execution_quality",
+      "rolling_7d"
+    ]
+  }
+}

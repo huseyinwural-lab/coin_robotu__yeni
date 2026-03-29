@@ -90,11 +90,13 @@ from services.execution_environment_control_service import (
     list_safe_mode_states,
     upsert_environment_override,
 )
+from services.futures_testnet_control_service import build_testnet_execution_quality, build_testnet_execution_quality_rolling_7d
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.guard_metrics_service import build_guard_telemetry_payload
 from services.execution_safety_service import ExecutionSafetyViolation
 from services.commercial_controls_enforcement_service import CommercialControlViolation
 from services.system_alert_service import create_system_alert
+from services.pipeline.runtime import pipeline_runtime
 from services.live_mode_service import (
     create_release_gate_override,
     enforce_release_gate,
@@ -250,6 +252,26 @@ def _builder_schema_from_version(row) -> dict:
         "policy_code": getattr(row, "policy_code", None),
         "rules": list(rules_payload.get("builder_rules") or []),
         "scope": dict(rules_payload.get("builder_scope") or {}),
+    }
+
+
+@router.get("/futures/execution-quality")
+def admin_futures_execution_quality_alias(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    payload = build_testnet_execution_quality(db, pipeline_runtime.cache, current_admin.id)
+    return {
+        **payload,
+        "alias_of": "/api/admin/futures/testnet/execution-quality",
+    }
+
+
+@router.get("/execution/metrics")
+def admin_execution_metrics_alias(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    quality = build_testnet_execution_quality(db, pipeline_runtime.cache, current_admin.id)
+    rolling = build_testnet_execution_quality_rolling_7d(db, pipeline_runtime.cache, current_admin.id)
+    return {
+        "alias_of": "/api/admin/futures/testnet/execution-quality",
+        "execution_quality": quality,
+        "rolling_7d": rolling,
     }
 
 
