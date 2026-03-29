@@ -380,6 +380,7 @@ class LiveActivationConfig(Base):
     disable_futures: Mapped[bool] = mapped_column(Boolean, default=False)
     ip_whitelist_ready: Mapped[bool] = mapped_column(Boolean, default=False)
     trading_permission_ready: Mapped[bool] = mapped_column(Boolean, default=False)
+    environment_policy: Mapped[dict] = mapped_column(JSON, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class TestnetExecutionLog(Base):

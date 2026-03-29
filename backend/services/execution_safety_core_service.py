@@ -62,13 +62,13 @@ HARD_BLOCK_STEP_KEYS = {
     "kill_switch",
 }
 INTENT_ALLOWED_TRANSITIONS = {
-    "CREATED": {"SUBMITTED", "FAILED", "QUARANTINED", "CANCELLED"},
-    "SUBMITTED": {"ACKED", "FAILED", "QUARANTINED", "CANCELLED"},
-    "ACKED": {"FILLED", "FAILED", "QUARANTINED", "CANCELLED"},
+    "CREATED": {"SUBMITTED", "FAILED", "QUARANTINED", "CANCELED"},
+    "SUBMITTED": {"ACKED", "FAILED", "QUARANTINED", "CANCELED"},
+    "ACKED": {"FILLED", "FAILED", "QUARANTINED", "CANCELED"},
     "FILLED": set(),
     "FAILED": set(),
-    "CANCELLED": set(),
-    "QUARANTINED": {"SUBMITTED", "FAILED", "CANCELLED"},
+    "CANCELED": set(),
+    "QUARANTINED": {"SUBMITTED", "FAILED", "CANCELED"},
 }
 INTENT_STUCK_TIMEOUT_ENV = {
     "CREATED": "EXECUTION_INTENT_CREATED_TIMEOUT_SEC",
@@ -586,7 +586,7 @@ def _intent_state_from_event(current_state: str, event: ExecutionIntentEvent) ->
     elif event_status in {"FAILED", "REJECTED", "ERROR"}:
         target = "FAILED"
     elif event_status in {"CANCELLED", "CANCELED", "EXPIRED"}:
-        target = "CANCELLED"
+        target = "CANCELED"
     elif "QUARANTINE" in event_type:
         target = "QUARANTINED"
 

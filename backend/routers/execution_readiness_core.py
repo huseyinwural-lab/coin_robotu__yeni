@@ -22,6 +22,14 @@ from services.execution_safety_core_service import (
 router = APIRouter(prefix="/execution-readiness", tags=["execution_readiness_core"])
 
 
+def _deprecated_payload(data: dict) -> dict:
+    return {
+        **(data or {}),
+        "deprecated": True,
+        "replacement_namespace": "/api/execution-safety/*",
+    }
+
+
 @router.get("/gate")
 def execution_safety_gate(
     force_refresh: bool = Query(default=False),
@@ -30,7 +38,7 @@ def execution_safety_gate(
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    return get_execution_safety_gate(db, user_id=user_id, force_refresh=force_refresh)
+    return _deprecated_payload(get_execution_safety_gate(db, user_id=user_id, force_refresh=force_refresh))
 
 
 @router.get("/intents")
@@ -42,12 +50,12 @@ def execution_intents_state_machine(
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    return get_execution_intent_state_machine_snapshot(
+    return _deprecated_payload(get_execution_intent_state_machine_snapshot(
         db,
         limit=limit,
         include_events=include_events,
         auto_quarantine_stuck=auto_quarantine_stuck,
-    )
+    ))
 
 
 @router.get("/quarantine")
@@ -57,7 +65,7 @@ def execution_quarantine_snapshot(
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    return get_runtime_quarantine_snapshot(db, limit=limit)
+    return _deprecated_payload(get_runtime_quarantine_snapshot(db, limit=limit))
 
 
 @router.post("/quarantine/{event_id}/{action}")
@@ -68,13 +76,13 @@ def execution_quarantine_action(
     db: Session = Depends(get_db),
 ):
     try:
-        return apply_runtime_quarantine_action(
+        return _deprecated_payload(apply_runtime_quarantine_action(
             db,
             event_id=event_id,
             action=action,
             actor_user_id=current_user.id,
             actor_role=current_user.role.value,
-        )
+        ))
     except ValueError as exc:
         detail = str(exc)
         status_code = status.HTTP_404_NOT_FOUND if detail == "quarantine_event_not_found" else status.HTTP_400_BAD_REQUEST
@@ -89,7 +97,7 @@ def execution_incident_export(
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    return build_execution_incident_package(db, user_id=user_id, include_events=include_events)
+    return _deprecated_payload(build_execution_incident_package(db, user_id=user_id, include_events=include_events))
 
 
 @router.post("/intents/stuck/batch-recover")
@@ -100,13 +108,13 @@ def execution_stuck_intents_batch_recover(
     db: Session = Depends(get_db),
 ):
     try:
-        return batch_recover_stuck_intents(
+        return _deprecated_payload(batch_recover_stuck_intents(
             db,
             action=action,
             limit=limit,
             actor_user_id=current_user.id,
             actor_role=current_user.role.value,
-        )
+        ))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -118,7 +126,7 @@ def execution_reconciliation_summary(
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    return get_order_reconciliation_summary(db, limit=limit)
+    return _deprecated_payload(get_order_reconciliation_summary(db, limit=limit))
 
 
 @router.get("/gate/trends")
@@ -127,7 +135,7 @@ def execution_gate_failure_trends(
     current_user: User = Depends(require_admin),
 ):
     _ = current_user
-    return get_gate_failure_trends(days=days)
+    return _deprecated_payload(get_gate_failure_trends(days=days))
 
 
 @router.get("/interventions/audit-trail")
@@ -137,4 +145,4 @@ def execution_interventions_audit_trail(
     db: Session = Depends(get_db),
 ):
     _ = current_user
-    return get_manual_intervention_audit_trail(db, limit=limit)
+    return _deprecated_payload(get_manual_intervention_audit_trail(db, limit=limit))

@@ -1,0 +1,253 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from db import get_db
+from deps import require_admin
+from models import User
+from services.execution_safety_namespace_service import (
+    batch_execution_recovery,
+    apply_execution_safety_quarantine_action,
+    apply_intent_recovery_action,
+    create_execution_attempt_artifact,
+    evaluate_execution_safety_gate,
+    export_execution_incident_package,
+    get_execution_gate_trends,
+    get_execution_intervention_audit,
+    get_execution_observability_snapshot,
+    get_execution_reconciliation_summary,
+    get_execution_recovery_overview,
+    get_execution_safety_intents,
+    get_execution_safety_quarantine,
+    get_unified_environment_policy,
+    update_unified_environment_policy,
+)
+
+
+router = APIRouter(prefix="/execution-safety", tags=["execution_safety"])
+
+
+@router.get("/gate")
+def execution_safety_gate(
+    force_refresh: bool = Query(default=False),
+    user_id: str | None = Query(default=None),
+    request_id: str | None = Query(default=None),
+    session_id: str | None = Query(default=None),
+    correlation_id: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return evaluate_execution_safety_gate(
+        db,
+        force_refresh=force_refresh,
+        user_id=user_id,
+        request_id=request_id,
+        session_id=session_id,
+        correlation_id=correlation_id,
+    )
+
+
+@router.get("/intents")
+def execution_safety_intents(
+    limit: int = Query(default=100, ge=1, le=300),
+    include_events: bool = Query(default=False),
+    auto_quarantine_stuck: bool = Query(default=True),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_execution_safety_intents(
+        db,
+        limit=limit,
+        include_events=include_events,
+        auto_quarantine_stuck=auto_quarantine_stuck,
+    )
+
+
+@router.get("/quarantine")
+def execution_safety_quarantine(
+    limit: int = Query(default=200, ge=1, le=500),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_execution_safety_quarantine(db, limit=limit)
+
+
+@router.post("/quarantine/{quarantine_id}/{action}")
+def execution_safety_quarantine_action(
+    quarantine_id: str,
+    action: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return apply_execution_safety_quarantine_action(
+            db,
+            quarantine_id=quarantine_id,
+            action=action,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if detail == "quarantine_event_not_found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.get("/artifacts")
+def execution_safety_artifacts(
+    intent_id: str = Query(...),
+    request_id: str | None = Query(default=None),
+    session_id: str | None = Query(default=None),
+    execution_id: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    try:
+        return create_execution_attempt_artifact(
+            db,
+            intent_id=intent_id,
+            request_id=request_id,
+            session_id=session_id,
+            execution_id=execution_id,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if detail == "intent_not_found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.get("/artifacts/incident-export")
+def execution_safety_incident_export(
+    include_events: bool = Query(default=False),
+    user_id: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return export_execution_incident_package(db, include_events=include_events, user_id=user_id)
+
+
+@router.get("/recovery")
+def execution_safety_recovery_overview(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_execution_recovery_overview(db)
+
+
+@router.post("/recovery/batch")
+def execution_safety_recovery_batch(
+    action: str = Query(default="retry"),
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return batch_execution_recovery(
+            db,
+            action=action,
+            limit=limit,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/recovery/policy")
+def execution_safety_recovery_policy(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_unified_environment_policy(db)
+
+
+@router.post("/recovery/policy/{environment}")
+def execution_safety_update_policy(
+    environment: str,
+    enable_flag: bool = Query(...),
+    validation_status: str = Query(...),
+    path_open: bool = Query(...),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return update_unified_environment_policy(
+            db,
+            environment=environment,
+            enable_flag=enable_flag,
+            validation_status=validation_status,
+            path_open=path_open,
+            verification_evidence={"updated_from": "api", "actor": current_user.id},
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/recovery/{intent_id}/{action}")
+def execution_safety_recovery_action(
+    intent_id: str,
+    action: str,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return apply_intent_recovery_action(
+            db,
+            intent_id=intent_id,
+            action=action,
+            actor_user_id=current_user.id,
+            actor_role=current_user.role.value,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND if detail == "intent_not_found" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+
+@router.get("/observability")
+def execution_safety_observability(
+    user_id: str | None = Query(default=None),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_execution_observability_snapshot(db, user_id=user_id)
+
+
+@router.get("/recovery/reconciliation-summary")
+def execution_safety_reconciliation_summary(
+    limit: int = Query(default=500, ge=1, le=2000),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_execution_reconciliation_summary(db, limit=limit)
+
+
+@router.get("/recovery/gate-trends")
+def execution_safety_gate_trends(
+    days: int = Query(default=14, ge=1, le=90),
+    current_user: User = Depends(require_admin),
+):
+    _ = current_user
+    return get_execution_gate_trends(days=days)
+
+
+@router.get("/recovery/intervention-audit")
+def execution_safety_intervention_audit(
+    limit: int = Query(default=120, ge=1, le=500),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return get_execution_intervention_audit(db, limit=limit)

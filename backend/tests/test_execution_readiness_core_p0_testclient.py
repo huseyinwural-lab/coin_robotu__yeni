@@ -179,7 +179,7 @@ class TestExecutionReadinessIntentsEndpointLocal:
         assert response.status_code == 200
         data = response.json()
         
-        expected_states = ["CREATED", "SUBMITTED", "ACKED", "FILLED", "FAILED", "CANCELLED", "QUARANTINED"]
+        expected_states = ["CREATED", "SUBMITTED", "ACKED", "FILLED", "FAILED", "CANCELED", "QUARANTINED"]
         state_counts = data.get("state_counts", {})
         
         for state in expected_states:

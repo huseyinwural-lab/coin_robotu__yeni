@@ -11,7 +11,7 @@ export const AdminRuntimeQuarantinePage = () => {
   const loadEvents = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await apiClient.get("/execution-readiness/quarantine?limit=250");
+      const { data } = await apiClient.get("/execution-safety/quarantine?limit=250");
       setSnapshot({
         items: data?.items || [],
         summary: data?.summary || {},
@@ -30,7 +30,7 @@ export const AdminRuntimeQuarantinePage = () => {
 
   const runAction = async (eventId, action) => {
     try {
-      await apiClient.post(`/execution-readiness/quarantine/${eventId}/${action}`);
+      await apiClient.post(`/execution-safety/quarantine/${eventId}/${action}`);
       toast.success(`Quarantine ${action} tamamlandı`);
       await loadEvents();
     } catch (error) {
@@ -70,29 +70,31 @@ export const AdminRuntimeQuarantinePage = () => {
       )}
 
       <div className="space-y-3" data-testid="admin-runtime-quarantine-list">
-        {(snapshot?.items || []).map((eventItem) => (
-          <div key={eventItem.id} className="border border-slate-700 bg-slate-900 p-3" data-testid={`runtime-quarantine-row-${eventItem.id}`}>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3" data-testid={`runtime-quarantine-grid-${eventItem.id}`}>
-              <p className="text-sm" data-testid={`runtime-quarantine-entity-${eventItem.id}`}>entity_type: {eventItem.entity_type}</p>
-              <p className="text-sm" data-testid={`runtime-quarantine-event-${eventItem.id}`}>event: {eventItem.event_type}</p>
-              <p className="text-sm" data-testid={`runtime-quarantine-status-${eventItem.id}`}>status: {eventItem.status}</p>
-              <p className="text-sm" data-testid={`runtime-quarantine-reason-${eventItem.id}`}>reason: {eventItem.reason_code || "-"}</p>
-              <p className="text-xs text-slate-400" data-testid={`runtime-quarantine-retry-${eventItem.id}`}>retry: {eventItem.retry_count}/{eventItem.max_retry}</p>
-              <p className="text-xs text-slate-400" data-testid={`runtime-quarantine-error-${eventItem.id}`}>error: {eventItem.error_message}</p>
+        {(snapshot?.items || []).map((eventItem) => {
+          const rowId = eventItem.quarantine_id || eventItem.id;
+          return (
+          <div key={rowId} className="border border-slate-700 bg-slate-900 p-3" data-testid={`runtime-quarantine-row-${rowId}`}>
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3" data-testid={`runtime-quarantine-grid-${rowId}`}>
+              <p className="text-sm" data-testid={`runtime-quarantine-entity-${rowId}`}>entity_type: {eventItem.entity_type}</p>
+              <p className="text-sm" data-testid={`runtime-quarantine-event-${rowId}`}>event: {eventItem.event_type}</p>
+              <p className="text-sm" data-testid={`runtime-quarantine-status-${rowId}`}>status: {eventItem.status}</p>
+              <p className="text-sm" data-testid={`runtime-quarantine-reason-${rowId}`}>reason: {eventItem.reason || eventItem.reason_code || "-"}</p>
+              <p className="text-xs text-slate-400" data-testid={`runtime-quarantine-retry-${rowId}`}>retry: {eventItem.retry_count}/{eventItem.max_retry}</p>
+              <p className="text-xs text-slate-400" data-testid={`runtime-quarantine-error-${rowId}`}>error: {eventItem?.error_snapshot?.error_message || eventItem.error_message || "-"}</p>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2" data-testid={`runtime-quarantine-actions-${eventItem.id}`}>
-              <Button size="sm" className="bg-emerald-500 text-black hover:bg-emerald-600" onClick={() => runAction(eventItem.id, "replay")} data-testid={`runtime-quarantine-replay-${eventItem.id}`}>
+            <div className="mt-3 flex flex-wrap gap-2" data-testid={`runtime-quarantine-actions-${rowId}`}>
+              <Button size="sm" className="bg-emerald-500 text-black hover:bg-emerald-600" onClick={() => runAction(rowId, "replay")} data-testid={`runtime-quarantine-replay-${rowId}`}>
                 Replay
               </Button>
-              <Button size="sm" variant="outline" className="border-slate-500 text-slate-200" onClick={() => runAction(eventItem.id, "dismiss")} data-testid={`runtime-quarantine-dismiss-${eventItem.id}`}>
+              <Button size="sm" variant="outline" className="border-slate-500 text-slate-200" onClick={() => runAction(rowId, "dismiss")} data-testid={`runtime-quarantine-dismiss-${rowId}`}>
                 Dismiss
               </Button>
-              <Button size="sm" variant="outline" className="border-red-500 text-red-300" onClick={() => runAction(eventItem.id, "mark_failed")} data-testid={`runtime-quarantine-mark-failed-${eventItem.id}`}>
+              <Button size="sm" variant="outline" className="border-red-500 text-red-300" onClick={() => runAction(rowId, "mark_failed")} data-testid={`runtime-quarantine-mark-failed-${rowId}`}>
                 Mark Failed
               </Button>
             </div>
           </div>
-        ))}
+        )})}
       </div>
     </section>
   );

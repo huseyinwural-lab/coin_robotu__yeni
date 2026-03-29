@@ -1,0 +1,96 @@
+{
+  "summary": "Execution Safety Namespace P0 Testing Complete - All backend APIs verified, route ordering fix applied, frontend auth has cross-origin cookie issue (known from iteration 173)",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "Bybit Testnet", "issue": "Returns HTTP 403 from this runtime - expected per main agent context (environment blocker, not code defect)"},
+      {"endpoint": "S3 Artifact Upload", "issue": "Working correctly - S3_UPLOADED status confirmed"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Admin Login -> /admin/execution-readiness",
+        "issue": "Session device_id cookie not being sent correctly in browser due to cross-origin/SameSite restrictions. This is a known issue from iteration 173. Backend X-Session-Device header fallback works correctly via curl.",
+        "affected_selectors": ["admin-production-gate-page", "execution-safety-gate-card"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_execution_safety_namespace_p0.py",
+    "/app/test_reports/pytest/execution_safety_namespace_p0.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FIXED: Route ordering in execution_safety.py - moved /recovery/policy/{environment} before /recovery/{intent_id}/{action} to prevent route collision",
+    "FIXED: Added try/except ValueError handling to /recovery/policy/{environment} endpoint for proper 400 error response",
+    "Gate standard schema verified: state/score/blockers/warnings/evaluated_at/correlation_id all present",
+    "Hard blocker override verified: when blockers exist, state is BLOCKED",
+    "Intent lifecycle canonical states verified: CREATED,SUBMITTED,ACKED,PARTIALLY_FILLED,FILLED,FAILED,CANCELED,RECONCILING,RECONCILED",
+    "Quarantine required fields contract verified: quarantine_id, correlation_id, intent_id, reason, failure_stage, retry_count, first_seen_at, last_seen_at, payload_snapshot, error_snapshot, status",
+    "Recovery endpoints verified: /recovery, /recovery/{intent_id}/{action}, /recovery/batch",
+    "Artifacts endpoints verified: /artifacts?intent_id=..., /artifacts/incident-export",
+    "Deprecated legacy namespace verified: /api/execution-readiness/* returns deprecated=true and replacement_namespace=/api/execution-safety/*"
+  ],
+  "updated_files": [
+    "/app/backend/routers/execution_safety.py",
+    "/app/backend/tests/test_execution_safety_namespace_p0.py"
+  ],
+  "success_rate": {
+    "backend": "100% - All execution-safety namespace endpoints verified via curl",
+    "frontend": "Unable to verify via browser - Admin login flow has cross-origin cookie issue (known from iteration 173)"
+  },
+  "test_credentials": "canary.admin@platform.local / CanaryAdmin123!",
+  "seed_data_creation": "None required - using existing admin user",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All execution-safety namespace endpoints verified working via curl with proper session binding (X-Session-Device header). Route ordering fix applied to prevent /recovery/policy/{environment} from being matched by /recovery/{intent_id}/{action}. Frontend browser testing blocked by cross-origin cookie issue (same as iteration 173).",
+  "verified_contracts": {
+    "gate_standard_schema": {
+      "required_fields": ["state", "score", "blockers", "warnings", "evaluated_at", "correlation_id"],
+      "state_values": ["READY", "DEGRADED", "BLOCKED"],
+      "hard_blocker_override": "If blockers exist, state must be BLOCKED"
+    },
+    "intent_lifecycle_canonical_states": {
+      "states": ["CREATED", "SUBMITTED", "ACKED", "PARTIALLY_FILLED", "FILLED", "FAILED", "CANCELED", "RECONCILING", "RECONCILED"],
+      "verified": true
+    },
+    "quarantine_required_fields": {
+      "fields": ["quarantine_id", "correlation_id", "intent_id", "reason", "failure_stage", "retry_count", "first_seen_at", "last_seen_at", "payload_snapshot", "error_snapshot", "status"],
+      "verified": true
+    },
+    "recovery_endpoints": {
+      "/recovery": "200 OK - returns active_stuck_intents, quarantined_events, replay_history",
+      "/recovery/{intent_id}/{action}": "200 OK for valid intent, 404 for invalid intent",
+      "/recovery/batch": "200 OK - accepts retry/cancel/reconcile/quarantine actions, 400 for invalid_action"
+    },
+    "artifacts_endpoints": {
+      "/artifacts?intent_id=...": "422 without intent_id, 404 for invalid intent_id",
+      "/artifacts/incident-export": "200 OK - returns schema_version, package_type, runbook_recommendations, quarantine_replay_plan"
+    },
+    "deprecated_legacy_namespace": {
+      "/api/execution-readiness/gate": "200 OK with deprecated=true, replacement_namespace=/api/execution-safety/*",
+      "/api/execution-readiness/intents": "200 OK with deprecated=true",
+      "/api/execution-readiness/quarantine": "200 OK with deprecated=true"
+    }
+  },
+  "environment_limitations": {
+    "bybit_testnet": "HTTP 403 from this runtime - expected per main agent context (environment blocker)",
+    "preview_url": "Cross-origin cookie issues affect browser-based auth (known from iteration 173)"
+  },
+  "fixes_applied": [
+    {
+      "file": "/app/backend/routers/execution_safety.py",
+      "issue": "Route ordering collision - /recovery/policy/{environment} was being matched by /recovery/{intent_id}/{action}",
+      "fix": "Moved /recovery/batch, /recovery/policy, /recovery/policy/{environment} routes before /recovery/{intent_id}/{action}"
+    },
+    {
+      "file": "/app/backend/routers/execution_safety.py",
+      "issue": "Missing error handling for invalid_environment ValueError",
+      "fix": "Added try/except ValueError block to return proper 400 HTTP error"
+    }
+  ],
+  "rca_of_the_issue": "Route ordering in FastAPI - more specific routes must be defined before generic path parameter routes. The /recovery/{intent_id}/{action} route was matching 'policy' as intent_id and 'testnet' as action, causing intent_not_found errors."
+}
