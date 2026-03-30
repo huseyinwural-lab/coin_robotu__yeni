@@ -171,10 +171,6 @@ export const UserTradePage = () => {
   const handlePreview = async () => {
     try {
       const validation = await runValidation({ silent: true });
-      if (!validation?.valid) {
-        toast.error("Validation failed: preview oluşturulamadı");
-        return;
-      }
       const payload = {
         source_type: "manual",
         intent_type: "OPEN_POSITION",
@@ -198,7 +194,11 @@ export const UserTradePage = () => {
       const { data } = await apiClient.post("/v1/user/trading/preview", payload);
       setPreviewResult(data);
       setConfirmChecked(false);
-      toast.success("Preview oluşturuldu");
+      if (!validation?.valid) {
+        toast.warning("Validation warning var; preview panelinde detayları inceleyin");
+      } else {
+        toast.success("Preview oluşturuldu");
+      }
     } catch (error) {
       toast.error(parseErrorText(error));
     }
