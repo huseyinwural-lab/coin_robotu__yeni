@@ -217,6 +217,9 @@ class MfaSettingsResponse(BaseModel):
     backup_codes_remaining: int = 0
     mfa_enabled_not_verified: bool = False
     backup_download_required: bool = False
+    mfa_grace_active: bool = False
+    mfa_grace_expires_at: datetime | None = None
+    last_verified_at: datetime | None = None
     updated_at: datetime | None = None
 
 
@@ -235,6 +238,13 @@ class MfaBackupCodesResponse(BaseModel):
     generated_codes: list[str] = Field(default_factory=list)
     backup_codes_remaining: int = 0
     generated_at: datetime
+
+
+class MfaSecureActionRequest(BaseModel):
+    current_password: str = Field(min_length=8, max_length=128)
+    method: str = Field(min_length=4, max_length=20)
+    code: str = Field(min_length=4, max_length=12)
+    revoke_other_sessions: bool = False
 
 
 class MfaChallengeVerifyRequest(BaseModel):

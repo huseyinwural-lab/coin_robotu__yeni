@@ -367,6 +367,7 @@ def _is_grace_expired(security_state: UserMfaSecurityState, now: datetime) -> bo
 
 def get_mfa_settings(db: Session, user_id: str) -> dict:
     pref = _get_or_create_preference(db, user_id)
+    state = _get_or_create_security_state(db, user_id)
     methods = _normalize_methods(pref.enabled_methods)
     decrypted_secret = _decrypt_totp_secret(pref.totp_secret)
     return {
@@ -378,6 +379,9 @@ def get_mfa_settings(db: Session, user_id: str) -> dict:
         "backup_codes_remaining": _active_backup_codes_count(db, user_id),
         "mfa_enabled_not_verified": bool(pref.is_enabled and not pref.totp_verified),
         "backup_download_required": bool(pref.totp_verified and _active_backup_codes_count(db, user_id) == 0),
+        "mfa_grace_active": bool(state.mfa_grace_expires_at and _to_utc(state.mfa_grace_expires_at) and _to_utc(state.mfa_grace_expires_at) > _now()),
+        "mfa_grace_expires_at": _to_utc(state.mfa_grace_expires_at),
+        "last_verified_at": _to_utc(state.last_mfa_verified_at),
         "updated_at": pref.updated_at,
     }
 

@@ -9,6 +9,7 @@ from models import User, UserRole
 from schemas import (
     AuthResponse,
     MfaBackupCodesResponse,
+    MfaSecureActionRequest,
     MfaChallengeCreateRequest,
     MfaChallengeResendResponse,
     MfaChallengeVerifyRequest,
@@ -17,6 +18,7 @@ from schemas import (
     MfaTotpSetupResponse,
     MfaTotpVerifyRequest,
 )
+from core.security import verify_password
 from services.audit_service import create_audit_log
 from services.auth_session_security_service import resolve_or_create_device_id, set_device_cookie
 from services.identity_control_service import (
@@ -40,6 +42,7 @@ from services.mfa_service import (
     resolve_challenge_user,
     update_mfa_settings,
     verify_mfa_challenge,
+    verify_step_up_code,
     verify_totp_setup,
 )
 from services.recovery_approval_service import (
@@ -188,6 +191,40 @@ def post_backup_codes_regenerate(
         details={"count": payload.get("backup_codes_remaining", 0), **build_security_audit_context(request)},
     )
     return MfaBackupCodesResponse(**payload)
+
+
+@router.post("/backup-codes/regenerate-secure", response_model=MfaBackupCodesResponse)
+def post_backup_codes_regenerate_secure(
+    payload: MfaSecureActionRequest,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _set_deprecated_headers(response)
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="current_password_invalid")
+    verify_step_up_code(
+        db,
+        user=current_user,
+        method=payload.method,
+        code=payload.code,
+        device_id=str(request.cookies.get("device_id") or request.headers.get("X-Session-Device") or "secure-mfa-action"),
+        session_context={"ip_hash": resolve_ip_hash(request), "device_fingerprint": resolve_device_fingerprint(request)},
+        step_up_scope=["mfa_backup_regenerate"],
+    )
+    result = regenerate_backup_codes(db, user_id=current_user.id)
+    create_audit_log(
+        db,
+        action="mfa_backup_codes_regenerated_secure",
+        entity_type="user",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning",
+        details=build_security_audit_context(request),
+    )
+    return MfaBackupCodesResponse(**result)
 
 
 def _verify_challenge_handler(
@@ -424,6 +461,46 @@ def post_public_mfa_disable(
         actor_role=current_user.role.value,
         severity="warning",
         details=build_security_audit_context(request),
+    )
+    return MfaSettingsResponse(**result)
+
+
+@router.post("/disable-secure", response_model=MfaSettingsResponse)
+def post_mfa_disable_secure(
+    payload: MfaSecureActionRequest,
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _set_deprecated_headers(response)
+    if current_user.role in {UserRole.OPS}:
+        raise HTTPException(status_code=403, detail="privileged_mfa_disable_forbidden")
+    if not verify_password(payload.current_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="current_password_invalid")
+    verify_step_up_code(
+        db,
+        user=current_user,
+        method=payload.method,
+        code=payload.code,
+        device_id=str(request.cookies.get("device_id") or request.headers.get("X-Session-Device") or "secure-mfa-disable"),
+        session_context={"ip_hash": resolve_ip_hash(request), "device_fingerprint": resolve_device_fingerprint(request)},
+        step_up_scope=["mfa_disable"],
+    )
+    result = disable_user_mfa(db, user_id=current_user.id)
+    revoked = 0
+    if payload.revoke_other_sessions:
+        revoked = revoke_all_active_sessions_for_user(db, target_user_id=current_user.id, actor=current_user, reason="mfa_disable_secure")
+        db.commit()
+    create_audit_log(
+        db,
+        action="mfa_disabled_secure",
+        entity_type="user",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="warning",
+        details={"revoked_sessions": revoked, **build_security_audit_context(request)},
     )
     return MfaSettingsResponse(**result)
 
