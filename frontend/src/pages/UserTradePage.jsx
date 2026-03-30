@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiClient } from "@/lib/api";
+import { apiClient, buildSessionHeaders, FRONTEND_BACKEND_URL } from "@/lib/api";
 
 const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"];
 
@@ -32,6 +32,32 @@ const parseErrorText = (error) => {
     return detail.code;
   }
   return "trade_submit_failed";
+};
+
+const postJsonWithSession = async (path, body) => {
+  const token = window.localStorage.getItem("token");
+  const response = await fetch(`${FRONTEND_BACKEND_URL}/api${path}`, {
+    method: "POST",
+    headers: {
+      ...buildSessionHeaders(),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: "include",
+    cache: "no-store",
+    body: JSON.stringify(body),
+  });
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  if (!response.ok) {
+    const error = new Error((payload && (payload.detail || payload.message || payload.reason_code)) || `request_failed_${response.status}`);
+    error.response = { status: response.status, data: payload };
+    throw error;
+  }
+  return payload;
 };
 
 const formatConnectionLabel = (connection) => {
@@ -199,7 +225,7 @@ export const UserTradePage = () => {
         execution_mode: "manual",
         exchange_connection_id: selectedConnectionId || null,
       };
-      const { data } = await apiClient.post("/v1/user/trading/preview", payload);
+      const data = await postJsonWithSession("/v1/user/trading/preview", payload);
       setPreviewResult(data);
       setConfirmChecked(false);
       if (!validation?.valid) {
