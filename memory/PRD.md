@@ -193,6 +193,38 @@
   - **Trade Entry = PRODUCTION READY (LOCAL VERIFIED)**
   - preview tarafı hâlâ ayrı olarak infra-blocked kabul edilir
 
+## 2026-03-30 — GLOBAL FINAL READINESS & RELEASE GATE
+
+### Tek cümlelik durum
+- Sistem modül bazlı değil, uçtan uca zincirler halinde doğrulandı.
+- Kritik modüller **READY değilse bile LOCAL VERIFIED** durumuna getirildi.
+- Preview auth/network sorunu core code blocker değil, **PREVIEW BLOCKED (infra)** olarak ayrıştırıldı.
+
+### Release kararı
+SYSTEM STATUS: READY FOR STAGED RELEASE
+
+### Özet durumlar
+- Bot Runtime Module → LOCAL VERIFIED
+- Unified Risk Core → LOCAL VERIFIED
+- Execution Engine (Microstructure dahil) → LOCAL VERIFIED
+- Unified Control Room → LOCAL VERIFIED
+- Strategy Layer → LOCAL VERIFIED
+- Observability / Logs / Metrics → LOCAL VERIFIED
+- Auth / RBAC / MFA → LOCAL VERIFIED
+- Exchange Connectivity → LOCAL VERIFIED
+- API Gateway / Backend Core → PREVIEW BLOCKED
+
+### Karar notu
+- PREVIEW BLOCKED durumları infra kaynaklı olduğu için doğrudan core release blocker olarak sayılmadı.
+- Controlled rollout / staged release mantığında sistem çıkabilir seviyededir.
+- Ancak final live release onayı için:
+  - preview auth stabil olmalı **veya**
+  - gerçek deploy ortamında aynı regression seti PASS olmalıdır.
+
+### Kanıt kaynağı
+- Ayrıntılı matris:
+  - `/app/memory/FINAL_READINESS_MATRIX.md`
+
 ## 2026-03-30 — BOT MODULE P2 (Control Room + Portfolio Control)
 
 ### Tamamlanan P2 katmanları
