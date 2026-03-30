@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,7 @@ export const SymbolSelectorPanel = ({
   onWatchlistApplied,
 }) => {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [watchlists, setWatchlists] = useState([]);
@@ -98,6 +99,7 @@ export const SymbolSelectorPanel = ({
   const [liquidityBandFilter, setLiquidityBandFilter] = useState("all");
   const [riskBandFilter, setRiskBandFilter] = useState("all");
   const [exchangeFilter, setExchangeFilter] = useState("all");
+  const loadAbortRef = useRef(null);
 
   const normalizedSelectedSymbols = useMemo(() => normalizeSymbols(selectedSymbols), [selectedSymbols]);
   const normalizedMode = useMemo(() => normalizeModeValue(mode), [mode]);
@@ -134,6 +136,13 @@ export const SymbolSelectorPanel = ({
     return ["all", ...values];
   }, [normalizedRows]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
   const loadProviderConfig = useCallback(async () => {
     try {
       const { data } = await apiClient.get("/symbol-selector/provider-config");
@@ -155,6 +164,10 @@ export const SymbolSelectorPanel = ({
   const loadUniverse = useCallback(async ({ forceMode } = {}) => {
     setIsLoading(true);
     try {
+      if (loadAbortRef.current) {
+        loadAbortRef.current.abort();
+      }
+      loadAbortRef.current = new AbortController();
       const activeMode = normalizeModeValue(forceMode || normalizedMode);
       const { data } = await apiClient.get("/symbol-selector/universe", {
         params: {
@@ -163,9 +176,10 @@ export const SymbolSelectorPanel = ({
           market_type: marketType,
           mode: activeMode,
           selected_symbols: normalizedSelectedSymbols.join(","),
-          query: search,
+          query: debouncedSearch,
           quote_asset_filter: quoteAssetFilter,
         },
+        signal: loadAbortRef.current.signal,
       });
       setRows(data?.rows || []);
 
@@ -196,6 +210,9 @@ export const SymbolSelectorPanel = ({
         }
       }
     } catch (error) {
+      if (error?.code === "ERR_CANCELED" || String(error?.message || "").toLowerCase().includes("canceled")) {
+        return;
+      }
       toast.error(error?.response?.data?.detail || "Sembol evreni yüklenemedi");
       setRows([]);
     } finally {
@@ -209,7 +226,7 @@ export const SymbolSelectorPanel = ({
     normalizedSelectedSymbols,
     onSelectedSymbolsChange,
     quoteAssetFilter,
-    search,
+    debouncedSearch,
     source,
   ]);
 

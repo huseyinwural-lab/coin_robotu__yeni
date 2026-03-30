@@ -28,24 +28,51 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 
-const userNavItems = [
-  { to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" },
-  { to: "/user/dashboard", label: "Dashboard", icon: BarChart3, testId: "nav-user-dashboard-link" },
-  { to: "/user/execution", label: "Execution", icon: Activity, testId: "nav-user-execution-link" },
-  { to: "/user/alerts", label: "Alerts", icon: ShieldAlert, testId: "nav-user-alerts-link" },
-  { to: "/user/trade", label: "Trade Entry", icon: Wrench, testId: "nav-user-trade-entry-link" },
-  { to: "/user/exchange-settings", label: "Exchange Settings", icon: KeyRound, testId: "nav-user-exchange-settings-link" },
-  { to: "/user/mfa-settings", label: "MFA Settings", icon: ShieldAlert, testId: "nav-user-mfa-settings-link" },
-  { to: "/user/risk-policy", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
-  { to: "/user/bot-profiles", label: "Bot Profilleri", icon: TrendingUp, testId: "nav-bot-profiles-link" },
-  { to: "/user/signals", label: "Signal", icon: Radio, testId: "nav-user-signals-link" },
-  { to: "/user/trades", label: "Trades", icon: Activity, testId: "nav-user-trades-link" },
-  { to: "/user/positions", label: "Positions", icon: Activity, testId: "nav-user-positions-link" },
-  { to: "/user/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },
-  { to: "/user/portfolio", label: "Portfolio", icon: BarChartBig, testId: "nav-user-portfolio-link" },
-  { to: "/user/reports", label: "Reports", icon: FileText, testId: "nav-user-reports-link" },
-  { to: "/user/paper-positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
-  { to: "/user/backtest-insights", label: "Backtest Insights", icon: LineChart, testId: "nav-backtest-insights-link" },
+const userMenuGroups = [
+  { id: "dashboard", label: "Dashboard", items: [{ to: "/user/dashboard", label: "Global Dashboard", icon: BarChart3, testId: "nav-user-dashboard-link" }] },
+  { id: "market", label: "Market", items: [{ to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" }] },
+  {
+    id: "execution",
+    label: "Execution",
+    items: [
+      { to: "/user/execution", label: "Execution View", icon: Activity, testId: "nav-user-execution-link" },
+      { to: "/user/positions", label: "Positions", icon: Activity, testId: "nav-user-positions-link" },
+      { to: "/user/trades", label: "History", icon: Activity, testId: "nav-user-trades-link" },
+    ],
+  },
+  {
+    id: "portfolio",
+    label: "Portfolio",
+    items: [
+      { to: "/user/portfolio", label: "PnL", icon: BarChartBig, testId: "nav-user-portfolio-link" },
+      { to: "/user/reports", label: "Reports", icon: FileText, testId: "nav-user-reports-link" },
+    ],
+  },
+  {
+    id: "strategy",
+    label: "Strategy",
+    items: [
+      { to: "/user/bot-profiles", label: "Bot Profiles", icon: TrendingUp, testId: "nav-bot-profiles-link" },
+      { to: "/user/backtest-insights", label: "Backtests", icon: LineChart, testId: "nav-backtest-insights-link" },
+    ],
+  },
+  {
+    id: "monitoring",
+    label: "Monitoring",
+    items: [
+      { to: "/user/alerts", label: "Alerts", icon: ShieldAlert, testId: "nav-user-alerts-link" },
+      { to: "/user/activity-log", label: "Activity Log", icon: FileText, testId: "nav-user-activity-log-link" },
+      { to: "/user/signals", label: "Audit Signals", icon: Radio, testId: "nav-user-signals-link" },
+    ],
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    items: [
+      { to: "/user/settings", label: "Profile / API Keys / Risk", icon: Settings2, testId: "nav-user-settings-link" },
+      { to: "/user/mfa-settings", label: "MFA", icon: ShieldAlert, testId: "nav-user-mfa-settings-link" },
+    ],
+  },
 ];
 
 const adminOnlyItems = [
@@ -163,7 +190,6 @@ export const PanelLayout = () => {
     Object.fromEntries(adminOnlyItems.map((group) => [group.id, group.defaultOpen])),
   );
   const isAdmin = adminRoles.has(user?.role);
-  const navItems = isAdmin ? [] : userNavItems;
   const roleThemeClass = isAdmin ? "admin-ops-theme" : "user-theme";
   const sidebarClass = isAdmin ? "border-orange-700 bg-orange-300" : "border-slate-800 bg-slate-900";
   const brandTitleClass = isAdmin ? "text-black" : "text-orange-500";
@@ -241,17 +267,22 @@ export const PanelLayout = () => {
       .filter((group) => group.items.length > 0);
   }, [normalizedSearch]);
 
-  const filteredUserNavItems = useMemo(() => {
-    if (!normalizedSearch) return navItems;
-    return navItems.filter((item) => item.label.toLocaleLowerCase("tr-TR").includes(normalizedSearch));
-  }, [navItems, normalizedSearch]);
+  const filteredUserGroups = useMemo(() => {
+    if (!normalizedSearch) return userMenuGroups;
+    return userMenuGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.label.toLocaleLowerCase("tr-TR").includes(normalizedSearch)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [normalizedSearch]);
 
   const hasAnySidebarMatch = useMemo(() => {
     if (isAdmin) {
       return filteredAdminGroups.some((group) => (group.items || []).length > 0);
     }
-    return filteredUserNavItems.length > 0;
-  }, [filteredAdminGroups, filteredUserNavItems, isAdmin]);
+    return filteredUserGroups.length > 0;
+  }, [filteredAdminGroups, filteredUserGroups, isAdmin]);
 
   const renderNavLink = (item) => {
     if (item.superAdminOnly && user?.role !== "super_admin") {
@@ -403,7 +434,16 @@ export const PanelLayout = () => {
                 })}
               </div>
             ) : (
-              filteredUserNavItems.map(renderNavLink)
+              <div className="space-y-3" data-testid="user-menu-groups">
+                {filteredUserGroups.map((group) => (
+                  <section key={group.id} className="rounded border border-black/20 bg-black/5 p-2" data-testid={`user-menu-group-${group.id}`}>
+                    <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-black" data-testid={`user-menu-group-label-${group.id}`}>{group.label}</p>
+                    <div className="mt-2 space-y-2" data-testid={`user-menu-group-items-${group.id}`}>
+                      {group.items.map(renderNavLink)}
+                    </div>
+                  </section>
+                ))}
+              </div>
             )}
           </nav>
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -8,6 +8,7 @@ import { TradeSymbolSelection } from "@/components/TradeSymbolSelection";
 import { Button } from "@/components/ui/button";
 import { UserMarketChartPanel } from "@/components/UserMarketChartPanel";
 import { apiClient } from "@/lib/api";
+import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { saveExecutionContext } from "@/lib/userFlowContext";
 import { DecisionCard } from "@/pages/user/components/DecisionCard";
 import { ExplainabilityDrawer } from "@/pages/user/components/ExplainabilityDrawer";
@@ -219,6 +220,7 @@ const deriveRequestHealth = (events) => {
 
 export const UserScannerPage = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [mode, setMode] = useState("ASSISTED");
   const [overview, setOverview] = useState(null);
   const [scannerResults, setScannerResults] = useState([]);
@@ -241,6 +243,7 @@ export const UserScannerPage = () => {
   const [scannerDailyReport, setScannerDailyReport] = useState(null);
   const [scannerLoadDegraded, setScannerLoadDegraded] = useState(false);
   const [scannerLoadFailures, setScannerLoadFailures] = useState([]);
+  const [showSlowLoadingHint, setShowSlowLoadingHint] = useState(false);
   const [decisionCards, setDecisionCards] = useState([]);
   const [selectedDecisionSymbol, setSelectedDecisionSymbol] = useState("");
   const [isExplainabilityDrawerOpen, setIsExplainabilityDrawerOpen] = useState(false);
@@ -262,6 +265,7 @@ export const UserScannerPage = () => {
   const [selectedTrendWindowMinutes, setSelectedTrendWindowMinutes] = useState(5);
   const [chartSymbol, setChartSymbol] = useState("BTCUSDT");
   const [chartTimeframe, setChartTimeframe] = useState("1h");
+  const [scannerSection, setScannerSection] = useState(searchParams.get("section") === "screener" ? "screener" : "results");
   const [requestTrend, setRequestTrend] = useState(() => buildTrendPoints([], 5));
   const [requestEndpointBreakdown, setRequestEndpointBreakdown] = useState({
     oneMinute: summarizeEndpointBreakdown([], { windowMs: 60_000 }),
@@ -921,6 +925,7 @@ export const UserScannerPage = () => {
 
     const effectiveMode = watchlistOnly ? "manual_selection" : symbolMode;
     setIsRunning(true);
+    setShowSlowLoadingHint(false);
     try {
       if (activeAutomation?.auto_enabled) {
         await saveActiveProfile({ autoEnabled: true, withToast: false });
@@ -944,6 +949,20 @@ export const UserScannerPage = () => {
       setIsRunning(false);
     }
   };
+
+  useEffect(() => {
+    if (!isRunning) {
+      setShowSlowLoadingHint(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setShowSlowLoadingHint(true), 4000);
+    return () => window.clearTimeout(timer);
+  }, [isRunning]);
+
+  useEffect(() => {
+    const nextSection = searchParams.get("section") === "screener" ? "screener" : "results";
+    setScannerSection(nextSection);
+  }, [searchParams]);
 
   const runPreset = async (preset) => {
     if (!ensureScannerRunReady()) {
@@ -1005,6 +1024,13 @@ export const UserScannerPage = () => {
     setChartTimeframe("1h");
   };
 
+  const switchScannerSection = (nextSection) => {
+    setScannerSection(nextSection);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("section", nextSection === "screener" ? "screener" : "results");
+    setSearchParams(nextParams, { replace: true });
+  };
+
   const buildIntentPayload = (item) => ({
     source_type: "scanner",
     source_ref_id: item.id,
@@ -1062,6 +1088,20 @@ export const UserScannerPage = () => {
           testIdPrefix="user-scanner-chart"
         />
       </div>
+
+      <section className="order-2 col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-section-toggle-panel">
+        <div className="flex flex-wrap items-center gap-2" data-testid="user-scanner-section-toggle-group">
+          <Button type="button" variant={scannerSection === "results" ? "default" : "outline"} onClick={() => switchScannerSection("results")} data-testid="user-scanner-section-results-button">Scan Results</Button>
+          <Button type="button" variant={scannerSection === "screener" ? "default" : "outline"} onClick={() => switchScannerSection("screener")} data-testid="user-scanner-section-screener-button">Indicator Screener</Button>
+        </div>
+      </section>
+
+      {scannerSection === "screener" ? (
+        <div className="col-span-12" data-testid="user-scanner-embedded-screener-wrapper">
+          <UserIndicatorScreenerPage embedded />
+        </div>
+      ) : (
+      <>
 
       <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-request-health-mini-indicator">
         <div className="flex flex-wrap items-center gap-3" data-testid="user-scanner-request-health-row">
@@ -1474,6 +1514,11 @@ export const UserScannerPage = () => {
           <p className="text-sm" data-testid="user-scanner-last-scan-value">Last Scan: {formatDateLabel(activeAutomation?.last_run_at || overview?.latest_generated_at)}</p>
           <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan: {formatDateLabel(activeAutomation?.next_run_at)}</p>
         </div>
+        {showSlowLoadingHint && (
+          <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="user-scanner-slow-loading-hint">
+            Tarama yanıtı uzadı. Mevcut sonuçlar korunuyor; isterseniz yeniden deneyebilir veya kısmi görünümle devam edebilirsiniz.
+          </div>
+        )}
       </section>
 
       <section className="order-6 col-span-12" data-testid="user-scanner-symbol-selection-section">
@@ -1657,6 +1702,8 @@ export const UserScannerPage = () => {
           onAddWatchlist={addWatchlistFromResult}
         />
       </section>
+      </>
+      )}
     </section>
   );
 };

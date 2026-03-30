@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -145,7 +145,7 @@ const parseOptionalNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-export const UserIndicatorScreenerPage = () => {
+export const UserIndicatorScreenerPage = ({ embedded = false }) => {
   const navigate = useNavigate();
   const [filters, setFilters] = useState(defaultFilters);
   const [saveQueryName, setSaveQueryName] = useState("");
@@ -162,6 +162,9 @@ export const UserIndicatorScreenerPage = () => {
   const [showFiltersExpanded, setShowFiltersExpanded] = useState(true);
   const [selectedRowKey, setSelectedRowKey] = useState("");
   const [selectorSymbols, setSelectorSymbols] = useState([]);
+  const [symbolSearchInput, setSymbolSearchInput] = useState(defaultFilters.symbol_search);
+  const [showSlowHint, setShowSlowHint] = useState(false);
+  const runAbortControllerRef = useRef(null);
 
   const watchlistSymbolSet = useMemo(() => new Set((watchlistRows || []).map((item) => `${item.symbol}:${item.market_type}`)), [watchlistRows]);
 
@@ -193,6 +196,17 @@ export const UserIndicatorScreenerPage = () => {
   const updateFilter = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
+
+  useEffect(() => {
+    setSymbolSearchInput(filters.symbol_search || "");
+  }, [filters.symbol_search]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setFilters((prev) => ({ ...prev, symbol_search: String(symbolSearchInput || "").toUpperCase() }));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [symbolSearchInput]);
 
   const clearSingleFilter = (key) => {
     if (!(key in defaultFilters)) {
@@ -306,8 +320,13 @@ export const UserIndicatorScreenerPage = () => {
     }
 
     setIsRunning(true);
+    setShowSlowHint(false);
     setRunError("");
     try {
+      if (runAbortControllerRef.current) {
+        runAbortControllerRef.current.abort();
+      }
+      runAbortControllerRef.current = new AbortController();
       const payload = {
         exchange: filters.exchange,
         market_type: filters.market_type,
@@ -317,7 +336,7 @@ export const UserIndicatorScreenerPage = () => {
         symbol_universe: ["whitelist_only", "custom_list"].includes(filters.symbol_universe_mode) ? (filters.symbol_whitelist || "") : "all",
         filter_payload: buildFilterPayload(),
       };
-      const { data } = await apiClient.post("/user/indicator-screener/run", payload);
+      const { data } = await apiClient.post("/user/indicator-screener/run", payload, { signal: runAbortControllerRef.current.signal });
       setMeta(data || null);
       setRows(data?.rows || []);
       setSelectedRowKey("");
@@ -332,6 +351,9 @@ export const UserIndicatorScreenerPage = () => {
         toast.success(resultStateMessages[data?.result_state] || `Tarama tamamlandı. Eşleşme: ${data?.match_count || 0}`);
       }
     } catch (error) {
+      if (error?.code === "ERR_CANCELED" || String(error?.message || "").toLowerCase().includes("canceled")) {
+        return;
+      }
       const message = error?.response?.data?.detail || "Indicator query çalıştırılamadı";
       const statusCode = Number(error?.response?.status || 0);
       let mappedState = "backend_unavailable";
@@ -353,6 +375,15 @@ export const UserIndicatorScreenerPage = () => {
       setIsRunning(false);
     }
   };
+
+  useEffect(() => {
+    if (!isRunning) {
+      setShowSlowHint(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setShowSlowHint(true), 3500);
+    return () => window.clearTimeout(timer);
+  }, [isRunning]);
 
   const clearAllFilters = () => {
     setFilters(defaultFilters);
@@ -685,7 +716,7 @@ export const UserIndicatorScreenerPage = () => {
 
   return (
     <section className="space-y-4" data-testid="user-indicator-screener-page">
-      <header className="rounded-lg border border-emerald-300 bg-gradient-to-r from-emerald-100 via-emerald-50 to-lime-100 p-4" data-testid="user-indicator-screener-header">
+      {!embedded && <header className="rounded-lg border border-emerald-300 bg-gradient-to-r from-emerald-100 via-emerald-50 to-lime-100 p-4" data-testid="user-indicator-screener-header">
         <div className="flex flex-wrap items-start justify-between gap-3" data-testid="user-indicator-screener-header-row">
           <div data-testid="user-indicator-screener-header-left">
             <h2 className="text-4xl font-black uppercase tracking-tight text-slate-900" data-testid="user-indicator-screener-title">Indicator Screener</h2>
@@ -726,10 +757,16 @@ export const UserIndicatorScreenerPage = () => {
             <p className="text-xs text-slate-700" data-testid="user-indicator-screener-applied-filter-summary-value">market={appliedFilterSummary.market_participation} · universe={appliedFilterSummary.symbol_universe_mode} · sort={appliedFilterSummary.sort_by}/{appliedFilterSummary.sort_direction}</p>
           </div>
         </div>
-      </header>
+      </header>}
 
       {loadError && (
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" data-testid="user-indicator-screener-warning-alert">Açılış yüklemesinde uyarı: {loadError}</div>
+      )}
+
+      {showSlowHint && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" data-testid="user-indicator-screener-slow-network-hint">
+          Ağ yanıtı yavaş. Mevcut sonuçlar korunuyor; isterseniz biraz sonra tekrar deneyebilirsiniz.
+        </div>
       )}
 
       <section className="rounded-lg border border-slate-300 bg-white p-4" data-testid="user-indicator-screener-filter-panel">
@@ -807,7 +844,7 @@ export const UserIndicatorScreenerPage = () => {
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="user-indicator-screener-universe-liquidity-grid">
                 <label className="space-y-1" data-testid="user-indicator-screener-symbol-search-field">
                   <span className="text-xs text-slate-600">Symbol Search</span>
-                  <Input value={filters.symbol_search} onChange={(event) => updateFilter("symbol_search", event.target.value.toUpperCase())} placeholder="BTC, ETH, SOL" className="h-9 border-slate-300 bg-white" data-testid="user-indicator-screener-symbol-search-input" />
+                  <Input value={symbolSearchInput} onChange={(event) => setSymbolSearchInput(event.target.value.toUpperCase())} placeholder="BTC, ETH, SOL" className="h-9 border-slate-300 bg-white" data-testid="user-indicator-screener-symbol-search-input" />
                 </label>
                 <label className="space-y-1" data-testid="user-indicator-screener-universe-mode-field">
                   <span className="text-xs text-slate-600">Symbol Universe Mode</span>

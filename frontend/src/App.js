@@ -59,6 +59,8 @@ import { UserPortfolioPage } from "@/pages/UserPortfolioPage";
 import { UserTradesPage } from "@/pages/UserTradesPage";
 import { UserExecutionPage } from "@/pages/UserExecutionPage";
 import { UserAlertCenterPage } from "@/pages/UserAlertCenterPage";
+import { UserSettingsPage } from "@/pages/UserSettingsPage";
+import { UserActivityLogPage } from "@/pages/UserActivityLogPage";
 import { UserScannerPage } from "@/pages/UserScannerPage";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
@@ -248,8 +250,9 @@ function App() {
             <Route path="trades" element={<UserTradesPage />} />
             <Route path="execution" element={<UserExecutionPage />} />
             <Route path="alerts" element={<UserAlertCenterPage />} />
+            <Route path="activity-log" element={<UserActivityLogPage />} />
             <Route path="scanner" element={<UserScannerPage />} />
-            <Route path="indicator-screener" element={<UserIndicatorScreenerPage />} />
+            <Route path="indicator-screener" element={<Navigate to="/user/scanner?section=screener" replace />} />
             <Route path="signals" element={<UserSignalsPage />} />
             <Route path="symbol/:symbol" element={<UserSymbolDecisionDetailPage />} />
             <Route path="reports" element={<UserReportsPage />} />
@@ -258,11 +261,12 @@ function App() {
             <Route path="chart" element={<UserChartPage />} />
             <Route path="bot-profiles" element={<BotProfilesPage />} />
             <Route path="bots" element={<Navigate to="/user/bot-profiles" replace />} />
-            <Route path="risk-policy" element={<RiskPoliciesPage />} />
-            <Route path="risk-policies" element={<Navigate to="/user/risk-policy" replace />} />
-            <Route path="strategies" element={<StrategyTemplatesPage />} />
+            <Route path="risk-policy" element={<Navigate to="/user/settings" replace />} />
+            <Route path="risk-policies" element={<Navigate to="/user/settings" replace />} />
+            <Route path="strategies" element={<Navigate to="/user/bot-profiles" replace />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
-            <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />
+            <Route path="exchange-settings" element={<Navigate to="/user/settings" replace />} />
+            <Route path="settings" element={<UserSettingsPage />} />
             <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="positions" element={<UserPositionsPage />} />
             <Route path="live-trading-dashboard" element={<UserLiveTradingDashboardPage />} />
