@@ -10,11 +10,17 @@ const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"];
 
 const defaultForm = {
   symbol: "BTCUSDT",
+  side: "buy",
   size_mode: "USDT",
   size_value: 100,
   leverage: 1,
   margin_type: "isolated",
   order_type: "market",
+  price: "",
+  stop_price: "",
+  take_profit_price: "",
+  stop_loss_mode: "none",
+  take_profit_mode: "none",
 };
 
 const parseErrorText = (error) => {
@@ -48,7 +54,10 @@ export const UserTradePage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
+  const [previewResult, setPreviewResult] = useState(null);
   const [executionResult, setExecutionResult] = useState(null);
+  const [openOrders, setOpenOrders] = useState([]);
+  const [confirmChecked, setConfirmChecked] = useState(false);
 
   const estimatedQty = useMemo(() => {
     const sizeValue = Number(form.size_value || 0);
@@ -63,6 +72,10 @@ export const UserTradePage = () => {
   }, [form.size_mode, form.size_value, midPrice]);
 
   const canRunValidation = Number(midPrice || 0) > 0 && Number(estimatedQty || 0) > 0 && Boolean(form.symbol);
+  const isFutures = useMemo(() => {
+    const selectedConnection = connections.find((row) => row.id === selectedConnectionId);
+    return String(selectedConnection?.market_type || "futures").toLowerCase() === "futures";
+  }, [connections, selectedConnectionId]);
 
   useEffect(() => {
     const symbolFromQuery = String(searchParams.get("symbol") || "").trim().toUpperCase();
@@ -118,16 +131,28 @@ export const UserTradePage = () => {
     loadTicker();
   }, [form.symbol]);
 
+  useEffect(() => {
+    const loadOpenOrders = async () => {
+      try {
+        const { data } = await apiClient.get("/user/execution/intents", { params: { limit: 20 } });
+        setOpenOrders((data || []).filter((item) => ["PREVIEWED", "QUEUED", "APPROVED", "SUBMITTED"].includes(String(item.status || "").toUpperCase())));
+      } catch {
+        setOpenOrders([]);
+      }
+    };
+    loadOpenOrders();
+  }, [executionResult, previewResult]);
+
   const runValidation = async ({ silent = false } = {}) => {
     const payload = {
       symbol: form.symbol,
-      market_type: "futures",
+      market_type: isFutures ? "futures" : "spot",
       order_type: form.order_type,
-      side: "buy",
-      price: Number(midPrice || 0),
+      side: form.side,
+      price: Number(form.price || midPrice || 0),
       size: Number(estimatedQty || 0),
-      leverage: Number(form.leverage || 1),
-      margin_mode: form.margin_type,
+      leverage: isFutures ? Number(form.leverage || 1) : 1,
+      margin_mode: isFutures ? form.margin_type : "isolated",
     };
 
     const { data } = await apiClient.post("/user/validate-order", payload);
@@ -143,6 +168,42 @@ export const UserTradePage = () => {
     return data;
   };
 
+  const handlePreview = async () => {
+    try {
+      const validation = await runValidation({ silent: true });
+      if (!validation?.valid) {
+        toast.error("Validation failed: preview oluşturulamadı");
+        return;
+      }
+      const payload = {
+        source_type: "manual",
+        intent_type: "OPEN_POSITION",
+        market_type: isFutures ? "futures" : "spot",
+        symbol: form.symbol,
+        side: form.side,
+        order_type: form.order_type.toUpperCase(),
+        position_size_mode: "fixed_notional",
+        position_size_value: form.size_mode === "USDT" ? Number(form.size_value || 0) : Number((Number(form.size_value || 0) * Number(midPrice || 0)).toFixed(4)),
+        margin_mode: isFutures ? form.margin_type : null,
+        leverage: isFutures ? Number(form.leverage || 1) : null,
+        size: Number(estimatedQty || 0),
+        price: form.price ? Number(form.price) : undefined,
+        stop_price: form.stop_price ? Number(form.stop_price) : undefined,
+        take_profit_price: form.take_profit_price ? Number(form.take_profit_price) : undefined,
+        take_profit_mode: form.take_profit_mode,
+        stop_loss_mode: form.stop_loss_mode,
+        execution_mode: "manual",
+        exchange_connection_id: selectedConnectionId || null,
+      };
+      const { data } = await apiClient.post("/v1/user/trading/preview", payload);
+      setPreviewResult(data);
+      setConfirmChecked(false);
+      toast.success("Preview oluşturuldu");
+    } catch (error) {
+      toast.error(parseErrorText(error));
+    }
+  };
+
   const handleValidateOnly = async () => {
     try {
       await runValidation();
@@ -151,70 +212,36 @@ export const UserTradePage = () => {
     }
   };
 
-  const handleOpenPosition = async () => {
+  const handleConfirmAndExecute = async () => {
+    if (!previewResult?.preview?.intent_token || !confirmChecked) {
+      toast.error("Confirm onayı gerekli");
+      return;
+    }
     setIsSubmitting(true);
     setExecutionResult(null);
-    let latestValidation = null;
 
     try {
-      const validation = await runValidation({ silent: true });
-      latestValidation = validation;
-      if (!validation?.valid) {
-        setExecutionResult({
-          status: "failed",
-          execution_mode: validation?.execution_mode || "mocked",
-          violations: validation?.violations || [],
-          explain: validation?.explain || [],
-          error_text: "validation_failed",
-        });
-        toast.error("Validation fail: trade açılamaz");
-        return;
-      }
-
-      const previewPayload = {
-        source_type: "manual",
-        intent_type: "OPEN_POSITION",
-        market_type: "futures",
-        symbol: form.symbol,
-        side: "buy",
-        order_type: form.order_type,
-        position_size_mode: "fixed_notional",
-        position_size_value:
-          form.size_mode === "USDT"
-            ? Number(form.size_value || 0)
-            : Number((Number(form.size_value || 0) * Number(midPrice || 0)).toFixed(4)),
-        margin_mode: form.margin_type,
-        leverage: Number(form.leverage || 1),
-        execution_mode: "manual",
-        holding_profile: "intraday",
-        size: Number(estimatedQty || 0),
-        exchange_connection_id: selectedConnectionId || null,
-      };
-
-      const previewRes = await apiClient.post("/v1/user/trading/preview", previewPayload);
-      const preview = previewRes.data?.preview;
-      if (!preview?.intent_token) {
-        throw new Error("preview_token_missing");
-      }
-
       const submitRes = await apiClient.post("/user/open-position", {
-        intent_token: preview.intent_token,
-        preview_hash: preview.preview_hash,
+        intent_token: previewResult.preview.intent_token,
+        preview_hash: previewResult.preview.preview_hash,
       });
 
       const executionMode =
-        submitRes.data?.execution_mode || validation?.execution_mode || preview?.execution_mode || "mocked";
+        submitRes.data?.execution_mode || previewResult?.preview?.execution_mode || "mocked";
 
       setExecutionResult({
-        status: "opened",
+        status: "submitted",
+        intent_id: submitRes.data?.intent_id,
+        queue_state: submitRes.data?.queue_state,
+        reason_codes: submitRes.data?.reason_codes || [],
         execution_mode: executionMode,
-        violations: [],
-        explain: submitRes.data?.explain || validation?.explain || [],
+        policy_decision: submitRes.data?.policy_decision || {},
+        pipeline_trace: submitRes.data?.pipeline_trace || [],
+        explain: submitRes.data?.explain || [],
         error_text: "",
       });
 
-      toast.success("Trade açıldı, positions sayfasına yönlendiriliyorsunuz");
-      setTimeout(() => navigate("/user/positions"), 1500);
+      toast.success("Order confirmed → execution queue’ya gönderildi");
     } catch (error) {
       const statusCode = Number(error?.response?.status || 0);
       const detail = error?.response?.data?.detail;
@@ -222,9 +249,9 @@ export const UserTradePage = () => {
 
       setExecutionResult({
         status: "failed",
-        execution_mode: latestValidation?.execution_mode || validationResult?.execution_mode || "mocked",
+        execution_mode: previewResult?.preview?.execution_mode || validationResult?.execution_mode || "mocked",
         violations,
-        explain: latestValidation?.explain || validationResult?.explain || [],
+        explain: validationResult?.explain || [],
         error_text: statusCode === 423 ? "EXECUTION_BLOCKED_BY_READINESS" : parseErrorText(error),
       });
       if (statusCode === 423) {
@@ -246,7 +273,7 @@ export const UserTradePage = () => {
   }
 
   const executionStateClass =
-    executionResult?.status === "opened"
+    executionResult?.status === "submitted"
       ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-100"
       : "border-red-500/60 bg-red-500/10 text-red-100";
 
@@ -275,6 +302,14 @@ export const UserTradePage = () => {
                   {symbol}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div className="col-span-12 md:col-span-6" data-testid="user-trade-side-field">
+            <label className="text-xs text-slate-400" htmlFor="user-trade-side-select">Side</label>
+            <select id="user-trade-side-select" className="mt-1 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 text-sm" value={form.side} onChange={(event) => setForm((prev) => ({ ...prev, side: event.target.value }))} data-testid="user-trade-side-select">
+              <option value="buy">BUY</option>
+              <option value="sell">SELL</option>
             </select>
           </div>
 
@@ -323,7 +358,7 @@ export const UserTradePage = () => {
             />
           </div>
 
-          <div className="col-span-6 md:col-span-3" data-testid="user-trade-leverage-field">
+          {isFutures && <div className="col-span-6 md:col-span-3" data-testid="user-trade-leverage-field">
             <label className="text-xs text-slate-400" htmlFor="user-trade-leverage-input" data-testid="user-trade-leverage-label">Leverage</label>
             <Input
               id="user-trade-leverage-input"
@@ -334,9 +369,9 @@ export const UserTradePage = () => {
               onChange={(event) => setForm((prev) => ({ ...prev, leverage: Number(event.target.value || 1) }))}
               data-testid="user-trade-leverage-input"
             />
-          </div>
+          </div>}
 
-          <div className="col-span-6 md:col-span-3" data-testid="user-trade-margin-type-field">
+          {isFutures && <div className="col-span-6 md:col-span-3" data-testid="user-trade-margin-type-field">
             <label className="text-xs text-slate-400" htmlFor="user-trade-margin-type-select" data-testid="user-trade-margin-type-label">Margin Type</label>
             <select
               id="user-trade-margin-type-select"
@@ -348,7 +383,7 @@ export const UserTradePage = () => {
               <option value="isolated" data-testid="user-trade-margin-type-option-isolated">isolated</option>
               <option value="cross" data-testid="user-trade-margin-type-option-cross">cross</option>
             </select>
-          </div>
+          </div>}
 
           <div className="col-span-12 md:col-span-4" data-testid="user-trade-order-type-field">
             <label className="text-xs text-slate-400" htmlFor="user-trade-order-type-select" data-testid="user-trade-order-type-label">Order Type</label>
@@ -361,8 +396,31 @@ export const UserTradePage = () => {
             >
               <option value="market" data-testid="user-trade-order-type-option-market">market</option>
               <option value="limit" data-testid="user-trade-order-type-option-limit">limit</option>
+              <option value="stop_loss" data-testid="user-trade-order-type-option-stop-loss">stop</option>
+              <option value="stop_loss_limit" data-testid="user-trade-order-type-option-stop-limit">stop-limit</option>
+              <option value="take_profit" data-testid="user-trade-order-type-option-tp">tp</option>
+              <option value="take_profit_limit" data-testid="user-trade-order-type-option-tp-limit">tp-limit</option>
             </select>
           </div>
+
+          {form.order_type !== "market" && (
+            <div className="col-span-6 md:col-span-4" data-testid="user-trade-price-field">
+              <label className="text-xs text-slate-400" htmlFor="user-trade-price-input">Limit Price</label>
+              <Input id="user-trade-price-input" type="number" min="0" step="0.0001" value={form.price} onChange={(event) => setForm((prev) => ({ ...prev, price: event.target.value }))} data-testid="user-trade-price-input" />
+            </div>
+          )}
+          {form.order_type.includes("stop") && (
+            <div className="col-span-6 md:col-span-4" data-testid="user-trade-stop-price-field">
+              <label className="text-xs text-slate-400" htmlFor="user-trade-stop-price-input">Stop Price</label>
+              <Input id="user-trade-stop-price-input" type="number" min="0" step="0.0001" value={form.stop_price} onChange={(event) => setForm((prev) => ({ ...prev, stop_price: event.target.value }))} data-testid="user-trade-stop-price-input" />
+            </div>
+          )}
+          {form.order_type.includes("take_profit") && (
+            <div className="col-span-6 md:col-span-4" data-testid="user-trade-take-profit-price-field">
+              <label className="text-xs text-slate-400" htmlFor="user-trade-take-profit-price-input">Take Profit Price</label>
+              <Input id="user-trade-take-profit-price-input" type="number" min="0" step="0.0001" value={form.take_profit_price} onChange={(event) => setForm((prev) => ({ ...prev, take_profit_price: event.target.value }))} data-testid="user-trade-take-profit-price-input" />
+            </div>
+          )}
 
           <div className="col-span-12 md:col-span-8 rounded border border-slate-700 bg-slate-950 p-3" data-testid="user-trade-estimation-card">
             <p className="text-xs text-slate-400" data-testid="user-trade-mid-price-label">Mid Price</p>
@@ -414,11 +472,12 @@ export const UserTradePage = () => {
           </Button>
           <Button
             type="button"
-            onClick={handleOpenPosition}
+            variant="outline"
+            onClick={handlePreview}
             disabled={isSubmitting || !canRunValidation}
-            data-testid="user-trade-open-position-button"
+            data-testid="user-trade-preview-button"
           >
-            {isSubmitting ? "Submitting..." : "Validate + Open Position"}
+            Preview
           </Button>
         </div>
         {!canRunValidation && (
@@ -428,8 +487,58 @@ export const UserTradePage = () => {
         )}
       </div>
 
-      <aside className="col-span-12 lg:col-span-5 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-trade-result-card">
-        <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-trade-result-title">Execution Result</p>
+      <aside className="col-span-12 lg:col-span-5 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-trade-right-column">
+        <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-trade-preview-title">Order Preview</p>
+
+        {!previewResult && <p className="mt-3 text-sm text-slate-300" data-testid="user-trade-preview-empty">Henüz preview yok.</p>}
+
+        {previewResult && (
+          <div className="mt-3 space-y-3" data-testid="user-trade-preview-panel">
+            <pre className="overflow-x-auto rounded border border-cyan-500/60 bg-cyan-500/10 p-3 text-xs text-cyan-50" data-testid="user-trade-preview-metrics-json">{JSON.stringify(previewResult.metrics || {}, null, 2)}</pre>
+            <pre className="overflow-x-auto rounded border border-slate-700 bg-slate-950 p-3 text-xs text-slate-200" data-testid="user-trade-preview-intent-json">{JSON.stringify(previewResult.preview || {}, null, 2)}</pre>
+            <label className="flex items-center gap-2 text-sm text-slate-300" data-testid="user-trade-confirm-checkbox-wrapper">
+              <input type="checkbox" checked={confirmChecked} onChange={(event) => setConfirmChecked(event.target.checked)} data-testid="user-trade-confirm-checkbox" />
+              Risk preview ve execution etkisini okudum, confirm ediyorum.
+            </label>
+            <Button type="button" onClick={handleConfirmAndExecute} disabled={isSubmitting || !confirmChecked} data-testid="user-trade-confirm-order-button">
+              {isSubmitting ? "Executing..." : "Confirm Order"}
+            </Button>
+          </div>
+        )}
+
+        <div className="mt-6 border-t border-slate-800 pt-4" data-testid="user-trade-open-orders-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-trade-open-orders-title">Open Orders</p>
+          <div className="mt-3 space-y-2" data-testid="user-trade-open-orders-list">
+            {openOrders.length === 0 && <p className="text-sm text-slate-300" data-testid="user-trade-open-orders-empty">Açık order yok.</p>}
+            {openOrders.map((row, idx) => (
+              <div key={`${row.id}-${idx}`} className="rounded border border-slate-700 bg-slate-950 p-3" data-testid={`user-trade-open-order-item-${idx}`}>
+                <p className="font-mono text-xs">{row.symbol} · {row.status}</p>
+                <p className="mt-1 text-xs text-slate-400">intent={row.intent_token}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={async () => {
+                    try {
+                      await apiClient.post('/user/execution/intent/cancel', { intent_token: row.intent_token });
+                      toast.success('Open order cancelled');
+                      const { data } = await apiClient.get('/user/execution/intents', { params: { limit: 20 } });
+                      setOpenOrders((data || []).filter((item) => ['PREVIEWED', 'QUEUED', 'APPROVED', 'SUBMITTED'].includes(String(item.status || '').toUpperCase())));
+                    } catch (error) {
+                      toast.error(parseErrorText(error));
+                    }
+                  }}
+                  data-testid={`user-trade-open-order-cancel-button-${idx}`}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 border-t border-slate-800 pt-4" data-testid="user-trade-result-card">
+          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-trade-result-title">Execution Feedback</p>
 
         {!executionResult && (
           <p className="mt-3 text-sm text-slate-300" data-testid="user-trade-result-empty">
@@ -442,6 +551,8 @@ export const UserTradePage = () => {
             <p className="text-sm font-semibold" data-testid="user-trade-result-status">
               status: {executionResult.status}
             </p>
+            {executionResult.intent_id && <p className="mt-1 text-xs" data-testid="user-trade-result-intent-id">intent_id: {executionResult.intent_id}</p>}
+            {executionResult.queue_state && <p className="mt-1 text-xs" data-testid="user-trade-result-queue-state">queue_state: {executionResult.queue_state}</p>}
             <p className="mt-1 inline-flex rounded-full border border-current px-2 py-0.5 text-xs" data-testid="user-trade-result-execution-mode">
               execution_mode: {executionResult.execution_mode}
             </p>
@@ -466,8 +577,13 @@ export const UserTradePage = () => {
                 ))}
               </div>
             )}
+            <div className="mt-3 flex flex-wrap gap-2" data-testid="user-trade-result-shortcuts">
+              <Button type="button" variant="outline" onClick={() => navigate('/user/trades')} data-testid="user-trade-result-view-history-button">View in history</Button>
+              <Button type="button" variant="outline" onClick={() => navigate('/user/execution')} data-testid="user-trade-result-view-execution-button">View in execution panel</Button>
+            </div>
           </div>
         )}
+        </div>
       </aside>
     </section>
   );

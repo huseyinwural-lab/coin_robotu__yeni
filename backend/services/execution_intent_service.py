@@ -157,6 +157,20 @@ def _to_float(value, default: float = 0.0) -> float:
         return default
 
 
+def _json_safe(value):
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
 def _side_to_direction(side: str) -> str:
     side_lower = str(side or "buy").lower()
     if side_lower in {"sell", "short"}:
@@ -933,6 +947,14 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     }
 
     final_status = "PREVIEWED" if validation.get("validation_status") == "valid" else "REJECTED"
+    normalized = _json_safe(normalized)
+    conflict_result = _json_safe(conflict_result)
+    rebalance_result = _json_safe(rebalance_result)
+    hedge_suggestion = _json_safe(hedge_suggestion)
+    venue_context = _json_safe(venue_context)
+    risk_impact = _json_safe(risk_impact)
+    meta_summary = _json_safe(meta_summary)
+
     intent = UserExecutionIntent(
         id=str(uuid.uuid4()),
         intent_id=intent_id,

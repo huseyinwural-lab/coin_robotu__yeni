@@ -20,6 +20,20 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _json_safe(value):
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
 def _fallback_reason_title(code: str) -> str:
     return code.replace("_", " ").replace("-", " ").strip().title() or "Unknown Reason"
 
@@ -122,8 +136,8 @@ def record_decision_trace(
         correlation_basis=str(correlation_basis) if correlation_basis else None,
         reason_codes=normalized_codes,
         reason_details=build_reason_details(normalized_codes),
-        feature_snapshot=feature_snapshot or {},
-        context_payload=context_payload or {},
+        feature_snapshot=_json_safe(feature_snapshot or {}),
+        context_payload=_json_safe(context_payload or {}),
         created_at=current,
         expires_at=current + timedelta(days=TRACE_RETENTION_DAYS),
     )

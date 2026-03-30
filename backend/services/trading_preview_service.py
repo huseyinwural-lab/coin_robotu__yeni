@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 from db import redis_client
-from models import AdminControl
+from models import AdminControl, Position
 from services.pipeline.position_sizing_engine import compute_position_sizing
 
 
@@ -109,11 +109,30 @@ def build_execution_preview_metrics(db: Session, user_id: str, payload: dict, va
     notional = _estimated_notional(payload, account_equity)
     estimated_quantity = round(notional / max(entry_price, 0.0001), 8)
     estimated_risk_usdt = round(notional * ((stop_distance_pct or 0.0) / 100), 4)
+    applied_leverage = int(validation.get("applied_leverage") or payload.get("leverage") or 1)
+    required_margin = round(notional / max(applied_leverage, 1), 4)
+    estimated_fee = round(notional * 0.001, 4)
 
     spread_payload = _cached_json(f"market:spread:{symbol}")
     ticker_payload = _cached_json(f"market:ticker:{symbol}")
     spread_bps = _safe_float(spread_payload.get("spread_bps"), 0.0)
     quote_volume = _safe_float(ticker_payload.get("quote_volume"), 0.0)
+    slippage_estimate_bps = round(spread_bps + max((notional / max(quote_volume, 1.0)) * 10000, 0.0), 6)
+    expected_fill_price = round(entry_price * (1 + slippage_estimate_bps / 10000), 8) if direction == "long" else round(entry_price * (1 - slippage_estimate_bps / 10000), 8)
+    liquidation_buffer_pct = max(4.0, 100.0 / max(applied_leverage, 1))
+    liquidation_price = round(entry_price * (1 - liquidation_buffer_pct / 100), 8) if direction == "long" else round(entry_price * (1 + liquidation_buffer_pct / 100), 8)
+    open_exposure = (
+        db.query(Position)
+        .filter(Position.user_id == user_id, Position.status == "open")
+        .all()
+    )
+    current_exposure = sum(abs(_safe_float(row.size) * _safe_float(row.current_price or row.entry_price)) for row in open_exposure)
+    exposure_after = round(current_exposure + notional, 4)
+    projected_pnl_upside = round((take_profit_price - expected_fill_price) * estimated_quantity, 4) if direction == "long" and take_profit_price else None
+    projected_pnl_downside = round((expected_fill_price - stop_price) * estimated_quantity, 4) if direction == "long" and stop_price else None
+    if direction == "short":
+        projected_pnl_upside = round((expected_fill_price - take_profit_price) * estimated_quantity, 4) if take_profit_price else None
+        projected_pnl_downside = round((stop_price - expected_fill_price) * estimated_quantity, 4) if stop_price else None
 
     control = db.query(AdminControl).filter(AdminControl.id == "global").first()
     min_volume = _safe_float(control.minimum_volume_usd if control else 1_000_000, 1_000_000)
@@ -135,7 +154,26 @@ def build_execution_preview_metrics(db: Session, user_id: str, payload: dict, va
         "estimated_notional": round(notional, 4),
         "estimated_quantity": estimated_quantity,
         "estimated_risk_usdt": estimated_risk_usdt,
+        "estimated_fee": estimated_fee,
+        "slippage_estimate_bps": slippage_estimate_bps,
+        "expected_fill_price": expected_fill_price,
         "account_equity": round(account_equity, 4),
+        "required_margin": required_margin,
+        "liquidation_price": liquidation_price,
+        "leverage_impact": {
+            "requested_leverage": int(payload.get("leverage") or 1),
+            "applied_leverage": applied_leverage,
+            "margin_mode": payload.get("margin_mode") or "isolated",
+        },
+        "post_trade_exposure": {
+            "current_exposure": round(current_exposure, 4),
+            "projected_exposure": exposure_after,
+            "delta": round(notional, 4),
+        },
+        "projected_pnl_impact": {
+            "upside": projected_pnl_upside,
+            "downside": projected_pnl_downside,
+        },
         "liquidity_guard": {
             "ok": liquidity_ok,
             "volume_ok": volume_ok,
