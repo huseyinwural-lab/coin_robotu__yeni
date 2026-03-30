@@ -464,6 +464,15 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
   - `/api/bot-profiles` → 200
   - `/api/bot-profiles/{id}/detail` → 200
 
+### Bot closure verification (final)
+- Testing agent raporu:
+  - `/app/test_reports/iteration_193.json`
+- Sonuç:
+  - backend bot runtime doğrulaması **100% PASS**
+  - create/list/detail/status timeout sorunu yok
+  - lifecycle endpoints PASS
+  - manual/scanner symbol source kontratı PASS
+
 ### Hâlâ açık kalanlar (sonraki tur)
 - bot-scoped trade filtering için correlation namespace’i execution metric katmanına daha güçlü bağlamak
 - unified control room entegrasyonu
