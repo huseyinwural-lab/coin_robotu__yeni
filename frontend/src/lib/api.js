@@ -90,6 +90,13 @@ const ensureDeviceId = () => {
 };
 
 export const getSessionDeviceId = () => ensureDeviceId();
+export const getSessionId = () => ensureSessionId();
+export const buildSessionHeaders = () => ({
+  "Content-Type": "application/json",
+  "X-Session-ID": ensureSessionId(),
+  "X-Session-Device": ensureDeviceId(),
+  "X-Request-ID": generateRequestId(),
+});
 
 apiClient.interceptors.request.use((config) => {
   const nextConfig = config;

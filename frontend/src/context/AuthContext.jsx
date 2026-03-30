@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-import { apiClient, setAuthToken } from "@/lib/api";
+import { apiClient, buildSessionHeaders, FRONTEND_BACKEND_URL, setAuthToken } from "@/lib/api";
 
 const AuthContext = createContext(null);
 const AUTH_TOKEN_KEY = "token";
@@ -30,6 +30,38 @@ const persistAuthSession = ({ token, user }) => {
 const clearAuthSession = () => {
   localStorage.removeItem(AUTH_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
+};
+
+const authFetchJson = async (path, { method = "GET", body = null, token = null, timeoutMs = 8000 } = {}) => {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${FRONTEND_BACKEND_URL}/api${path}`, {
+      method,
+      headers: {
+        ...buildSessionHeaders(),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    if (!response.ok) {
+      const error = new Error((payload && (payload.detail || payload.reason_code)) || `request_failed_${response.status}`);
+      error.response = { status: response.status, data: payload };
+      throw error;
+    }
+    return payload;
+  } finally {
+    window.clearTimeout(timer);
+  }
 };
 
 export const AuthProvider = ({ children }) => {
@@ -85,6 +117,19 @@ export const AuthProvider = ({ children }) => {
             return;
           } catch {
             // fall through to normal 401 cleanup
+          }
+        }
+        if (status === 0 || String(error?.name || "").toLowerCase() === "aborterror" || String(error?.code || "").toUpperCase() === "ERR_NETWORK") {
+          try {
+            const retryPayload = await authFetchJson("/auth/me", { method: "GET", token, timeoutMs: 8000 });
+            if (!cancelled) {
+              setUser(retryPayload);
+              localStorage.setItem(AUTH_USER_KEY, JSON.stringify(retryPayload));
+              setLoading(false);
+            }
+            return;
+          } catch {
+            // continue into normal fallback path
           }
         }
         if (status === 401) {
@@ -149,7 +194,17 @@ export const AuthProvider = ({ children }) => {
     clearAuthSession();
     setAuthToken(null);
     const panelPath = panel === "admin" ? "/auth/login/admin" : panel === "user" ? "/auth/login/user" : "/auth/login";
-    const { data } = await apiClient.post(panelPath, { email, password }, { timeout: 8000 });
+    let data;
+    try {
+      const response = await apiClient.post(panelPath, { email, password }, { timeout: 8000 });
+      data = response.data;
+    } catch (error) {
+      const isNetworkLike = String(error?.code || "").toUpperCase() === "ERR_NETWORK" || String(error?.name || "").toLowerCase() === "aborterror" || String(error?.message || "").toLowerCase().includes("network") || String(error?.message || "").toLowerCase().includes("canceled");
+      if (!isNetworkLike) {
+        throw error;
+      }
+      data = await authFetchJson(panelPath, { method: "POST", body: { email, password }, timeoutMs: 8000 });
+    }
     if (data?.mfa_required) {
       return {
         mfaRequired: true,
@@ -176,11 +231,21 @@ export const AuthProvider = ({ children }) => {
   };
 
   const verifyMfaChallenge = async ({ challengeToken, method, code }) => {
-    const { data } = await apiClient.post("/mfa/verify", {
-      challenge_token: challengeToken,
-      method,
-      code: code || "",
-    }, { timeout: 8000 });
+    let data;
+    try {
+      const response = await apiClient.post("/mfa/verify", {
+        challenge_token: challengeToken,
+        method,
+        code: code || "",
+      }, { timeout: 8000 });
+      data = response.data;
+    } catch (error) {
+      const isNetworkLike = String(error?.code || "").toUpperCase() === "ERR_NETWORK" || String(error?.name || "").toLowerCase() === "aborterror" || String(error?.message || "").toLowerCase().includes("network") || String(error?.message || "").toLowerCase().includes("canceled");
+      if (!isNetworkLike) {
+        throw error;
+      }
+      data = await authFetchJson("/mfa/verify", { method: "POST", body: { challenge_token: challengeToken, method, code: code || "" }, timeoutMs: 8000 });
+    }
     persistAuthSession({ token: data.access_token, user: data.user || null });
     setAuthToken(data.access_token);
     setToken(data.access_token);
