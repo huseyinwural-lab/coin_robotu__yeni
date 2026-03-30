@@ -340,6 +340,45 @@ class BotProfileResponse(BotProfileBase):
     updated_at: datetime
 
 
+class BotRuntimeActionResponse(BaseModel):
+    bot_id: str
+    status: str
+    mode: str
+    strategy_id: str | None = None
+    risk_profile_id: str | None = None
+    execution_profile_id: str | None = None
+    last_heartbeat: str | None = None
+    runtime_context: dict = Field(default_factory=dict)
+    binding_ok: bool | None = None
+    actor_id: str | None = None
+
+
+class BotRuntimeStatusResponse(BaseModel):
+    id: str
+    name: str
+    status: str
+    mode: str
+    strategy_id: str | None = None
+    risk_profile_id: str | None = None
+    execution_profile_id: str | None = None
+    last_heartbeat: str | None = None
+    runtime_context: dict = Field(default_factory=dict)
+    symbol_source: str = "manual"
+    pnl: float = 0
+    active_positions: int = 0
+    last_signal: dict | None = None
+    health: str = "HEALTHY"
+
+
+class BotRuntimePerformanceResponse(BaseModel):
+    bot_id: str
+    pnl: float
+    win_rate: float
+    drawdown: float
+    trade_count: int
+    avg_rr: float
+
+
 class RiskPolicyBase(BaseModel):
     name: str
     position_size_pct: float

@@ -13,7 +13,7 @@ const initialForm = {
   market_type: "spot",
   symbols: "BTCUSDT,ETHUSDT",
   strategy_type: "trend_following",
-  max_concurrent_trades: 3,
+  mode: "live_ready_disabled",
   timeframe: "15m",
   trend_timeframe: "1h",
   is_enabled: true,
@@ -80,10 +80,6 @@ export const BotProfilesPage = () => {
     if (parsedSymbols.length === 0) {
       nextErrors.symbols = "En az bir sembol girin.";
     }
-    if (!Number(form.max_concurrent_trades) || Number(form.max_concurrent_trades) < 1) {
-      nextErrors.max_concurrent_trades = "Max Concurrent Trades en az 1 olmalı.";
-    }
-
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       toast.error("Form alanlarını kontrol edin");
@@ -98,7 +94,7 @@ export const BotProfilesPage = () => {
       strategy_type: form.strategy_type,
       timeframe: form.timeframe,
       trend_timeframe: form.trend_timeframe,
-      leverage: Number(form.max_concurrent_trades),
+      leverage: 1,
       is_enabled: Boolean(form.is_enabled),
     };
 
@@ -126,7 +122,7 @@ export const BotProfilesPage = () => {
     setForm({
       ...item,
       symbols: item.symbols.join(","),
-      max_concurrent_trades: item.leverage,
+      mode: item.mode || "live_ready_disabled",
     });
     setSymbolSource("crypto");
     setSymbolMode("manual_selection");
@@ -136,9 +132,9 @@ export const BotProfilesPage = () => {
 
   const toggleRunning = async (item) => {
     try {
-      const endpoint = item.is_running ? "stop" : "start";
-      await apiClient.post(`/pipeline/bots/${item.id}/${endpoint}`);
-      toast.success(item.is_running ? "Bot durduruldu" : "Bot başlatıldı");
+      const endpoint = item.status === "RUNNING" ? "stop" : "start";
+      await apiClient.post(`/bot-profiles/${item.id}/${endpoint}`);
+      toast.success(endpoint === "stop" ? "Bot durduruldu" : "Bot başlatıldı");
       fetchItems();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Bot durumu değiştirilemedi");
@@ -286,22 +282,14 @@ export const BotProfilesPage = () => {
           <p className="form-helper-text" data-testid="bot-form-template-helper">Ayrı template ekranı yerine bot profili içinden başlangıç seçilir.</p>
         </div>
 
-        <div className="form-group" data-testid="bot-form-group-max-concurrent-trades">
-          <label className="form-label" htmlFor="bot-form-max-concurrent-trades-input" data-testid="bot-form-max-concurrent-trades-label">Max Concurrent Trades</label>
-          <Input
-            id="bot-form-max-concurrent-trades-input"
-            type="number"
-            min={1}
-            max={25}
-            value={form.max_concurrent_trades}
-            onChange={(event) => setForm((prev) => ({ ...prev, max_concurrent_trades: event.target.value }))}
-            data-testid="bot-form-max-concurrent-trades-input"
-            aria-label="Max Concurrent Trades"
-            aria-describedby="bot-form-max-concurrent-trades-helper bot-form-max-concurrent-trades-error"
-            required
-          />
-          <p className="form-helper-text" id="bot-form-max-concurrent-trades-helper" data-testid="bot-form-max-concurrent-trades-helper">Aynı anda açılabilecek maksimum işlem sayısını belirleyin.</p>
-          {formErrors.max_concurrent_trades && <p className="form-error-text" id="bot-form-max-concurrent-trades-error" data-testid="bot-form-max-concurrent-trades-error">{formErrors.max_concurrent_trades}</p>}
+        <div className="form-group" data-testid="bot-form-group-mode">
+          <label className="form-label" htmlFor="bot-form-mode-select" data-testid="bot-form-mode-label">Mode</label>
+          <select id="bot-form-mode-select" value={form.mode} onChange={(event) => setForm((prev) => ({ ...prev, mode: event.target.value }))} className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="bot-form-mode-select">
+            <option value="live_ready_disabled">LIVE-READY (disabled)</option>
+            <option value="paper">PAPER</option>
+            <option value="mock">MOCK</option>
+          </select>
+          <p className="form-helper-text" data-testid="bot-form-mode-helper">Bot varsayılan olarak canlıya hazır ama kapalı başlar.</p>
         </div>
 
         <div className="flex gap-2 md:col-span-2">
@@ -336,6 +324,9 @@ export const BotProfilesPage = () => {
               <TableHead data-testid="bot-table-head-market">Market</TableHead>
               <TableHead data-testid="bot-table-head-strategy">Strateji</TableHead>
               <TableHead data-testid="bot-table-head-parity">Backtest ↔ Live</TableHead>
+              <TableHead data-testid="bot-table-head-status">Status</TableHead>
+              <TableHead data-testid="bot-table-head-health">Health</TableHead>
+              <TableHead data-testid="bot-table-head-mode">Mode</TableHead>
               <TableHead data-testid="bot-table-head-symbols">Semboller</TableHead>
               <TableHead data-testid="bot-table-head-runtime">Runtime</TableHead>
               <TableHead data-testid="bot-table-head-action">Aksiyon</TableHead>
@@ -350,10 +341,13 @@ export const BotProfilesPage = () => {
                     <>
                 <TableCell data-testid={`bot-table-name-${item.id}`}>{item.name}</TableCell>
                 <TableCell data-testid={`bot-table-market-${item.id}`}>{item.market_type}</TableCell>
-                <TableCell data-testid={`bot-table-strategy-${item.id}`}>{item.strategy_type}</TableCell>
+                <TableCell data-testid={`bot-table-strategy-${item.id}`}>{item.strategy_id || item.strategy_type}</TableCell>
                 <TableCell data-testid={`bot-table-parity-${item.id}`}>{parity ? `${parity.backtest?.win_rate ?? 0} / ${parity.live?.win_rate ?? 0} / ${parity.deviation_pct ?? 0}%` : "-"}</TableCell>
+                <TableCell data-testid={`bot-table-status-${item.id}`}>{item.status || (item.is_running ? "RUNNING" : "IDLE")}</TableCell>
+                <TableCell data-testid={`bot-table-health-${item.id}`}>{item.health || "HEALTHY"}</TableCell>
+                <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "live_ready_disabled"}</TableCell>
                 <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbols.join(", ")}</TableCell>
-                <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.is_running ? "running" : "stopped"}</TableCell>
+                <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.last_heartbeat || (item.is_running ? "running" : "stopped")}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" className="border-slate-600 bg-transparent" onClick={() => onEdit(item)} data-testid={`bot-table-edit-${item.id}`}>
@@ -362,12 +356,13 @@ export const BotProfilesPage = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      className={`bg-transparent ${item.is_running ? "border-red-400 text-red-300" : "border-green-400 text-green-300"}`}
+                      className={`bg-transparent ${item.status === "RUNNING" ? "border-red-400 text-red-300" : "border-green-400 text-green-300"}`}
                       onClick={() => toggleRunning(item)}
                       data-testid={`bot-table-toggle-running-${item.id}`}
                     >
-                      {item.is_running ? "Stop" : "Start"}
+                      {item.status === "RUNNING" ? "Stop" : "Start"}
                     </Button>
+                    <Button size="sm" variant="outline" className="border-amber-400 bg-transparent text-amber-200" onClick={async () => { await apiClient.post(`/bot-profiles/${item.id}/pause`); toast.success('Bot pause edildi'); fetchItems(); }} data-testid={`bot-table-pause-${item.id}`}>Pause</Button>
                     <Button
                       size="sm"
                       variant="outline"

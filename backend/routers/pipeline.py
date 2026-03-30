@@ -6,6 +6,7 @@ from deps import get_current_user, is_admin_role, require_admin
 from models import BotProfile, SignalEvent, User
 from schemas import PipelineMonitoringResponse, SignalEventResponse
 from services.audit_service import create_audit_log
+from services.bot_runtime_service import pause_bot_runtime, start_bot_runtime, stop_bot_runtime
 from services.pipeline.runtime import pipeline_runtime
 
 router = APIRouter(prefix="/pipeline", tags=["pipeline"])
@@ -24,8 +25,7 @@ def _authorized_bot(db: Session, bot_id: str, current_user: User):
 @router.post("/bots/{bot_id}/start")
 def start_bot(bot_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     bot = _authorized_bot(db, bot_id, current_user)
-    bot.is_running = True
-    db.commit()
+    payload = start_bot_runtime(db, bot=bot, actor_id=current_user.id)
     create_audit_log(
         db,
         action="bot_start",
@@ -33,16 +33,15 @@ def start_bot(bot_id: str, current_user: User = Depends(get_current_user), db: S
         entity_id=bot.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
-        details={"name": bot.name, "market_type": bot.market_type},
+        details={"name": bot.name, "market_type": bot.market_type, "runtime_status": payload.get("status")},
     )
-    return {"id": bot.id, "is_running": True}
+    return {"id": bot.id, "is_running": True, "status": payload.get("status")}
 
 
 @router.post("/bots/{bot_id}/stop")
 def stop_bot(bot_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     bot = _authorized_bot(db, bot_id, current_user)
-    bot.is_running = False
-    db.commit()
+    payload = stop_bot_runtime(db, bot=bot, actor_id=current_user.id)
     create_audit_log(
         db,
         action="bot_stop",
@@ -50,9 +49,25 @@ def stop_bot(bot_id: str, current_user: User = Depends(get_current_user), db: Se
         entity_id=bot.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
-        details={"name": bot.name, "market_type": bot.market_type},
+        details={"name": bot.name, "market_type": bot.market_type, "runtime_status": payload.get("status")},
     )
-    return {"id": bot.id, "is_running": False}
+    return {"id": bot.id, "is_running": False, "status": payload.get("status")}
+
+
+@router.post("/bots/{bot_id}/pause")
+def pause_bot(bot_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    bot = _authorized_bot(db, bot_id, current_user)
+    payload = pause_bot_runtime(db, bot=bot, actor_id=current_user.id)
+    create_audit_log(
+        db,
+        action="bot_pause",
+        entity_type="bot_profile",
+        entity_id=bot.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"name": bot.name, "market_type": bot.market_type, "runtime_status": payload.get("status")},
+    )
+    return {"id": bot.id, "is_running": False, "status": payload.get("status")}
 
 
 @router.get("/monitoring", response_model=PipelineMonitoringResponse)
