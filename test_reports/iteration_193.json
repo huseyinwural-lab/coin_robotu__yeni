@@ -1,0 +1,113 @@
+{
+  "summary": "Bot Runtime Module P0/P1 Testing Complete - All backend APIs verified working (100%). Local backend tests confirm: GET /api/bot-profiles returns runtime summary, GET /api/bot-profiles/{id}/detail returns full binding/validation/compatibility data, lifecycle endpoints (start/pause/stop/status) work correctly, performance/logs/trades endpoints work, manual symbol source resolves correctly, scanner symbol source empty causes ERROR on start.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bot_runtime_module.py",
+    "/app/backend/tests/test_bot_p2_integration.py",
+    "/app/backend/tests/test_bot_runtime_api.py",
+    "/app/test_reports/pytest/bot_runtime_iteration193.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/bot-profiles returns lightweight runtime summary with: id, name, status, health, mode, strategy_id, symbol_source, symbol_source_summary, last_heartbeat, binding_validation, compatibility",
+    "GET /api/bot-profiles/{id}/detail returns full detail with: config_summary, runtime_summary, strategy_binding, risk_binding, execution_binding, binding_validation, compatibility, last_execution_summary",
+    "Manual symbol source resolves correctly with source_type='manual', ok=true, resolution_status='resolved'",
+    "Scanner symbol source with empty results correctly returns ERROR on start with binding_ok=false",
+    "Bot lifecycle endpoints (start/pause/stop/status) all return correct status transitions",
+    "Performance endpoint returns pnl, win_rate, drawdown, trade_count, avg_rr",
+    "Logs endpoint returns signal events with queue_trace (correlation_id, queue_name, correlation_namespace)",
+    "Trades endpoint returns execution metrics with queue_trace (execution_pipeline trace)",
+    "No timeout on local backend path - list: ~6s, detail: ~2.7s, status: ~1.5s (all under 10s threshold)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_bot_runtime_api.py"
+  ],
+  "success_rate": {
+    "backend": "100% (all endpoints returning 200 OK with correct data)",
+    "frontend": "N/A (backend only testing requested)"
+  },
+  "test_credentials": "review.user@platform.local / ReviewUser123!",
+  "seed_data_creation": "N/A - using existing test user and bot profile",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bot runtime module fully verified: (1) GET /api/bot-profiles returns runtime summary with status/health/mode/strategy_name/symbol_source_summary/last_heartbeat, (2) GET /api/bot-profiles/{id}/detail returns config_summary/runtime_summary/strategy_binding/risk_binding/execution_binding/binding_validation/compatibility/last_execution_summary, (3) Manual symbol source resolves correctly, (4) Scanner symbol source empty causes start -> ERROR, (5) Lifecycle endpoints start/pause/stop/status work, (6) Performance/logs/trades endpoints work, (7) No timeout on local backend path.",
+  "features_verified": {
+    "GET /api/bot-profiles": {
+      "status": "PASS",
+      "http_code": 200,
+      "response_time": "~6s",
+      "fields_verified": ["id", "name", "status", "health", "mode", "strategy_id", "symbol_source", "symbol_source_summary", "last_heartbeat", "binding_validation", "compatibility", "pnl", "today_pnl", "active_positions"]
+    },
+    "GET /api/bot-profiles/{id}/detail": {
+      "status": "PASS",
+      "http_code": 200,
+      "response_time": "~2.7s",
+      "fields_verified": ["config_summary", "runtime_summary", "strategy_binding", "risk_binding", "execution_binding", "binding_validation", "compatibility", "last_execution_summary"]
+    },
+    "manual_symbol_source": {
+      "status": "PASS",
+      "evidence": "symbol_source_summary.source_type='manual', ok=true, resolution_status='resolved'"
+    },
+    "scanner_symbol_source_empty_error": {
+      "status": "PASS",
+      "evidence": "start returns status='ERROR', binding_ok=false, runtime_context.last_error='binding_failed'"
+    },
+    "POST /api/bot-profiles/{id}/start": {
+      "status": "PASS",
+      "http_code": 200,
+      "returns": "status='RUNNING', binding_ok=true, queue_registration, correlation_namespace"
+    },
+    "POST /api/bot-profiles/{id}/pause": {
+      "status": "PASS",
+      "http_code": 200,
+      "returns": "status='PAUSED', pause_policy='new_trades_blocked_existing_managed'"
+    },
+    "POST /api/bot-profiles/{id}/stop": {
+      "status": "PASS",
+      "http_code": 200,
+      "returns": "status='STOPPED', graceful_stop=true, force_close_available=true"
+    },
+    "GET /api/bot-profiles/{id}/status": {
+      "status": "PASS",
+      "http_code": 200,
+      "returns": "full runtime status with health, mode, binding_validation"
+    },
+    "GET /api/bot-profiles/{id}/performance": {
+      "status": "PASS",
+      "http_code": 200,
+      "returns": "bot_id, pnl, win_rate, drawdown, trade_count, avg_rr"
+    },
+    "GET /api/bot-profiles/{id}/logs": {
+      "status": "PASS",
+      "http_code": 200,
+      "returns": "list of signal events with queue_trace"
+    },
+    "GET /api/bot-profiles/{id}/trades": {
+      "status": "PASS",
+      "http_code": 200,
+      "returns": "list of execution metrics with queue_trace"
+    },
+    "no_timeout_local_backend": {
+      "status": "PASS",
+      "evidence": "list=6.15s, detail=2.69s, status=1.5s (all under 10s threshold)"
+    }
+  },
+  "pytest_results": {
+    "test_manual_symbol_source_runtime_detail": "PASSED",
+    "test_scanner_symbol_source_error_when_empty": "PASSED",
+    "test_scanner_symbol_source_resolves_and_logs_bindings": "PASSED",
+    "test_bot_portfolio_control_and_unified_room_embed": "PASSED"
+  },
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  }
+}
