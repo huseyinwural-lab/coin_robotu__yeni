@@ -47,17 +47,26 @@ export const UserLoginPage = () => {
   };
 
   useEffect(() => {
-    if (loading || !user) {
+    const storedToken = localStorage.getItem("token");
+    if (!storedToken && user) {
+      return;
+    }
+    if (loading || submitting || mfaState?.mfaRequired || !user || !storedToken) {
       return;
     }
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
     if (adminRoles.has(user.role)) {
       navigate("/admin/dashboard", { replace: true });
+      return;
     }
-  }, [loading, navigate, user]);
+    navigate("/user/dashboard", { replace: true });
+  }, [loading, mfaState?.mfaRequired, navigate, submitting, user]);
 
   const onSubmit = async (event) => {
     event.preventDefault();
+    if (submitting) {
+      return;
+    }
     setSubmitting(true);
     try {
       if (mode === "register") {
@@ -76,7 +85,20 @@ export const UserLoginPage = () => {
         setMode("login");
       } else {
         setPanelHint("");
-        const loginResult = await login({ email: form.email, password: form.password, panel: "user" });
+        const attemptLogin = async () => login({ email: form.email, password: form.password, panel: "user" });
+        let loginResult;
+        try {
+          loginResult = await attemptLogin();
+        } catch (firstError) {
+          const code = String(firstError?.code || "").toUpperCase();
+          const message = String(firstError?.message || "").toLowerCase();
+          const retryableAbort = code === "ERR_CANCELED" || code === "ERR_ABORTED" || message.includes("aborted") || message.includes("canceled") || message.includes("network error");
+          if (!retryableAbort) {
+            throw firstError;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 350));
+          loginResult = await attemptLogin();
+        }
         if (loginResult?.mfaRequired) {
           setMfaState(loginResult);
           setMfaCode("");
@@ -86,7 +108,7 @@ export const UserLoginPage = () => {
           return;
         }
         toast.success(`Giriş başarılı${rememberMe ? "" : " (oturum cihazda saklanmayacak)"}`);
-        navigate("/user/dashboard");
+        navigate("/user/dashboard", { replace: true });
       }
     } catch (error) {
       const message = getErrorMessage(error, "İşlem başarısız");
