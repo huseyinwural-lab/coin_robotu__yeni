@@ -225,6 +225,87 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Ayrıntılı matris:
   - `/app/memory/FINAL_READINESS_MATRIX.md`
 
+## 2026-03-30 — FINAL REMAINING GAP CLOSURE (Risk Policy / Alert Center / Execution Analytics / Signals Cleanup)
+
+### Risk Policy lifecycle
+- Risk Policy ekranı artık aktif policy lifecycle odaklı çalışıyor:
+  - `Create`
+  - `Preview Impact`
+  - `Activate`
+  - `History`
+  - `Rollback`
+- Yeni backend route’lar:
+  - `POST /api/risk-policies/{id}/preview-impact`
+  - `POST /api/risk-policies/{id}/activate`
+  - `GET /api/risk-policies/{id}/history`
+  - `POST /api/risk-policies/{id}/rollback`
+- Yeni alanlar:
+  - `version_group_id`
+  - `version_num`
+  - `lifecycle_state`
+  - `is_active`
+  - `activated_at`
+  - `activated_by`
+  - `status_reason`
+  - `metadata_json`
+
+### Risk impact / enforce / kill-switch görünürlüğü
+- UI’da görünür:
+  - active policy kartı
+  - version/history paneli
+  - impact preview paneli
+  - execution enforce kanıt paneli
+  - kill-switch görünürlüğü
+
+### Alert Center production-grade dönüşüm
+- Yeni backend route:
+  - `GET /api/user/alerts`
+  - `POST /api/user/alerts/{id}/ack`
+  - `POST /api/user/alerts/{id}/dismiss`
+- UserAlertCenter artık destekliyor:
+  - severity
+  - category
+  - timestamp
+  - history
+  - filter/search
+  - acknowledge
+  - dismiss
+  - backend persistence
+  - execution/activity-log/strategy/symbol drill-down
+
+### Execution analytics ürünleştirildi
+- UserExecutionPage artık kullanıcı dostu analitik yüzey sunuyor:
+  - slippage summary
+  - latency summary
+  - fill rate
+  - reject count
+  - cancel count
+  - retry count
+  - quality score
+  - filtered history
+  - export json/csv
+  - preview vs actual görünürlüğü için analytics alanı hazır
+
+### Signals menü temizliği
+- Standalone `Signals / Audit Signals` user nav item kaldırıldı.
+- Signals görünürlüğü artık:
+  - Scanner
+  - Trade / Execution context
+  - Activity / Audit akışları
+  üzerinden taşınıyor.
+
+### Test / doğrulama
+- Testing agent raporu:
+  - `/app/test_reports/iteration_192.json`
+- Sonuç:
+  - backend APIs **100% PASS**
+  - frontend doğrulama **PASS**
+  - tek frontend hata (`UserExecutionPage` Button import) testing agent tarafından fixlendi
+
+### Son durum
+- Risk Policy, Alert Center, Execution Analytics ve bilgi mimarisi cleanup bu turda kapanmış kabul edilir.
+- Final readiness matrisi için gerekli son user-facing blocker’lar kapatıldı.
+
 ## 2026-03-30 — BOT MODULE P2 (Control Room + Portfolio Control)
 
 ### Tamamlanan P2 katmanları
