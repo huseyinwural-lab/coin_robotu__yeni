@@ -278,23 +278,23 @@ export const UserTradePage = () => {
     setExecutionResult(null);
 
     try {
-      const submitRes = await apiClient.post("/user/open-position", {
+      const submitRes = await postJsonWithSession("/user/open-position", {
         intent_token: previewResult.preview.intent_token,
         preview_hash: previewResult.preview.preview_hash,
       });
 
       const executionMode =
-        submitRes.data?.execution_mode || previewResult?.preview?.execution_mode || "mocked";
+        submitRes?.execution_mode || previewResult?.preview?.execution_mode || "mocked";
 
       setExecutionResult({
         status: "submitted",
-        intent_id: submitRes.data?.intent_id,
-        queue_state: submitRes.data?.queue_state,
-        reason_codes: submitRes.data?.reason_codes || [],
+        intent_id: submitRes?.intent_id,
+        queue_state: submitRes?.queue_state,
+        reason_codes: submitRes?.reason_codes || [],
         execution_mode: executionMode,
-        policy_decision: submitRes.data?.policy_decision || {},
-        pipeline_trace: submitRes.data?.pipeline_trace || [],
-        explain: submitRes.data?.explain || [],
+        policy_decision: submitRes?.policy_decision || {},
+        pipeline_trace: submitRes?.pipeline_trace || [],
+        explain: submitRes?.explain || [],
         error_text: "",
       });
 
