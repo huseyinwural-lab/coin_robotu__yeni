@@ -18,8 +18,18 @@ class _FailingAdapter:
         raise RuntimeError(self.message)
 
 
+def _allowing_precheck(*args, **kwargs):
+    size = float(kwargs.get("size") or 0.0)
+    return {
+        "valid": True,
+        "adjustments": {"adjusted_size": size},
+        "microstructure_guard": {"state": "ALLOW", "selected_venue": "binance", "slippage_prediction": {"expected_slippage_bps": 1.0}},
+    }
+
+
 def _run_failure_case(db, user_id: str, message: str):
     deactivate_kill_switch(source="test", reason="reset_before_each_case")
+    execution_engine.validate_order_precheck = _allowing_precheck
     submit = execution_engine.submit_signal(
         db,
         user_id=user_id,

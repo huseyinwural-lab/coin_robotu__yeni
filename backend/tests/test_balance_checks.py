@@ -13,11 +13,24 @@ class _LowBalanceAdapter:
         raise AssertionError("submit_order should not be called when balance is insufficient")
 
 
+def _allowing_precheck(*args, **kwargs):
+    size = float(kwargs.get("size") or 0.0)
+    return {
+        "valid": True,
+        "adjustments": {"adjusted_size": size},
+        "microstructure_guard": {"state": "ALLOW", "selected_venue": "binance", "slippage_prediction": {"expected_slippage_bps": 1.0}},
+    }
+
+
 def test_insufficient_balance_rejects_execution(monkeypatch):
     db = SessionLocal()
     try:
         user = db.query(User).order_by(User.created_at.asc()).first()
         assert user is not None
+        monkeypatch.setattr(execution_engine, "validate_order_precheck", _allowing_precheck)
+        monkeypatch.setattr(execution_engine, "evaluate_canary_constraints", lambda *args, **kwargs: {"allowed": True})
+        monkeypatch.setattr(execution_engine, "run_risk_checks", lambda *args, **kwargs: {"allowed": True, "reject_reason": None, "reject_reasons": []})
+        monkeypatch.setattr(execution_engine, "evaluate_auto_kill_switch", lambda *args, **kwargs: {"active": False})
 
         submit = execution_engine.submit_signal(
             db,

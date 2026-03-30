@@ -1,0 +1,95 @@
+{
+  "risk_block_test": {
+    "allowed": false,
+    "reject_reason": "max_position_pct_exceeded",
+    "reject_reasons": [
+      "max_position_pct_exceeded",
+      "leverage_cap_exceeded",
+      "per_user_notional_cap_exceeded"
+    ],
+    "metrics": {
+      "proposed_notional": 2000.0,
+      "open_notional": 1990.0,
+      "daily_realized_pnl": 0.0,
+      "leverage": 10
+    },
+    "limits": {
+      "max_position_pct": 1.0,
+      "max_daily_loss_usd": 250.0,
+      "leverage_cap": 2,
+      "per_user_notional_cap": 100.0
+    }
+  },
+  "order_reconciliation_test": {
+    "order_reconciliation_state": "ERROR",
+    "order_reconciliation_issues": [
+      {
+        "order_id": "1",
+        "issue": "EXECUTION_MISMATCH",
+        "fields": [
+          "status"
+        ]
+      }
+    ],
+    "order_state_correction": [
+      {
+        "order_id": "1",
+        "exchange_snapshot": {
+          "order_id": "1",
+          "symbol": "BTCUSDT",
+          "side": "BUY",
+          "price": 100,
+          "quantity": 1,
+          "status": "FILLED"
+        }
+      }
+    ],
+    "event": {
+      "event": "ORDER_RECONCILIATION_ERROR",
+      "issue_count": 1,
+      "timestamp": "2026-03-30T10:25:15.923648+00:00"
+    }
+  },
+  "position_sync_test": {
+    "position_sync_state": "DRIFT",
+    "position_drifts": [
+      {
+        "symbol": "BTCUSDT",
+        "reason": "FIELD_MISMATCH",
+        "fields": [
+          "position_size"
+        ]
+      }
+    ],
+    "sync_correction": [
+      {
+        "symbol": "BTCUSDT",
+        "exchange_snapshot": {
+          "symbol": "BTCUSDT",
+          "position_size": 1.1,
+          "entry_price": 100,
+          "leverage": 2,
+          "unrealized_pnl": 5
+        }
+      }
+    ],
+    "event": {
+      "event": "POSITION_DRIFT_DETECTED",
+      "drift_count": 1,
+      "timestamp": "2026-03-30T10:25:15.923672+00:00"
+    }
+  },
+  "pnl_summary_keys": [
+    "scope",
+    "requester_user_id",
+    "open_positions",
+    "realized_pnl",
+    "unrealized_pnl",
+    "fees",
+    "funding",
+    "net_pnl",
+    "by_symbol",
+    "by_user",
+    "updated_at"
+  ]
+}
