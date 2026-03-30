@@ -54,6 +54,7 @@ import { StateRebuildLogsPage } from "@/pages/StateRebuildLogsPage";
 import { StrategyTemplatesPage } from "@/pages/StrategyTemplatesPage";
 import { UserLoginPage } from "@/pages/UserLoginPage";
 import { UserExchangeSettingsPage } from "@/pages/UserExchangeSettingsPage";
+import { UserExchangeDiagnosticsPage } from "@/pages/UserExchangeDiagnosticsPage";
 import { UserDashboardPage } from "@/pages/UserDashboardPage";
 import { UserPortfolioPage } from "@/pages/UserPortfolioPage";
 import { UserTradesPage } from "@/pages/UserTradesPage";
@@ -265,7 +266,8 @@ function App() {
             <Route path="risk-policies" element={<Navigate to="/user/settings" replace />} />
             <Route path="strategies" element={<Navigate to="/user/bot-profiles" replace />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
-            <Route path="exchange-settings" element={<Navigate to="/user/settings" replace />} />
+            <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />
+            <Route path="exchange-diagnostics" element={<UserExchangeDiagnosticsPage />} />
             <Route path="settings" element={<UserSettingsPage />} />
             <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="positions" element={<UserPositionsPage />} />

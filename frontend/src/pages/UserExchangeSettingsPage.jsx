@@ -59,8 +59,8 @@ const initialFuturesContext = {
   atr_stop_multiplier: 3,
 };
 
-export const UserExchangeSettingsPage = ({ embedded = false }) => {
-  const [activeTab, setActiveTab] = useState("overview");
+export const UserExchangeSettingsPage = ({ embedded = false, mode = "management" }) => {
+  const [activeTab, setActiveTab] = useState(mode === "diagnostics" ? "test" : "overview");
   const [settings, setSettings] = useState(null);
   const [permission, setPermission] = useState(null);
   const [validateResult, setValidateResult] = useState(null);
@@ -82,6 +82,7 @@ export const UserExchangeSettingsPage = ({ embedded = false }) => {
   const [selectedVenue, setSelectedVenue] = useState(fallbackVenue);
   const [venueAccess, setVenueAccess] = useState(null);
   const [connectionProfiles, setConnectionProfiles] = useState([]);
+  const [activeProfileId, setActiveProfileId] = useState("");
   const [connectionForm, setConnectionForm] = useState(initialConnectionForm);
   const [editingConnectionId, setEditingConnectionId] = useState("");
   const [isConnectionSaving, setIsConnectionSaving] = useState(false);
@@ -138,6 +139,9 @@ export const UserExchangeSettingsPage = ({ embedded = false }) => {
       return null;
     }
 
+    const activeExplicit = connectionProfiles.find((item) => item.id === activeProfileId);
+    if (activeExplicit) return activeExplicit;
+
     const exactDefault = connectionProfiles.find(
       (item) => item.is_default
         && item.exchange === selectedVenue.exchange
@@ -160,6 +164,23 @@ export const UserExchangeSettingsPage = ({ embedded = false }) => {
     () => (connectionProfiles || []).filter((item) => Boolean(item?.action_required)),
     [connectionProfiles],
   );
+
+  useEffect(() => {
+    if (!connectionProfiles.length) return;
+    const preferred = connectionProfiles.find((item) => item.is_default) || connectionProfiles[0];
+    if (preferred && preferred.id !== activeProfileId) {
+      setActiveProfileId(preferred.id);
+    }
+  }, [activeProfileId, connectionProfiles]);
+
+  useEffect(() => {
+    if (!selectedConnectionProfile) return;
+    setSelectedVenue({
+      exchange: selectedConnectionProfile.exchange,
+      market_type: selectedConnectionProfile.market_type,
+      environment: selectedConnectionProfile.environment,
+    });
+  }, [selectedConnectionProfile]);
 
   const selectedHealthTimeline = useMemo(
     () => (selectedConnectionProfile?.health_history || []).slice().reverse().slice(0, 8),
@@ -253,6 +274,37 @@ export const UserExchangeSettingsPage = ({ embedded = false }) => {
     if (normalized === "offline") return "border-rose-700/70 text-rose-300 bg-rose-900/20";
     return "border-slate-700 text-slate-300 bg-slate-900/40";
   };
+
+  const permissionBadges = (profile) => {
+    const permissions = new Set((profile?.permission_snapshot || []).map((item) => String(item || "").toLowerCase()));
+    return [
+      { key: "read", active: permissions.has("read") },
+      { key: "write", active: permissions.has("write") },
+      { key: "trade", active: permissions.has("trade") },
+      { key: "withdraw", active: permissions.has("withdraw"), danger: true },
+    ];
+  };
+
+  const selectedAccountSnapshot = useMemo(() => {
+    const snapshot = selectedConnectionProfile?.readiness_snapshot || {};
+    return {
+      available_balance: snapshot.available_balance ?? snapshot.free_balance ?? null,
+      wallet_equity: snapshot.wallet_balance ?? snapshot.equity ?? snapshot.account_equity ?? null,
+      open_order_margin: snapshot.open_order_margin ?? snapshot.order_margin ?? null,
+      unrealized_pnl: snapshot.unrealized_pnl ?? snapshot.upnl ?? null,
+      last_sync_time: selectedConnectionProfile?.last_validated_at || snapshot.last_sync_at || snapshot.validation_timestamp || null,
+      stale_state: !selectedConnectionProfile?.last_validated_at,
+    };
+  }, [selectedConnectionProfile]);
+
+  const selectedRateLimitState = useMemo(() => {
+    const snapshot = selectedConnectionProfile?.readiness_snapshot || {};
+    return {
+      throttle_state: snapshot.throttle_state || snapshot.rate_limit_state || "unknown",
+      retry_after: snapshot.retry_after_seconds ?? snapshot.next_retry_in_seconds ?? null,
+      recent_hits: snapshot.recent_rate_limit_hits ?? snapshot.validation_fail_24h ?? 0,
+    };
+  }, [selectedConnectionProfile]);
 
   const loadAll = useCallback(async () => {
     try {
@@ -853,10 +905,35 @@ export const UserExchangeSettingsPage = ({ embedded = false }) => {
         </p>
       </header>}
 
+      <section className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-active-profile-panel">
+        <div className="grid gap-3 lg:grid-cols-[1.4fr,1fr]" data-testid="user-exchange-active-profile-grid">
+          <div className="form-group" data-testid="user-exchange-active-profile-selector-group">
+            <label className="form-label" htmlFor="user-exchange-active-profile-select" data-testid="user-exchange-active-profile-selector-label">Active Profile</label>
+            <select
+              id="user-exchange-active-profile-select"
+              className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              value={activeProfileId}
+              onChange={(event) => setActiveProfileId(event.target.value)}
+              data-testid="user-exchange-active-profile-selector"
+            >
+              {(connectionProfiles || []).map((item) => (
+                <option key={item.id} value={item.id}>{item.account_label} · {item.exchange}/{item.market_type}/{item.environment}</option>
+              ))}
+            </select>
+            <p className="form-helper-text" data-testid="user-exchange-active-profile-selector-helper">Yanlış environment riskini azaltmak için aktif profil üstte açıkça seçilir.</p>
+          </div>
+          <div className="rounded border border-slate-700 bg-slate-950 p-3" data-testid="user-exchange-active-profile-summary-card">
+            <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-exchange-active-profile-summary-title">Active Profile Summary</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100" data-testid="user-exchange-active-profile-summary-label">{selectedConnectionProfile?.account_label || "-"}</p>
+            <p className="text-xs text-slate-400" data-testid="user-exchange-active-profile-summary-meta">{selectedConnectionProfile?.exchange || "-"} / {selectedConnectionProfile?.market_type || "-"} / {selectedConnectionProfile?.environment || "-"}</p>
+            <p className="mt-1 text-xs text-slate-400" data-testid="user-exchange-active-profile-summary-status">status: {selectedConnectionProfile?.connection_health || "unknown"}</p>
+          </div>
+        </div>
+      </section>
+
       <div className="flex flex-wrap gap-2" data-testid="user-tabs-nav">
-        <Button className={activeTab === "overview" ? "bg-orange-500 text-black" : "bg-slate-800 text-slate-200"} onClick={() => setActiveTab("overview")} data-testid="user-tab-overview-button">Overview</Button>
-        <Button className={activeTab === "risk" ? "bg-orange-500 text-black" : "bg-slate-800 text-slate-200"} onClick={() => setActiveTab("risk")} data-testid="user-tab-risk-settings-button">Risk Settings</Button>
-        <Button className={activeTab === "test" ? "bg-orange-500 text-black" : "bg-slate-800 text-slate-200"} onClick={() => setActiveTab("test")} data-testid="user-tab-test-validation-button">Test & Validation</Button>
+        {mode !== "diagnostics" && <Button className={activeTab === "overview" ? "bg-orange-500 text-black" : "bg-slate-800 text-slate-200"} onClick={() => setActiveTab("overview")} data-testid="user-tab-overview-button">Overview</Button>}
+        {mode === "diagnostics" && <Button className={activeTab === "test" ? "bg-orange-500 text-black" : "bg-slate-800 text-slate-200"} onClick={() => setActiveTab("test")} data-testid="user-tab-test-validation-button">Diagnostics</Button>}
       </div>
 
       {activeTab === "overview" && (
@@ -1063,7 +1140,13 @@ export const UserExchangeSettingsPage = ({ embedded = false }) => {
                         {connection.connection_health || "unknown"}
                       </span>
                     </p>
-                    <p className="text-xs text-slate-500" data-testid={`user-connection-profile-permissions-${connection.id}`}>permissions: {(connection.permission_snapshot || []).join(",") || "-"}</p>
+                    <div className="mt-2 flex flex-wrap gap-2" data-testid={`user-connection-profile-permissions-${connection.id}`}>
+                      {permissionBadges(connection).map((badge) => (
+                        <span key={`${connection.id}-${badge.key}`} className={`inline-flex rounded border px-2 py-0.5 text-[11px] uppercase tracking-wide ${badge.active ? badge.danger ? "border-rose-600 text-rose-300 bg-rose-950/30" : "border-emerald-600 text-emerald-300 bg-emerald-950/20" : "border-slate-700 text-slate-400 bg-slate-900/40"}`} data-testid={`user-connection-profile-permission-badge-${connection.id}-${badge.key}`}>
+                          {badge.key}
+                        </span>
+                      ))}
+                    </div>
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-readiness-${connection.id}`}>readiness: {connection.readiness_snapshot?.venue_state || "-"}</p>
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-can-trade-${connection.id}`}>can_trade_effective: {String(Boolean(connection.can_trade_effective))}</p>
                     <p className="text-xs text-slate-500" data-testid={`user-connection-profile-last-validated-${connection.id}`}>last_validated_at: {formatConnectionTime(connection.last_validated_at)}</p>
@@ -1078,6 +1161,7 @@ export const UserExchangeSettingsPage = ({ embedded = false }) => {
                       {validatingConnectionId === connection.id ? "Doğrulanıyor..." : "Revalidate"}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => setProfileAsDefault(connection.id)} data-testid={`user-connection-profile-set-default-button-${connection.id}`}>Default Yap</Button>
+                    <Button size="sm" variant="outline" onClick={() => window.location.assign('/user/exchange-diagnostics')} data-testid={`user-connection-profile-open-diagnostics-button-${connection.id}`}>Open Diagnostics</Button>
                     <Button size="sm" className="bg-rose-600 text-white hover:bg-rose-500" onClick={() => deleteConnectionProfile(connection.id)} data-testid={`user-connection-profile-delete-button-${connection.id}`}>Sil</Button>
                   </div>
                 </article>
@@ -1087,10 +1171,59 @@ export const UserExchangeSettingsPage = ({ embedded = false }) => {
               )}
             </div>
           </section>
+
+          <section className="grid gap-3 lg:grid-cols-2" data-testid="user-exchange-account-snapshot-grid">
+            <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-account-snapshot-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500">Account Snapshot</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <MetricCard label="Available" value={selectedAccountSnapshot.available_balance ?? "-"} tone="blue" testId="user-exchange-account-available" />
+                <MetricCard label="Wallet / Equity" value={selectedAccountSnapshot.wallet_equity ?? "-"} tone="orange" testId="user-exchange-account-equity" />
+                <MetricCard label="Open Order Margin" value={selectedAccountSnapshot.open_order_margin ?? "-"} tone="blue" testId="user-exchange-account-order-margin" />
+                <MetricCard label="Unrealized PnL" value={selectedAccountSnapshot.unrealized_pnl ?? "-"} tone="orange" testId="user-exchange-account-unrealized-pnl" />
+              </div>
+              <p className="mt-3 text-xs text-slate-400" data-testid="user-exchange-account-last-sync">last_sync: {formatConnectionTime(selectedAccountSnapshot.last_sync_time)}</p>
+              <p className="text-xs text-slate-400" data-testid="user-exchange-account-stale-state">state: {selectedAccountSnapshot.stale_state ? "stale" : "synced"}</p>
+            </div>
+            <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-security-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500">Credential Security</p>
+              <p className="mt-2 text-sm text-slate-200" data-testid="user-exchange-security-masked-key">masked_api_key: {selectedConnectionProfile?.masked_api_key || "-"}</p>
+              <p className="mt-1 text-sm text-slate-200" data-testid="user-exchange-security-key-masked">key masked: {String(Boolean(selectedConnectionProfile?.has_api_key))}</p>
+              <p className="mt-1 text-sm text-slate-200" data-testid="user-exchange-security-secret-masked">secret masked: {String(Boolean(selectedConnectionProfile?.has_api_secret))}</p>
+              <p className="mt-1 text-sm text-slate-200" data-testid="user-exchange-security-fingerprint">fingerprint: {selectedConnectionProfile?.credential_fingerprint || "-"}</p>
+              <p className="mt-1 text-sm text-slate-200" data-testid="user-exchange-security-updated-at">updated_at: {formatConnectionTime(selectedConnectionProfile?.updated_at)}</p>
+            </div>
+          </section>
+
+          <section className="grid gap-3 lg:grid-cols-2" data-testid="user-exchange-validation-operations-grid">
+            <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-validation-breakdown-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500">Validation Breakdown</p>
+              <div className="mt-3 space-y-2 text-sm text-slate-200">
+                <p data-testid="user-exchange-validation-credential-status">credential_status: {selectedConnectionProfile?.has_api_key && selectedConnectionProfile?.has_api_secret ? "present" : "missing"}</p>
+                <p data-testid="user-exchange-validation-permission-status">permission_status: {selectedConnectionProfile?.can_trade_effective ? "trade-ready" : "restricted"}</p>
+                <p data-testid="user-exchange-validation-environment-status">environment_match: {selectedConnectionProfile?.environment_valid ? "match" : "mismatch"}</p>
+                <p data-testid="user-exchange-validation-reachability-status">venue_reachability: {selectedConnectionProfile?.connection_health || "unknown"}</p>
+                <p data-testid="user-exchange-validation-verdict">trade_ready_verdict: {selectedConnectionProfile?.can_trade_effective ? "ready" : "blocked"}</p>
+                <p data-testid="user-exchange-validation-required-action">required_action: {selectedConnectionProfile?.action_required_message || "none"}</p>
+              </div>
+            </div>
+            <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-validation-history-panel">
+              <p className="text-xs uppercase tracking-widest text-slate-500">Connection Test History</p>
+              <div className="mt-3 space-y-2" data-testid="user-exchange-validation-history-list">
+                {(selectedHealthTimeline || []).map((item, index) => (
+                  <div key={`${item.at || 'na'}-${index}`} className="border border-slate-700 p-2 text-xs" data-testid={`user-exchange-validation-history-item-${index}`}>
+                    <p>{formatConnectionTime(item.at)} · {item.health || "unknown"}</p>
+                    <p>reason: {item.reason || "-"}</p>
+                    <p>source: {item.source || "-"} · latency: {formatMs(item.latency_ms)}</p>
+                  </div>
+                ))}
+                {selectedHealthTimeline.length === 0 && <p className="text-sm text-slate-400" data-testid="user-exchange-validation-history-empty">Henüz validation geçmişi yok.</p>}
+              </div>
+            </div>
+          </section>
         </div>
       )}
 
-      {activeTab === "risk" && (
+      {false && activeTab === "risk" && (
         <div className="space-y-4" data-testid="user-risk-settings-tab-content">
           <div className="grid gap-2 border border-slate-800 bg-slate-900 p-4 md:grid-cols-3" data-testid="user-risk-venue-selection-grid">
             <div className="form-group" data-testid="user-risk-venue-exchange-group">
