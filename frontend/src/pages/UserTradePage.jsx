@@ -36,16 +36,24 @@ const parseErrorText = (error) => {
 
 const postJsonWithSession = async (path, body) => {
   const token = window.localStorage.getItem("token");
-  const response = await fetch(`${FRONTEND_BACKEND_URL}/api${path}`, {
-    method: "POST",
-    headers: {
-      ...buildSessionHeaders(),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    credentials: "include",
-    cache: "no-store",
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+  let response;
+  try {
+    response = await fetch(`${FRONTEND_BACKEND_URL}/api${path}`, {
+      method: "POST",
+      headers: {
+        ...buildSessionHeaders(),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      cache: "no-store",
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
   let payload = null;
   try {
     payload = await response.json();
