@@ -937,7 +937,12 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         .first()
     )
     if duplicate_intent is not None:
-        raise DuplicateExecutionIntentError(intent_id=duplicate_intent.intent_id, idempotency_key=idempotency_key)
+        duplicate_status = str(duplicate_intent.status or "").upper()
+        if duplicate_status in {"PREVIEWED", "REJECTED", "CANCELLED", "FAILED"}:
+            db.delete(duplicate_intent)
+            db.flush()
+        else:
+            raise DuplicateExecutionIntentError(intent_id=duplicate_intent.intent_id, idempotency_key=idempotency_key)
 
     normalized["idempotency_contract"] = {
         "intent_id_source": "sha256_canonical_payload",
