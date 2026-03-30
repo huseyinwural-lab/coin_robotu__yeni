@@ -1,3 +1,74 @@
+## 2026-03-30 — USER SIDE P1 + P2 (Domain Menu + Backend Sync)
+
+### P1 — Menü ve domain mimarisi
+- User sidebar domain bazlı gruplara taşındı:
+  - `DASHBOARD`
+  - `MARKET`
+  - `EXECUTION`
+  - `PORTFOLIO`
+  - `STRATEGY`
+  - `MONITORING`
+  - `SETTINGS`
+- Dosya:
+  - `/app/frontend/src/components/PanelLayout.jsx`
+
+### Scanner + Indicator Screener merge
+- `Indicator Screener` ayrı sayfa olmaktan çıkarılıp `Scanner` içine section toggle ile bağlandı.
+- `Scanner` içinde toggle:
+  - `Scan Results`
+  - `Indicator Screener`
+- `Indicator Screener` bileşeni embedded mod destekler hale getirildi.
+- Legacy route redirect:
+  - `/user/indicator-screener` → `/user/scanner?section=screener`
+
+### Settings konsolidasyonu
+- Yeni birleşik settings sayfası eklendi:
+  - `/user/settings`
+- İçerik:
+  - `Profile`
+  - `Exchange Connections`
+  - `Risk Settings`
+  - API key notu (exchange bağlantı bloğu altında konsolide)
+- Legacy redirect’ler:
+  - `/user/exchange-settings` → `/user/settings`
+  - `/user/risk-policy` → `/user/settings`
+
+### P2 — State + backend senkronizasyonu
+- `SymbolSelectorPanel` içine:
+  - `300ms debounce`
+  - `previous request cancel` (AbortController tabanlı axios signal)
+- `UserIndicatorScreenerPage` içine:
+  - debounced symbol search
+  - previous request cancel
+  - slow network hint
+- `UserScannerPage` içine:
+  - slow loading fallback/hint
+- Scanner automation state zaten backend config üzerinden okunduğu için bu sprintte korunup görünürlük teyit edildi:
+  - `auto_enabled`
+  - `last_run_at`
+  - `next_run_at`
+
+### Zorunlu görünürlük tamamlamaları
+- Yeni kullanıcı activity/audit route:
+  - `GET /api/user/activity-log`
+- Yeni kullanıcı activity sayfası:
+  - `/user/activity-log`
+- User dashboard / execution / alerts / chart route’larının çalıştığı tekrar doğrulandı.
+
+### Test / doğrulama
+- Testing agent raporu:
+  - `/app/test_reports/iteration_187.json`
+- Sonuç:
+  - backend curl doğrulaması: **100% PASS**
+  - frontend sayfa/route doğrulaması: **100% PASS**
+- Not düşülen düşük öncelikli konu:
+  - preview URL’de scanner tarafında network latency nedeniyle uzun loading skeleton görülebiliyor
+
+### Henüz açık kalan user backlog
+- Reports’ı Portfolio içinde gerçek sekme mimarisine taşımak
+- Bot Profiles içinde template türetme UX’ini daha ileri taşımak
+- Backtest ↔ live performance karşılaştırmasını user yüzeyinde daha zengin göstermek
+
 ## 2026-03-29 — USER SIDE GAP CLOSURE (P0 Dashboard / Chart / Execution / Alerts / Queue)
 
 ### Bu turda tamamlanan P0 blokları
