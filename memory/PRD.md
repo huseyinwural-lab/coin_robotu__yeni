@@ -1,3 +1,97 @@
+## 2026-03-30 — CALI TARAFI SİSTEM KAPANIŞI (Deterministic Engine Closure)
+
+### Faz sırası
+- Bu fazda öncelik sadece local/backend deterministic doğrulama oldu.
+- Sıra:
+  1. execution determinism
+  2. risk guard determinism
+  3. exchange/internal state parity sinyalleri
+  4. pnl / observability doğrulaması
+
+### Doğrulanan engine katmanları
+
+#### 1) Order lifecycle
+- Testle doğrulandı:
+  - `CREATED`
+  - `SENT`
+  - `PARTIALLY_FILLED`
+  - `FILLED`
+- Fill sonrası position oluşturma ve state güncellemesi doğrulandı.
+
+#### 2) Idempotency / duplicate guard
+- Aynı business request için ikinci submit’in `duplicate` döndürdüğü doğrulandı.
+- Deterministic idempotency sözleşmesi ayrıca artefact ile korunuyor.
+
+#### 3) Retry / failure classification
+- Aşağıdaki failure class’lar deterministic doğrulandı:
+  - `network_error`
+  - `timeout`
+  - `exchange_reject`
+  - `unknown`
+
+#### 4) Global risk guard
+- Limit aşımı durumunda bloklama doğrulandı:
+  - `max_position_pct_exceeded`
+  - `leverage_cap_exceeded`
+  - `per_user_notional_cap_exceeded`
+
+#### 5) Kill switch
+- Risk kill switch ve runtime kill switch bloklama yolu deterministic doğrulandı.
+
+#### 6) Order reconciliation
+- Exchange/internal mismatch durumunda:
+  - `EXECUTION_MISMATCH`
+  - correction payload
+  - reconciliation state
+  üretildiği doğrulandı.
+
+#### 7) Position sync
+- Exchange/internal drift durumunda:
+  - `DRIFT`
+  - `POSITION_DRIFT_DETECTED`
+  - correction payload
+  doğrulandı.
+
+#### 8) PnL doğruluğu
+- PnL summary ve position bazlı alanlar doğrulandı:
+  - `realized_pnl`
+  - `unrealized_pnl`
+  - `fees`
+  - `funding`
+  - `net_pnl`
+
+#### 9) Decision trace / explainability
+- Execution intent detail içinde şu alanlar doğrulandı:
+  - `gate_decision`
+  - `expected_impact`
+  - order_preview açıklaması
+
+### Yeni test paketi
+- `/app/backend/tests/test_cali_deterministic_closure.py`
+
+### Test / doğrulama
+- Testing agent raporu:
+  - `/app/test_reports/iteration_188.json`
+- Sonuç:
+  - backend deterministic suite **13/13 PASS**
+- Ek artefact:
+  - `/app/test_reports/cali_deterministic_selftest.json`
+
+### Program kapanışına etkisi
+- Artık şu sorular backend deterministic katmanda cevaplanabiliyor:
+  - Bu order neden açıldı?
+  - Bu order gerçekten execute oldu mu?
+  - Sistem yanlışlıkla tekrar order gönderir mi?
+  - Risk limiti aşılırsa ne olur?
+  - Exchange ile state aynı mı?
+  - PnL doğru mu?
+
+### Sonraki doğru adım
+- Final production activation / live pilot öncesi:
+  - preview regresyon doğrulaması
+  - rollback PASS checklist
+  - staged activation Stage 1→2 geçiş hazırlığı
+
 ## 2026-03-30 — USER SIDE P1 + P2 (Domain Menu + Backend Sync)
 
 ### P1 — Menü ve domain mimarisi
