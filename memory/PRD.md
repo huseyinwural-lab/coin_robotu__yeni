@@ -136,6 +136,11 @@
   - `next_run_at`
   - `interval_seconds`
 
+#### 5) User login hardening
+- `UserLoginPage.jsx` içinde retry-safe submit akışı eklendi.
+- Retryable abort / network error durumlarında ikinci deneme yapılır.
+- Stored token + hydrated user mevcutsa redirect akışı daha savunmalı hale getirildi.
+
 ### P1 ek güçlendirmeler
 - Bot Profiles içine template tabanlı başlangıç seçimi eklendi:
   - `Create from template`
@@ -157,6 +162,7 @@
 - Not:
   - preview URL user login hâlâ aralıklı auth/network dalgalanması gösteriyor
   - testing agent bunu **infra issue** olarak işaretledi, code bug değil
+  - focused browser retest de aynı sonucu verdi: bazı login denemeleri backend’e hiç ulaşmadan preview/network katmanında askıda kalıyor
 
 ### Program kapanışına etkisi
 - Kullanıcı artık şunu görebiliyor:
