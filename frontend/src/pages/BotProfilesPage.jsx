@@ -17,11 +17,13 @@ const initialForm = {
   timeframe: "15m",
   trend_timeframe: "1h",
   is_enabled: true,
+  template_id: "",
 };
 
 export const BotProfilesPage = () => {
   const [items, setItems] = useState([]);
   const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
+  const [templates, setTemplates] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [deletingBotId, setDeletingBotId] = useState("");
   const [form, setForm] = useState(initialForm);
@@ -31,15 +33,31 @@ export const BotProfilesPage = () => {
   const [selectedSymbols, setSelectedSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
 
   const fetchItems = async () => {
-    const [profilesRes, strategyPerfRes] = await Promise.all([
+    const [profilesRes, strategyPerfRes, templatesRes] = await Promise.all([
       apiClient.get("/bot-profiles"),
       apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
+      apiClient.get("/strategy-templates"),
     ]);
     setItems(profilesRes.data || []);
     setStrategyPerformance(strategyPerfRes.data || { items: [] });
+    setTemplates(templatesRes.data || []);
   };
 
   const findStrategyParity = (strategyType) => (strategyPerformance?.items || []).find((item) => item.strategy_id === strategyType);
+
+  const applyTemplate = (templateId) => {
+    const template = (templates || []).find((item) => item.id === templateId);
+    if (!template) return;
+    setForm((prev) => ({
+      ...prev,
+      name: prev.name || `${template.name} Bot`,
+      strategy_type: template.strategy_type || prev.strategy_type,
+      timeframe: template.timeframe || prev.timeframe,
+      market_type: template.market_type || prev.market_type,
+      template_id: template.id,
+    }));
+    toast.success("Template bot formuna aktarıldı");
+  };
 
   useEffect(() => {
     fetchItems();
@@ -245,6 +263,27 @@ export const BotProfilesPage = () => {
             <option value="volatility_breakout">volatility_breakout</option>
           </select>
           <p className="form-helper-text" id="bot-form-strategy-helper" data-testid="bot-form-strategy-helper">Botun sinyal üretim metodunu seçin.</p>
+        </div>
+
+        <div className="form-group" data-testid="bot-form-group-template">
+          <label className="form-label" htmlFor="bot-form-template-select" data-testid="bot-form-template-label">Create from template</label>
+          <select
+            id="bot-form-template-select"
+            value={form.template_id}
+            onChange={(event) => {
+              const value = event.target.value;
+              setForm((prev) => ({ ...prev, template_id: value }));
+              applyTemplate(value);
+            }}
+            className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            data-testid="bot-form-template-select"
+          >
+            <option value="">no template</option>
+            {(templates || []).map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+          <p className="form-helper-text" data-testid="bot-form-template-helper">Ayrı template ekranı yerine bot profili içinden başlangıç seçilir.</p>
         </div>
 
         <div className="form-group" data-testid="bot-form-group-max-concurrent-trades">

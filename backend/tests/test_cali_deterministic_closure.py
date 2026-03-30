@@ -133,6 +133,27 @@ def test_state_parity_reconciliation_detects_mismatch_and_pnl_is_explicit():
     assert pos_recon["position_sync_state"] == "DRIFT"
 
 
+def test_order_reconciliation_partial_fill_and_cancel_mismatch_edge_cases():
+    partial = reconcile_order_state(
+        engine_orders=[{"order_id": "2", "symbol": "ETHUSDT", "side": "BUY", "price": 100, "quantity": 1, "status": "PARTIALLY_FILLED"}],
+        exchange_orders=[{"order_id": "2", "symbol": "ETHUSDT", "side": "BUY", "price": 100, "quantity": 1, "status": "FILLED"}],
+    )
+    canceled = reconcile_order_state(
+        engine_orders=[{"order_id": "3", "symbol": "SOLUSDT", "side": "SELL", "price": 50, "quantity": 2, "status": "SENT"}],
+        exchange_orders=[{"order_id": "3", "symbol": "SOLUSDT", "side": "SELL", "price": 50, "quantity": 2, "status": "CANCELED"}],
+    )
+    assert partial["order_reconciliation_state"] == "ERROR"
+    assert canceled["order_reconciliation_state"] == "ERROR"
+
+
+def test_position_sync_reconnect_rebuild_unverified_state():
+    payload = reconcile_position_state(
+        engine_positions=[{"symbol": "BNBUSDT", "position_size": 1.0, "entry_price": 100, "leverage": 2, "unrealized_pnl": 4}],
+        exchange_positions=[],
+    )
+    assert payload["position_sync_state"] == "UNVERIFIED"
+
+
 def test_execution_intent_detail_answers_why_order_exists():
     db = SessionLocal()
     try:
