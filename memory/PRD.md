@@ -92,6 +92,81 @@
   - rollback PASS checklist
   - staged activation Stage 1→2 geçiş hazırlığı
 
+## 2026-03-30 — FINAL GAP CLOSURE (Strategy Visibility + Financial Center + Operational Control)
+
+### Tamamlanan zorunlu kapanışlar
+
+#### 1) Backtest ↔ Live Strategy görünürlüğü
+- Yeni endpoint:
+  - `GET /api/user/live/strategy-performance`
+- Dönen contract:
+  - `strategy_id`
+  - `backtest { win_rate, max_drawdown, profit_factor, sample_size, risk_label }`
+  - `live { trades, win_rate, avg_return, quality_score }`
+  - `deviation_pct`
+- Bu görünürlük şu 3 yüzeye taşındı:
+  - `UserLiveTradingDashboardPage.jsx`
+  - `BotProfilesPage.jsx`
+  - `UserExecutionPage.jsx`
+
+#### 2) Reports → Portfolio tam birleşim
+- `/user/portfolio` içine sekmeli yapı eklendi:
+  - `Overview`
+  - `PnL`
+  - `Reports`
+- `Reports` sekmesi `UserReportsPage` embed eder.
+- Redirect:
+  - `/user/reports` → `/user/portfolio?tab=reports`
+
+#### 3) API Key management (gerçek UI)
+- Yeni unified settings sayfası içinde gerçek exchange connection / API key yönetimi yüzeyi gömülü hale getirildi.
+- `UserSettingsPage` artık şunları kapsıyor:
+  - `Profile`
+  - `Exchange Connections`
+  - `API Keys`
+  - `Risk Settings`
+  - embedded `UserExchangeSettingsPage`
+
+#### 4) Next Scan → gerçek scheduler source
+- Yeni endpoint:
+  - `GET /api/user/live/scheduler/next-run`
+- UI artık backend `scheduler_config` kaynağından okuyor:
+  - `auto_enabled`
+  - `last_run_at`
+  - `next_run_at`
+  - `interval_seconds`
+
+### P1 ek güçlendirmeler
+- Bot Profiles içine template tabanlı başlangıç seçimi eklendi:
+  - `Create from template`
+- Ayrı strategy template route kullanıcı yüzeyinde geri planda bırakıldı; ana giriş noktası Bot Profiles oldu.
+
+### CALI parity edge-case derinleştirme
+- Deterministic edge-case testleri eklendi / doğrulandı:
+  - partial fill mismatch
+  - cancel mismatch
+  - reconnect / unverified sync
+  - position drift
+
+### Test / doğrulama
+- Testing agent raporu:
+  - `/app/test_reports/iteration_190.json`
+- Sonuç:
+  - backend local curl doğrulaması: **100% PASS**
+  - CALI edge-case tests: **PASS**
+- Not:
+  - preview URL user login hâlâ aralıklı auth/network dalgalanması gösteriyor
+  - testing agent bunu **infra issue** olarak işaretledi, code bug değil
+
+### Program kapanışına etkisi
+- Kullanıcı artık şunu görebiliyor:
+  - stratejinin geçmiş performansı
+  - canlı performansı
+  - sapması
+  - finansal merkez içinde raporlar
+  - gerçek exchange/API yönetim yüzeyi
+  - gerçek next scan zamanı
+
 ## 2026-03-30 — USER SIDE P1 + P2 (Domain Menu + Backend Sync)
 
 ### P1 — Menü ve domain mimarisi
