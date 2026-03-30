@@ -18,6 +18,20 @@ def _runtime_key(bot_id: str) -> str:
     return f"{BOT_RUNTIME_PREFIX}:{bot_id}"
 
 
+def _json_safe(value):
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
 def build_bot_runtime_config(*, bot, strategy_id: str, risk_profile_id: str | None, execution_profile_id: str | None) -> dict:
     return {
         "bot_id": bot.id,
@@ -50,6 +64,7 @@ def load_bot_runtime(cache, bot_id: str) -> dict | None:
 def save_bot_runtime(cache, payload: dict) -> dict:
     runtime = dict(payload or {})
     runtime["last_heartbeat"] = _now_iso()
+    runtime = _json_safe(runtime)
     set_json(cache, _runtime_key(runtime["bot_id"]), runtime)
     return runtime
 

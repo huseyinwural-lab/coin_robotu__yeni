@@ -11,6 +11,20 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _json_safe(value):
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
 def _resolve_bindings(db, bot: BotProfile) -> dict:
     risk_policy = (
         db.query(RiskPolicy)
@@ -39,7 +53,7 @@ def _resolve_symbol_source(db, bot: BotProfile) -> dict:
         rows = (
             db.query(UserScannerResult)
             .filter(UserScannerResult.user_id == bot.user_id)
-            .order_by(UserScannerResult.created_at.desc())
+            .order_by(UserScannerResult.generated_at.desc())
             .limit(25)
             .all()
         )
@@ -49,10 +63,18 @@ def _resolve_symbol_source(db, bot: BotProfile) -> dict:
             if symbol and symbol not in symbols:
                 symbols.append(symbol)
         if not symbols:
-            return {"ok": False, "source_type": "scanner", "scanner_id": bot.scanner_id, "symbols": [], "summary": "scanner_source_empty"}
-        return {"ok": True, "source_type": "scanner", "scanner_id": bot.scanner_id, "symbols": symbols, "summary": f"scanner:{bot.scanner_id}"}
+            return {"ok": False, "source_type": "scanner", "scanner_id": bot.scanner_id, "symbols": [], "summary": "scanner_source_empty", "last_resolution_time": None, "resolution_status": "failed"}
+        return {
+            "ok": True,
+            "source_type": "scanner",
+            "scanner_id": bot.scanner_id,
+            "symbols": symbols,
+            "summary": f"scanner:{bot.scanner_id}",
+            "last_resolution_time": rows[0].generated_at if rows else None,
+            "resolution_status": "resolved",
+        }
     manual_symbols = [str(item).upper().strip() for item in list(bot.symbols or []) if str(item).strip()]
-    return {"ok": bool(manual_symbols), "source_type": "manual", "scanner_id": None, "symbols": manual_symbols, "summary": "manual_symbols"}
+    return {"ok": bool(manual_symbols), "source_type": "manual", "scanner_id": None, "symbols": manual_symbols, "summary": "manual_symbols", "last_resolution_time": _now_iso(), "resolution_status": "resolved" if manual_symbols else "failed"}
 
 
 def _ensure_runtime(db, bot: BotProfile) -> dict:
@@ -114,14 +136,15 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     symbol_resolution = _resolve_symbol_source(db, bot)
     strategy_binding, risk_binding, execution_binding, binding_validation, compatibility = _build_binding_blocks(db, bot, runtime, symbol_resolution)
     positions = db.query(PaperPosition).filter(PaperPosition.user_id == bot.user_id, PaperPosition.status == "open", PaperPosition.symbol.in_(list(bot.symbols or []))).all()
-    trade_rows = db.query(ExecutionMetric).filter(ExecutionMetric.user_id == bot.user_id, ExecutionMetric.symbol.in_(list(bot.symbols or []))).all()
+    resolved_symbols = list(symbol_resolution.get("symbols") or list(bot.symbols or []))
+    trade_rows = db.query(ExecutionMetric).filter(ExecutionMetric.user_id == bot.user_id, ExecutionMetric.symbol.in_(resolved_symbols), ExecutionMetric.strategy_type == bot.strategy_type).all()
     signal = (
         db.query(SignalEvent)
         .filter(SignalEvent.bot_profile_id == bot.id)
         .order_by(SignalEvent.generated_at.desc())
         .first()
     )
-    pending = db.query(PendingSignal).filter(PendingSignal.user_id == bot.user_id, PendingSignal.symbol.in_(list(bot.symbols or []))).count()
+    pending = db.query(PendingSignal).filter(PendingSignal.user_id == bot.user_id, PendingSignal.symbol.in_(resolved_symbols)).count()
     pnl = sum(float(getattr(row, "slippage_pct", 0.0) or 0.0) for row in trade_rows)
     today_pnl = sum(float(getattr(row, "slippage_pct", 0.0) or 0.0) for row in trade_rows if getattr(row, "created_at", None) and getattr(row, "created_at").date() == datetime.now(timezone.utc).date())
     heartbeat_age = 0.0
@@ -137,9 +160,10 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "symbols_resolved": bool(symbol_resolution.get("ok")),
     }
     health = "HEALTHY"
+    last_error = str((runtime.get("runtime_context") or {}).get("last_error") or "").lower()
     if runtime.get("status") == "ERROR" or not symbol_resolution.get("ok"):
         health = "ERROR"
-    elif heartbeat_age > 120 or reject_spike >= 3 or pending > 5:
+    elif heartbeat_age > 120 or reject_spike >= 3 or pending > 5 or any(token in last_error for token in ["binding", "scanner", "provider", "queue"]):
         health = "DEGRADED"
     return {
         "id": bot.id,
@@ -225,7 +249,7 @@ def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
     if not bindings["strategy_id"] or not bindings["execution_profile_id"] or not symbol_resolution.get("ok"):
         runtime = set_bot_runtime_state(redis_client, bot_id=bot.id, state="ERROR", error="binding_failed")
         return {**runtime, "binding_ok": False}
-    bot.symbol_resolution_snapshot = symbol_resolution
+    bot.symbol_resolution_snapshot = _json_safe(symbol_resolution)
     runtime = bind_bot_runtime(redis_client, bot=bot, strategy_id=bindings["strategy_id"], risk_profile_id=bindings["risk_profile_id"], execution_profile_id=bindings["execution_profile_id"], mode="live_ready_disabled")
     runtime["symbol_source"] = symbol_resolution.get("source_type", "manual")
     runtime.setdefault("runtime_context", {})["symbol_resolution_snapshot"] = symbol_resolution
@@ -244,6 +268,7 @@ def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
         "graceful_stop": True,
         "force_close_default": False,
     }
+    runtime.setdefault("runtime_context", {})["correlation_namespace"] = f"bot:{bot.id}"
     runtime = heartbeat_bot_runtime(redis_client, bot.id, patch=runtime.get("runtime_context") or {})
     runtime = set_bot_runtime_state(redis_client, bot_id=bot.id, state="RUNNING")
     bot.is_running = True
@@ -296,6 +321,7 @@ def get_bot_runtime_performance(db, *, bot: BotProfile) -> dict:
 
 
 def get_bot_runtime_logs(db, *, bot: BotProfile) -> list[dict]:
+    runtime = _ensure_runtime(db, bot)
     rows = (
         db.query(SignalEvent)
         .filter(SignalEvent.bot_profile_id == bot.id)
@@ -314,6 +340,7 @@ def get_bot_runtime_logs(db, *, bot: BotProfile) -> list[dict]:
                 "registered": True,
                 "queue_name": "execution_queue",
                 "correlation_id": f"signal:{row.id}",
+                "correlation_namespace": (runtime.get("runtime_context") or {}).get("correlation_namespace"),
             },
             "generated_at": row.generated_at,
         }
@@ -322,9 +349,11 @@ def get_bot_runtime_logs(db, *, bot: BotProfile) -> list[dict]:
 
 
 def get_bot_runtime_trades(db, *, bot: BotProfile) -> list[dict]:
+    runtime = _ensure_runtime(db, bot)
+    resolved_symbols = list((_resolve_symbol_source(db, bot).get("symbols") or list(bot.symbols or [])))
     rows = (
         db.query(ExecutionMetric)
-        .filter(ExecutionMetric.user_id == bot.user_id, ExecutionMetric.symbol.in_(list(bot.symbols or [])))
+        .filter(ExecutionMetric.user_id == bot.user_id, ExecutionMetric.symbol.in_(resolved_symbols), ExecutionMetric.strategy_type == bot.strategy_type)
         .order_by(ExecutionMetric.created_at.desc())
         .limit(100)
         .all()
@@ -341,6 +370,7 @@ def get_bot_runtime_trades(db, *, bot: BotProfile) -> list[dict]:
             "quality_score": row.execution_quality_score,
             "queue_trace": {
                 "correlation_id": ((row.raw_exchange_status or {}).get("exchange_result") or {}).get("correlation_id"),
+                "correlation_namespace": (runtime.get("runtime_context") or {}).get("correlation_namespace"),
                 "execution_pipeline": "signal -> risk_check -> execution_queue -> execution_result -> position_update",
             },
             "created_at": row.created_at,

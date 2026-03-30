@@ -14,6 +14,8 @@ const initialForm = {
   symbols: "BTCUSDT,ETHUSDT",
   strategy_type: "trend_following",
   mode: "live_ready_disabled",
+  symbol_source_type: "manual",
+  scanner_id: "",
   timeframe: "15m",
   trend_timeframe: "1h",
   is_enabled: true,
@@ -56,7 +58,7 @@ export const BotProfilesPage = () => {
       if (!selectedBot?.id) return;
       try {
         const [statusRes, perfRes, logsRes, tradesRes] = await Promise.all([
-          apiClient.get(`/bot-profiles/${selectedBot.id}/status`),
+          apiClient.get(`/bot-profiles/${selectedBot.id}/detail`),
           apiClient.get(`/bot-profiles/${selectedBot.id}/performance`),
           apiClient.get(`/bot-profiles/${selectedBot.id}/logs`),
           apiClient.get(`/bot-profiles/${selectedBot.id}/trades`),
@@ -121,6 +123,7 @@ export const BotProfilesPage = () => {
       scanner_id: form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null,
       symbols: parsedSymbols,
       strategy_type: form.strategy_type,
+      strategy_template_id: form.template_id || null,
       timeframe: form.timeframe,
       trend_timeframe: form.trend_timeframe,
       leverage: 1,
@@ -154,6 +157,7 @@ export const BotProfilesPage = () => {
       mode: item.mode || "live_ready_disabled",
       symbol_source_type: item.symbol_source || "manual",
       scanner_id: item.symbol_source_summary?.scanner_id || "",
+      template_id: item.strategy_template_id || item.template_id || "",
     });
     setSymbolSource("crypto");
     setSymbolMode("manual_selection");
@@ -433,13 +437,14 @@ export const BotProfilesPage = () => {
               <p className="text-sm text-black/70" data-testid="bot-detail-subtitle">{selectedBot.strategy_id || selectedBot.strategy_type} · {selectedBot.mode}</p>
             </div>
             <div className="flex flex-wrap gap-2" data-testid="bot-detail-tabs">
-              {['overview','runtime','performance','logs','trades'].map((tab) => (
+              {['overview','runtime','bindings','performance','logs','trades'].map((tab) => (
                 <Button key={tab} size="sm" variant={detailTab === tab ? 'default' : 'outline'} onClick={() => setDetailTab(tab)} data-testid={`bot-detail-tab-${tab}`}>{tab}</Button>
               ))}
             </div>
           </div>
-          {detailTab === 'overview' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-overview-json">{JSON.stringify(selectedBot, null, 2)}</pre>}
-          {detailTab === 'runtime' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-runtime-json">{JSON.stringify(botStatus || {}, null, 2)}</pre>}
+          {detailTab === 'overview' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-overview-json">{JSON.stringify((botStatus || {}).runtime_summary || selectedBot, null, 2)}</pre>}
+          {detailTab === 'runtime' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-runtime-json">{JSON.stringify((botStatus || {}).runtime_summary || {}, null, 2)}</pre>}
+          {detailTab === 'bindings' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-bindings-json">{JSON.stringify({ strategy_binding: botStatus?.strategy_binding, risk_binding: botStatus?.risk_binding, execution_binding: botStatus?.execution_binding, binding_validation: botStatus?.binding_validation, compatibility: botStatus?.compatibility, last_execution_summary: botStatus?.last_execution_summary }, null, 2)}</pre>}
           {detailTab === 'performance' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-performance-json">{JSON.stringify(botPerformance || {}, null, 2)}</pre>}
           {detailTab === 'logs' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-logs-json">{JSON.stringify(botLogs || [], null, 2)}</pre>}
           {detailTab === 'trades' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-trades-json">{JSON.stringify(botTrades || [], null, 2)}</pre>}

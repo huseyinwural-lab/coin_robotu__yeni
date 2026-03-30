@@ -193,6 +193,98 @@
   - **Trade Entry = PRODUCTION READY (LOCAL VERIFIED)**
   - preview tarafı hâlâ ayrı olarak infra-blocked kabul edilir
 
+## 2026-03-30 — BOT MODULE P0 Tamamlayıcılar + P1 Observability (İlerleme)
+
+### Tamamlanan P0 parçaları
+- Bot veri modeli genişletildi:
+  - `symbol_source_type`
+  - `scanner_id`
+  - `symbol_resolution_snapshot`
+  - `strategy_template_id`
+- Runtime summary/detail ayrımı kuruldu:
+  - list endpoint → hafif runtime summary
+  - detail endpoint → zengin binding / queue / execution görünürlüğü
+- Yeni route:
+  - `GET /api/bot-profiles/{id}/detail`
+
+### Symbol source contract
+- `manual` source gerçek çözülüyor
+- `scanner` source gerçek scanner sonuçlarından resolve ediliyor
+- scanner sonucu boşsa bot start → `ERROR`
+- runtime/detail içinde görünür:
+  - `source_type`
+  - `scanner_id`
+  - `resolved_symbols`
+  - `last_resolution_time`
+  - `resolution_status`
+
+### Binding görünürlüğü
+- detail response içine eklendi:
+  - `strategy_binding`
+  - `risk_binding`
+  - `execution_binding`
+  - `binding_validation`
+  - `compatibility`
+- Böylece selected / resolved / active ayrımı netleşti.
+
+### Queue trace / execution hattı
+- runtime context içinde queue registration görünür:
+  - `queue_name`
+  - `registered_at`
+  - `graceful_stop`
+  - `force_close_default`
+- `last_execution_summary` eklendi:
+  - `last_signal_time`
+  - `last_risk_check_result`
+  - `last_queue_event`
+  - `last_execution_result`
+  - `last_position_update`
+- logs / trades çıktılarında queue trace alanı mevcut.
+
+### Health state motoru
+- Ayrı health hesabı kullanılıyor:
+  - `HEALTHY`
+  - `DEGRADED`
+  - `ERROR`
+- Tetikler:
+  - symbol resolution failure
+  - runtime error
+  - heartbeat age
+  - reject spike
+  - queue/pending spike
+  - provider/binding kaynaklı last_error
+
+### UI tarafı
+- Bot Profiles listesinde görünür:
+  - status
+  - health
+  - mode
+  - strategy id
+  - symbol source summary
+  - last heartbeat
+  - backtest ↔ live parity
+- Bot detail paneli açıldı ve sekmeler eklendi:
+  - `Overview`
+  - `Runtime`
+  - `Bindings`
+  - `Performance`
+  - `Logs`
+  - `Trades`
+
+### Test / doğrulama
+- Yeni test dosyası:
+  - `/app/backend/tests/test_bot_runtime_module.py`
+- Sonuç:
+  - **3/3 PASS**
+- Yerel API doğrulaması:
+  - `/api/bot-profiles` → 200
+  - `/api/bot-profiles/{id}/detail` → 200
+
+### Hâlâ açık kalanlar (sonraki tur)
+- bot-scoped trade filtering için correlation namespace’i execution metric katmanına daha güçlü bağlamak
+- unified control room entegrasyonu
+- dynamic params / multi-bot portfolio control / auto scaling
+
 ## 2026-03-30 — MFA SETTINGS FINAL GAP CLOSURE
 
 ### P0 — Route ve backend doğrulaması
