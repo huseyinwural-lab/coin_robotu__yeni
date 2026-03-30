@@ -32,7 +32,7 @@ const clearAuthSession = () => {
   localStorage.removeItem(AUTH_USER_KEY);
 };
 
-const authFetchJson = async (path, { method = "GET", body = null, token = null, timeoutMs = 8000 } = {}) => {
+const authFetchJson = async (path, { method = "GET", body = null, token = null, timeoutMs = 15000 } = {}) => {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }) => {
 
       try {
         setAuthToken(token);
-        const { data } = await apiClient.get("/auth/me", { timeout: 8000 });
+        const { data } = await apiClient.get("/auth/me", { timeout: 15000 });
         if (!cancelled) {
           setUser(data);
           localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data));
@@ -108,7 +108,7 @@ export const AuthProvider = ({ children }) => {
         if (status === 401 && detail.includes("session_device_mismatch")) {
           try {
             await new Promise((resolve) => window.setTimeout(resolve, 350));
-            const retry = await apiClient.get("/auth/me", { timeout: 8000 });
+            const retry = await apiClient.get("/auth/me", { timeout: 15000 });
             if (!cancelled) {
               setUser(retry.data);
               localStorage.setItem(AUTH_USER_KEY, JSON.stringify(retry.data));
@@ -121,7 +121,7 @@ export const AuthProvider = ({ children }) => {
         }
         if (status === 0 || String(error?.name || "").toLowerCase() === "aborterror" || String(error?.code || "").toUpperCase() === "ERR_NETWORK") {
           try {
-            const retryPayload = await authFetchJson("/auth/me", { method: "GET", token, timeoutMs: 8000 });
+            const retryPayload = await authFetchJson("/auth/me", { method: "GET", token, timeoutMs: 15000 });
             if (!cancelled) {
               setUser(retryPayload);
               localStorage.setItem(AUTH_USER_KEY, JSON.stringify(retryPayload));
@@ -196,14 +196,14 @@ export const AuthProvider = ({ children }) => {
     const panelPath = panel === "admin" ? "/auth/login/admin" : panel === "user" ? "/auth/login/user" : "/auth/login";
     let data;
     try {
-      const response = await apiClient.post(panelPath, { email, password }, { timeout: 8000 });
+      const response = await apiClient.post(panelPath, { email, password }, { timeout: 15000 });
       data = response.data;
     } catch (error) {
       const isNetworkLike = String(error?.code || "").toUpperCase() === "ERR_NETWORK" || String(error?.name || "").toLowerCase() === "aborterror" || String(error?.message || "").toLowerCase().includes("network") || String(error?.message || "").toLowerCase().includes("canceled");
       if (!isNetworkLike) {
         throw error;
       }
-      data = await authFetchJson(panelPath, { method: "POST", body: { email, password }, timeoutMs: 8000 });
+      data = await authFetchJson(panelPath, { method: "POST", body: { email, password }, timeoutMs: 15000 });
     }
     if (data?.mfa_required) {
       return {
@@ -237,14 +237,14 @@ export const AuthProvider = ({ children }) => {
         challenge_token: challengeToken,
         method,
         code: code || "",
-      }, { timeout: 8000 });
+      }, { timeout: 15000 });
       data = response.data;
     } catch (error) {
       const isNetworkLike = String(error?.code || "").toUpperCase() === "ERR_NETWORK" || String(error?.name || "").toLowerCase() === "aborterror" || String(error?.message || "").toLowerCase().includes("network") || String(error?.message || "").toLowerCase().includes("canceled");
       if (!isNetworkLike) {
         throw error;
       }
-      data = await authFetchJson("/mfa/verify", { method: "POST", body: { challenge_token: challengeToken, method, code: code || "" }, timeoutMs: 8000 });
+      data = await authFetchJson("/mfa/verify", { method: "POST", body: { challenge_token: challengeToken, method, code: code || "" }, timeoutMs: 15000 });
     }
     persistAuthSession({ token: data.access_token, user: data.user || null });
     setAuthToken(data.access_token);
