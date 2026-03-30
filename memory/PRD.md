@@ -193,6 +193,87 @@
   - **Trade Entry = PRODUCTION READY (LOCAL VERIFIED)**
   - preview tarafı hâlâ ayrı olarak infra-blocked kabul edilir
 
+## 2026-03-30 — EXCHANGE SETTINGS FINAL GAP CLOSURE
+
+### P0 — Kritik kapanışlar
+- Exchange Settings ekranı production-grade profile management yönüne taşındı.
+- Eklenen ana görünürlükler:
+  - **Active profile selector** (üstte büyük selector)
+  - **Active profile summary card**
+  - **Permission badges**
+    - `read`
+    - `write`
+    - `trade`
+    - `withdraw` (risk tonu ile)
+  - **Account snapshot cards**
+    - available balance
+    - wallet/equity
+    - open order margin
+    - unrealized pnl
+    - last sync / stale state
+  - **Validation breakdown panel**
+    - credential status
+    - permission status
+    - environment match
+    - venue reachability
+    - trade-ready verdict
+    - required action
+  - **Connection test history panel**
+    - validation attempt time
+    - result/source/reason/latency
+
+### Action Required alanı
+- Action Required artık yalnız text değil; connection kartları üzerinde aksiyonlarla birlikte görünür:
+  - `Revalidate`
+  - `Edit`
+  - `Set Default`
+  - `Open Diagnostics`
+  - `Delete`
+
+### Single source of truth
+- Exchange Settings artık risk ayarlarını primary tab olarak göstermiyor.
+- Risk Settings kendi ana kaynağı olan `/user/settings` içinde kaldı.
+- Exchange Settings yalnızca:
+  - credentials
+  - profiles
+  - health
+  - diagnostics
+  - test order
+  ekseninde bırakıldı.
+
+### P1 — Bilgi mimarisi
+- Yeni diagnostics sayfası eklendi:
+  - `/user/exchange-diagnostics`
+- Sidebar’a ayrı `Diagnostics` menü maddesi eklendi.
+- Exchange Settings içinden de `Open Diagnostics` butonu korundu.
+- `UserExchangeDiagnosticsPage.jsx` oluşturuldu ve `UserExchangeSettingsPage` diagnostics modunda yeniden kullanıldı.
+
+### P2 — Güvenli credential görünürlüğü
+- Kullanıcıya görünür hale getirildi:
+  - `masked_api_key`
+  - `has_api_key`
+  - `has_api_secret`
+  - `credential_fingerprint`
+  - `updated_at`
+- Plaintext gösterimi yapılmadı.
+
+### Route ve menü sonuçları
+- `Exchange Settings` tekrar bağımsız route olarak kullanılıyor:
+  - `/user/exchange-settings`
+- `Diagnostics` bağımsız route:
+  - `/user/exchange-diagnostics`
+- `Risk Policy` legacy redirect korunuyor:
+  - `/user/risk-policy` → `/user/settings`
+
+### Test / doğrulama
+- Local fallback browser validation PASS:
+  - user exchange settings / diagnostics flow → **5/5 PASS**
+- Sonuç dosyası / değerlendirme:
+  - browser validation: **LOCAL VERIFIED PASS**
+- Not:
+  - preview auth dalgalanması bu modülün local acceptance’ını etkilemedi
+  - test sonrası frontend backend target tekrar preview URL’ye restore edildi
+
 ## 2026-03-30 — FINAL PRODUCTION ACTIVATION (Current Status)
 
 ### Faz 0 — Infra stabilizasyonu
