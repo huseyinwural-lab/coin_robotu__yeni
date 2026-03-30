@@ -193,6 +193,77 @@
   - **Trade Entry = PRODUCTION READY (LOCAL VERIFIED)**
   - preview tarafı hâlâ ayrı olarak infra-blocked kabul edilir
 
+## 2026-03-30 — BOT MODULE P2 (Control Room + Portfolio Control)
+
+### Tamamlanan P2 katmanları
+
+#### 1) Unified Control Room entegrasyonu
+- Unified control room backend’e bot overview bağlandı.
+- Yeni blok:
+  - `live_operations.bots_overview`
+- Her bot için görünür:
+  - `status`
+  - `health`
+  - `mode`
+  - `pnl / today_pnl`
+  - `risk_exposure`
+  - `active_positions`
+  - `last_action`
+  - `anomaly_flag`
+
+#### 2) Bot → Risk Core aggregation
+- Bot bazlı risk katkısı summary’ye eklendi:
+  - `bot_risk_contribution.exposure`
+  - `bot_risk_contribution.avg_leverage`
+  - `bot_risk_contribution.direction_mix`
+- Unified control room içine taşındı:
+  - `risk_market_context.capital_pressure.bot_portfolio_control`
+
+#### 3) Multi-bot portfolio control
+- Yeni allocator summary eklendi:
+  - `aggregate_bot_portfolio_control(...)`
+- Dönen alanlar:
+  - `bot_count`
+  - `total_exposure`
+  - `avg_leverage`
+  - `allocator[]`
+  - `portfolio_health`
+- Allocator içinde bot bazlı:
+  - `capital_share`
+  - `throttled`
+  - `throttle_reason`
+  - `dynamic_parameters`
+
+#### 4) Dynamic parameter system (ilk sürüm)
+- Runtime summary’ye eklendi:
+  - `dynamic_parameters.position_size_multiplier`
+  - `dynamic_parameters.risk_multiplier`
+  - `dynamic_parameters.regime_adjustment`
+- Basit adaptasyon mantığı:
+  - `today_pnl`
+  - reject spike
+  - health state
+  üzerinden azaltılmış risk / size çarpanı
+
+#### 5) Correlation namespace
+- Runtime context içine eklendi:
+  - `correlation_namespace = bot:{bot_id}`
+- Logs / trades queue_trace bloklarına taşındı.
+
+### Test / doğrulama
+- Yeni testler:
+  - `/app/backend/tests/test_bot_runtime_module.py`
+  - `/app/backend/tests/test_bot_p2_integration.py`
+- Sonuç:
+  - **4/4 PASS**
+
+### Son durum
+- Bot artık yalnız çalışan entity değil; risk/execution/learning/control room katmanlarına bağlanan bir operasyon nesnesi haline geldi.
+- Açık backlog olarak bırakılanlar:
+  - tam auto scaling
+  - gelişmiş capital orchestration
+  - daha zengin dynamic params
+
 ## 2026-03-30 — BOT MODULE P0 Tamamlayıcılar + P1 Observability (İlerleme)
 
 ### Tamamlanan P0 parçaları

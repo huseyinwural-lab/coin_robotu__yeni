@@ -147,6 +147,9 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     pending = db.query(PendingSignal).filter(PendingSignal.user_id == bot.user_id, PendingSignal.symbol.in_(resolved_symbols)).count()
     pnl = sum(float(getattr(row, "slippage_pct", 0.0) or 0.0) for row in trade_rows)
     today_pnl = sum(float(getattr(row, "slippage_pct", 0.0) or 0.0) for row in trade_rows if getattr(row, "created_at", None) and getattr(row, "created_at").date() == datetime.now(timezone.utc).date())
+    exposure = sum(abs(float(getattr(row, "size", 0.0) or 0.0) * float(getattr(row, "current_price", getattr(row, "entry_price", 0.0)) or 0.0)) for row in positions)
+    leverage_values = [float(getattr(row, "leverage", 1) or 1) for row in positions]
+    direction_mix = {"long": len([row for row in positions if str(getattr(row, "side", "")).lower() == "buy"]), "short": len([row for row in positions if str(getattr(row, "side", "")).lower() == "sell"])}
     heartbeat_age = 0.0
     try:
         heartbeat_age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(runtime.get("last_heartbeat") or _now_iso()).replace("Z", "+00:00"))).total_seconds()
@@ -165,6 +168,11 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         health = "ERROR"
     elif heartbeat_age > 120 or reject_spike >= 3 or pending > 5 or any(token in last_error for token in ["binding", "scanner", "provider", "queue"]):
         health = "DEGRADED"
+    dynamic_parameters = {
+        "position_size_multiplier": round(0.7 if abs(today_pnl) > 0.05 else 0.85 if reject_spike >= 2 else 1.0, 4),
+        "risk_multiplier": round(0.75 if health == "DEGRADED" else 0.5 if health == "ERROR" else 1.0, 4),
+        "regime_adjustment": "reduced_risk" if abs(today_pnl) > 0.05 else "default",
+    }
     return {
         "id": bot.id,
         "name": bot.name,
@@ -181,6 +189,12 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "compatibility": compatibility,
         "pnl": round(pnl, 6),
         "today_pnl": round(today_pnl, 6),
+        "risk_exposure": round(exposure, 6),
+        "bot_risk_contribution": {
+            "exposure": round(exposure, 6),
+            "avg_leverage": round(sum(leverage_values) / len(leverage_values), 6) if leverage_values else 1.0,
+            "direction_mix": direction_mix,
+        },
         "active_positions": len(positions),
         "last_signal": {
             "signal": getattr(signal, "signal", None),
@@ -191,6 +205,9 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         else None,
         "last_signal_at": getattr(signal, "generated_at", None) if signal else None,
         "strategy_name": runtime.get("strategy_id"),
+        "last_action": runtime.get("status", "IDLE"),
+        "anomaly_flag": bool(health in {"DEGRADED", "ERROR"}),
+        "dynamic_parameters": dynamic_parameters,
         "health": health,
     }
 
@@ -230,6 +247,38 @@ def get_bot_runtime_detail(db, *, bot: BotProfile) -> dict:
         "binding_validation": binding_validation,
         "compatibility": compatibility,
         "last_execution_summary": last_execution_summary,
+    }
+
+
+def aggregate_bot_portfolio_control(db, *, user_id: str) -> dict:
+    bots = list_bot_runtime_summaries(db, user_id=user_id)
+    total_exposure = sum(float((item.get("bot_risk_contribution") or {}).get("exposure", 0.0) or 0.0) for item in bots)
+    avg_leverage = 0.0
+    leverage_values = [float((item.get("bot_risk_contribution") or {}).get("avg_leverage", 1.0) or 1.0) for item in bots]
+    if leverage_values:
+        avg_leverage = sum(leverage_values) / len(leverage_values)
+    allocator = []
+    total_bots = max(len(bots), 1)
+    for item in bots:
+        contribution = float((item.get("bot_risk_contribution") or {}).get("exposure", 0.0) or 0.0)
+        allocation_share = round(contribution / total_exposure, 6) if total_exposure > 0 else round(1 / total_bots, 6)
+        throttled = bool(item.get("health") == "DEGRADED" or item.get("health") == "ERROR")
+        allocator.append(
+            {
+                "bot_id": item.get("id"),
+                "strategy_id": item.get("strategy_id"),
+                "capital_share": allocation_share,
+                "throttled": throttled,
+                "throttle_reason": "health_guard" if throttled else None,
+                "dynamic_parameters": item.get("dynamic_parameters") or {},
+            }
+        )
+    return {
+        "bot_count": len(bots),
+        "total_exposure": round(total_exposure, 6),
+        "avg_leverage": round(avg_leverage, 6),
+        "allocator": allocator,
+        "portfolio_health": "DEGRADED" if any(item.get("health") == "DEGRADED" for item in bots) else "ERROR" if any(item.get("health") == "ERROR" for item in bots) else "HEALTHY",
     }
 
 

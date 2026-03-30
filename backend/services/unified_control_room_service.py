@@ -6,6 +6,7 @@ from services.execution_safety_p1_service import get_operator_center_snapshot
 from services.futures_microstructure_service import build_microstructure_status
 from services.incident_intelligence_service import list_intelligence_incidents
 from services.learning_memory_service import get_learning_overview
+from services.bot_runtime_service import aggregate_bot_portfolio_control, list_bot_runtime_summaries
 from services.risk_orchestrator_analytics_service import compute_risk_analytics
 from services.pipeline.runtime import pipeline_runtime
 
@@ -32,6 +33,8 @@ def build_unified_control_room(db, *, user_id: str, window: str = "7d", incident
     learning = get_learning_overview(db)
     microstructure = build_microstructure_status(db, pipeline_runtime.cache if pipeline_runtime else None, user_id=user_id)
     risk = compute_risk_analytics(db, days=14)
+    bots = list_bot_runtime_summaries(db, user_id=user_id)
+    bot_portfolio = aggregate_bot_portfolio_control(db, user_id=user_id)
 
     recommendations = list(learning.get("recommendations") or [])[:recommendation_limit]
     incidents = [
@@ -78,6 +81,7 @@ def build_unified_control_room(db, *, user_id: str, window: str = "7d", incident
             "risk_policy_hits": risk.get("risk_policy_hits"),
             "kill_switch_events": risk.get("kill_switch_events"),
             "duplicate_intent_attempts": risk.get("duplicate_intent_attempts"),
+            "bot_portfolio_control": bot_portfolio,
         },
         "microstructure_stress": {
             "state": microstructure.get("portfolio_microstructure_state"),
@@ -122,6 +126,7 @@ def build_unified_control_room(db, *, user_id: str, window: str = "7d", incident
             "incidents": incidents,
             "execution_alerts": execution_alerts,
             "quarantined_runtime": operator_center.get("top_risky_intents") or [],
+            "bots_overview": bots,
         },
         "learning_adaptation": {
             "actionable_recommendations": learning_cards,

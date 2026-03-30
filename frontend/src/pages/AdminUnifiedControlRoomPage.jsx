@@ -124,6 +124,19 @@ export default function AdminUnifiedControlRoomPage() {
                     ))}
                   </div>
                 </div>
+                <div className="mt-4 border-t border-slate-200 pt-3" data-testid="unified-control-room-bots-panel">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">bots overview</p>
+                  <div className="mt-2 space-y-2">
+                    {(overview?.live_operations?.bots_overview || []).slice(0, 6).map((item, idx) => (
+                      <div key={`${item.id}-${idx}`} className="border border-slate-200 p-2 text-xs" data-testid={`unified-control-room-bot-item-${idx}`}>
+                        <p className="font-semibold" data-testid={`unified-control-room-bot-name-${idx}`}>{item.name}</p>
+                        <p data-testid={`unified-control-room-bot-status-${idx}`}>{item.status} · {item.health} · {item.mode}</p>
+                        <p data-testid={`unified-control-room-bot-pnl-${idx}`}>pnl={item.today_pnl ?? item.pnl}</p>
+                        <p data-testid={`unified-control-room-bot-risk-${idx}`}>risk_exposure={item.risk_exposure ?? 0}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
