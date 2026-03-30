@@ -92,6 +92,53 @@
   - rollback PASS checklist
   - staged activation Stage 1→2 geçiş hazırlığı
 
+## 2026-03-30 — FINAL PRODUCTION ACTIVATION (Current Status)
+
+### Faz 0 — Infra stabilizasyonu
+- Frontend auth hardening daha agresif hale getirildi:
+  - auth endpoint timeout kısaltıldı
+  - auth request retry budget artırıldı
+  - user login submit retry-safe hale getirildi
+- Sonuç:
+  - **Kod tarafında** auth akışı sertleştirildi
+  - **Preview ortamında** login hâlâ aralıklı infra/network katmanında askıda kalabiliyor
+
+### Browser regression durumu
+- Full browser regression denemesi yapıldı.
+- Sonuç:
+  - user/admin login preview katmanında yine aralıklı olarak `İşleniyor...` durumunda kalabiliyor
+  - testing agent bunu **INFRA issue** olarak sınıflandırdı
+  - backend’e hiç ulaşmayan veya yanıtı frontend’e geri dönemeyen preview denemeleri mevcut
+
+### Stage 1 read-only / simulation doğrulaması
+- Backend-only doğrulama tamamlandı:
+  - market data ON
+  - scanner ON
+  - signals ON
+  - execution simulate/read-only
+  - risk görünür
+  - alerts görünür
+  - signal → decision → execution-intent zinciri görünür
+  - backtest ↔ live sapması okunur
+- Testing agent raporu:
+  - `/app/test_reports/iteration_191.json`
+- Sonuç:
+  - Stage 1 backend/read-only zinciri **PASS**
+
+### Release gate yorumu
+- Şu an release kararı için tek dışsal blokaj:
+  - preview auth/network stabilitesi
+- Kod tarafında kritik backend katmanları kapalı devre şekilde doğrulandı:
+  - user/dashboard P0-P2
+  - CALI deterministic closure
+  - final gap closure
+  - stage 1 read-only backend verification
+
+### Son karar durumu
+- **Stage 1 backend perspective:** hazır
+- **Full browser regression:** preview infra blokajı nedeniyle tamamlanamadı
+- **Live konuşulabilir mi?** hayır, preview auth/network tam stabil olmadan değil
+
 ## 2026-03-30 — FINAL GAP CLOSURE (Strategy Visibility + Financial Center + Operational Control)
 
 ### Tamamlanan zorunlu kapanışlar
