@@ -83,6 +83,7 @@ from routers import (
     user_trading,
     user_explainability,
     user_activity,
+    user_alerts,
     user_platform,
     user_reports,
     user_scanner_signals,
@@ -365,6 +366,7 @@ api_router.include_router(user_execution.router)
 api_router.include_router(user_trading.router)
 api_router.include_router(user_explainability.router)
 api_router.include_router(user_activity.router)
+api_router.include_router(user_alerts.router)
 api_router.include_router(user_reports.router)
 api_router.include_router(debug_effective_universe.router)
 api_router.include_router(strategy_templates.router)

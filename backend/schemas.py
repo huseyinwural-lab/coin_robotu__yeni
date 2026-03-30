@@ -415,11 +415,11 @@ class RiskPolicyBase(BaseModel):
 
 
 class RiskPolicyCreate(RiskPolicyBase):
-    pass
+    reason_note: str | None = None
 
 
 class RiskPolicyUpdate(RiskPolicyBase):
-    pass
+    reason_note: str | None = None
 
 
 class RiskPolicyResponse(RiskPolicyBase):
@@ -427,6 +427,14 @@ class RiskPolicyResponse(RiskPolicyBase):
 
     id: str
     user_id: str
+    version_group_id: str
+    version_num: int
+    lifecycle_state: str
+    is_active: bool
+    activated_at: datetime | None = None
+    activated_by: str | None = None
+    status_reason: str | None = None
+    metadata_json: dict = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 

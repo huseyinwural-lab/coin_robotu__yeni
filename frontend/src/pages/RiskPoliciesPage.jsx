@@ -24,8 +24,12 @@ export const RiskPoliciesPage = () => {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [formErrors, setFormErrors] = useState({});
+  const [reasonById, setReasonById] = useState({});
+  const [previewImpact, setPreviewImpact] = useState(null);
+  const [selectedPolicy, setSelectedPolicy] = useState(null);
+  const [history, setHistory] = useState([]);
 
-  const activePolicy = useMemo(() => (items && items.length > 0 ? items[0] : null), [items]);
+  const activePolicy = useMemo(() => (items || []).find((item) => item.is_active) || null, [items]);
 
   const fetchItems = async () => {
     const { data } = await apiClient.get("/risk-policies");
@@ -76,6 +80,7 @@ export const RiskPoliciesPage = () => {
       spread_limit_bps: Number(form.spread_limit_bps),
       slippage_limit_bps: Number(form.slippage_limit_bps),
       min_liquidity_usdt: Number(form.min_liquidity_usdt),
+      reason_note: reasonById[editingId || 'draft'] || 'manual_update',
     };
 
     try {
@@ -99,6 +104,67 @@ export const RiskPoliciesPage = () => {
     setEditingId(item.id);
     setForm(item);
     setFormErrors({});
+    setSelectedPolicy(item);
+  };
+
+  const requireReason = (id) => {
+    const value = String(reasonById[id] || '').trim();
+    if (!value) {
+      toast.error('Reason zorunlu');
+      return null;
+    }
+    return value;
+  };
+
+  const previewPolicyImpact = async (item) => {
+    try {
+      const { data } = await apiClient.post(`/risk-policies/${item.id}/preview-impact`, {
+        current_daily_pnl_pct: 1.5,
+        current_open_positions: 1,
+        current_leverage: 2,
+        current_spread_bps: 12,
+        current_slippage_bps: 10,
+      });
+      setPreviewImpact(data);
+      setSelectedPolicy(item);
+      toast.success('Risk impact preview hazır');
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Impact preview başarısız');
+    }
+  };
+
+  const activatePolicy = async (item) => {
+    const reason = requireReason(item.id);
+    if (!reason) return;
+    try {
+      await apiClient.post(`/risk-policies/${item.id}/activate`, { reason });
+      await fetchItems();
+      toast.success('Policy active oldu');
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Policy activate başarısız');
+    }
+  };
+
+  const loadHistory = async (item) => {
+    try {
+      const { data } = await apiClient.get(`/risk-policies/${item.id}/history`);
+      setHistory(data?.items || []);
+      setSelectedPolicy(item);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Policy history yüklenemedi');
+    }
+  };
+
+  const rollbackPolicy = async (item) => {
+    const reason = requireReason(item.id);
+    if (!reason) return;
+    try {
+      await apiClient.post(`/risk-policies/${item.id}/rollback`, { reason });
+      await fetchItems();
+      toast.success('Policy rollback tamamlandı');
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || 'Policy rollback başarısız');
+    }
   };
 
   return (
@@ -108,13 +174,13 @@ export const RiskPoliciesPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="risk-policies-description">Position sizing, ATR, RR ve günlük risk limitleri tek formda yönetilir.</p>
         <div className="mt-3 grid gap-2 rounded border border-cyan-800/40 bg-cyan-950/20 p-3 md:grid-cols-3" data-testid="risk-policies-active-indicator-panel">
           <p className="text-xs" data-testid="risk-policies-active-indicator-status">
-            Policy Status: {activePolicy ? "ACTIVE" : "INACTIVE"}
+            Policy Status: {activePolicy ? activePolicy.lifecycle_state?.toUpperCase() : "INACTIVE"}
           </p>
           <p className="text-xs" data-testid="risk-policies-active-indicator-name">
             Active Policy: {activePolicy?.name || "-"}
           </p>
           <p className="text-xs" data-testid="risk-policies-active-indicator-note">
-            Not: Varsayılan execution policy en güncel policy olarak uygulanır.
+            {activePolicy ? `${activePolicy.version_group_id} v${activePolicy.version_num} · activated_by=${activePolicy.activated_by || '-'} · enforce=${activePolicy.metadata_json?.enforce ? 'on' : 'pending'}` : 'no active policy selected'}
           </p>
         </div>
       </header>
@@ -220,6 +286,7 @@ export const RiskPoliciesPage = () => {
         </div>
 
         <div className="flex gap-2 md:col-span-2">
+          <Input value={reasonById[editingId || 'draft'] || ''} onChange={(event) => setReasonById((prev) => ({ ...prev, [editingId || 'draft']: event.target.value }))} placeholder="reason note" data-testid="risk-form-reason-input" />
           <Button type="submit" className="bg-orange-500 text-black hover:bg-orange-600" data-testid="risk-form-submit-button">
             {editingId ? "Güncelle" : "Oluştur"}
           </Button>
@@ -250,6 +317,7 @@ export const RiskPoliciesPage = () => {
               <TableHead data-testid="risk-table-head-atr">ATR</TableHead>
               <TableHead data-testid="risk-table-head-rr">RR</TableHead>
               <TableHead data-testid="risk-table-head-status">Status</TableHead>
+              <TableHead data-testid="risk-table-head-version">Version</TableHead>
               <TableHead data-testid="risk-table-head-action">Aksiyon</TableHead>
             </TableRow>
           </TableHeader>
@@ -262,18 +330,43 @@ export const RiskPoliciesPage = () => {
                 <TableCell className="font-mono" data-testid={`risk-table-rr-${item.id}`}>{item.risk_reward_ratio}</TableCell>
                 <TableCell data-testid={`risk-table-status-${item.id}`}>
                   <span className={`rounded px-2 py-1 text-xs font-semibold ${activePolicy?.id === item.id ? "bg-emerald-200 text-emerald-900" : "bg-slate-300 text-slate-800"}`} data-testid={`risk-table-status-badge-${item.id}`}>
-                    {activePolicy?.id === item.id ? "ACTIVE" : "INACTIVE"}
+                    {item.is_active ? "ACTIVE" : item.lifecycle_state?.toUpperCase() || 'INACTIVE'}
                   </span>
                 </TableCell>
+                <TableCell data-testid={`risk-table-version-${item.id}`}>v{item.version_num}</TableCell>
                 <TableCell>
-                  <Button size="sm" variant="outline" className="border-slate-600 bg-transparent" onClick={() => editPolicy(item)} data-testid={`risk-table-edit-${item.id}`}>
-                    Düzenle
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" className="border-slate-600 bg-transparent" onClick={() => editPolicy(item)} data-testid={`risk-table-edit-${item.id}`}>Düzenle</Button>
+                    <Button size="sm" variant="outline" className="border-cyan-600 bg-transparent" onClick={() => previewPolicyImpact(item)} data-testid={`risk-table-preview-${item.id}`}>Preview</Button>
+                    <Button size="sm" variant="outline" className="border-emerald-600 bg-transparent" onClick={() => activatePolicy(item)} data-testid={`risk-table-activate-${item.id}`}>Set Active</Button>
+                    <Button size="sm" variant="outline" className="border-amber-600 bg-transparent" onClick={() => loadHistory(item)} data-testid={`risk-table-history-${item.id}`}>History</Button>
+                    <Button size="sm" variant="outline" className="border-rose-600 bg-transparent" onClick={() => rollbackPolicy(item)} data-testid={`risk-table-rollback-${item.id}`}>Rollback</Button>
+                  </div>
+                  <Input className="mt-2" value={reasonById[item.id] || ''} onChange={(event) => setReasonById((prev) => ({ ...prev, [item.id]: event.target.value }))} placeholder="reason" data-testid={`risk-table-reason-${item.id}`} />
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2" data-testid="risk-policy-observability-grid">
+        <article className="border border-slate-800 bg-slate-900 p-4" data-testid="risk-policy-impact-preview-panel">
+          <h3 className="text-base font-semibold" data-testid="risk-policy-impact-preview-title">Real-time Risk Impact Preview</h3>
+          <pre className="mt-3 overflow-x-auto bg-slate-950 p-3 text-xs text-slate-200" data-testid="risk-policy-impact-preview-json">{JSON.stringify(previewImpact || {}, null, 2)}</pre>
+        </article>
+        <article className="border border-slate-800 bg-slate-900 p-4" data-testid="risk-policy-history-panel">
+          <h3 className="text-base font-semibold" data-testid="risk-policy-history-title">Version / History / Rollback</h3>
+          <pre className="mt-3 overflow-x-auto bg-slate-950 p-3 text-xs text-slate-200" data-testid="risk-policy-history-json">{JSON.stringify(history || [], null, 2)}</pre>
+        </article>
+        <article className="border border-slate-800 bg-slate-900 p-4" data-testid="risk-policy-enforce-panel">
+          <h3 className="text-base font-semibold" data-testid="risk-policy-enforce-title">Execution Enforce Kanıtı</h3>
+          <pre className="mt-3 overflow-x-auto bg-slate-950 p-3 text-xs text-slate-200" data-testid="risk-policy-enforce-json">{JSON.stringify(activePolicy?.metadata_json?.enforce || {}, null, 2)}</pre>
+        </article>
+        <article className="border border-slate-800 bg-slate-900 p-4" data-testid="risk-policy-kill-switch-panel">
+          <h3 className="text-base font-semibold" data-testid="risk-policy-kill-switch-title">Kill Switch Görünürlüğü</h3>
+          <pre className="mt-3 overflow-x-auto bg-slate-950 p-3 text-xs text-slate-200" data-testid="risk-policy-kill-switch-json">{JSON.stringify({ state: activePolicy?.metadata_json?.kill_switch || 'unknown', source: 'global', reason: activePolicy?.status_reason || null }, null, 2)}</pre>
+        </article>
       </div>
     </section>
   );

@@ -63,7 +63,6 @@ const userMenuGroups = [
       { to: "/user/alerts", label: "Alerts", icon: ShieldAlert, testId: "nav-user-alerts-link" },
       { to: "/user/activity-log", label: "Activity Log", icon: FileText, testId: "nav-user-activity-log-link" },
       { to: "/user/exchange-diagnostics", label: "Diagnostics", icon: Activity, testId: "nav-user-diagnostics-link" },
-      { to: "/user/signals", label: "Audit Signals", icon: Radio, testId: "nav-user-signals-link" },
     ],
   },
   {
