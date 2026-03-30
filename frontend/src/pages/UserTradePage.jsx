@@ -171,6 +171,14 @@ export const UserTradePage = () => {
   const handlePreview = async () => {
     try {
       const validation = await runValidation({ silent: true });
+      const stalePreviewOrders = openOrders.filter(
+        (item) =>
+          String(item.symbol || "").toUpperCase() === String(form.symbol || "").toUpperCase() &&
+          ["PREVIEWED", "REJECTED"].includes(String(item.status || "").toUpperCase()),
+      );
+      for (const item of stalePreviewOrders) {
+        await apiClient.post("/user/execution/intent/cancel", { intent_token: item.intent_token });
+      }
       const payload = {
         source_type: "manual",
         intent_type: "OPEN_POSITION",
@@ -200,7 +208,12 @@ export const UserTradePage = () => {
         toast.success("Preview oluşturuldu");
       }
     } catch (error) {
-      toast.error(parseErrorText(error));
+      const detail = error?.response?.data?.detail;
+      if (String(detail || "").includes("duplicate_execution_intent")) {
+        toast.error("Aynı sembol için açık preview/order bulundu. Önce mevcut order’ı iptal edin.");
+      } else {
+        toast.error(parseErrorText(error));
+      }
     }
   };
 
