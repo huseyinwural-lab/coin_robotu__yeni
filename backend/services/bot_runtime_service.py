@@ -62,9 +62,57 @@ def _ensure_runtime(db, bot: BotProfile) -> dict:
     return runtime
 
 
+def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution: dict) -> tuple[dict, dict, dict, dict, dict]:
+    binding_sources = dict((runtime.get("runtime_context") or {}).get("binding_sources") or {})
+    strategy_binding = {
+        "selected_strategy_id": bot.strategy_type,
+        "selected_strategy_template_id": getattr(bot, "strategy_template_id", None),
+        "effective_runtime_strategy_id": runtime.get("strategy_id"),
+        "effective_params": {
+            "timeframe": bot.timeframe,
+            "trend_timeframe": bot.trend_timeframe,
+            "market_type": bot.market_type,
+        },
+        "override": False,
+    }
+    risk_binding = {
+        "risk_source": binding_sources.get("risk_source", "default"),
+        "resolved_risk_profile_id": runtime.get("risk_profile_id"),
+        "validation_result": "ok" if runtime.get("risk_profile_id") or binding_sources.get("risk_source") == "default" else "missing",
+    }
+    execution_binding = {
+        "execution_source": binding_sources.get("execution_profile_source", "default"),
+        "resolved_execution_profile_id": runtime.get("execution_profile_id"),
+        "venue_mode_compatibility": "ok",
+    }
+    binding_validation = {
+        "selected": {
+            "strategy_id": bot.strategy_type,
+            "risk_profile_id": runtime.get("risk_profile_id"),
+            "execution_profile_id": runtime.get("execution_profile_id"),
+            "symbol_source": symbol_resolution.get("source_type"),
+        },
+        "resolved": {
+            "strategy_id": runtime.get("strategy_id"),
+            "resolved_symbols": symbol_resolution.get("symbols") or [],
+            "resolved_symbol_count": len(symbol_resolution.get("symbols") or []),
+            "resolution_timestamp": runtime.get("last_heartbeat"),
+        },
+        "result": "ok" if symbol_resolution.get("ok") and runtime.get("execution_profile_id") and runtime.get("strategy_id") else "failed",
+    }
+    compatibility = {
+        "parity": "ok",
+        "market_strategy_compatible": True,
+        "execution_profile_source": binding_sources.get("execution_profile_source"),
+        "risk_source": binding_sources.get("risk_source"),
+    }
+    return strategy_binding, risk_binding, execution_binding, binding_validation, compatibility
+
+
 def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     runtime = _ensure_runtime(db, bot)
     symbol_resolution = _resolve_symbol_source(db, bot)
+    strategy_binding, risk_binding, execution_binding, binding_validation, compatibility = _build_binding_blocks(db, bot, runtime, symbol_resolution)
     positions = db.query(PaperPosition).filter(PaperPosition.user_id == bot.user_id, PaperPosition.status == "open", PaperPosition.symbol.in_(list(bot.symbols or []))).all()
     trade_rows = db.query(ExecutionMetric).filter(ExecutionMetric.user_id == bot.user_id, ExecutionMetric.symbol.in_(list(bot.symbols or []))).all()
     signal = (
@@ -82,9 +130,9 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     except Exception:
         heartbeat_age = 99999
     reject_spike = len([row for row in trade_rows if str(getattr(row, "final_status", "")).upper() in {"REJECTED", "FAILED", "CANCELED"}])
-    binding_validation = {
+    binding_summary = {
         "strategy_bound": bool(runtime.get("strategy_id")),
-        "risk_bound": bool(runtime.get("risk_profile_id")),
+        "risk_bound": bool(runtime.get("risk_profile_id") or risk_binding.get("risk_source") == "default"),
         "execution_bound": bool(runtime.get("execution_profile_id")),
         "symbols_resolved": bool(symbol_resolution.get("ok")),
     }
@@ -105,12 +153,8 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "runtime_context": runtime.get("runtime_context") or {},
         "symbol_source": runtime.get("symbol_source", "manual"),
         "symbol_source_summary": symbol_resolution,
-        "binding_validation": binding_validation,
-        "compatibility": {
-            "market_strategy_compatible": True,
-            "execution_profile_source": (runtime.get("runtime_context") or {}).get("binding_sources", {}).get("execution_profile_source"),
-            "risk_source": (runtime.get("runtime_context") or {}).get("binding_sources", {}).get("risk_source"),
-        },
+        "binding_validation": binding_summary,
+        "compatibility": compatibility,
         "pnl": round(pnl, 6),
         "today_pnl": round(today_pnl, 6),
         "active_positions": len(positions),
@@ -124,6 +168,44 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "last_signal_at": getattr(signal, "generated_at", None) if signal else None,
         "strategy_name": runtime.get("strategy_id"),
         "health": health,
+    }
+
+
+def get_bot_runtime_detail(db, *, bot: BotProfile) -> dict:
+    runtime = _ensure_runtime(db, bot)
+    symbol_resolution = _resolve_symbol_source(db, bot)
+    strategy_binding, risk_binding, execution_binding, binding_validation, compatibility = _build_binding_blocks(db, bot, runtime, symbol_resolution)
+    summary = build_bot_runtime_summary(db, bot)
+    logs = get_bot_runtime_logs(db, bot=bot)
+    trades = get_bot_runtime_trades(db, bot=bot)
+    last_execution_summary = {
+        "last_signal_time": summary.get("last_signal_at"),
+        "last_risk_check_result": "ok" if risk_binding.get("validation_result") == "ok" else "failed",
+        "last_queue_event": (logs[0].get("queue_trace") if logs else None),
+        "last_execution_result": trades[0] if trades else None,
+        "last_position_update": summary.get("active_positions"),
+    }
+    return {
+        "config_summary": {
+            "bot_id": bot.id,
+            "name": bot.name,
+            "exchange": bot.exchange,
+            "market_type": bot.market_type,
+            "strategy_type": bot.strategy_type,
+            "strategy_template_id": getattr(bot, "strategy_template_id", None),
+            "mode": summary.get("mode"),
+            "symbol_source_type": getattr(bot, "symbol_source_type", "manual"),
+            "scanner_id": getattr(bot, "scanner_id", None),
+            "symbols": list(bot.symbols or []),
+            "symbol_resolution_snapshot": getattr(bot, "symbol_resolution_snapshot", {}) or {},
+        },
+        "runtime_summary": summary,
+        "strategy_binding": strategy_binding,
+        "risk_binding": risk_binding,
+        "execution_binding": execution_binding,
+        "binding_validation": binding_validation,
+        "compatibility": compatibility,
+        "last_execution_summary": last_execution_summary,
     }
 
 

@@ -308,6 +308,7 @@ class BotProfileBase(BaseModel):
     scanner_id: str | None = None
     symbols: list[str]
     strategy_type: str
+    strategy_template_id: str | None = None
     timeframe: str = "15m"
     trend_timeframe: str = "1h"
     leverage: int = Field(default=3, ge=1, le=25)
@@ -324,6 +325,7 @@ class BotProfileUpdate(BaseModel):
     market_type: str
     symbols: list[str]
     strategy_type: str
+    strategy_template_id: str | None = None
     timeframe: str
     trend_timeframe: str
     leverage: int = Field(default=3, ge=1, le=25)
@@ -377,6 +379,17 @@ class BotRuntimeStatusResponse(BaseModel):
     last_signal_at: datetime | None = None
     strategy_name: str | None = None
     health: str = "HEALTHY"
+
+
+class BotRuntimeDetailResponse(BaseModel):
+    config_summary: dict = Field(default_factory=dict)
+    runtime_summary: dict = Field(default_factory=dict)
+    strategy_binding: dict = Field(default_factory=dict)
+    risk_binding: dict = Field(default_factory=dict)
+    execution_binding: dict = Field(default_factory=dict)
+    binding_validation: dict = Field(default_factory=dict)
+    compatibility: dict = Field(default_factory=dict)
+    last_execution_summary: dict = Field(default_factory=dict)
 
 
 class BotRuntimePerformanceResponse(BaseModel):

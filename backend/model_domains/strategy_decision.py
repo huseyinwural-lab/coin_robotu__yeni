@@ -20,6 +20,7 @@ class BotProfile(Base):
     symbols: Mapped[list[str]] = mapped_column(JSON, default=list)
     symbol_resolution_snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
     strategy_type: Mapped[str] = mapped_column(String(50), default="trend_following")
+    strategy_template_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     timeframe: Mapped[str] = mapped_column(String(10), default="15m")
     trend_timeframe: Mapped[str] = mapped_column(String(10), default="1h")
     leverage: Mapped[int] = mapped_column(Integer, default=3)

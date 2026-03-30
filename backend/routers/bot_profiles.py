@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user, is_admin_role
 from models import BotProfile, User
-from schemas import BotProfileCreate, BotProfileResponse, BotProfileUpdate, BotRuntimeActionResponse, BotRuntimePerformanceResponse, BotRuntimeStatusResponse
+from schemas import BotProfileCreate, BotProfileResponse, BotProfileUpdate, BotRuntimeActionResponse, BotRuntimeDetailResponse, BotRuntimePerformanceResponse, BotRuntimeStatusResponse
 from services.audit_service import create_audit_log
 from services.bot_runtime_service import (
+    get_bot_runtime_detail,
     get_bot_runtime_logs,
     get_bot_runtime_performance,
     get_bot_runtime_status,
@@ -150,6 +151,14 @@ def get_bot_profile_runtime_status(bot_id: str, current_user: User = Depends(get
     if bot_profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot profile not found")
     return BotRuntimeStatusResponse(**get_bot_runtime_status(db, bot=bot_profile))
+
+
+@router.get("/{bot_id}/detail", response_model=BotRuntimeDetailResponse)
+def get_bot_profile_runtime_detail_route(bot_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    bot_profile = _authorized_bot_query(db, bot_id, current_user).first()
+    if bot_profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot profile not found")
+    return BotRuntimeDetailResponse(**get_bot_runtime_detail(db, bot=bot_profile))
 
 
 @router.get("/{bot_id}/performance", response_model=BotRuntimePerformanceResponse)
