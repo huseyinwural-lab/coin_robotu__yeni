@@ -92,6 +92,73 @@
   - rollback PASS checklist
   - staged activation Stage 1→2 geçiş hazırlığı
 
+## 2026-03-30 — TRADE ENTRY FINAL GAP CLOSURE
+
+### P0 — Kritik lifecycle kapanışı
+- `UserTradePage.jsx` artık tek tıklama trade paneli değil; 5 aşamalı akışa dönüştürüldü:
+  - `Create`
+  - `Validate`
+  - `Preview`
+  - `Confirm`
+  - `Execute + Track`
+- UI ayrımları:
+  - `Validate` butonu ayrı
+  - `Preview` butonu ayrı
+  - `Confirm checkbox` zorunlu
+  - `Confirm Order` final aksiyon
+
+### Order types
+- UI selector’a eklendi:
+  - `market`
+  - `limit`
+  - `stop`
+  - `stop-limit`
+  - `tp`
+  - `tp-limit`
+- OCO **bilinçli olarak backlog** bırakıldı.
+
+### Preview / risk görünürlüğü
+- `trading_preview_service.py` genişletildi:
+  - `required_margin`
+  - `estimated_fee`
+  - `slippage_estimate_bps`
+  - `expected_fill_price`
+  - `liquidation_price`
+  - `leverage_impact`
+  - `post_trade_exposure`
+  - `projected_pnl_impact`
+- Trade Entry UI içinde preview metrics + intent payload görünür.
+
+### Open orders / execution feedback
+- Open orders kaynağı olarak user execution intents bağlandı.
+- Cancel akışı UI’dan çalışır hale getirildi:
+  - `/user/execution/intent/cancel`
+- Execution feedback panelinde görünür:
+  - `intent_id`
+  - `queue_state`
+  - `execution_mode`
+  - `policy_decision`
+  - `pipeline_trace`
+  - `explain`
+- Quick links eklendi:
+  - `View in history`
+  - `View in execution panel`
+
+### Duplicate / deterministic safety
+- UI tarafında çift submit akışı confirm + loading ile kontrol altına alındı.
+- Backend preview tarafında JSON-unsafe datetime sorunu kapatıldı:
+  - `execution_intent_service.py` normalize/sanitize patch
+  - `explainability_service.py` JSON-safe trace payload patch
+
+### Test / doğrulama
+- Local backend preview endpoint tekrar PASS:
+  - `POST /api/v1/user/trading/preview` → 200
+- Browser validation sonucu:
+  - UI contract **doğru implement edildi**
+  - Ancak preview auth instabilitesi nedeniyle gerçek browser runtime doğrulaması bloklu
+- Blocking note:
+  - testing agent / frontend agent bunu **preview auth/network issue** olarak sınıflandırdı, UI code bug değil
+
 ## 2026-03-30 — FINAL PRODUCTION ACTIVATION (Current Status)
 
 ### Faz 0 — Infra stabilizasyonu
