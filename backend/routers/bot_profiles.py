@@ -29,7 +29,7 @@ def _authorized_bot_query(db: Session, bot_id: str, current_user: User):
     return query
 
 
-@router.get("", response_model=list[BotProfileResponse])
+@router.get("", response_model=list[BotRuntimeStatusResponse])
 def list_bot_profiles(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     _ = db
     return list_bot_runtime_summaries(db, user_id=current_user.id)

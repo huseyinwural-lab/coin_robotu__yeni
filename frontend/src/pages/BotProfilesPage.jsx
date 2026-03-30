@@ -24,6 +24,12 @@ export const BotProfilesPage = () => {
   const [items, setItems] = useState([]);
   const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
   const [templates, setTemplates] = useState([]);
+  const [selectedBot, setSelectedBot] = useState(null);
+  const [detailTab, setDetailTab] = useState("overview");
+  const [botStatus, setBotStatus] = useState(null);
+  const [botPerformance, setBotPerformance] = useState(null);
+  const [botLogs, setBotLogs] = useState([]);
+  const [botTrades, setBotTrades] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [deletingBotId, setDeletingBotId] = useState("");
   const [form, setForm] = useState(initialForm);
@@ -44,6 +50,27 @@ export const BotProfilesPage = () => {
   };
 
   const findStrategyParity = (strategyType) => (strategyPerformance?.items || []).find((item) => item.strategy_id === strategyType);
+
+  useEffect(() => {
+    const loadDetail = async () => {
+      if (!selectedBot?.id) return;
+      try {
+        const [statusRes, perfRes, logsRes, tradesRes] = await Promise.all([
+          apiClient.get(`/bot-profiles/${selectedBot.id}/status`),
+          apiClient.get(`/bot-profiles/${selectedBot.id}/performance`),
+          apiClient.get(`/bot-profiles/${selectedBot.id}/logs`),
+          apiClient.get(`/bot-profiles/${selectedBot.id}/trades`),
+        ]);
+        setBotStatus(statusRes.data || null);
+        setBotPerformance(perfRes.data || null);
+        setBotLogs(logsRes.data || []);
+        setBotTrades(tradesRes.data || []);
+      } catch (error) {
+        toast.error(error?.response?.data?.detail || 'Bot detail yüklenemedi');
+      }
+    };
+    loadDetail();
+  }, [selectedBot]);
 
   const applyTemplate = (templateId) => {
     const template = (templates || []).find((item) => item.id === templateId);
@@ -90,6 +117,8 @@ export const BotProfilesPage = () => {
       name: form.name.trim(),
       exchange: form.exchange,
       market_type: form.market_type,
+      symbol_source_type: form.symbol_source_type || 'manual',
+      scanner_id: form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null,
       symbols: parsedSymbols,
       strategy_type: form.strategy_type,
       timeframe: form.timeframe,
@@ -123,6 +152,8 @@ export const BotProfilesPage = () => {
       ...item,
       symbols: item.symbols.join(","),
       mode: item.mode || "live_ready_disabled",
+      symbol_source_type: item.symbol_source || "manual",
+      scanner_id: item.symbol_source_summary?.scanner_id || "",
     });
     setSymbolSource("crypto");
     setSymbolMode("manual_selection");
@@ -242,6 +273,15 @@ export const BotProfilesPage = () => {
           {formErrors.symbols && <p className="form-error-text" id="bot-form-symbols-error" data-testid="bot-form-symbols-error">{formErrors.symbols}</p>}
         </div>
 
+        <div className="form-group" data-testid="bot-form-group-symbol-source">
+          <label className="form-label" htmlFor="bot-form-symbol-source-select" data-testid="bot-form-symbol-source-label">Symbol Source</label>
+          <select id="bot-form-symbol-source-select" value={form.symbol_source_type || "manual"} onChange={(event) => setForm((prev) => ({ ...prev, symbol_source_type: event.target.value }))} className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="bot-form-symbol-source-select">
+            <option value="manual">manual</option>
+            <option value="scanner">scanner</option>
+          </select>
+          {String(form.symbol_source_type || "manual") === "scanner" && <Input className="mt-2" value={form.scanner_id || ""} onChange={(event) => setForm((prev) => ({ ...prev, scanner_id: event.target.value }))} placeholder="scanner_id" data-testid="bot-form-scanner-id-input" />}
+        </div>
+
         <div className="form-group" data-testid="bot-form-group-strategy">
           <label className="form-label" htmlFor="bot-form-strategy-select" data-testid="bot-form-strategy-label">Strategy</label>
           <select
@@ -346,10 +386,11 @@ export const BotProfilesPage = () => {
                 <TableCell data-testid={`bot-table-status-${item.id}`}>{item.status || (item.is_running ? "RUNNING" : "IDLE")}</TableCell>
                 <TableCell data-testid={`bot-table-health-${item.id}`}>{item.health || "HEALTHY"}</TableCell>
                 <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "live_ready_disabled"}</TableCell>
-                <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbols.join(", ")}</TableCell>
+                <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbol_source_summary?.summary || item.symbols.join(", ")}</TableCell>
                 <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.last_heartbeat || (item.is_running ? "running" : "stopped")}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" className="border-cyan-400 bg-transparent text-cyan-200" onClick={() => setSelectedBot(item)} data-testid={`bot-table-open-detail-${item.id}`}>Detail</Button>
                     <Button size="sm" variant="outline" className="border-slate-600 bg-transparent" onClick={() => onEdit(item)} data-testid={`bot-table-edit-${item.id}`}>
                       Düzenle
                     </Button>
@@ -383,6 +424,27 @@ export const BotProfilesPage = () => {
           </TableBody>
         </Table>
       </div>
+
+      {selectedBot && (
+        <section className="space-y-3 rounded-2xl border border-black/20 bg-white/10 p-4" data-testid="bot-detail-panel">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-bold text-black" data-testid="bot-detail-title">{selectedBot.name}</h3>
+              <p className="text-sm text-black/70" data-testid="bot-detail-subtitle">{selectedBot.strategy_id || selectedBot.strategy_type} · {selectedBot.mode}</p>
+            </div>
+            <div className="flex flex-wrap gap-2" data-testid="bot-detail-tabs">
+              {['overview','runtime','performance','logs','trades'].map((tab) => (
+                <Button key={tab} size="sm" variant={detailTab === tab ? 'default' : 'outline'} onClick={() => setDetailTab(tab)} data-testid={`bot-detail-tab-${tab}`}>{tab}</Button>
+              ))}
+            </div>
+          </div>
+          {detailTab === 'overview' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-overview-json">{JSON.stringify(selectedBot, null, 2)}</pre>}
+          {detailTab === 'runtime' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-runtime-json">{JSON.stringify(botStatus || {}, null, 2)}</pre>}
+          {detailTab === 'performance' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-performance-json">{JSON.stringify(botPerformance || {}, null, 2)}</pre>}
+          {detailTab === 'logs' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-logs-json">{JSON.stringify(botLogs || [], null, 2)}</pre>}
+          {detailTab === 'trades' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-trades-json">{JSON.stringify(botTrades || [], null, 2)}</pre>}
+        </section>
+      )}
     </section>
   );
 };

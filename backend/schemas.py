@@ -304,6 +304,8 @@ class BotProfileBase(BaseModel):
     name: str
     exchange: str = "binance"
     market_type: str = "spot"
+    symbol_source_type: str = "manual"
+    scanner_id: str | None = None
     symbols: list[str]
     strategy_type: str
     timeframe: str = "15m"
@@ -335,6 +337,7 @@ class BotProfileResponse(BotProfileBase):
     user_id: str
     is_running: bool
     is_deleted: bool = False
+    symbol_resolution_snapshot: dict = Field(default_factory=dict)
     deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -364,9 +367,15 @@ class BotRuntimeStatusResponse(BaseModel):
     last_heartbeat: str | None = None
     runtime_context: dict = Field(default_factory=dict)
     symbol_source: str = "manual"
+    symbol_source_summary: dict = Field(default_factory=dict)
+    binding_validation: dict = Field(default_factory=dict)
+    compatibility: dict = Field(default_factory=dict)
     pnl: float = 0
+    today_pnl: float = 0
     active_positions: int = 0
     last_signal: dict | None = None
+    last_signal_at: datetime | None = None
+    strategy_name: str | None = None
     health: str = "HEALTHY"
 
 
