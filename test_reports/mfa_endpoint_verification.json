@@ -1,0 +1,78 @@
+{
+  "settings": {
+    "status": 200,
+    "keys": [
+      "is_enabled",
+      "enabled_methods",
+      "totp_configured",
+      "totp_verified",
+      "email_otp_verified",
+      "backup_codes_remaining",
+      "mfa_enabled_not_verified",
+      "backup_download_required",
+      "mfa_grace_active",
+      "mfa_grace_expires_at",
+      "last_verified_at",
+      "updated_at"
+    ],
+    "body": {
+      "is_enabled": true,
+      "enabled_methods": [
+        "totp"
+      ],
+      "totp_configured": true,
+      "totp_verified": true,
+      "email_otp_verified": false,
+      "backup_codes_remaining": 8,
+      "mfa_enabled_not_verified": false,
+      "backup_download_required": false,
+      "mfa_grace_active": false,
+      "mfa_grace_expires_at": null,
+      "last_verified_at": "2026-03-30T17:57:21.120584Z",
+      "updated_at": "2026-03-30T17:58:16.052692Z"
+    }
+  },
+  "totp_setup": {
+    "status": 200,
+    "keys": [
+      "secret",
+      "otpauth_uri",
+      "issuer",
+      "account_name"
+    ],
+    "body": {
+      "secret": "5Z7KZII6BXF7QC5UWPUWFYTLDD2N3WF7",
+      "otpauth_uri": "otpauth://totp/XILO:review.user%40platform.local?secret=5Z7KZII6BXF7QC5UWPUWFYTLDD2N3WF7&issuer=XILO",
+      "issuer": "XILO",
+      "account_name": "review.user@platform.local"
+    }
+  },
+  "verify_setup": {
+    "status": 200,
+    "keys": [
+      "is_enabled",
+      "enabled_methods",
+      "totp_configured",
+      "totp_verified",
+      "email_otp_verified",
+      "backup_codes_remaining",
+      "mfa_enabled_not_verified",
+      "backup_download_required",
+      "mfa_grace_active",
+      "mfa_grace_expires_at",
+      "last_verified_at",
+      "updated_at"
+    ]
+  },
+  "sessions_active": {
+    "status": 200,
+    "keys": [
+      "items",
+      "total"
+    ]
+  },
+  "activity_log": {
+    "status": 200,
+    "count": 100
+  }
+}
