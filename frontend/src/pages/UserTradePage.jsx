@@ -37,7 +37,7 @@ const parseErrorText = (error) => {
 const postJsonWithSession = async (path, body) => {
   const token = window.localStorage.getItem("token");
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+  const timeoutId = window.setTimeout(() => controller.abort(), 45000);
   let response;
   try {
     response = await fetch(`${FRONTEND_BACKEND_URL}/api${path}`, {
