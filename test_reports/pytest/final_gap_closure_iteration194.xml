@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="20" skipped="3" tests="23" time="811.653" timestamp="2026-03-30T22:26:23.632726+00:00" hostname="agent-env-0b5a67d9-e16e-4ff0-8f6e-0c6764b005dc"><testcase classname="tests.test_final_gap_closure_iteration194.TestRiskPolicyLifecycle" name="test_list_risk_policies" time="810.443"><failure message="AssertionError: List risk policies failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:40: in test_list_risk_policies
+    assert resp.status_code == 200, f"List risk policies failed: {resp.text}"
+E   AssertionError: List risk policies failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestRiskPolicyLifecycle" name="test_create_risk_policy" time="0.045"><failure message="AssertionError: Create risk policy failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:61: in test_create_risk_policy
+    assert resp.status_code == 200, f"Create risk policy failed: {resp.text}"
+E   AssertionError: Create risk policy failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestRiskPolicyLifecycle" name="test_preview_impact" time="0.044"><failure message="KeyError: 0">tests/test_final_gap_closure_iteration194.py:77: in test_preview_impact
+    policy_id = policies[0]["id"]
+                ^^^^^^^^^^^
+E   KeyError: 0</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestRiskPolicyLifecycle" name="test_activate_policy" time="0.045"><failure message="KeyError: 0">tests/test_final_gap_closure_iteration194.py:104: in test_activate_policy
+    policy_id = policies[0]["id"]
+                ^^^^^^^^^^^
+E   KeyError: 0</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestRiskPolicyLifecycle" name="test_policy_history" time="0.044"><failure message="KeyError: 0">tests/test_final_gap_closure_iteration194.py:120: in test_policy_history
+    policy_id = policies[0]["id"]
+                ^^^^^^^^^^^
+E   KeyError: 0</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestRiskPolicyLifecycle" name="test_rollback_policy" time="0.044"><failure message="KeyError: 0">tests/test_final_gap_closure_iteration194.py:135: in test_rollback_policy
+    policy_id = policies[0]["id"]
+                ^^^^^^^^^^^
+E   KeyError: 0</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserAlertCenter" name="test_list_alerts" time="0.044"><failure message="AssertionError: List alerts failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:152: in test_list_alerts
+    assert resp.status_code == 200, f"List alerts failed: {resp.text}"
+E   AssertionError: List alerts failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserAlertCenter" name="test_filter_by_severity" time="0.044"><failure message="AssertionError: Filter by severity failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:170: in test_filter_by_severity
+    assert resp.status_code == 200, f"Filter by severity failed: {resp.text}"
+E   AssertionError: Filter by severity failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserAlertCenter" name="test_filter_by_category" time="0.044"><failure message="AssertionError: Filter by category failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:180: in test_filter_by_category
+    assert resp.status_code == 200, f"Filter by category failed: {resp.text}"
+E   AssertionError: Filter by category failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserAlertCenter" name="test_search_alerts" time="0.045"><failure message="AssertionError: Search alerts failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:190: in test_search_alerts
+    assert resp.status_code == 200, f"Search alerts failed: {resp.text}"
+E   AssertionError: Search alerts failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserAlertCenter" name="test_acknowledge_alert" time="0.044"><skipped type="pytest.skip" message="No alerts to test acknowledge">/app/backend/tests/test_final_gap_closure_iteration194.py:200: No alerts to test acknowledge</skipped></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserAlertCenter" name="test_dismiss_alert" time="0.044"><skipped type="pytest.skip" message="No alerts to test dismiss">/app/backend/tests/test_final_gap_closure_iteration194.py:215: No alerts to test dismiss</skipped></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserAlertCenter" name="test_drilldown_links_present" time="0.043"><skipped type="pytest.skip" message="No alerts to verify drilldown">/app/backend/tests/test_final_gap_closure_iteration194.py:240: No alerts to verify drilldown</skipped></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserExecutionAnalytics" name="test_execution_positions" time="0.045"><failure message="AssertionError: Execution positions failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:257: in test_execution_positions
+    assert resp.status_code == 200, f"Execution positions failed: {resp.text}"
+E   AssertionError: Execution positions failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserExecutionAnalytics" name="test_execution_intents" time="0.044"><failure message="AssertionError: Execution intents failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:265: in test_execution_intents
+    assert resp.status_code == 200, f"Execution intents failed: {resp.text}"
+E   AssertionError: Execution intents failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserExecutionAnalytics" name="test_live_trades" time="0.045"><failure message="AssertionError: Live trades failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:273: in test_live_trades
+    assert resp.status_code == 200, f"Live trades failed: {resp.text}"
+E   AssertionError: Live trades failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserExecutionAnalytics" name="test_execution_quality" time="0.044"><failure message="AssertionError: Execution quality failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:281: in test_execution_quality
+    assert resp.status_code == 200, f"Execution quality failed: {resp.text}"
+E   AssertionError: Execution quality failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestUserExecutionAnalytics" name="test_strategy_performance" time="0.044"><failure message="AssertionError: Strategy performance failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:292: in test_strategy_performance
+    assert resp.status_code == 200, f"Strategy performance failed: {resp.text}"
+E   AssertionError: Strategy performance failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestPortfolioReportsRedirect" name="test_portfolio_endpoint" time="0.044"><failure message="AssertionError: Portfolio endpoint failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:304: in test_portfolio_endpoint
+    assert resp.status_code == 200, f"Portfolio endpoint failed: {resp.text}"
+E   AssertionError: Portfolio endpoint failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestPortfolioReportsRedirect" name="test_weekly_reports" time="0.044"><failure message="AssertionError: Weekly reports failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:310: in test_weekly_reports
+    assert resp.status_code == 200, f"Weekly reports failed: {resp.text}"
+E   AssertionError: Weekly reports failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestSettingsEndpoints" name="test_auth_me" time="0.044"><failure message="AssertionError: Auth me failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:320: in test_auth_me
+    assert resp.status_code == 200, f"Auth me failed: {resp.text}"
+E   AssertionError: Auth me failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestSettingsEndpoints" name="test_exchange_connections" time="0.044"><failure message="AssertionError: Exchange connections failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:328: in test_exchange_connections
+    assert resp.status_code == 200, f"Exchange connections failed: {resp.text}"
+E   AssertionError: Exchange connections failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="tests.test_final_gap_closure_iteration194.TestSettingsEndpoints" name="test_user_risk_settings" time="0.044"><failure message="AssertionError: User risk settings failed: {&quot;detail&quot;:&quot;Authentication required&quot;}&#10;assert 401 == 200&#10; +  where 401 = &lt;Response [401]&gt;.status_code">tests/test_final_gap_closure_iteration194.py:334: in test_user_risk_settings
+    assert resp.status_code == 200, f"User risk settings failed: {resp.text}"
+E   AssertionError: User risk settings failed: {"detail":"Authentication required"}
+E   assert 401 == 200
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase></testsuite></testsuites>

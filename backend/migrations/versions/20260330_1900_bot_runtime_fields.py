@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "20260330_1900_bot_runtime_fields"
-down_revision = "20260317_0050_bot_profiles_soft_delete"
+down_revision = "20260329_0097"
 branch_labels = None
 depends_on = None
 
