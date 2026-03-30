@@ -34,6 +34,7 @@ export default function UserLiveTradingDashboardPage() {
   const [decisionCards, setDecisionCards] = useState([]);
   const [queue, setQueue] = useState({ pending_orders: [], pending_decisions: [], queue_depth: 0 });
   const [streamState, setStreamState] = useState("connecting");
+  const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
 
   const hydrate = useCallback((payload) => {
     setSummary(payload.summary || null);
@@ -47,7 +48,7 @@ export default function UserLiveTradingDashboardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [summaryRes, positionsRes, performanceRes, riskRes, executionRes, strategiesRes, tradesRes, dailyRes, queueRes, cardsRes] = await Promise.all([
+      const [summaryRes, positionsRes, performanceRes, riskRes, executionRes, strategiesRes, tradesRes, dailyRes, queueRes, cardsRes, strategyPerfRes] = await Promise.all([
         apiClient.get("/user/live/summary", { params: { window: windowSize } }),
         apiClient.get("/user/live/positions"),
         apiClient.get("/user/live/performance", { params: { window: windowSize } }),
@@ -58,6 +59,7 @@ export default function UserLiveTradingDashboardPage() {
         apiClient.get("/user/live/daily-report", { params: { window: windowSize } }),
         apiClient.get("/user/live/queue", { params: { limit: 12 } }),
         apiClient.get("/user/decision-cards", { params: { limit: 8 } }),
+        apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
       ]);
 
       setSummary(summaryRes.data || null);
@@ -70,6 +72,7 @@ export default function UserLiveTradingDashboardPage() {
       setDailyReport(dailyRes.data || null);
       setQueue(queueRes.data || { pending_orders: [], pending_decisions: [], queue_depth: 0 });
       setDecisionCards(cardsRes.data?.items || []);
+      setStrategyPerformance(strategyPerfRes.data || { items: [] });
     } catch (error) {
       toast.error(error?.response?.data?.detail || "User dashboard verisi alınamadı");
     } finally {
@@ -255,6 +258,22 @@ export default function UserLiveTradingDashboardPage() {
           </div>
         </article>
       </div>
+
+      <article className="rounded border border-slate-700 bg-slate-900 p-4" data-testid="user-live-strategy-performance-panel">
+        <h3 className="text-base font-semibold" data-testid="user-live-strategy-performance-title">Strategy Performance (Backtest ↔ Live)</h3>
+        <div className="mt-3 overflow-x-auto">
+          <table className="min-w-full text-sm" data-testid="user-live-strategy-performance-table">
+            <thead><tr className="text-left text-slate-400"><th>Strategy</th><th>Backtest Win</th><th>Live Win</th><th>Deviation %</th></tr></thead>
+            <tbody>
+              {(strategyPerformance?.items || []).slice(0, 8).map((row, idx) => (
+                <tr key={`${row.strategy_id}-${idx}`} className="border-t border-slate-800" data-testid={`user-live-strategy-performance-row-${idx}`}>
+                  <td>{row.strategy_id}</td><td>{row.backtest?.win_rate ?? 0}</td><td>{row.live?.win_rate ?? 0}</td><td>{row.deviation_pct ?? 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </article>
 
       <article className="rounded border border-slate-700 bg-slate-900 p-4" data-testid="user-live-daily-report-panel">
         <h3 className="text-base font-semibold" data-testid="user-live-daily-report-title">Daily Report Snapshot</h3>

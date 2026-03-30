@@ -10,22 +10,25 @@ export const UserExecutionPage = () => {
   const [intents, setIntents] = useState([]);
   const [trades, setTrades] = useState([]);
   const [quality, setQuality] = useState(null);
+  const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const [positionsRes, intentsRes, tradesRes, qualityRes] = await Promise.all([
+        const [positionsRes, intentsRes, tradesRes, qualityRes, strategyPerfRes] = await Promise.all([
           apiClient.get("/user/execution/positions", { params: { include_closed: false } }),
           apiClient.get("/user/execution/intents", { params: { limit: 30 } }),
           apiClient.get("/user/live/trades", { params: { window: "24h", limit: 30 } }),
           apiClient.get("/user/live/execution-quality", { params: { window: "24h" } }),
+          apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
         ]);
         setPositions(positionsRes.data || []);
         setIntents(intentsRes.data || []);
         setTrades(tradesRes.data?.items || []);
         setQuality(qualityRes.data || null);
+        setStrategyPerformance(strategyPerfRes.data || { items: [] });
       } catch (error) {
         toast.error(error?.response?.data?.detail || "Execution view yüklenemedi");
       } finally {
@@ -104,6 +107,11 @@ export const UserExecutionPage = () => {
           <article className="border border-slate-800 bg-slate-900 p-4" data-testid="user-execution-quality-panel">
             <h3 className="text-base font-semibold" data-testid="user-execution-quality-title">Execution Status</h3>
             <pre className={`${monoBox} mt-3`} data-testid="user-execution-quality-json">{JSON.stringify(quality || {}, null, 2)}</pre>
+          </article>
+
+          <article className="border border-slate-800 bg-slate-900 p-4" data-testid="user-execution-strategy-parity-panel">
+            <h3 className="text-base font-semibold" data-testid="user-execution-strategy-parity-title">Backtest ↔ Live Strategy Parity</h3>
+            <pre className={`${monoBox} mt-3`} data-testid="user-execution-strategy-parity-json">{JSON.stringify((strategyPerformance?.items || []).slice(0, 8), null, 2)}</pre>
           </article>
         </div>
       </div>

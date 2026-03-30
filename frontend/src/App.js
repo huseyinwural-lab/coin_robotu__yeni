@@ -255,7 +255,7 @@ function App() {
             <Route path="indicator-screener" element={<Navigate to="/user/scanner?section=screener" replace />} />
             <Route path="signals" element={<UserSignalsPage />} />
             <Route path="symbol/:symbol" element={<UserSymbolDecisionDetailPage />} />
-            <Route path="reports" element={<UserReportsPage />} />
+            <Route path="reports" element={<Navigate to="/user/portfolio?tab=reports" replace />} />
             <Route path="execute" element={<ExecuteToTradeRedirect />} />
             <Route path="trade" element={<UserTradePage />} />
             <Route path="chart" element={<UserChartPage />} />

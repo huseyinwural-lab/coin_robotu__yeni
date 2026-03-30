@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from models import (
+    BacktestResultCard,
     BotProfile,
     ExecutionMetric,
     PendingSignal,
@@ -589,6 +590,43 @@ def build_user_live_runtime_snapshot(db: Session, user_id: str, *, window: str =
         "decision_cards": decisions,
         "alerts": (summary.get("alerts") or {}).get("items") or [],
     }
+
+
+def build_user_strategy_performance_bridge(db: Session, user_id: str, *, window: str = "24h") -> dict:
+    live = build_user_live_strategies(db, user_id, window=window, limit=100, offset=0)
+    live_items = list(live.get("items") or [])
+    backtests = db.query(BacktestResultCard).order_by(BacktestResultCard.updated_at.desc()).all()
+    backtest_by_strategy = {str(row.strategy_type or ""): row for row in backtests}
+    items = []
+    for row in live_items:
+        strategy_id = str(row.get("strategy_name") or row.get("strategy_type") or "unknown")
+        backtest = backtest_by_strategy.get(strategy_id)
+        live_return = _safe_float(row.get("avg_return"), 0.0)
+        live_hit = _safe_float(row.get("win_rate"), 0.0)
+        backtest_pf = _safe_float(getattr(backtest, "profit_factor", None), 0.0)
+        backtest_win = _safe_float(getattr(backtest, "win_rate", None), 0.0)
+        divergence_pct = round((live_return * 100) - backtest_win, 6)
+        items.append(
+            {
+                "strategy_id": strategy_id,
+                "parameter_hash": strategy_id,
+                "backtest": {
+                    "win_rate": backtest_win,
+                    "max_drawdown": _safe_float(getattr(backtest, "max_drawdown", None), 0.0),
+                    "profit_factor": backtest_pf,
+                    "sample_size": int(getattr(backtest, "sample_size", 0) or 0),
+                    "risk_label": getattr(backtest, "risk_label", None),
+                },
+                "live": {
+                    "trades": int(row.get("trades") or 0),
+                    "win_rate": live_hit,
+                    "avg_return": live_return,
+                    "quality_score": _safe_float(row.get("quality_score"), 0.0),
+                },
+                "deviation_pct": divergence_pct,
+            }
+        )
+    return {"window": window, "items": items}
 
 
 def build_user_live_daily_report(db: Session, user_id: str, *, window: str = "24h") -> dict:

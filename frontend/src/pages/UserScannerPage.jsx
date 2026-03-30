@@ -241,6 +241,7 @@ export const UserScannerPage = () => {
   const [runtimeSnapshot, setRuntimeSnapshot] = useState(null);
   const [liveReadiness, setLiveReadiness] = useState(null);
   const [scannerDailyReport, setScannerDailyReport] = useState(null);
+  const [schedulerState, setSchedulerState] = useState(null);
   const [scannerLoadDegraded, setScannerLoadDegraded] = useState(false);
   const [scannerLoadFailures, setScannerLoadFailures] = useState([]);
   const [showSlowLoadingHint, setShowSlowLoadingHint] = useState(false);
@@ -697,6 +698,7 @@ export const UserScannerPage = () => {
         { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot") },
         { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" } }) },
         { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" } }) },
+        { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run") },
       ];
       const responses = await Promise.allSettled(requestDescriptors.map((entry) => entry.request));
       const responsesWithEndpointMeta = responses.map((entry, index) => ({
@@ -728,6 +730,7 @@ export const UserScannerPage = () => {
       const runtimeRes = responses[7].status === "fulfilled" ? responses[7].value : null;
       const readinessRes = responses[8].status === "fulfilled" ? responses[8].value : null;
       const dailyRes = responses[9].status === "fulfilled" ? responses[9].value : null;
+      const schedulerRes = responses[10].status === "fulfilled" ? responses[10].value : null;
 
       setMode((prev) => modeRes?.data?.mode || prev || "ASSISTED");
       setOverview((prev) => overviewRes?.data || prev || null);
@@ -741,6 +744,7 @@ export const UserScannerPage = () => {
       setRuntimeSnapshot((prev) => runtimeRes?.data || prev || null);
       setLiveReadiness((prev) => readinessRes?.data || prev || null);
       setScannerDailyReport((prev) => dailyRes?.data || prev || null);
+      setSchedulerState((prev) => schedulerRes?.data || prev || null);
       setDecisionCards(cards);
       if (cards.length > 0) {
         const selectedSymbol = selectedDecisionSymbol || cards[0].symbol;
@@ -1512,7 +1516,7 @@ export const UserScannerPage = () => {
 
         <div className="grid gap-2 rounded border border-slate-800 bg-slate-950 p-3 md:grid-cols-2" data-testid="user-scanner-live-scan-timer-section">
           <p className="text-sm" data-testid="user-scanner-last-scan-value">Last Scan: {formatDateLabel(activeAutomation?.last_run_at || overview?.latest_generated_at)}</p>
-          <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan: {formatDateLabel(activeAutomation?.next_run_at)}</p>
+          <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan: {formatDateLabel(schedulerState?.next_run_at || activeAutomation?.next_run_at)}</p>
         </div>
         {showSlowLoadingHint && (
           <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="user-scanner-slow-loading-hint">

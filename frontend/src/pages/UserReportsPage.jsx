@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api";
 
-export const UserReportsPage = () => {
+export const UserReportsPage = ({ embedded = false }) => {
   const [report, setReport] = useState(null);
   const [previousReport, setPreviousReport] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,7 +68,7 @@ export const UserReportsPage = () => {
 
   return (
     <section className="grid grid-cols-12 gap-4" data-testid="user-reports-page">
-      <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-reports-header">
+      {!embedded && <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-reports-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-reports-title">Weekly Reports</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-reports-description">Haftalık performans özeti ve artefact indirmeleri.</p>
         <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="user-reports-control-grid">
@@ -97,7 +97,7 @@ export const UserReportsPage = () => {
             Uygula
           </Button>
         </div>
-      </header>
+      </header>}
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-reports-summary-grid">
         <div className="col-span-6 md:col-span-3 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-reports-pnl-card"><p className="text-xs text-slate-500">PnL</p><p className="text-lg font-semibold">{report?.pnl ?? 0}</p></div>

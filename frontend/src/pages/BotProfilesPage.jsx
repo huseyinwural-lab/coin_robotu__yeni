@@ -21,6 +21,7 @@ const initialForm = {
 
 export const BotProfilesPage = () => {
   const [items, setItems] = useState([]);
+  const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
   const [editingId, setEditingId] = useState(null);
   const [deletingBotId, setDeletingBotId] = useState("");
   const [form, setForm] = useState(initialForm);
@@ -30,9 +31,15 @@ export const BotProfilesPage = () => {
   const [selectedSymbols, setSelectedSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
 
   const fetchItems = async () => {
-    const { data } = await apiClient.get("/bot-profiles");
-    setItems(data);
+    const [profilesRes, strategyPerfRes] = await Promise.all([
+      apiClient.get("/bot-profiles"),
+      apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
+    ]);
+    setItems(profilesRes.data || []);
+    setStrategyPerformance(strategyPerfRes.data || { items: [] });
   };
+
+  const findStrategyParity = (strategyType) => (strategyPerformance?.items || []).find((item) => item.strategy_id === strategyType);
 
   useEffect(() => {
     fetchItems();
@@ -289,6 +296,7 @@ export const BotProfilesPage = () => {
               <TableHead data-testid="bot-table-head-name">Ad</TableHead>
               <TableHead data-testid="bot-table-head-market">Market</TableHead>
               <TableHead data-testid="bot-table-head-strategy">Strateji</TableHead>
+              <TableHead data-testid="bot-table-head-parity">Backtest ↔ Live</TableHead>
               <TableHead data-testid="bot-table-head-symbols">Semboller</TableHead>
               <TableHead data-testid="bot-table-head-runtime">Runtime</TableHead>
               <TableHead data-testid="bot-table-head-action">Aksiyon</TableHead>
@@ -297,9 +305,14 @@ export const BotProfilesPage = () => {
           <TableBody>
             {items.map((item) => (
               <TableRow key={item.id} data-testid={`bot-table-row-${item.id}`}>
+                {(() => {
+                  const parity = findStrategyParity(item.strategy_type);
+                  return (
+                    <>
                 <TableCell data-testid={`bot-table-name-${item.id}`}>{item.name}</TableCell>
                 <TableCell data-testid={`bot-table-market-${item.id}`}>{item.market_type}</TableCell>
                 <TableCell data-testid={`bot-table-strategy-${item.id}`}>{item.strategy_type}</TableCell>
+                <TableCell data-testid={`bot-table-parity-${item.id}`}>{parity ? `${parity.backtest?.win_rate ?? 0} / ${parity.live?.win_rate ?? 0} / ${parity.deviation_pct ?? 0}%` : "-"}</TableCell>
                 <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbols.join(", ")}</TableCell>
                 <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.is_running ? "running" : "stopped"}</TableCell>
                 <TableCell>
@@ -328,6 +341,9 @@ export const BotProfilesPage = () => {
                     </Button>
                   </div>
                 </TableCell>
+                    </>
+                  );
+                })()}
               </TableRow>
             ))}
           </TableBody>

@@ -59,7 +59,7 @@ const initialFuturesContext = {
   atr_stop_multiplier: 3,
 };
 
-export const UserExchangeSettingsPage = () => {
+export const UserExchangeSettingsPage = ({ embedded = false }) => {
   const [activeTab, setActiveTab] = useState("overview");
   const [settings, setSettings] = useState(null);
   const [permission, setPermission] = useState(null);
@@ -846,12 +846,12 @@ export const UserExchangeSettingsPage = () => {
 
   return (
     <section className="space-y-4" data-testid="user-exchange-settings-page">
-      <header className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-settings-header">
+      {!embedded && <header className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-settings-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-exchange-settings-title">Exchange Settings</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-exchange-settings-description">
           Spot/Futures venue seçimine göre API doğrulama ve test-order akışı. Bilgiler plaintext değil, şifreli saklanır.
         </p>
-      </header>
+      </header>}
 
       <div className="flex flex-wrap gap-2" data-testid="user-tabs-nav">
         <Button className={activeTab === "overview" ? "bg-orange-500 text-black" : "bg-slate-800 text-slate-200"} onClick={() => setActiveTab("overview")} data-testid="user-tab-overview-button">Overview</Button>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { apiClient } from "@/lib/api";
+import { UserExchangeSettingsPage } from "@/pages/UserExchangeSettingsPage";
 
 const monoBox = "overflow-x-auto bg-slate-50 p-2 text-[11px] text-slate-700";
 
@@ -56,8 +57,12 @@ export const UserSettingsPage = () => {
 
       <article className="border border-slate-800 bg-slate-900 p-4" data-testid="user-settings-api-keys-panel">
         <h3 className="text-base font-semibold" data-testid="user-settings-api-keys-title">API Keys</h3>
-        <p className="mt-2 text-sm text-slate-400" data-testid="user-settings-api-keys-note">API key yönetimi Exchange Connections bloğu üzerinden konsolide edildi.</p>
+        <p className="mt-2 text-sm text-slate-400" data-testid="user-settings-api-keys-note">Create / delete / masked görüntü / permission yönetimi aşağıdaki operatif bölümde yapılır.</p>
       </article>
+
+      <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-settings-operational-management-panel">
+        <UserExchangeSettingsPage embedded />
+      </div>
 
       {loading && <p className="text-xs text-slate-500" data-testid="user-settings-loading-state">loading...</p>}
     </section>

@@ -12,11 +12,13 @@ from services.user_live_dashboard_service import (
     build_user_live_queue,
     build_user_live_risk,
     build_user_live_runtime_snapshot,
+    build_user_strategy_performance_bridge,
     build_user_live_strategies,
     build_user_live_summary,
     build_user_live_trades,
     export_user_live_daily_report_csv,
 )
+from core.users.user_scanner_signal_service import get_or_create_scanner_automation_config, scanner_automation_config_response_payload
 
 router = APIRouter(prefix="/user/live", tags=["user_live_dashboard"])
 
@@ -133,3 +135,25 @@ def user_live_runtime_snapshot(
     db: Session = Depends(get_db),
 ):
     return build_user_live_runtime_snapshot(db, current_user.id, window=window)
+
+
+@router.get("/strategy-performance")
+def user_strategy_performance(
+    window: str = Query(default="24h", pattern="^(1h|6h|24h|7d|30d)$"),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_strategy_performance_bridge(db, current_user.id, window=window)
+
+
+@router.get("/scheduler/next-run")
+def user_scheduler_next_run(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    row = get_or_create_scanner_automation_config(db, current_user.id)
+    payload = scanner_automation_config_response_payload(row)
+    return {
+        "auto_enabled": payload.get("auto_enabled"),
+        "last_run_at": payload.get("last_run_at"),
+        "next_run_at": payload.get("next_run_at"),
+        "interval_seconds": payload.get("interval_seconds"),
+        "source": "scheduler_config",
+    }
