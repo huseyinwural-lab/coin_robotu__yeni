@@ -33,6 +33,11 @@ export const apiClient = axios.create({
   withCredentials: true,
 });
 
+const isAuthPath = (url) => {
+  const normalized = String(url || "");
+  return normalized.includes("/auth/login") || normalized.includes("/auth/me") || normalized.includes("/mfa/") || normalized.includes("/auth/step-up");
+};
+
 const SESSION_STORAGE_KEY = "platform-session-id";
 const DEVICE_STORAGE_KEY = "platform-device-id";
 
@@ -90,6 +95,9 @@ apiClient.interceptors.request.use((config) => {
   const nextConfig = config;
   nextConfig.headers = nextConfig.headers || {};
   nextConfig.__authTokenSnapshot = readStoredToken();
+  if (isAuthPath(nextConfig.url)) {
+    nextConfig.timeout = 8000;
+  }
 
   if (!nextConfig.headers.Authorization) {
     const token = readStoredToken();
@@ -113,8 +121,9 @@ const shouldRetryRequest = (error) => {
   const retryableMethods = new Set(["get", "head", "options"]);
   const retryableStatus = new Set([502, 503, 504]);
   const retryableCodes = new Set(["ECONNABORTED", "ERR_NETWORK", "ERR_BAD_RESPONSE"]);
+  const retryBudget = isAuthPath(url) ? 2 : 1;
 
-  if ((config.__retryCount || 0) >= 1) {
+  if ((config.__retryCount || 0) >= retryBudget) {
     return false;
   }
 

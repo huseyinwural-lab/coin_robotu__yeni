@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
 
       try {
         setAuthToken(token);
-        const { data } = await apiClient.get("/auth/me");
+        const { data } = await apiClient.get("/auth/me", { timeout: 8000 });
         if (!cancelled) {
           setUser(data);
           localStorage.setItem(AUTH_USER_KEY, JSON.stringify(data));
@@ -76,7 +76,7 @@ export const AuthProvider = ({ children }) => {
         if (status === 401 && detail.includes("session_device_mismatch")) {
           try {
             await new Promise((resolve) => window.setTimeout(resolve, 350));
-            const retry = await apiClient.get("/auth/me");
+            const retry = await apiClient.get("/auth/me", { timeout: 8000 });
             if (!cancelled) {
               setUser(retry.data);
               localStorage.setItem(AUTH_USER_KEY, JSON.stringify(retry.data));
@@ -149,7 +149,7 @@ export const AuthProvider = ({ children }) => {
     clearAuthSession();
     setAuthToken(null);
     const panelPath = panel === "admin" ? "/auth/login/admin" : panel === "user" ? "/auth/login/user" : "/auth/login";
-    const { data } = await apiClient.post(panelPath, { email, password });
+    const { data } = await apiClient.post(panelPath, { email, password }, { timeout: 8000 });
     if (data?.mfa_required) {
       return {
         mfaRequired: true,
@@ -180,7 +180,7 @@ export const AuthProvider = ({ children }) => {
       challenge_token: challengeToken,
       method,
       code: code || "",
-    });
+    }, { timeout: 8000 });
     persistAuthSession({ token: data.access_token, user: data.user || null });
     setAuthToken(data.access_token);
     setToken(data.access_token);
