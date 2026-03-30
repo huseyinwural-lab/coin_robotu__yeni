@@ -213,13 +213,23 @@ export const UserTradePage = () => {
       for (const item of stalePreviewOrders) {
         await apiClient.post("/user/execution/intent/cancel", { intent_token: item.intent_token });
       }
+      const hasExecutionModeSwitch = (validation?.violations || []).some((item) => item.code === "execution_mode_switch_required");
+      const resolvedOrderType = (() => {
+        const currentType = String(form.order_type || "market").toUpperCase();
+        if (!hasExecutionModeSwitch) {
+          return currentType;
+        }
+        if (currentType === "STOP_LOSS") return "STOP_LOSS_LIMIT";
+        if (currentType === "TAKE_PROFIT") return "TAKE_PROFIT_LIMIT";
+        return currentType.includes("LIMIT") ? currentType : "LIMIT";
+      })();
       const payload = {
         source_type: "manual",
         intent_type: "OPEN_POSITION",
         market_type: isFutures ? "futures" : "spot",
         symbol: form.symbol,
         side: form.side,
-        order_type: form.order_type.toUpperCase(),
+        order_type: resolvedOrderType,
         position_size_mode: "fixed_notional",
         position_size_value: form.size_mode === "USDT" ? Number(form.size_value || 0) : Number((Number(form.size_value || 0) * Number(midPrice || 0)).toFixed(4)),
         margin_mode: isFutures ? form.margin_type : null,
@@ -237,7 +247,7 @@ export const UserTradePage = () => {
       setPreviewResult(data);
       setConfirmChecked(false);
       if (!validation?.valid) {
-        toast.warning("Validation warning var; preview panelinde detayları inceleyin");
+        toast.warning(hasExecutionModeSwitch ? "Fast market tespit edildi; preview limit-style moda adapte edildi" : "Validation warning var; preview panelinde detayları inceleyin");
       } else {
         toast.success("Preview oluşturuldu");
       }
