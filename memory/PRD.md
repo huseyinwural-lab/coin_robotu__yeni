@@ -302,6 +302,16 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
   - frontend doğrulama **PASS**
   - tek frontend hata (`UserExecutionPage` Button import) testing agent tarafından fixlendi
 
+### Local browser acceptance
+- Local fallback browser doğrulaması da alındı:
+  - **LOCAL VERIFIED PASS**
+  - Risk redirect (`/user/risk-policy` → `/user/settings`) PASS
+  - UserAlertCenter filters + ack/dismiss + history PASS
+  - UserExecution analytics cards PASS
+  - standalone Signals nav item kaldırma PASS
+  - `/user/reports` → `/user/portfolio?tab=reports` PASS
+- Test sonrası frontend backend target tekrar preview URL’ye restore edildi.
+
 ### Son durum
 - Risk Policy, Alert Center, Execution Analytics ve bilgi mimarisi cleanup bu turda kapanmış kabul edilir.
 - Final readiness matrisi için gerekli son user-facing blocker’lar kapatıldı.
