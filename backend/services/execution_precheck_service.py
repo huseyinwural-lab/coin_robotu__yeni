@@ -11,6 +11,12 @@ POLICY_PATH = Path(
     or (Path(__file__).resolve().parents[2] / "config" / "execution_policy_registry.json")
 )
 ALLOWED_EXECUTION_MODES = {"manual", "bot_assisted", "signal_follow"}
+ADVANCED_ORDER_TYPE_ALIASES = {
+    "stop_loss": "market",
+    "stop_loss_limit": "limit",
+    "take_profit": "market",
+    "take_profit_limit": "limit",
+}
 
 
 def load_execution_policy_registry() -> dict:
@@ -103,7 +109,8 @@ def validate_execution_payload(payload: dict) -> dict:
 
     if market_policy:
         allowed_order_types = set(market_policy.get("allowed_order_types") or [])
-        if order_type not in allowed_order_types:
+        normalized_order_type = ADVANCED_ORDER_TYPE_ALIASES.get(order_type, order_type)
+        if order_type not in allowed_order_types and normalized_order_type not in allowed_order_types:
             reject_reason_codes.append("order_type_not_allowed")
 
         min_notional_map = market_policy.get("min_notional_by_symbol") or {}
