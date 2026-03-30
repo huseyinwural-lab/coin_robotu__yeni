@@ -159,6 +159,21 @@
 - Blocking note:
   - testing agent / frontend agent bunu **preview auth/network issue** olarak sınıflandırdı, UI code bug değil
 
+### Trade Entry acceptance durumu
+- Full browser acceptance henüz **FINAL PASS** değil.
+- Son durum:
+  - Validate akışı iyileştirildi (`~15s` → `~3.4s`)
+  - Preview API 500 kök nedeni kapatıldı
+  - Advanced order-type adaptation eklendi (`stop` → `stop-limit` / `limit-style`)
+  - Duplicate preview cleanup eklendi
+  - Preview timeout 45s’ye çıkarıldı
+- Buna rağmen final acceptance’ı bloklayan kalan konu:
+  - preview browser tarafında aralıklı auth/network istikrarsızlığı
+  - local browser fallback testinde ise son denemede tester `.env` değerini `localhost` yönüne çektiği için environment blocker oluştu; normal preview URL tekrar geri alındı
+- Son resmi durum:
+  - **Trade Entry = code ready / backend ready / acceptance partially verified**
+  - **Trade Entry = henüz production-ready diye işaretlenmedi**
+
 ## 2026-03-30 — FINAL PRODUCTION ACTIVATION (Current Status)
 
 ### Faz 0 — Infra stabilizasyonu
