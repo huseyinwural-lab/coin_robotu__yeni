@@ -193,6 +193,64 @@
   - **Trade Entry = PRODUCTION READY (LOCAL VERIFIED)**
   - preview tarafı hâlâ ayrı olarak infra-blocked kabul edilir
 
+## 2026-03-30 — MFA SETTINGS FINAL GAP CLOSURE
+
+### P0 — Route ve backend doğrulaması
+- Doğrulanan endpoint zinciri:
+  - `GET /api/auth/mfa/settings` → 200
+  - `POST /api/auth/mfa/totp/setup` → 200
+  - `POST /api/auth/mfa/totp/verify-setup` → 200
+  - `POST /api/auth/mfa/backup-codes/regenerate` → 200
+  - `PUT /api/auth/mfa/settings` (enable after verify) → 200
+  - `GET /api/auth/sessions/active` → 200
+  - `POST /api/auth/mfa/backup-codes/regenerate-secure` → 200
+  - `POST /api/auth/mfa/disable-secure` → 200
+- `settings_after_disable` isteğinin 401 dönmesi beklenen davranış olarak gözlendi; secure disable sırasında `revoke_other_sessions=true` kullanıldığında mevcut session da artık geçersiz hale geliyor.
+
+### P1 — Production-grade MFA UI
+- `MfaSettingsPage.jsx` tamamen ürünleştirilmiş yapıya taşındı.
+- Eklenen ana bloklar:
+  - setup wizard
+  - QR card
+  - masked manual key
+  - backup code one-time card
+  - acknowledge checkbox
+  - activate step
+  - secure disable panel
+  - secure backup regenerate panel
+  - trusted devices panel
+  - active sessions panel
+  - enforcement panel
+  - diagnostics/audit panel
+
+### Güvenlik düzeltmeleri
+- Raw TOTP secret / raw otpauth URI artık debug tarzı açık gösterimle sunulmuyor.
+- Secure disable için zorunlu:
+  - current password
+  - TOTP veya backup code
+  - opsiyonel other sessions revoke
+- Secure backup regeneration için zorunlu:
+  - current password
+  - TOTP veya backup code
+
+### Browser acceptance
+- Local browser fallback acceptance sonucu:
+  - **LOCAL VERIFIED PASS**
+  - 9/9 gereksinim geçti
+- Kabul edilenler:
+  - setup wizard görünür
+  - QR alanı var
+  - raw secret/plain URI exposure yok
+  - trusted devices kartı var
+  - active sessions kartı var
+  - secure disable paneli var
+  - backup regenerate secure paneli var
+  - diagnostics/audit paneli var
+
+### Operasyonel not
+- Local acceptance için frontend kısa süreli olarak `127.0.0.1:8001` backend hedefiyle doğrulandı ve test sonrası tekrar preview backend URL’ye döndürüldü.
+- Preview auth/network dalgalanması genel sistem notu olarak sürse de MFA modülünün local browser acceptance’ı başarıyla alındı.
+
 ## 2026-03-30 — EXCHANGE SETTINGS FINAL GAP CLOSURE
 
 ### P0 — Kritik kapanışlar
