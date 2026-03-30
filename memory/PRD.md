@@ -174,6 +174,25 @@
   - **Trade Entry = code ready / backend ready / acceptance partially verified**
   - **Trade Entry = henüz production-ready diye işaretlenmedi**
 
+### Trade Entry local acceptance güncellemesi
+- Geçici local browser harness ile doğrulama tamamlandı:
+  - frontend local: `http://127.0.0.1:3000`
+  - backend local: `http://127.0.0.1:8001`
+- Sonuç:
+  - login ✅
+  - `/user/trade` ✅
+  - order type switch ✅
+  - validate ✅
+  - preview ✅ (`200 OK`, panel render)
+  - confirm checkbox ✅
+  - confirm order ✅
+  - cancel open order ✅
+  - history navigation ✅
+  - execution feedback: **423 Locked / EXECUTION_BLOCKED_BY_READINESS** → bu bug değil, mevcut business-logic readiness kuralı
+- Bu nedenle statü güncellendi:
+  - **Trade Entry = PRODUCTION READY (LOCAL VERIFIED)**
+  - preview tarafı hâlâ ayrı olarak infra-blocked kabul edilir
+
 ## 2026-03-30 — FINAL PRODUCTION ACTIVATION (Current Status)
 
 ### Faz 0 — Infra stabilizasyonu
