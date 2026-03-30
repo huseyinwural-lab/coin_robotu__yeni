@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
-import { apiClient } from "@/lib/api";
+import { apiClient, buildSessionHeaders, FRONTEND_BACKEND_URL } from "@/lib/api";
 
 const qrUrl = (uri) => `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(uri)}`;
 const monoBox = "overflow-x-auto bg-slate-50 p-2 text-[11px] text-slate-700";
@@ -46,6 +46,39 @@ const groupTrustedDevices = (sessions) => {
   return Array.from(map.values());
 };
 
+const fetchSessionJson = async (path, { method = "GET", body = null, timeoutMs = 20000 } = {}) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  const token = window.localStorage.getItem("token");
+  try {
+    const response = await fetch(`${FRONTEND_BACKEND_URL}/api${path}`, {
+      method,
+      headers: {
+        ...buildSessionHeaders(),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+    if (!response.ok) {
+      const error = new Error((payload && (payload.detail || payload.message)) || `request_failed_${response.status}`);
+      error.response = { status: response.status, data: payload };
+      throw error;
+    }
+    return payload;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
+
 export const MfaSettingsPage = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -66,14 +99,14 @@ export const MfaSettingsPage = () => {
   const refresh = async () => {
     setLoading(true);
     try {
-      const [settingsRes, sessionsRes, activityRes] = await Promise.all([
-        apiClient.get("/auth/mfa/settings"),
-        apiClient.get("/auth/sessions/active"),
-        apiClient.get("/user/activity-log", { params: { limit: 100 } }),
+      const [settingsPayload, sessionsPayload, activityPayload] = await Promise.all([
+        fetchSessionJson("/auth/mfa/settings", { method: "GET", timeoutMs: 20000 }),
+        fetchSessionJson("/auth/sessions/active", { method: "GET", timeoutMs: 20000 }),
+        fetchSessionJson("/user/activity-log?limit=100", { method: "GET", timeoutMs: 20000 }),
       ]);
-      setSettings(settingsRes.data || null);
-      setSessions(sessionsRes.data?.items || []);
-      setSecurityEvents((activityRes.data || []).filter((item) => String(item.action || "").toLowerCase().includes("mfa") || String(item.action || "").toLowerCase().includes("session")));
+      setSettings(settingsPayload || null);
+      setSessions(sessionsPayload?.items || []);
+      setSecurityEvents((activityPayload || []).filter((item) => String(item.action || "").toLowerCase().includes("mfa") || String(item.action || "").toLowerCase().includes("session")));
     } catch (error) {
       toast.error(error?.response?.data?.detail || "MFA ayarları yüklenemedi");
     } finally {
@@ -88,7 +121,7 @@ export const MfaSettingsPage = () => {
   const startSetup = async () => {
     setBusyKey("setup");
     try {
-      const { data } = await apiClient.post("/mfa/setup");
+      const data = await fetchSessionJson("/auth/mfa/totp/setup", { method: "POST", timeoutMs: 20000 });
       setTotpSetup(data);
       setBackupCodes([]);
       setBackupAcknowledged(false);
@@ -103,10 +136,10 @@ export const MfaSettingsPage = () => {
   const verifySetup = async () => {
     setBusyKey("verify");
     try {
-      const { data } = await apiClient.post("/auth/mfa/totp/verify-setup", { code: totpCode });
+      const data = await fetchSessionJson("/auth/mfa/totp/verify-setup", { method: "POST", body: { code: totpCode }, timeoutMs: 20000 });
       setSettings(data);
-      const backupRes = await apiClient.post("/auth/mfa/backup-codes/regenerate");
-      setBackupCodes(backupRes.data?.generated_codes || []);
+      const backupRes = await fetchSessionJson("/auth/mfa/backup-codes/regenerate", { method: "POST", timeoutMs: 20000 });
+      setBackupCodes(backupRes?.generated_codes || []);
       setBackupAcknowledged(false);
       toast.success("OTP doğrulandı; backup codes hazırlandı");
     } catch (error) {
@@ -123,7 +156,7 @@ export const MfaSettingsPage = () => {
     }
     setBusyKey("activate");
     try {
-      const { data } = await apiClient.put("/auth/mfa/settings", { is_enabled: true, enabled_methods: ["totp"] });
+      const { data } = await apiClient.put("/auth/mfa/settings", { is_enabled: true, enabled_methods: ["totp"] }, { timeout: 20000 });
       setSettings(data);
       setBackupCodes([]);
       setTotpSetup(null);
@@ -139,7 +172,7 @@ export const MfaSettingsPage = () => {
   const disableMfa = async () => {
     setBusyKey("disable");
     try {
-      const { data } = await apiClient.post("/auth/mfa/disable-secure", secureForm);
+      const data = await fetchSessionJson("/auth/mfa/disable-secure", { method: "POST", body: secureForm, timeoutMs: 20000 });
       setSettings(data);
       setTotpSetup(null);
       setBackupCodes([]);
@@ -155,7 +188,7 @@ export const MfaSettingsPage = () => {
   const regenerateBackupCodes = async () => {
     setBusyKey("regen");
     try {
-      const { data } = await apiClient.post("/auth/mfa/backup-codes/regenerate-secure", secureForm);
+      const data = await fetchSessionJson("/auth/mfa/backup-codes/regenerate-secure", { method: "POST", body: secureForm, timeoutMs: 20000 });
       setBackupCodes(data?.generated_codes || []);
       setBackupAcknowledged(false);
       toast.success("Yeni backup codes üretildi");
