@@ -2180,6 +2180,10 @@ class UserTradeResponse(BaseModel):
     strategy_weight: float | None = None
     allocation_source: str | None = None
     meta_engine_decision: str | None = None
+    trace_available: bool = False
+    has_explainability: bool = False
+    reconciliation_status: str | None = None
+    strategy: str | None = None
 
 
 class UserSignalModeResponse(BaseModel):

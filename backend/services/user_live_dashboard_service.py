@@ -16,7 +16,11 @@ from models import (
     PositionLedgerEvent,
     RiskPolicy,
     TestnetExecutionLog,
+    UserDecisionTrace,
+    UserExecutionIntent,
     UserRiskSetting,
+    UserTradeLifecycleEvent,
+    UserTradeProjection,
 )
 from services.decision_card_service import list_user_decision_cards
 from services.execution_intent_service import list_user_execution_intents
@@ -420,6 +424,203 @@ def build_user_live_trades(
         "limit": safe_limit,
         "offset": safe_offset,
         "items": paged_items,
+    }
+
+
+def _upsert_trade_projection(db: Session, *, user_id: str, trade_id: str, payload: dict) -> UserTradeProjection:
+    row = db.query(UserTradeProjection).filter(UserTradeProjection.trade_id == trade_id).first()
+    if row is None:
+        row = UserTradeProjection(trade_id=trade_id, user_id=user_id, symbol=str(payload.get("symbol") or "").upper())
+        db.add(row)
+    for key, value in payload.items():
+        setattr(row, key, value)
+    return row
+
+
+def sync_user_trade_projection(db: Session, *, user_id: str) -> dict:
+    positions = db.query(PaperPosition).filter(PaperPosition.user_id == user_id).all()
+    intents = db.query(UserExecutionIntent).filter(UserExecutionIntent.user_id == user_id).all()
+    metrics = db.query(ExecutionMetric).filter(ExecutionMetric.user_id == user_id).all()
+    strategy_map = _position_strategy_map(db, user_id, positions)
+
+    synced = 0
+    for row in positions:
+        metric = next((item for item in metrics if str(item.symbol or "").upper() == str(row.symbol or "").upper()), None)
+        payload = {
+            "position_id": row.id,
+            "status": "CLOSED" if str(row.status or "") == "closed" else "OPEN",
+            "symbol": str(row.symbol or "").upper(),
+            "side": str(row.side or "buy").lower(),
+            "quantity": round(_safe_float(row.quantity), 8),
+            "avg_fill_price": round(_safe_float(row.entry_price), 8),
+            "fees": 0.0,
+            "slippage": round(_safe_float(getattr(metric, "slippage_pct", 0.0) or 0.0), 8) if metric else None,
+            "opened_at": _as_aware(row.opened_at or row.created_at),
+            "closed_at": _as_aware(row.closed_at),
+            "realized_pnl": round(_safe_float(row.realized_pnl), 8),
+            "unrealized_pnl": round(_safe_float(row.unrealized_pnl), 8),
+            "strategy_name": strategy_map.get(row.id),
+            "reconciliation_status": "OK",
+            "reconciliation_reason": None,
+            "trace_available": "true",
+            "explainability_status": "available",
+            "meta_json": {
+                "trade_source": "position_projection",
+                "allocation_source": strategy_map.get(row.id),
+                "execution_metric_id": metric.id if metric else None,
+            },
+        }
+        _upsert_trade_projection(db, user_id=user_id, trade_id=str(row.id), payload=payload)
+        synced += 1
+
+    for row in intents:
+        status = str(row.status or "").upper()
+        if status not in {"PREVIEWED", "QUEUED", "APPROVED", "SUBMITTED", "REJECTED", "CANCELLED"}:
+            continue
+        payload = {
+            "intent_id": row.intent_id,
+            "status": "PENDING" if status in {"PREVIEWED", "QUEUED", "APPROVED", "SUBMITTED"} else status,
+            "symbol": str(row.symbol or "").upper(),
+            "side": str(row.side or "buy").lower(),
+            "quantity": round(_safe_float(row.size), 8),
+            "avg_fill_price": round(_safe_float(row.price), 8) if row.price is not None else None,
+            "opened_at": _as_aware(row.created_at),
+            "closed_at": _as_aware(row.executed_at),
+            "realized_pnl": None,
+            "unrealized_pnl": None,
+            "strategy_name": str((row.normalized_order_payload or {}).get("strategy_type") or "manual_trade"),
+            "reconciliation_status": "PENDING",
+            "reconciliation_reason": str(row.reject_reason_code or "pending_execution"),
+            "trace_available": "true",
+            "explainability_status": "available",
+            "meta_json": {
+                "trade_source": "intent_projection",
+                "intent_token": row.intent_token,
+                "meta_engine_decision": row.meta_engine_decision,
+                "allocation_source": (row.normalized_order_payload or {}).get("strategy_type"),
+            },
+        }
+        _upsert_trade_projection(db, user_id=user_id, trade_id=str(row.position_id or row.id), payload=payload)
+
+    db.commit()
+    return {"synced": synced, "intent_rows": len(intents)}
+
+
+def build_user_trade_projection_list(db: Session, user_id: str, *, limit: int = 120) -> list[dict]:
+    sync_user_trade_projection(db, user_id=user_id)
+    rows = db.query(UserTradeProjection).filter(UserTradeProjection.user_id == user_id).order_by(UserTradeProjection.updated_at.desc()).limit(limit).all()
+    return [
+        {
+            "source": (row.meta_json or {}).get("trade_source", "projection"),
+            "trade_id": row.trade_id,
+            "symbol": row.symbol,
+            "side": row.side,
+            "status": row.status,
+            "quantity": row.quantity,
+            "entry_price": row.avg_fill_price,
+            "exit_price": None,
+            "realized_pnl": row.realized_pnl,
+            "unrealized_pnl": row.unrealized_pnl,
+            "opened_at": row.opened_at,
+            "closed_at": row.closed_at,
+            "strategy_weight": None,
+            "allocation_source": (row.meta_json or {}).get("allocation_source"),
+            "meta_engine_decision": (row.meta_json or {}).get("meta_engine_decision"),
+            "trace_available": str(row.trace_available or "false").lower() == "true",
+            "has_explainability": row.explainability_status == "available",
+            "reconciliation_status": row.reconciliation_status,
+            "strategy": row.strategy_name,
+        }
+        for row in rows
+    ]
+
+
+def build_user_trade_open_orders(db: Session, user_id: str, *, limit: int = 80) -> list[dict]:
+    rows = db.query(UserExecutionIntent).filter(UserExecutionIntent.user_id == user_id, UserExecutionIntent.status.in_(["PREVIEWED", "QUEUED", "APPROVED", "SUBMITTED"])) .order_by(UserExecutionIntent.created_at.desc()).limit(limit).all()
+    return [
+        {
+            "symbol": str(row.symbol or "").upper(),
+            "side": row.side,
+            "size": row.size,
+            "status": row.status,
+            "submitted_at": row.created_at,
+            "venue": (row.normalized_order_payload or {}).get("exchange") or "binance",
+            "reduce_only": bool((row.normalized_order_payload or {}).get("reduce_only", False)),
+            "queue_status": row.status,
+            "intent_source": row.intent_type,
+            "intent_id": row.intent_id,
+        }
+        for row in rows
+    ]
+
+
+def build_user_trade_pending_orders(db: Session, user_id: str, *, limit: int = 80) -> list[dict]:
+    return build_user_trade_open_orders(db, user_id, limit=limit)
+
+
+def build_user_trade_detail(db: Session, user_id: str, trade_id: str) -> dict:
+    sync_user_trade_projection(db, user_id=user_id)
+    row = db.query(UserTradeProjection).filter(UserTradeProjection.user_id == user_id, UserTradeProjection.trade_id == trade_id).first()
+    if row is None:
+        raise ValueError("trade_not_found")
+    traces = db.query(UserDecisionTrace).filter(UserDecisionTrace.user_id == user_id).order_by(UserDecisionTrace.created_at.desc()).limit(10).all()
+    lifecycle = []
+    for event_name, timestamp in [
+        ("created", row.created_at),
+        ("reviewed", row.opened_at),
+        ("queued", row.opened_at),
+        ("filled", row.opened_at if row.status in {"OPEN", "PARTIALLY_FILLED", "FILLED", "CLOSED"} else None),
+        ("updated", row.updated_at),
+        ("closed", row.closed_at),
+    ]:
+        if timestamp:
+            lifecycle.append({"event": event_name, "at": timestamp})
+    internal_pnl = _safe_float(row.realized_pnl, 0.0) + _safe_float(row.unrealized_pnl, 0.0)
+    execution_pnl = _safe_float(row.slippage, 0.0)
+    return {
+        "trade": {
+            "trade_id": row.trade_id,
+            "symbol": row.symbol,
+            "side": row.side,
+            "status": row.status,
+            "quantity": row.quantity,
+            "avg_fill_price": row.avg_fill_price,
+            "fees": row.fees,
+            "slippage": row.slippage,
+            "realized_pnl": row.realized_pnl,
+            "unrealized_pnl": row.unrealized_pnl,
+            "opened_at": row.opened_at,
+            "closed_at": row.closed_at,
+            "strategy": row.strategy_name,
+            "trace_available": str(row.trace_available or "false").lower() == "true",
+        },
+        "fills": [row.meta_json] if row.meta_json else [],
+        "timeline": lifecycle,
+        "queue_execution_trace": {
+            "intent_id": row.intent_id,
+            "order_id": row.order_id,
+            "execution_trace_id": row.execution_trace_id,
+        },
+        "risk_policy_summary": {
+            "gate_decision": (row.meta_json or {}).get("gate_decision"),
+            "meta_engine_decision": (row.meta_json or {}).get("meta_engine_decision"),
+        },
+        "why_this_trade_happened": {
+            "signal_source": (row.meta_json or {}).get("trade_source"),
+            "strategy_reason": traces[0].strategy_allocation_reason if traces else None,
+            "confidence_score": traces[0].portfolio_risk_score if traces else None,
+            "policy_result": (row.meta_json or {}).get("gate_decision"),
+            "allocation_decision": (row.meta_json or {}).get("allocation_source"),
+            "execution_result": row.status,
+        },
+        "reconciliation": {
+            "internal_pnl": round(internal_pnl, 8),
+            "execution_metric_pnl": round(execution_pnl, 8),
+            "delta": round(internal_pnl - execution_pnl, 8),
+            "status": row.reconciliation_status,
+            "reason": row.reconciliation_reason,
+            "last_reconciled_at": row.updated_at,
+        },
     }
 
 

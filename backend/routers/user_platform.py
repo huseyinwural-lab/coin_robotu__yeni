@@ -21,7 +21,6 @@ from core.users.user_exchange_connections import (
 from core.users.user_portfolio_engine import (
     build_user_performance_snapshot,
     build_user_portfolio_snapshot,
-    build_user_trade_history,
 )
 from core.users.user_portfolio_mapper import map_user_portfolio
 from core.users.user_risk_settings import (
@@ -67,6 +66,12 @@ from services.execution_readiness_service import enforce_execution_guard_or_rais
 from services.rate_limiter_service import consume_exchange_rate_limit
 from services.risk_policy_service import evaluate_request_risk
 from services.suspicious_activity_service import create_risk_event, maybe_create_suspicious_alert
+from services.user_live_dashboard_service import (
+    build_user_trade_detail,
+    build_user_trade_open_orders,
+    build_user_trade_pending_orders,
+    build_user_trade_projection_list,
+)
 
 router = APIRouter(prefix="/user", tags=["user_platform"])
 
@@ -597,8 +602,34 @@ def get_trades(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    rows = build_user_trade_history(db, current_user.id, limit=limit)
+    rows = build_user_trade_projection_list(db, current_user.id, limit=limit)
     return [UserTradeResponse(**row) for row in rows]
+
+
+@router.get("/trades/open-orders")
+def get_open_orders(
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_trade_open_orders(db, current_user.id, limit=limit)
+
+
+@router.get("/trades/pending-orders")
+def get_pending_orders(
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return build_user_trade_pending_orders(db, current_user.id, limit=limit)
+
+
+@router.get("/trades/{trade_id}")
+def get_trade_detail(trade_id: str, current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    try:
+        return build_user_trade_detail(db, current_user.id, trade_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @router.get("/dashboard", response_model=UserDashboardResponse)
