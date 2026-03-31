@@ -244,6 +244,8 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
   - activate
   - rollback
   - advanced json toggle
+  - history panel
+  - resolve preview paneli
 - Bot binding görünürlüğü backend tarafında hazır:
   - `strategy_template_id`
   - template resolution
@@ -252,6 +254,8 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 ### Kabul notu
 - Strategy Template P0 acceptance local browser ve local backend üzerinden alınmıştır.
 - Test sonrası frontend backend target tekrar preview URL’ye geri döndürüldü.
+- Son kabul cümlesi:
+  - **Strategy Template P0 acceptance PASS**
 
 ## 2026-03-31 — TRADES P2 (Trade Trace / Replay / Reconciliation)
 
