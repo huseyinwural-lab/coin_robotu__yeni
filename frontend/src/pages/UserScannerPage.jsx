@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -1540,6 +1540,7 @@ export const UserScannerPage = () => {
           <div className="rounded border border-cyan-700 bg-cyan-950/20 p-3 text-sm" data-testid="user-scanner-selected-template-summary">
             <p>selected template: {lastRunEnvelope.selected_template.template_code || '-'}</p>
             <pre className="mt-2 overflow-x-auto bg-slate-950 p-2 text-[11px] text-slate-200">{JSON.stringify(lastRunEnvelope.selected_template.effective_params || {}, null, 2)}</pre>
+            {lastRunEnvelope.selected_template.template_id && <Link to={`/user/strategies/${lastRunEnvelope.selected_template.template_id}`} className="mt-2 inline-flex underline text-cyan-300" data-testid="user-scanner-selected-template-detail-link">Open template detail</Link>}
           </div>
         )}
         {showSlowLoadingHint && (

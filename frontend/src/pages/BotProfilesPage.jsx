@@ -446,9 +446,12 @@ export const BotProfilesPage = () => {
           {detailTab === 'overview' && (
             <div className="rounded-xl border border-black/10 bg-white/70 p-3 text-sm text-black" data-testid="bot-detail-strategy-source-card">
               <p className="font-semibold" data-testid="bot-detail-strategy-source-title">Strategy Source</p>
-              <p data-testid="bot-detail-strategy-template-name">template: {botStatus?.strategy_binding?.selected_strategy_template_id || '-'}</p>
+              <p data-testid="bot-detail-strategy-template-name">template: {botStatus?.strategy_binding?.selected_template_code || botStatus?.strategy_binding?.selected_strategy_template_id || '-'}</p>
+              <p data-testid="bot-detail-strategy-template-version">version: {botStatus?.strategy_binding?.selected_template_version || '-'}</p>
+              <p data-testid="bot-detail-strategy-template-state">state: {botStatus?.strategy_binding?.selected_template_lifecycle_state || '-'}</p>
               <p data-testid="bot-detail-strategy-runtime-id">runtime strategy: {botStatus?.strategy_binding?.effective_runtime_strategy_id || '-'}</p>
-              <p data-testid="bot-detail-strategy-lifecycle">lifecycle: {botStatus?.compatibility?.parity || '-'}</p>
+              <p data-testid="bot-detail-strategy-lifecycle">compatibility: {botStatus?.compatibility?.parity || '-'}</p>
+              <p data-testid="bot-detail-strategy-last-resolved">last_resolved_at: {botStatus?.strategy_binding?.last_resolved_at || '-'}</p>
               <pre className="mt-2 overflow-x-auto bg-white/60 p-2 text-[11px]" data-testid="bot-detail-strategy-effective-config">{JSON.stringify(botStatus?.strategy_binding?.effective_params || {}, null, 2)}</pre>
             </div>
           )}

@@ -94,6 +94,9 @@ def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution:
     strategy_binding = {
         "selected_strategy_id": bot.strategy_type,
         "selected_strategy_template_id": getattr(bot, "strategy_template_id", None),
+        "selected_template_code": strategy_resolution.get("template_code"),
+        "selected_template_version": strategy_resolution.get("version_num"),
+        "selected_template_lifecycle_state": strategy_resolution.get("lifecycle_state"),
         "effective_runtime_strategy_id": runtime.get("strategy_id"),
         "effective_params": {
             "timeframe": bot.timeframe,
@@ -103,6 +106,7 @@ def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution:
         },
         "override": bool(getattr(bot, "strategy_template_id", None)),
         "validation_result": strategy_resolution.get("validation_result") or {},
+        "last_resolved_at": runtime.get("last_heartbeat"),
     }
     risk_binding = {
         "risk_source": binding_sources.get("risk_source", "default"),
@@ -303,7 +307,9 @@ def list_bot_runtime_summaries(db, *, user_id: str) -> list[dict]:
 def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
     bindings = _resolve_bindings(db, bot)
     symbol_resolution = _resolve_symbol_source(db, bot)
-    if not bindings["strategy_id"] or not bindings["execution_profile_id"] or not symbol_resolution.get("ok"):
+    strategy_resolution = dict(bindings.get("strategy_resolution") or {})
+    strategy_ok = bool(strategy_resolution.get("validation_result", {}).get("runtime_eligible", True))
+    if not bindings["strategy_id"] or not bindings["execution_profile_id"] or not symbol_resolution.get("ok") or not strategy_ok:
         runtime = set_bot_runtime_state(redis_client, bot_id=bot.id, state="ERROR", error="binding_failed")
         return {**runtime, "binding_ok": False}
     bot.symbol_resolution_snapshot = _json_safe(symbol_resolution)
@@ -313,11 +319,12 @@ def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
     runtime.setdefault("runtime_context", {})["binding_sources"] = bindings
     runtime.setdefault("runtime_context", {})["binding_validation_result"] = {
         "strategy_id": bindings["strategy_id"],
+        "strategy_template_id": getattr(bot, "strategy_template_id", None),
         "risk_profile_id": bindings["risk_profile_id"],
         "execution_profile_id": bindings["execution_profile_id"],
         "symbol_source": symbol_resolution.get("source_type"),
         "resolved_symbols": symbol_resolution.get("symbols") or [],
-        "compatibility": "ok",
+        "compatibility": "ok" if strategy_ok else "failed",
     }
     runtime.setdefault("runtime_context", {})["queue_registration"] = {
         "queue_name": "execution_queue",

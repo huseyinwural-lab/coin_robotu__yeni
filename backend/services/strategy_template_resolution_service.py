@@ -70,6 +70,8 @@ def resolve_effective_strategy_config(db, *, template_id: str | None = None, str
             "errors": validation_errors,
             "override_used": bool(overrides),
             "execution_compatibility": "PASS" if (template.allowed_modes or ["paper", "mock", "live_ready_disabled"]) else "FAIL",
+            "runtime_eligible": template.lifecycle_state == "ACTIVE" and len(validation_errors) == 0,
+            "lifecycle_state": template.lifecycle_state,
         },
     }
 
