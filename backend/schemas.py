@@ -515,6 +515,7 @@ class StrategyTemplateDetailResponse(BaseModel):
     bot_bindings: list[dict] = Field(default_factory=list)
     backtest_summary: dict = Field(default_factory=dict)
     execution_compatibility: dict = Field(default_factory=dict)
+    related_trades: list[dict] = Field(default_factory=list)
     audit_timeline: list[dict] = Field(default_factory=list)
     promotion_eligibility: dict = Field(default_factory=dict)
 
@@ -2240,6 +2241,11 @@ class UserTradeResponse(BaseModel):
     has_explainability: bool = False
     reconciliation_status: str | None = None
     strategy: str | None = None
+    strategy_template_id: str | None = None
+    strategy_version_id: str | None = None
+    scan_run_id: str | None = None
+    signal_id: str | None = None
+    decision_card_id: str | None = None
 
 
 class UserSignalModeResponse(BaseModel):

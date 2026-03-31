@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -65,10 +65,16 @@ export const StrategyTemplateDetailPage = () => {
           <article className="border border-slate-800 bg-slate-900 p-4 xl:col-span-6" data-testid="strategy-template-detail-scanner-bindings-panel">
             <h3 className="text-base font-semibold">Scanner Bindings</h3>
             <pre className="mt-3 overflow-x-auto bg-slate-950 p-3 text-[11px] text-slate-300">{pretty(detail.scanner_bindings)}</pre>
+            <div className="mt-2">
+              <Link to="/user/scanner" className="underline text-cyan-300" data-testid="strategy-template-detail-open-scanner-link">Open Scanner</Link>
+            </div>
           </article>
           <article className="border border-slate-800 bg-slate-900 p-4 xl:col-span-6" data-testid="strategy-template-detail-bot-bindings-panel">
             <h3 className="text-base font-semibold">Bot Bindings</h3>
             <pre className="mt-3 overflow-x-auto bg-slate-950 p-3 text-[11px] text-slate-300">{pretty(detail.bot_bindings)}</pre>
+            <div className="mt-2">
+              <Link to="/user/bot-profiles" className="underline text-cyan-300" data-testid="strategy-template-detail-open-bots-link">Open Related Bots</Link>
+            </div>
           </article>
           <article className="border border-slate-800 bg-slate-900 p-4 xl:col-span-6" data-testid="strategy-template-detail-execution-compatibility-panel">
             <h3 className="text-base font-semibold">Execution Compatibility</h3>
@@ -77,6 +83,10 @@ export const StrategyTemplateDetailPage = () => {
           <article className="border border-slate-800 bg-slate-900 p-4 xl:col-span-6" data-testid="strategy-template-detail-audit-timeline-panel">
             <h3 className="text-base font-semibold">Audit Timeline</h3>
             <pre className="mt-3 overflow-x-auto bg-slate-950 p-3 text-[11px] text-slate-300">{pretty(detail.audit_timeline)}</pre>
+          </article>
+          <article className="border border-slate-800 bg-slate-900 p-4 xl:col-span-12" data-testid="strategy-template-detail-related-trades-panel">
+            <h3 className="text-base font-semibold">Related Trades</h3>
+            <pre className="mt-3 overflow-x-auto bg-slate-950 p-3 text-[11px] text-slate-300">{pretty(detail.related_trades)}</pre>
           </article>
         </div>
       )}

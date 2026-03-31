@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from models import AuditLog, BacktestResultCard, BotProfile, StrategyTemplate
+from models import AuditLog, BacktestResultCard, BotProfile, StrategyTemplate, UserTradeProjection
 from schemas import StrategyTemplateResponse
 
 
@@ -132,6 +132,7 @@ def build_strategy_template_detail(db, *, template_id: str) -> dict | None:
     else:
         backtest = db.query(BacktestResultCard).filter(BacktestResultCard.strategy_type == template.strategy_type).order_by(BacktestResultCard.updated_at.desc()).first()
     bots = db.query(BotProfile).filter(BotProfile.strategy_template_id == template.id).all()
+    trades = db.query(UserTradeProjection).filter(UserTradeProjection.strategy_template_id == template.id).order_by(UserTradeProjection.updated_at.desc()).limit(50).all()
     audits = db.query(AuditLog).filter(AuditLog.entity_type == "strategy_template", AuditLog.entity_id == template.id).order_by(AuditLog.created_at.desc()).limit(50).all()
     resolved = resolve_effective_strategy_config(db, template_id=template.id)
     backtest_summary = {
@@ -158,6 +159,7 @@ def build_strategy_template_detail(db, *, template_id: str) -> dict | None:
         "scanner_bindings": {
             "selected_template": template.template_code,
             "effective_params": (resolved.get("effective_runtime_config") or {}).get("parameters") or {},
+            "scan_usage_count": len([row for row in trades if row.scan_run_id]),
         },
         "bot_bindings": [
             {"bot_id": bot.id, "bot_name": bot.name, "status": bot.is_running, "symbol_source": getattr(bot, "symbol_source_type", "manual")}
@@ -171,6 +173,17 @@ def build_strategy_template_detail(db, *, template_id: str) -> dict | None:
             "allowed_modes": template.allowed_modes or [],
             "compatibility": resolved.get("validation_result", {}).get("execution_compatibility"),
         },
+        "related_trades": [
+            {
+                "trade_id": row.trade_id,
+                "status": row.status,
+                "symbol": row.symbol,
+                "scan_run_id": row.scan_run_id,
+                "signal_id": row.signal_id,
+                "execution_trace_id": row.execution_trace_id,
+            }
+            for row in trades[:20]
+        ],
         "audit_timeline": [
             {"action": row.action, "actor": row.actor_user_id, "at": row.created_at, "details": row.details or {}}
             for row in audits
