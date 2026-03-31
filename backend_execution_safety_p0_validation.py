@@ -11,7 +11,7 @@ This script validates all execution safety endpoints mentioned in the review req
 6. Canonical state output
 7. Legacy namespace deprecation marker
 
-Test URL: https://unified-orchestrator.preview.emergentagent.com
+Test URL: https://trade-trace-engine.preview.emergentagent.com
 Test Credentials: canary.admin@platform.local / CanaryAdmin123!
 """
 
@@ -639,7 +639,7 @@ class ExecutionSafetyValidator:
 
 def main():
     """Main execution function"""
-    base_url = "https://unified-orchestrator.preview.emergentagent.com"
+    base_url = "https://trade-trace-engine.preview.emergentagent.com"
     
     validator = ExecutionSafetyValidator(base_url)
     results = validator.run_validation()

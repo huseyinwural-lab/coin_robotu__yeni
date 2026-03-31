@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P0.5 Closure Backend Regression Testing
-Base URL: https://unified-orchestrator.preview.emergentagent.com
+Base URL: https://trade-trace-engine.preview.emergentagent.com
 Admin: canary.admin@platform.local / CanaryAdmin123!
 
 Test Requirements:
@@ -18,7 +18,7 @@ import time
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

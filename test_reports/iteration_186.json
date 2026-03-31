@@ -145,7 +145,7 @@
     "mocked_apis_list": []
   },
   "preview_infrastructure_issue": {
-    "description": "Preview URL (https://unified-orchestrator.preview.emergentagent.com) has network latency issues causing slow page loads and login timeouts. Backend returns 200 OK locally.",
+    "description": "Preview URL (https://trade-trace-engine.preview.emergentagent.com) has network latency issues causing slow page loads and login timeouts. Backend returns 200 OK locally.",
     "impact": "Scanner page shows loading skeleton for extended time",
     "workaround": "Backend APIs verified via localhost testing. Frontend code verified via code review.",
     "is_code_bug": false

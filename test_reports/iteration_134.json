@@ -55,7 +55,7 @@
   "should_main_agent_self_test": false,
   "context_for_next_testing_agent": "PostgreSQL database at postgres.internal is not available. All backend APIs return 503 with database_unavailable error. Frontend loads correctly. Code review shows implementation is correct. Need infrastructure fix before functional testing can proceed.",
   "infrastructure_status": {
-    "frontend": "RUNNING - loads correctly at https://unified-orchestrator.preview.emergentagent.com",
+    "frontend": "RUNNING - loads correctly at https://trade-trace-engine.preview.emergentagent.com",
     "backend": "DEGRADED - running but database connection failing",
     "database": "UNAVAILABLE - postgres.internal hostname cannot be resolved",
     "redis": "UNKNOWN - using in-memory fallback"

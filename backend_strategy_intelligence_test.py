@@ -8,7 +8,7 @@ Tests the Strategy Intelligence governance flow with the following scenarios:
 3) Authorization controls
 4) Compare endpoint functionality
 
-URL: https://unified-orchestrator.preview.emergentagent.com
+URL: https://trade-trace-engine.preview.emergentagent.com
 """
 
 import json
@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 # Base URL from frontend/.env
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials

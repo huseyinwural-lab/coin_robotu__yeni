@@ -9,7 +9,7 @@ import sys
 
 def test_acceptance_latest():
     """Test the acceptance latest endpoint specifically"""
-    base_url = "https://unified-orchestrator.preview.emergentagent.com"
+    base_url = "https://trade-trace-engine.preview.emergentagent.com"
     
     # Authenticate
     auth_data = {"email": "canary.admin@platform.local", "password": "CanaryAdmin123!"}

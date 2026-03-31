@@ -9,7 +9,7 @@ Test Requirements (Turkish):
 3) GET /api/health/ready ve /api/ready -> preview_smoke_gate check'i status=ready/gate_status=pass olmalı
 4) /api/health içindeki startup.preview_smoke_gate.checks anahtarları: api_health, auth_login, commercial_route, overview_fetch
 
-Base URL: https://unified-orchestrator.preview.emergentagent.com
+Base URL: https://trade-trace-engine.preview.emergentagent.com
 """
 
 import requests
@@ -18,7 +18,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

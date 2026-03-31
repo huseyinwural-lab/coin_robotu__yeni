@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 
 # Base URL
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 
 def test_health_endpoints():
     """Test health and ready endpoints"""

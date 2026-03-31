@@ -3,7 +3,7 @@ import os
 import requests
 
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://unified-orchestrator.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-trace-engine.preview.emergentagent.com").rstrip("/")
 
 
 def _admin_headers():

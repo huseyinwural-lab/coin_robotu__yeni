@@ -18,7 +18,7 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+    BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 
 LOGIN_EMAIL = "canary.admin@platform.local"
 LOGIN_PASSWORD = "CanaryAdmin123!"

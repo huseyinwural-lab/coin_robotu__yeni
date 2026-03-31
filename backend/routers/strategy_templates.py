@@ -7,11 +7,40 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user, require_admin
 from models import StrategyTemplate, User
-from schemas import StrategyTemplateCloneVersionRequest, StrategyTemplateCreate, StrategyTemplateDetailResponse, StrategyTemplatePreviewImpactRequest, StrategyTemplateReasonRequest, StrategyTemplateResolvedConfigResponse, StrategyTemplateResponse, StrategyTemplateUpdate
+from schemas import (
+    StrategyTemplateCloneVersionRequest,
+    StrategyTemplateCreate,
+    StrategyTemplateDetailResponse,
+    StrategyTemplatePreviewImpactRequest,
+    StrategyTemplateReasonRequest,
+    StrategyTemplateResolvedConfigResponse,
+    StrategyTemplateResponse,
+    StrategyTemplateUpdate,
+)
 from services.audit_service import build_critical_action_details, create_audit_log
 from services.strategy_template_resolution_service import build_strategy_template_detail, ensure_seed_strategy_templates, resolve_effective_strategy_config
 
 router = APIRouter(prefix="/strategy-templates", tags=["strategy_templates"])
+
+
+def _get_template_or_404(db: Session, template_id: str) -> StrategyTemplate:
+    template = db.query(StrategyTemplate).filter(StrategyTemplate.id == template_id).first()
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    return template
+
+
+def _set_active_template(db: Session, template: StrategyTemplate) -> None:
+    peers = db.query(StrategyTemplate).filter(StrategyTemplate.version_group_id == template.version_group_id).all()
+    for peer in peers:
+        if peer.id == template.id:
+            continue
+        if peer.is_active and peer.lifecycle_state != "ROLLED_BACK":
+            peer.lifecycle_state = "DEPRECATED"
+        peer.is_active = False
+    template.is_active = True
+    template.lifecycle_state = "ACTIVE"
+    template.last_validated_at = datetime.now(timezone.utc)
 
 
 @router.get("", response_model=list[StrategyTemplateResponse])
@@ -135,24 +164,130 @@ def clone_strategy_template_version(template_id: str, payload: StrategyTemplateC
 
 @router.post("/{template_id}/activate", response_model=StrategyTemplateResponse)
 def activate_strategy_template(template_id: str, payload: StrategyTemplateReasonRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    template = db.query(StrategyTemplate).filter(StrategyTemplate.id == template_id).first()
-    if template is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
-    db.query(StrategyTemplate).filter(StrategyTemplate.version_group_id == template.version_group_id).update({StrategyTemplate.is_active: False, StrategyTemplate.lifecycle_state: "DEPRECATED"})
-    template.is_active = True
-    template.lifecycle_state = "ACTIVE"
-    template.last_validated_at = datetime.now(timezone.utc)
+    template = _get_template_or_404(db, template_id)
+    _set_active_template(db, template)
     db.commit()
     db.refresh(template)
     create_audit_log(db, action="strategy_template_activated", entity_type="strategy_template", entity_id=template.id, actor_user_id=current_admin.id, actor_role=current_admin.role.value, details=build_critical_action_details(actor=current_admin.id, reason=payload.reason, scope="strategy_template:activate", before_state={}, after_state={"template_id": template.id, "version": template.version_num}))
     return template
 
 
+@router.post("/{template_id}/validate", response_model=StrategyTemplateResponse)
+def validate_strategy_template(template_id: str, payload: StrategyTemplateReasonRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    template = _get_template_or_404(db, template_id)
+    current_state = str(template.lifecycle_state or "").upper()
+    if current_state not in {"DRAFT", "VALIDATED", "BACKTEST_PASSED"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_state_transition_for_validation")
+    template.lifecycle_state = "VALIDATED"
+    template.last_validated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(template)
+    create_audit_log(
+        db,
+        action="strategy_template_validated",
+        entity_type="strategy_template",
+        entity_id=template.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="strategy_template:validate",
+            before_state={"lifecycle_state": current_state},
+            after_state={"lifecycle_state": template.lifecycle_state, "version": template.version_num},
+        ),
+    )
+    return template
+
+
+@router.post("/{template_id}/mark-backtest-passed", response_model=StrategyTemplateResponse)
+def mark_backtest_passed_strategy_template(template_id: str, payload: StrategyTemplateReasonRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    template = _get_template_or_404(db, template_id)
+    current_state = str(template.lifecycle_state or "").upper()
+    if current_state not in {"VALIDATED", "BACKTEST_PASSED", "ACTIVE"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="validation_required_before_backtest_pass")
+    template.lifecycle_state = "BACKTEST_PASSED"
+    template.last_validated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(template)
+    create_audit_log(
+        db,
+        action="strategy_template_backtest_passed",
+        entity_type="strategy_template",
+        entity_id=template.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="strategy_template:mark_backtest_passed",
+            before_state={"lifecycle_state": current_state},
+            after_state={"lifecycle_state": template.lifecycle_state, "version": template.version_num},
+        ),
+    )
+    return template
+
+
+@router.post("/{template_id}/promote-to-active", response_model=StrategyTemplateResponse)
+def promote_strategy_template_to_active(template_id: str, payload: StrategyTemplateReasonRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    template = _get_template_or_404(db, template_id)
+    current_state = str(template.lifecycle_state or "").upper()
+    if current_state not in {"BACKTEST_PASSED", "ACTIVE"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="backtest_pass_required_before_promote")
+    _set_active_template(db, template)
+    db.commit()
+    db.refresh(template)
+    create_audit_log(
+        db,
+        action="strategy_template_promoted_active",
+        entity_type="strategy_template",
+        entity_id=template.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="strategy_template:promote_active",
+            before_state={"lifecycle_state": current_state},
+            after_state={"lifecycle_state": template.lifecycle_state, "version": template.version_num},
+        ),
+    )
+    return template
+
+
+@router.post("/{template_id}/deprecate", response_model=StrategyTemplateResponse)
+def deprecate_strategy_template(template_id: str, payload: StrategyTemplateReasonRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    template = _get_template_or_404(db, template_id)
+    current_state = str(template.lifecycle_state or "").upper()
+    if current_state == "ROLLED_BACK":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="rolled_back_template_cannot_be_deprecated")
+    template.is_active = False
+    template.lifecycle_state = "DEPRECATED"
+    template.last_validated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(template)
+    create_audit_log(
+        db,
+        action="strategy_template_deprecated",
+        entity_type="strategy_template",
+        entity_id=template.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="strategy_template:deprecate",
+            before_state={"lifecycle_state": current_state},
+            after_state={"lifecycle_state": template.lifecycle_state, "version": template.version_num},
+        ),
+    )
+    return template
+
+
 @router.post("/{template_id}/rollback", response_model=StrategyTemplateResponse)
 def rollback_strategy_template(template_id: str, payload: StrategyTemplateReasonRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    current = db.query(StrategyTemplate).filter(StrategyTemplate.id == template_id).first()
-    if current is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    current = _get_template_or_404(db, template_id)
+    previous_state = str(current.lifecycle_state or "").upper()
     if not current.parent_template_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="rollback_target_missing")
     target = db.query(StrategyTemplate).filter(StrategyTemplate.id == current.parent_template_id).first()
@@ -165,6 +300,21 @@ def rollback_strategy_template(template_id: str, payload: StrategyTemplateReason
     current.rollback_from_template_id = target.id
     db.commit()
     db.refresh(target)
+    create_audit_log(
+        db,
+        action="strategy_template_rolled_back",
+        entity_type="strategy_template",
+        entity_id=current.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="strategy_template:rollback",
+            before_state={"lifecycle_state": previous_state},
+            after_state={"lifecycle_state": current.lifecycle_state, "rollback_target": target.id},
+        ),
+    )
     return target
 
 

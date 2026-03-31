@@ -545,6 +545,8 @@ def build_user_trade_projection_list(db: Session, user_id: str, *, limit: int = 
             "scan_run_id": row.scan_run_id,
             "signal_id": row.signal_id,
             "decision_card_id": row.decision_card_id,
+            "intent_id": row.intent_id,
+            "execution_trace_id": row.execution_trace_id,
         }
         for row in rows
     ]

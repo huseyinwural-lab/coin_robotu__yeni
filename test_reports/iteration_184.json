@@ -9,7 +9,7 @@
     "integration_issues": [
       {
         "flow": "Admin login via preview URL",
-        "issue": "Login request times out on preview URL (https://unified-orchestrator.preview.emergentagent.com). Backend returns 200 OK for login requests but frontend shows 'İşleniyor...' indefinitely. This is a network/infrastructure issue, not a code bug.",
+        "issue": "Login request times out on preview URL (https://trade-trace-engine.preview.emergentagent.com). Backend returns 200 OK for login requests but frontend shows 'İşleniyor...' indefinitely. This is a network/infrastructure issue, not a code bug.",
         "affected_selectors": ["button:has-text('Admin Olarak Giriş Yap')"]
       }
     ],

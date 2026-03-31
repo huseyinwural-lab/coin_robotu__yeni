@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P0+P1 Final Closure Retest (Post-Security-Header Fix) - FINAL VERSION
-URL: https://unified-orchestrator.preview.emergentagent.com
+URL: https://trade-trace-engine.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Validate:
@@ -23,7 +23,7 @@ import re
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

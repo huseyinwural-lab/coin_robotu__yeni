@@ -5426,7 +5426,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Unit test: `pytest -q /app/backend/tests/test_commercial_ops_p0_service.py` → **3 passed**
 - Lint: yeni/edilen backend dosyaları için **pass**
 - `deep_testing_backend_v2` sonucu: **ENV BLOCKER**
-  - Preview URL `https://unified-orchestrator.preview.emergentagent.com` üzerinde `/api/health` dahil 502
+  - Preview URL `https://trade-trace-engine.preview.emergentagent.com` üzerinde `/api/health` dahil 502
   - Kök neden (lokal teşhis): `postgres.internal` bu runtime’da çözümlenmiyor (`Name or service not known`)
   - Bu nedenle canlı endpoint E2E/curl doğrulaması bu turda tamamlanamadı.
 

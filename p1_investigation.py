@@ -6,7 +6,7 @@ P1 Backend Investigation - Deep dive into failing endpoints
 import requests
 import json
 
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 SUPER_ADMIN_CREDS = {
     "email": "canary.admin@platform.local",
     "password": "CanaryAdmin123!"

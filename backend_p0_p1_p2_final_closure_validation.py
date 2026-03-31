@@ -3,7 +3,7 @@
 P0+P1+P2 Final Closure Validation Test
 Turkish Review Request: Final P0+P1+P2 closure doğrulaması (kısa ama kapsamlı)
 
-URL: https://unified-orchestrator.preview.emergentagent.com
+URL: https://trade-trace-engine.preview.emergentagent.com
 Credential: canary.admin@platform.local / CanaryAdmin123!
 
 Kontrol et:
@@ -24,7 +24,7 @@ import sys
 from datetime import datetime
 
 # Test Configuration
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 AUDIT_REPORT_PATH = "/app/test_reports/p0_p1_p2_final_gap_closure_audit.json"

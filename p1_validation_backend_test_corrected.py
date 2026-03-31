@@ -2,7 +2,7 @@
 """
 P1 Backend Validation Test - CORRECTED VERSION
 Testing conflict/hedge/rebalance flows, deterministic model, compare upgrade, and queue hardening regression
-URL: https://unified-orchestrator.preview.emergentagent.com
+URL: https://trade-trace-engine.preview.emergentagent.com
 """
 
 import requests
@@ -11,7 +11,7 @@ import sys
 from typing import Dict, Any, Optional
 
 # Test configuration
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 API_BASE = f"{BASE_URL}/api"
 
 # Test credentials

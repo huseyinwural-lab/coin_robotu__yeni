@@ -9,7 +9,7 @@
     "integration_issues": [
       {
         "flow": "Admin login via preview URL",
-        "issue": "Login request times out on preview URL (https://unified-orchestrator.preview.emergentagent.com). Button shows 'İşleniyor...' indefinitely. This is a preview infrastructure/network issue, not a code bug. Backend returns 200 OK for login requests locally.",
+        "issue": "Login request times out on preview URL (https://trade-trace-engine.preview.emergentagent.com). Button shows 'İşleniyor...' indefinitely. This is a preview infrastructure/network issue, not a code bug. Backend returns 200 OK for login requests locally.",
         "affected_selectors": ["button:has-text('Admin Olarak Giriş Yap')"]
       }
     ],
@@ -99,7 +99,7 @@
     ]
   },
   "preview_infrastructure_issue": {
-    "description": "Preview URL (https://unified-orchestrator.preview.emergentagent.com) has network timeout issues during login. Backend returns 200 OK locally but frontend doesn't receive response via preview URL.",
+    "description": "Preview URL (https://trade-trace-engine.preview.emergentagent.com) has network timeout issues during login. Backend returns 200 OK locally but frontend doesn't receive response via preview URL.",
     "impact": "Cannot verify frontend UI via Playwright on preview URL",
     "workaround": "Backend and frontend code verified via code review and local testing. All required elements are present in code.",
     "is_code_bug": false

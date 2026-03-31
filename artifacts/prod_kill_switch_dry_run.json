@@ -2,7 +2,7 @@
   "phase": "FAZ_D0_TASK_6",
   "status": "PASS",
   "generated_at": "2026-03-21T12:53:05.840297+00:00",
-  "base_url": "https://unified-orchestrator.preview.emergentagent.com",
+  "base_url": "https://trade-trace-engine.preview.emergentagent.com",
   "checks": [
     {
       "name": "admin_login",

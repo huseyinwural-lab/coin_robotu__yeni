@@ -17,7 +17,7 @@ import os
 from datetime import datetime, timezone
 
 # Base URL from frontend/.env
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 
 # Test credentials
 SUPER_ADMIN_EMAIL = "canary.admin@platform.local"

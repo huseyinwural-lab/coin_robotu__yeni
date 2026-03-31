@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Final Gap-Closure Quick Retest - Focused Backend Validation
-URL: https://unified-orchestrator.preview.emergentagent.com
+URL: https://trade-trace-engine.preview.emergentagent.com
 Creds: canary.admin@platform.local / CanaryAdmin123!
 
 Focused test to check what we can access and validate the key requirements.
@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

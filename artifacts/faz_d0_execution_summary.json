@@ -29,7 +29,7 @@
       "step": "task5_prod_like_smoke",
       "command": "/app/scripts/prod_like_smoke.sh",
       "exit_code": 0,
-      "stdout_tail": "2026-03-21T12:53:03Z INFO: prod-like smoke başladı base_url=https://unified-orchestrator.preview.emergentagent.com\n{\"status\": \"PASS\", \"error_5xx_count\": 0}\n",
+      "stdout_tail": "2026-03-21T12:53:03Z INFO: prod-like smoke başladı base_url=https://trade-trace-engine.preview.emergentagent.com\n{\"status\": \"PASS\", \"error_5xx_count\": 0}\n",
       "stderr_tail": "",
       "status": "PASS"
     },

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Execution Decision Gate Backend Regression Check
-Base: https://unified-orchestrator.preview.emergentagent.com/api
+Base: https://trade-trace-engine.preview.emergentagent.com/api
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Requirements:
@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com/api"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com/api"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

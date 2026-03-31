@@ -33,6 +33,7 @@ const initialForm = {
 };
 
 const pretty = (value) => JSON.stringify(value || {}, null, 2);
+const promotionFlow = ["DRAFT", "VALIDATED", "BACKTEST_PASSED", "ACTIVE", "DEPRECATED", "ROLLED_BACK"];
 
 const fetchTemplateJson = async (path, { method = "GET", body = null, timeoutMs = 30000 } = {}) => {
   const controller = new AbortController();
@@ -181,6 +182,21 @@ export const StrategyTemplatesPage = () => {
 
   const actionReason = (fallback) => String(form.reason_note || fallback || "manual_action").trim();
 
+  const runLifecycleAction = async (path, successMessage, fallbackError) => {
+    if (!selected?.id) return;
+    try {
+      const data = await fetchTemplateJson(path, {
+        method: "POST",
+        body: { reason: actionReason(path.replaceAll("/", "_") || "lifecycle_action") },
+      });
+      toast.success(successMessage);
+      setSelected(data);
+      await fetchItems();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || fallbackError);
+    }
+  };
+
   const cloneVersion = async () => {
     if (!selected?.id) return;
     try {
@@ -193,17 +209,13 @@ export const StrategyTemplatesPage = () => {
     }
   };
 
-  const activateVersion = async () => {
-    if (!selected?.id) return;
-    try {
-      const data = await fetchTemplateJson(`/strategy-templates/${selected.id}/activate`, { method: "POST", body: { reason: actionReason("activate_version") } });
-      toast.success("Template ACTIVE oldu");
-      setSelected(data);
-      await fetchItems();
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Activate başarısız");
-    }
-  };
+  const validateVersion = async () => runLifecycleAction(`/strategy-templates/${selected.id}/validate`, "Template VALIDATED oldu", "Validate başarısız");
+
+  const markBacktestPassed = async () => runLifecycleAction(`/strategy-templates/${selected.id}/mark-backtest-passed`, "Template BACKTEST_PASSED oldu", "Backtest pass işareti başarısız");
+
+  const promoteToActive = async () => runLifecycleAction(`/strategy-templates/${selected.id}/promote-to-active`, "Template ACTIVE oldu", "Promote başarısız");
+
+  const deprecateVersion = async () => runLifecycleAction(`/strategy-templates/${selected.id}/deprecate`, "Template DEPRECATED oldu", "Deprecate başarısız");
 
   const rollbackVersion = async () => {
     if (!selected?.id) return;
@@ -229,8 +241,8 @@ export const StrategyTemplatesPage = () => {
           <p className="text-xs uppercase tracking-widest text-emerald-300">User Bridge Guidance</p>
           <p className="mt-2 text-sm text-emerald-100">Bu ekran read-only. Template sonucu Bot Profiles ve Scanner içinde görünür.</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => navigate("/user/scanner")}>Scanner’a Git</Button>
-            <Button variant="outline" onClick={() => navigate("/user/bot-profiles")}>Bot Profiles’a Git</Button>
+            <Button variant="outline" onClick={() => navigate("/user/scanner")} data-testid="strategy-template-user-bridge-open-scanner-button">Scanner’a Git</Button>
+            <Button variant="outline" onClick={() => navigate("/user/bot-profiles")} data-testid="strategy-template-user-bridge-open-bot-profiles-button">Bot Profiles’a Git</Button>
           </div>
         </section>
       )}
@@ -266,6 +278,25 @@ export const StrategyTemplatesPage = () => {
           <div className="border border-slate-800 bg-slate-900 p-4" data-testid="strategy-template-resolve-preview-panel">
             <p className="text-xs uppercase tracking-widest text-slate-500">Resolve Preview</p>
             <pre className="mt-3 overflow-x-auto bg-slate-950 p-3 text-[11px] text-slate-300" data-testid="strategy-template-resolve-preview-json">{pretty(resolved)}</pre>
+          </div>
+
+          <div className="border border-slate-800 bg-slate-900 p-4" data-testid="strategy-template-promotion-flow-panel">
+            <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="strategy-template-promotion-flow-title">Promotion Flow</p>
+            <div className="mt-3 flex flex-wrap gap-2" data-testid="strategy-template-promotion-flow-list">
+              {promotionFlow.map((state, idx) => {
+                const isCurrent = selected?.lifecycle_state === state;
+                const isPassed = promotionFlow.indexOf(selected?.lifecycle_state || "") > idx;
+                return (
+                  <span
+                    key={state}
+                    className={`rounded px-2 py-1 text-[11px] uppercase tracking-wide ${isCurrent ? "bg-cyan-700 text-white" : isPassed ? "bg-emerald-800 text-emerald-100" : "bg-slate-800 text-slate-300"}`}
+                    data-testid={`strategy-template-promotion-flow-state-${state.toLowerCase()}`}
+                  >
+                    {state}
+                  </span>
+                );
+              })}
+            </div>
           </div>
         </aside>
 
@@ -331,7 +362,10 @@ export const StrategyTemplatesPage = () => {
                 <Button type="submit" className="bg-blue-500 text-white hover:bg-blue-600" data-testid="strategy-form-submit-button">{editingId ? 'Güncelle' : 'Template Oluştur'}</Button>
                 {editingId && <Button type="button" variant="outline" onClick={() => { setEditingId(null); setForm(initialForm); }} data-testid="strategy-form-cancel-edit-button">İptal</Button>}
                 <Button type="button" variant="outline" onClick={cloneVersion} disabled={!selected?.id} data-testid="strategy-form-clone-version-button">Clone Version</Button>
-                <Button type="button" variant="outline" onClick={activateVersion} disabled={!selected?.id} data-testid="strategy-form-activate-button">Activate</Button>
+                <Button type="button" variant="outline" onClick={validateVersion} disabled={!selected?.id} data-testid="strategy-form-validate-button">Validate</Button>
+                <Button type="button" variant="outline" onClick={markBacktestPassed} disabled={!selected?.id} data-testid="strategy-form-backtest-passed-button">Mark Backtest Passed</Button>
+                <Button type="button" variant="outline" onClick={promoteToActive} disabled={!selected?.id} data-testid="strategy-form-promote-active-button">Promote Active</Button>
+                <Button type="button" variant="outline" onClick={deprecateVersion} disabled={!selected?.id} data-testid="strategy-form-deprecate-button">Deprecate</Button>
                 <Button type="button" variant="outline" onClick={rollbackVersion} disabled={!selected?.id} data-testid="strategy-form-rollback-button">Rollback</Button>
               </div>
             )}

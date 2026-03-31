@@ -12,7 +12,7 @@ Testing the 7 Kontroller requirements for production deployment:
 6. Queue control role guard + pause during execute
 7. Observability fields present (reject_ratio/override_ratio/stale/unauthorized)
 
-Base URL: https://unified-orchestrator.preview.emergentagent.com/api
+Base URL: https://trade-trace-engine.preview.emergentagent.com/api
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 """
 
@@ -22,7 +22,7 @@ import time
 from datetime import datetime
 
 # Configuration
-BASE_URL = "https://unified-orchestrator.preview.emergentagent.com/api"
+BASE_URL = "https://trade-trace-engine.preview.emergentagent.com/api"
 ADMIN_EMAIL = "canary.admin@platform.local"
 ADMIN_PASSWORD = "CanaryAdmin123!"
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Strategy Observability P0 Sprint Backend Endpoint Testing
-Target: https://unified-orchestrator.preview.emergentagent.com
+Target: https://trade-trace-engine.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test endpoints:
@@ -33,7 +33,7 @@ def test_strategy_observability_endpoints():
     Test Strategy Observability P0 sprint backend endpoints
     """
     
-    BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+    BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
     ADMIN_EMAIL = "canary.admin@platform.local"
     ADMIN_PASSWORD = "CanaryAdmin123!"
     

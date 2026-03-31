@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P0 Backend Validation Test for Identity Control Platform
-Base URL: https://unified-orchestrator.preview.emergentagent.com
+Base URL: https://trade-trace-engine.preview.emergentagent.com
 Admin credentials: canary.admin@platform.local / CanaryAdmin123!
 
 Test Cases:
@@ -19,7 +19,7 @@ from datetime import datetime
 
 class P0BackendValidator:
     def __init__(self):
-        self.base_url = "https://unified-orchestrator.preview.emergentagent.com"
+        self.base_url = "https://trade-trace-engine.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.session = requests.Session()

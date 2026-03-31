@@ -13,7 +13,7 @@ import re
 
 def test_ui_validation():
     """Perform concise UI validation"""
-    url = "https://unified-orchestrator.preview.emergentagent.com"
+    url = "https://trade-trace-engine.preview.emergentagent.com"
     
     try:
         # Get the landing page

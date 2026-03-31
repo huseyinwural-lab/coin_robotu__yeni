@@ -1,6 +1,6 @@
 {
   "test_timestamp": "2026-03-28 23:33:43 UTC",
-  "base_url": "https://unified-orchestrator.preview.emergentagent.com",
+  "base_url": "https://trade-trace-engine.preview.emergentagent.com",
   "credentials_email": "canary.admin@platform.local",
   "admin_login": {
     "status": "success",

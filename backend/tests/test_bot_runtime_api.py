@@ -17,7 +17,7 @@ if str(BACKEND_ROOT) not in sys.path:
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
-    BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+    BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 
 # Test credentials from test_credentials.md
 TEST_EMAIL = "review.user@platform.local"

@@ -612,7 +612,7 @@ def main():
     """Main function to run the execution-safety namespace validation"""
     
     # Configuration
-    BASE_URL = "https://unified-orchestrator.preview.emergentagent.com"
+    BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
     EMAIL = "canary.admin@platform.local"
     PASSWORD = "CanaryAdmin123!"
     

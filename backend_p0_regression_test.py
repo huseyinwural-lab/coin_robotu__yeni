@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Final Backend P0 Regression Test
-Base URL: https://unified-orchestrator.preview.emergentagent.com
+Base URL: https://trade-trace-engine.preview.emergentagent.com
 Admin: canary.admin@platform.local / CanaryAdmin123!
 
 Test set:
@@ -20,7 +20,7 @@ from typing import Dict, Any, Optional
 
 class P0RegressionTester:
     def __init__(self):
-        self.base_url = "https://unified-orchestrator.preview.emergentagent.com"
+        self.base_url = "https://trade-trace-engine.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.session = requests.Session()

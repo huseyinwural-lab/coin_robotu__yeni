@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 P0 Final Closure Validation Test - Turkish Review Request
-URL: https://unified-orchestrator.preview.emergentagent.com
+URL: https://trade-trace-engine.preview.emergentagent.com
 Creds: canary.admin@platform.local / CanaryAdmin123!
 
 Kontrol et:
@@ -22,7 +22,7 @@ from typing import Dict, List, Any, Optional
 
 class P0FinalClosureValidator:
     def __init__(self):
-        self.base_url = "https://unified-orchestrator.preview.emergentagent.com"
+        self.base_url = "https://trade-trace-engine.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.session = requests.Session()

@@ -3,7 +3,7 @@
 P0+P1 FINAL CLOSURE COMPREHENSIVE VALIDATION TEST
 Turkish Review Request: P0+P1 FINAL closure doğrulaması yap (backend + frontend smoke + rapor dosyaları)
 
-Test URL: https://unified-orchestrator.preview.emergentagent.com
+Test URL: https://trade-trace-engine.preview.emergentagent.com
 Credentials: canary.admin@platform.local / CanaryAdmin123!
 
 This test focuses on what can be validated given the security constraints.
@@ -17,7 +17,7 @@ from datetime import datetime
 
 class P0P1ComprehensiveValidator:
     def __init__(self):
-        self.base_url = "https://unified-orchestrator.preview.emergentagent.com"
+        self.base_url = "https://trade-trace-engine.preview.emergentagent.com"
         self.admin_email = "canary.admin@platform.local"
         self.admin_password = "CanaryAdmin123!"
         self.test_results = []

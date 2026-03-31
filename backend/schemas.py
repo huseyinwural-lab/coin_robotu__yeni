@@ -518,6 +518,11 @@ class StrategyTemplateDetailResponse(BaseModel):
     related_trades: list[dict] = Field(default_factory=list)
     audit_timeline: list[dict] = Field(default_factory=list)
     promotion_eligibility: dict = Field(default_factory=dict)
+    promotion_lifecycle: list[dict] = Field(default_factory=list)
+    outcome_analytics: dict = Field(default_factory=dict)
+    recent_outcomes: list[dict] = Field(default_factory=list)
+    global_trace_spine: list[dict] = Field(default_factory=list)
+    learning_feedback_loop: dict = Field(default_factory=dict)
 
 
 class AuditLogResponse(BaseModel):
@@ -2246,6 +2251,8 @@ class UserTradeResponse(BaseModel):
     scan_run_id: str | None = None
     signal_id: str | None = None
     decision_card_id: str | None = None
+    intent_id: str | None = None
+    execution_trace_id: str | None = None
 
 
 class UserSignalModeResponse(BaseModel):

@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from models import AuditLog, BacktestResultCard, BotProfile, StrategyTemplate, UserTradeProjection
 from schemas import StrategyTemplateResponse
 
+PROMOTION_STEPS = ["DRAFT", "VALIDATED", "BACKTEST_PASSED", "ACTIVE", "DEPRECATED", "ROLLED_BACK"]
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -15,6 +17,168 @@ def _default_param_schema(parameters: dict) -> dict:
     for key, value in (parameters or {}).items():
         schema[key] = {"type": type(value).__name__, "default": value}
     return schema
+
+
+def _state_rank(state: str | None) -> int:
+    current = str(state or "").upper()
+    if current in PROMOTION_STEPS:
+        return PROMOTION_STEPS.index(current)
+    return -1
+
+
+def _safe_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _build_outcome_analytics(trades: list[UserTradeProjection]) -> tuple[dict, list[dict], list[dict], dict]:
+    recent_outcomes = []
+    trace_spine = []
+
+    for row in trades[:20]:
+        recent_outcomes.append(
+            {
+                "trade_id": row.trade_id,
+                "symbol": row.symbol,
+                "status": row.status,
+                "realized_pnl": row.realized_pnl,
+                "unrealized_pnl": row.unrealized_pnl,
+                "opened_at": row.opened_at,
+                "closed_at": row.closed_at,
+                "trace": {
+                    "strategy_template_id": row.strategy_template_id,
+                    "strategy_version_id": row.strategy_version_id,
+                    "scan_run_id": row.scan_run_id,
+                    "signal_id": row.signal_id,
+                    "decision_card_id": row.decision_card_id,
+                    "intent_id": row.intent_id,
+                    "trade_id": row.trade_id,
+                    "execution_trace_id": row.execution_trace_id,
+                },
+            }
+        )
+
+    for row in trades[:50]:
+        trace_spine.append(
+            {
+                "strategy_template_id": row.strategy_template_id,
+                "strategy_version_id": row.strategy_version_id,
+                "scan_run_id": row.scan_run_id,
+                "signal_id": row.signal_id,
+                "decision_card_id": row.decision_card_id,
+                "intent_id": row.intent_id,
+                "trade_id": row.trade_id,
+                "execution_trace_id": row.execution_trace_id,
+            }
+        )
+
+    closed_like = [row for row in trades if str(row.status or "").upper() in {"CLOSED", "FILLED"}]
+    wins = [row for row in closed_like if _safe_float(row.realized_pnl) > 0]
+    gross_profit = sum(max(_safe_float(row.realized_pnl), 0.0) for row in closed_like)
+    gross_loss_abs = abs(sum(min(_safe_float(row.realized_pnl), 0.0) for row in closed_like))
+    profit_factor = round(gross_profit / gross_loss_abs, 4) if gross_loss_abs > 0 else (999.0 if gross_profit > 0 else 0.0)
+    win_rate = round((len(wins) / len(closed_like)) * 100.0, 2) if closed_like else 0.0
+    avg_realized = round(sum(_safe_float(row.realized_pnl) for row in closed_like) / len(closed_like), 6) if closed_like else 0.0
+    avg_slippage = round(sum(_safe_float(row.slippage) for row in trades if row.slippage is not None) / max(len([r for r in trades if r.slippage is not None]), 1), 6)
+
+    trace_complete = 0
+    for spine in trace_spine:
+        required_values = [
+            spine.get("strategy_template_id"),
+            spine.get("strategy_version_id"),
+            spine.get("scan_run_id"),
+            spine.get("signal_id"),
+            spine.get("decision_card_id"),
+            spine.get("intent_id"),
+            spine.get("trade_id"),
+            spine.get("execution_trace_id"),
+        ]
+        if all(required_values):
+            trace_complete += 1
+    trace_coverage_pct = round((trace_complete / len(trace_spine)) * 100.0, 2) if trace_spine else 0.0
+
+    status_counts: dict[str, int] = {}
+    for row in trades:
+        key = str(row.status or "UNKNOWN").upper()
+        status_counts[key] = status_counts.get(key, 0) + 1
+
+    learning_feedback = {
+        "feedback_loop_status": "ACTIVE",
+        "recommendations": [
+            {
+                "code": "tighten_entry_filter",
+                "priority": "HIGH" if win_rate < 45 and len(closed_like) >= 10 else "LOW",
+                "reason": "Win rate düşükse giriş filtresi sıkılaştırılmalı",
+            },
+            {
+                "code": "execution_profile_review",
+                "priority": "MEDIUM" if abs(avg_slippage) > 0.35 else "LOW",
+                "reason": "Slippage yüksekse execution profile gözden geçirilmeli",
+            },
+            {
+                "code": "trace_instrumentation_gap",
+                "priority": "HIGH" if trace_coverage_pct < 80 else "LOW",
+                "reason": "Trace spine kapsaması düşükse pipeline id geçişleri tamamlanmalı",
+            },
+        ],
+    }
+
+    analytics = {
+        "performance_summary": {
+            "trade_count": len(trades),
+            "closed_trade_count": len(closed_like),
+            "win_rate": win_rate,
+            "avg_realized_pnl": avg_realized,
+            "profit_factor": profit_factor,
+            "avg_slippage": avg_slippage,
+            "status_distribution": status_counts,
+        },
+        "trace_quality": {
+            "trace_complete_count": trace_complete,
+            "trace_total_count": len(trace_spine),
+            "trace_coverage_pct": trace_coverage_pct,
+        },
+        "learning_feedback": learning_feedback,
+    }
+
+    return analytics, recent_outcomes, trace_spine, learning_feedback
+
+
+def _build_promotion_lifecycle(*, template: StrategyTemplate, audits: list[AuditLog]) -> list[dict]:
+    audit_map = {
+        "strategy_template_validated": "VALIDATED",
+        "strategy_template_backtest_passed": "BACKTEST_PASSED",
+        "strategy_template_promoted_active": "ACTIVE",
+        "strategy_template_activated": "ACTIVE",
+        "strategy_template_deprecated": "DEPRECATED",
+        "strategy_template_rolled_back": "ROLLED_BACK",
+    }
+    first_seen_at: dict[str, datetime] = {}
+    for row in reversed(audits):
+        state = audit_map.get(str(row.action or ""))
+        if state and state not in first_seen_at:
+            first_seen_at[state] = row.created_at
+
+    current_rank = _state_rank(template.lifecycle_state)
+    lifecycle = []
+    for idx, state in enumerate(PROMOTION_STEPS):
+        if idx < current_rank:
+            phase_status = "completed"
+        elif idx == current_rank:
+            phase_status = "current"
+        else:
+            phase_status = "pending"
+        lifecycle.append(
+            {
+                "state": state,
+                "phase_status": phase_status,
+                "event_at": first_seen_at.get(state),
+                "is_current": str(template.lifecycle_state or "").upper() == state,
+            }
+        )
+    return lifecycle
 
 
 def resolve_strategy_template(db, *, template_id: str | None = None, strategy_type: str | None = None) -> StrategyTemplate | None:
@@ -131,10 +295,21 @@ def build_strategy_template_detail(db, *, template_id: str) -> dict | None:
         backtest = db.query(BacktestResultCard).filter(BacktestResultCard.id == template.backtest_result_ref).first()
     else:
         backtest = db.query(BacktestResultCard).filter(BacktestResultCard.strategy_type == template.strategy_type).order_by(BacktestResultCard.updated_at.desc()).first()
-    bots = db.query(BotProfile).filter(BotProfile.strategy_template_id == template.id).all()
-    trades = db.query(UserTradeProjection).filter(UserTradeProjection.strategy_template_id == template.id).order_by(UserTradeProjection.updated_at.desc()).limit(50).all()
+    group_template_ids = [row.id for row in version_history]
+    bots = db.query(BotProfile).filter(BotProfile.strategy_template_id.in_(group_template_ids)).all() if group_template_ids else []
+    trades = (
+        db.query(UserTradeProjection)
+        .filter(UserTradeProjection.strategy_template_id.in_(group_template_ids))
+        .order_by(UserTradeProjection.updated_at.desc())
+        .limit(100)
+        .all()
+        if group_template_ids
+        else []
+    )
     audits = db.query(AuditLog).filter(AuditLog.entity_type == "strategy_template", AuditLog.entity_id == template.id).order_by(AuditLog.created_at.desc()).limit(50).all()
     resolved = resolve_effective_strategy_config(db, template_id=template.id)
+    outcome_analytics, recent_outcomes, trace_spine, learning_feedback = _build_outcome_analytics(trades)
+    promotion_lifecycle = _build_promotion_lifecycle(template=template, audits=audits)
     backtest_summary = {
         "latest_backtest": {
             "win_rate": getattr(backtest, "win_rate", None),
@@ -178,8 +353,12 @@ def build_strategy_template_detail(db, *, template_id: str) -> dict | None:
                 "trade_id": row.trade_id,
                 "status": row.status,
                 "symbol": row.symbol,
+                "strategy_template_id": row.strategy_template_id,
+                "strategy_version_id": row.strategy_version_id,
                 "scan_run_id": row.scan_run_id,
                 "signal_id": row.signal_id,
+                "decision_card_id": row.decision_card_id,
+                "intent_id": row.intent_id,
                 "execution_trace_id": row.execution_trace_id,
             }
             for row in trades[:20]
@@ -189,4 +368,9 @@ def build_strategy_template_detail(db, *, template_id: str) -> dict | None:
             for row in audits
         ],
         "promotion_eligibility": backtest_summary,
+        "promotion_lifecycle": promotion_lifecycle,
+        "outcome_analytics": outcome_analytics,
+        "recent_outcomes": recent_outcomes,
+        "global_trace_spine": trace_spine,
+        "learning_feedback_loop": learning_feedback,
     }
