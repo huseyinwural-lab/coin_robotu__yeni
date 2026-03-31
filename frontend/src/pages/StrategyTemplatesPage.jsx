@@ -53,7 +53,7 @@ export const StrategyTemplatesPage = () => {
     try {
       const { data } = await apiClient.get("/strategy-templates");
       setItems(data || []);
-      setSelected((prev) => prev || data?.[0] || null);
+      setSelected((prev) => (prev ? (data || []).find((item) => item.id === prev.id) || null : null));
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Template listesi yüklenemedi");
     } finally {
