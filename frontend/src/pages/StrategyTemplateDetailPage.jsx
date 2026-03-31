@@ -3,9 +3,36 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { apiClient } from "@/lib/api";
+import { buildSessionHeaders, FRONTEND_BACKEND_URL } from "@/lib/api";
 
 const pretty = (value) => JSON.stringify(value || {}, null, 2);
+
+const fetchTemplateDetail = async (path) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 30000);
+  const token = window.localStorage.getItem("token");
+  try {
+    const response = await fetch(`${FRONTEND_BACKEND_URL}/api${path}`, {
+      method: "GET",
+      headers: {
+        ...buildSessionHeaders(),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = new Error((payload && (payload.detail || payload.message)) || `request_failed_${response.status}`);
+      error.response = { status: response.status, data: payload };
+      throw error;
+    }
+    return payload;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
 
 export const StrategyTemplateDetailPage = () => {
   const { templateId } = useParams();
@@ -17,7 +44,7 @@ export const StrategyTemplateDetailPage = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const { data } = await apiClient.get(`/strategy-templates/${templateId}`);
+        const data = await fetchTemplateDetail(`/strategy-templates/${templateId}`);
         setDetail(data || null);
       } catch (error) {
         toast.error(error?.response?.data?.detail || "Template detail yüklenemedi");

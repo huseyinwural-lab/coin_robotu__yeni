@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
-import { apiClient } from "@/lib/api";
+import { apiClient, buildSessionHeaders, FRONTEND_BACKEND_URL } from "@/lib/api";
 
 const initialForm = {
   name: "",
@@ -34,6 +34,34 @@ const initialForm = {
 
 const pretty = (value) => JSON.stringify(value || {}, null, 2);
 
+const fetchTemplateJson = async (path, { method = "GET", body = null, timeoutMs = 30000 } = {}) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  const token = window.localStorage.getItem("token");
+  try {
+    const response = await fetch(`${FRONTEND_BACKEND_URL}/api${path}`, {
+      method,
+      headers: {
+        ...buildSessionHeaders(),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      cache: "no-store",
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = new Error((payload && (payload.detail || payload.message)) || `request_failed_${response.status}`);
+      error.response = { status: response.status, data: payload };
+      throw error;
+    }
+    return payload;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+};
+
 export const StrategyTemplatesPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -51,7 +79,7 @@ export const StrategyTemplatesPage = () => {
   const fetchItems = async () => {
     setLoading(true);
     try {
-      const { data } = await apiClient.get("/strategy-templates");
+      const data = await fetchTemplateJson("/strategy-templates", { method: "GET" });
       setItems(data || []);
       setSelected((prev) => (prev ? (data || []).find((item) => item.id === prev.id) || null : null));
     } catch (error) {
@@ -70,11 +98,11 @@ export const StrategyTemplatesPage = () => {
       if (!selected?.id) return;
       try {
         const [historyRes, resolvedRes] = await Promise.all([
-          apiClient.get(`/strategy-templates/${selected.id}/history`),
-          apiClient.post(`/strategy-templates/${selected.id}/resolve`, { volatility_regime: "normal", risk_regime: "balanced", market_regime: "neutral" }),
+          fetchTemplateJson(`/strategy-templates/${selected.id}/history`, { method: "GET" }),
+          fetchTemplateJson(`/strategy-templates/${selected.id}/resolve`, { method: "POST", body: { volatility_regime: "normal", risk_regime: "balanced", market_regime: "neutral" } }),
         ]);
-        setHistory(historyRes.data?.items || []);
-        setResolved(resolvedRes.data || null);
+        setHistory(historyRes?.items || []);
+        setResolved(resolvedRes || null);
       } catch {
         setHistory([]);
         setResolved(null);
@@ -120,10 +148,10 @@ export const StrategyTemplatesPage = () => {
     try {
       const payload = toPayload();
       if (editingId) {
-        await apiClient.put(`/strategy-templates/${editingId}`, payload);
+        await fetchTemplateJson(`/strategy-templates/${editingId}`, { method: "PUT", body: payload });
         toast.success("Template güncellendi");
       } else {
-        await apiClient.post("/strategy-templates", payload);
+        await fetchTemplateJson(`/strategy-templates`, { method: "POST", body: payload });
         toast.success("Template oluşturuldu");
       }
       setEditingId(null);
@@ -156,7 +184,7 @@ export const StrategyTemplatesPage = () => {
   const cloneVersion = async () => {
     if (!selected?.id) return;
     try {
-      const { data } = await apiClient.post(`/strategy-templates/${selected.id}/clone-version`, { reason: actionReason("clone_version"), name: `${selected.name} clone` });
+      const data = await fetchTemplateJson(`/strategy-templates/${selected.id}/clone-version`, { method: "POST", body: { reason: actionReason("clone_version"), name: `${selected.name} clone` } });
       toast.success("Yeni version oluşturuldu");
       setSelected(data);
       await fetchItems();
@@ -168,7 +196,7 @@ export const StrategyTemplatesPage = () => {
   const activateVersion = async () => {
     if (!selected?.id) return;
     try {
-      const { data } = await apiClient.post(`/strategy-templates/${selected.id}/activate`, { reason: actionReason("activate_version") });
+      const data = await fetchTemplateJson(`/strategy-templates/${selected.id}/activate`, { method: "POST", body: { reason: actionReason("activate_version") } });
       toast.success("Template ACTIVE oldu");
       setSelected(data);
       await fetchItems();
@@ -180,7 +208,7 @@ export const StrategyTemplatesPage = () => {
   const rollbackVersion = async () => {
     if (!selected?.id) return;
     try {
-      const { data } = await apiClient.post(`/strategy-templates/${selected.id}/rollback`, { reason: actionReason("rollback_version") });
+      const data = await fetchTemplateJson(`/strategy-templates/${selected.id}/rollback`, { method: "POST", body: { reason: actionReason("rollback_version") } });
       toast.success("Rollback tamamlandı");
       setSelected(data);
       await fetchItems();
