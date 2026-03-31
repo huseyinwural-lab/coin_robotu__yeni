@@ -1,3 +1,50 @@
+## 2026-03-31 — STRATEGY TEMPLATE P2 COMPLETION (Trace Spine + Promotion + Outcome Analytics)
+
+### Kapsam
+- Strategy Template P2 tamamlandı: global trace spine görünürlüğü, promotion workflow endpointleri ve detail analytics ekranı.
+
+### Backend implementasyonu
+- Yeni lifecycle endpointleri eklendi:
+  - `POST /api/strategy-templates/{id}/validate`
+  - `POST /api/strategy-templates/{id}/mark-backtest-passed`
+  - `POST /api/strategy-templates/{id}/promote-to-active`
+  - `POST /api/strategy-templates/{id}/deprecate`
+- Mevcut `activate` akışı korunarak active atama ortak helper ile güvenli hale getirildi.
+- `rollback` için audit log zenginleştirildi (`strategy_template_rolled_back`).
+- Template detail payload’ına eklendi:
+  - `promotion_lifecycle`
+  - `outcome_analytics`
+  - `recent_outcomes`
+  - `global_trace_spine`
+  - `learning_feedback_loop`
+- Trade projection response zincirine `intent_id` ve `execution_trace_id` geçirildi.
+
+### Frontend implementasyonu
+- `StrategyTemplatesPage.jsx`:
+  - Lifecycle aksiyonları P2 workflow’a göre güncellendi (Validate / Backtest Passed / Promote Active / Deprecate / Rollback).
+  - Promotion flow görsel state paneli eklendi.
+- `StrategyTemplateDetailPage.jsx`:
+  - Performance Summary kartları
+  - Promotion Lifecycle timeline
+  - Learning Feedback Loop paneli
+  - Recent Outcomes listesi (trace zinciri ile)
+  - Global Trace Spine paneli
+
+### Doğrulama
+- Python + JS lint: PASS
+- `pytest /app/backend/tests/test_bot_p2_integration.py`: PASS
+- Backend deep test agent: P2 endpoint akışı PASS (create → validate → backtest_passed → promote → deprecate + detail alan doğrulaması)
+- Frontend smoke: sayfa yükleniyor (login ekranı görüntülendi)
+- Frontend kapsamlı test: preview ortamında auth session persistence sorunu nedeniyle tam akış bloklandı (bilinen infra/intermittent issue).
+
+### Güncel önceliklendirme
+- P0: Strategy Template P2 (tamamlandı)
+- P1: Final global regresyon + staged live hazırlık (SIM mode, live=false)
+- P2 Backlog:
+  - Visual Policy Builder
+  - Advanced compounding/capital allocation
+  - Deep explainability graph drill-down
+
 ## 2026-03-30 — CALI TARAFI SİSTEM KAPANIŞI (Deterministic Engine Closure)
 
 ### Faz sırası
