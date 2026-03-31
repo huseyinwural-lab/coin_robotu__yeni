@@ -225,6 +225,34 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Ayrıntılı matris:
   - `/app/memory/FINAL_READINESS_MATRIX.md`
 
+## 2026-03-31 — STRATEGY TEMPLATE P0 ACCEPTANCE
+
+### Son durum
+- Strategy Template backend lifecycle zinciri local/backend seviyesinde doğrulandı:
+  - create
+  - clone version
+  - activate
+  - history
+  - resolve
+  - rollback
+- Strategy Template UI, local browser walkthrough ile doğrulandı:
+  - admin login
+  - `/user/strategies`
+  - form-first editor blokları
+  - create
+  - clone version
+  - activate
+  - rollback
+  - advanced json toggle
+- Bot binding görünürlüğü backend tarafında hazır:
+  - `strategy_template_id`
+  - template resolution
+  - effective config runtime summary içinde taşınıyor
+
+### Kabul notu
+- Strategy Template P0 acceptance local browser ve local backend üzerinden alınmıştır.
+- Test sonrası frontend backend target tekrar preview URL’ye geri döndürüldü.
+
 ## 2026-03-31 — TRADES P2 (Trade Trace / Replay / Reconciliation)
 
 ### Tamamlananlar
