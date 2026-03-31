@@ -77,15 +77,16 @@ def resolve_effective_strategy_config(db, *, template_id: str | None = None, str
 
 
 def ensure_seed_strategy_templates(db, *, created_by: str) -> None:
-    if db.query(StrategyTemplate).count() > 0:
-        return
     seeds = [
         ("trend_following", {"ema_fast": 20, "ema_slow": 50}, {"indicators": ["ema_fast", "ema_slow"], "timeframe": "15m", "params": {"ema_fast": 20, "ema_slow": 50, "source": "close"}}, {"entry_rules": {"long_condition": "ema_fast > ema_slow", "threshold": 0}, "exit_rules": {"stop_loss_pct": 1.5, "take_profit_pct": 3.0, "exit_condition": "ema_fast < ema_slow"}, "risk_hints": {"position_size_hint_pct": 2.0, "max_exposure_hint_pct": 20.0}}),
         ("mean_reversion", {"rsi_period": 14, "rsi_low": 30, "rsi_high": 70}, {"indicators": ["rsi"], "timeframe": "15m", "params": {"rsi_period": 14}}, {"entry_rules": {"long_condition": "rsi < rsi_low", "threshold": 30}, "exit_rules": {"stop_loss_pct": 1.2, "take_profit_pct": 2.4, "exit_condition": "rsi > 50"}, "risk_hints": {"position_size_hint_pct": 1.5, "max_exposure_hint_pct": 15.0}}),
         ("breakout", {"range_period": 20, "breakout_buffer": 0.2}, {"indicators": ["range_high", "range_low"], "timeframe": "1h", "params": {"range_period": 20}}, {"entry_rules": {"long_condition": "price > range_high", "threshold": 0.2}, "exit_rules": {"stop_loss_pct": 1.8, "take_profit_pct": 4.0, "exit_condition": "price < range_low"}, "risk_hints": {"position_size_hint_pct": 1.8, "max_exposure_hint_pct": 18.0}}),
         ("volatility_expansion", {"atr_period": 14, "atr_threshold": 1.8}, {"indicators": ["atr"], "timeframe": "1h", "params": {"atr_period": 14}}, {"entry_rules": {"long_condition": "atr > atr_threshold", "threshold": 1.8}, "exit_rules": {"stop_loss_pct": 2.0, "take_profit_pct": 4.5, "exit_condition": "atr < 1.2"}, "risk_hints": {"position_size_hint_pct": 1.2, "max_exposure_hint_pct": 12.0}}),
     ]
+    existing_codes = {str(getattr(row, "template_code", None) or row[0] or "") for row in db.query(StrategyTemplate.template_code).all()}
     for name, params, indicator_schema, logic_schema in seeds:
+        if name in existing_codes:
+            continue
         template = StrategyTemplate(
             name=name.replace("_", " ").title(),
             template_code=name,
