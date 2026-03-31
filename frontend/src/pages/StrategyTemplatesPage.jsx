@@ -214,17 +214,18 @@ export const StrategyTemplatesPage = () => {
             {loading && <p className="mt-3 text-sm text-slate-400">loading...</p>}
             <div className="mt-3 space-y-2" data-testid="strategy-template-list-items">
               {(items || []).map((item, idx) => (
-                <button key={item.id} type="button" onClick={() => setSelected(item)} className={`block w-full border p-3 text-left ${selected?.id === item.id ? "border-cyan-500 bg-cyan-950/20" : "border-slate-800 bg-slate-900"}`} data-testid={`strategy-template-list-item-${idx}`}>
+                <div key={item.id} className={`block w-full border p-3 text-left ${selected?.id === item.id ? "border-cyan-500 bg-cyan-950/20" : "border-slate-800 bg-slate-900"}`} data-testid={`strategy-template-list-item-${idx}`}>
                   <p className="font-semibold text-slate-100">{item.name}</p>
                   <p className="mt-1 text-xs text-slate-400">{item.template_code} · v{item.version_num}</p>
                   <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase tracking-wide">
                     <span className={`rounded px-2 py-1 ${item.is_active ? "bg-emerald-800 text-emerald-200" : "bg-slate-700 text-slate-200"}`}>{item.lifecycle_state}</span>
                     {item.is_active && <span className="rounded bg-cyan-800 px-2 py-1 text-cyan-100">ACTIVE</span>}
                   </div>
-                  <div className="mt-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" onClick={() => setSelected(item)} data-testid={`strategy-template-select-item-${idx}`}>Select</Button>
                     <Button type="button" variant="outline" onClick={(event) => { event.stopPropagation(); navigate(`/user/strategies/${item.id}`); }} data-testid={`strategy-template-open-detail-${idx}`}>Open detail</Button>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </div>
