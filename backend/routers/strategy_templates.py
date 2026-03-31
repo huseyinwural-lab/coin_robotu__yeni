@@ -7,16 +7,25 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user, require_admin
 from models import StrategyTemplate, User
-from schemas import StrategyTemplateCloneVersionRequest, StrategyTemplateCreate, StrategyTemplatePreviewImpactRequest, StrategyTemplateReasonRequest, StrategyTemplateResolvedConfigResponse, StrategyTemplateResponse, StrategyTemplateUpdate
+from schemas import StrategyTemplateCloneVersionRequest, StrategyTemplateCreate, StrategyTemplateDetailResponse, StrategyTemplatePreviewImpactRequest, StrategyTemplateReasonRequest, StrategyTemplateResolvedConfigResponse, StrategyTemplateResponse, StrategyTemplateUpdate
 from services.audit_service import build_critical_action_details, create_audit_log
-from services.strategy_template_resolution_service import resolve_effective_strategy_config
+from services.strategy_template_resolution_service import build_strategy_template_detail, ensure_seed_strategy_templates, resolve_effective_strategy_config
 
 router = APIRouter(prefix="/strategy-templates", tags=["strategy_templates"])
 
 
 @router.get("", response_model=list[StrategyTemplateResponse])
-def list_strategy_templates(_: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_strategy_templates(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    ensure_seed_strategy_templates(db, created_by=current_user.id)
     return db.query(StrategyTemplate).order_by(StrategyTemplate.created_at.desc()).all()
+
+
+@router.get("/{template_id}", response_model=StrategyTemplateDetailResponse)
+def get_strategy_template_detail(template_id: str, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    payload = build_strategy_template_detail(db, template_id=template_id)
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    return StrategyTemplateDetailResponse(**payload)
 
 
 @router.post("", response_model=StrategyTemplateResponse)

@@ -16,6 +16,7 @@ from core.policy.quote_policy import filter_allowed_symbols
 from services.risk_engine_service import build_admin_risk_status, evaluate_risk_decision
 from services.top_volume_fallback import evaluate_top_volume_fallback
 from services.universe_service import get_full_market_universe
+from services.strategy_template_resolution_service import resolve_effective_strategy_config
 
 
 def _decision_label(value: str) -> str:
@@ -62,6 +63,7 @@ def run_scanner_runtime(
     symbol_selection_mode: str = "all_market_symbols",
     selected_symbols: list[str] | None = None,
     symbol_source: str = "crypto",
+    strategy_template_id: str | None = None,
     max_results: int = 120,
     backpressure_policy: dict | None = None,
 ) -> dict:
@@ -113,6 +115,8 @@ def run_scanner_runtime(
     )
     decision_input_symbols = list(qualification_payload.get("qualified_candidate_symbols") or [])
     decision_max_results = min(adjusted_max_results, tier_caps["decision_cap"])
+
+    resolved_template = resolve_effective_strategy_config(db, template_id=strategy_template_id) if strategy_template_id else {"template_id": None, "effective_runtime_config": {}, "validation_result": {"ok": True}}
 
     scan_payload = run_user_scanner(
         db,
@@ -323,6 +327,12 @@ def run_scanner_runtime(
     payload = {
         "user_id": user_id,
         "run_id": scan_payload.get("run_id"),
+        "selected_template": {
+            "template_id": resolved_template.get("template_id"),
+            "template_code": resolved_template.get("template_code"),
+            "effective_params": (resolved_template.get("effective_runtime_config") or {}).get("parameters") or {},
+            "validation_result": resolved_template.get("validation_result") or {},
+        },
         "symbol_selection_mode": str(symbol_selection_mode or "all_market_symbols").lower(),
         "effective_mode": str(effective_mode).lower(),
         "fallback_active": bool(fallback_state.get("active", False)),

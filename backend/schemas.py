@@ -446,6 +446,10 @@ class StrategyTemplateBase(BaseModel):
     param_schema: dict = Field(default_factory=dict)
     logic_schema: dict = Field(default_factory=dict)
     indicator_schema: dict = Field(default_factory=dict)
+    execution_profile_ref: str | None = None
+    risk_hint_ref: str | None = None
+    allowed_venues: list[str] = Field(default_factory=list)
+    allowed_modes: list[str] = Field(default_factory=list)
     is_active: bool = True
 
 
@@ -500,6 +504,19 @@ class StrategyTemplateResolvedConfigResponse(BaseModel):
     lifecycle_state: str
     effective_runtime_config: dict = Field(default_factory=dict)
     validation_result: dict = Field(default_factory=dict)
+
+
+class StrategyTemplateDetailResponse(BaseModel):
+    template: StrategyTemplateResponse
+    current_active_version: StrategyTemplateResponse | None = None
+    version_history: list[StrategyTemplateResponse] = Field(default_factory=list)
+    param_editor_summary: dict = Field(default_factory=dict)
+    scanner_bindings: dict = Field(default_factory=dict)
+    bot_bindings: list[dict] = Field(default_factory=list)
+    backtest_summary: dict = Field(default_factory=dict)
+    execution_compatibility: dict = Field(default_factory=dict)
+    audit_timeline: list[dict] = Field(default_factory=list)
+    promotion_eligibility: dict = Field(default_factory=dict)
 
 
 class AuditLogResponse(BaseModel):
