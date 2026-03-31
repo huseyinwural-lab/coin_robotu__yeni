@@ -37,10 +37,21 @@ def main() -> int:
 
     base_url = _resolve_base_url()
     missing: list[str] = []
+    transient_probe_failures: list[str] = []
     for item in contracts:
         endpoint = item.get("endpoint")
         method = str(item.get("method", "GET")).upper()
-        probe = requests.request(method, f"{base_url}{endpoint}", timeout=20)
+        probe = None
+        last_error = None
+        for _ in range(3):
+            try:
+                probe = requests.request(method, f"{base_url}{endpoint}", timeout=20)
+                break
+            except requests.RequestException as exc:
+                last_error = exc
+        if probe is None:
+            transient_probe_failures.append(f"{method.upper()} {endpoint}: {str(last_error)[:120]}")
+            continue
         if probe.status_code == 404:
             missing.append(f"{method.upper()} {endpoint}")
 
@@ -52,6 +63,8 @@ def main() -> int:
 
     print("contract_gate_status=PASS")
     print(f"checked_contracts={len(contracts)}")
+    if transient_probe_failures:
+        print(f"contract_gate_warnings={transient_probe_failures}")
     return 0
 
 

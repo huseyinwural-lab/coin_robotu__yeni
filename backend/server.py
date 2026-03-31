@@ -667,8 +667,14 @@ async def startup_event():
         STARTUP_RUNTIME_STATE["pipeline_runtime_ok"] = False
         logger.warning("PIPELINE_RUNTIME_SKIPPED_DATABASE_NOT_READY")
 
+    background_loops_default = "0" if canary_mode else "1"
+    background_loops_enabled = (
+        str(os.getenv("BACKGROUND_TASK_LOOPS_ENABLED", background_loops_default) or background_loops_default).strip().lower()
+        in {"1", "true", "yes"}
+    )
+
     global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task, execution_microstructure_runtime, incident_intelligence_task
-    if STARTUP_RUNTIME_STATE["database_ready"]:
+    if STARTUP_RUNTIME_STATE["database_ready"] and background_loops_enabled:
         from db import SessionLocal
 
         async def _incident_intelligence_loop():
@@ -708,6 +714,9 @@ async def startup_event():
         readiness_maintenance_scheduler_task = asyncio.create_task(run_readiness_maintenance_scheduler_loop(SessionLocal))
         incident_intelligence_task = asyncio.create_task(_incident_intelligence_loop())
         STARTUP_RUNTIME_STATE["background_loops_started"] = True
+    elif STARTUP_RUNTIME_STATE["database_ready"] and not background_loops_enabled:
+        STARTUP_RUNTIME_STATE["background_loops_started"] = False
+        logger.warning("BACKGROUND_TASK_LOOPS_SKIPPED_BY_FLAG", extra={"canary_mode": canary_mode})
     else:
         STARTUP_RUNTIME_STATE["background_loops_started"] = False
 

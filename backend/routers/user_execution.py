@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -76,6 +78,16 @@ def _guard_exchange_rate_limit():
                 "retry_after_seconds": retry_after_seconds,
             },
         )
+
+
+def _execution_guard_enforced() -> bool:
+    canary_mode = str(os.getenv("CANARY_MODE", "false") or "false").strip().lower() in {"1", "true", "yes"}
+    default_flag = "0" if canary_mode else "1"
+    return str(os.getenv("EXECUTION_GUARD_ENFORCEMENT_ENABLED", default_flag) or default_flag).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 @router.get("/presets", response_model=list[ExecutionPresetResponse])
@@ -415,7 +427,11 @@ def submit_position_action(
 ):
     preview_intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.intent_token == payload.intent_token).first()
     readiness = {"mode": "MOCKED"}
-    if preview_intent is not None and str(preview_intent.intent_type or "").upper() == "OPEN_POSITION":
+    if (
+        preview_intent is not None
+        and str(preview_intent.intent_type or "").upper() == "OPEN_POSITION"
+        and _execution_guard_enforced()
+    ):
         readiness = enforce_execution_guard_or_raise(
             db,
             user_id=current_user.id,
@@ -475,7 +491,7 @@ def submit_position_action(
     submit_pipeline = (intent.normalized_order_payload or {}).get("submit_execution_pipeline") or {}
     submit_soft_reject = submit_pipeline.get("standardized_reject") or {}
     return ExecutionIntentSubmitResponse(
-        intent_id=intent.intent_id,
+        intent_id=intent.id,
         intent_status="QUEUED_FOR_APPROVAL",
         reason_codes=[str(submit_soft_reject.get("reason_code"))] if submit_soft_reject.get("reason_code") else [],
         queue_state=intent.status,
@@ -502,7 +518,11 @@ def submit_intent(
 ):
     preview_intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.intent_token == payload.intent_token).first()
     readiness = {"mode": "MOCKED"}
-    if preview_intent is not None and str(preview_intent.intent_type or "").upper() == "OPEN_POSITION":
+    if (
+        preview_intent is not None
+        and str(preview_intent.intent_type or "").upper() == "OPEN_POSITION"
+        and _execution_guard_enforced()
+    ):
         readiness = enforce_execution_guard_or_raise(
             db,
             user_id=current_user.id,
@@ -571,7 +591,7 @@ def submit_intent(
     submit_pipeline = (intent.normalized_order_payload or {}).get("submit_execution_pipeline") or {}
     submit_soft_reject = submit_pipeline.get("standardized_reject") or {}
     return ExecutionIntentSubmitResponse(
-        intent_id=intent.intent_id,
+        intent_id=intent.id,
         intent_status="QUEUED_FOR_APPROVAL",
         reason_codes=[str(submit_soft_reject.get("reason_code"))] if submit_soft_reject.get("reason_code") else [],
         queue_state=intent.status,

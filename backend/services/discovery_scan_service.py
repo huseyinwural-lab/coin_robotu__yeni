@@ -38,9 +38,13 @@ def _symbol_score(cache, symbol: str) -> tuple[float, list[str]]:
 
 
 def run_discovery_scan(cache, universe_symbols: list[str], *, max_candidates: int) -> dict:
-    normalized = filter_allowed_symbols(
-        [str(symbol or "").upper().strip() for symbol in universe_symbols]
-    )
+    normalized = [
+        symbol
+        for symbol in filter_allowed_symbols(
+            [str(symbol or "").upper().strip() for symbol in universe_symbols]
+        )
+        if str(symbol).upper().endswith("USDT") and str(symbol).isascii()
+    ]
     rows = []
 
     for symbol in normalized:

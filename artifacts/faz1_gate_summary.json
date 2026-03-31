@@ -1,0 +1,9 @@
+{
+  "deploy gate": "FAIL",
+  "prod gate": "FAIL",
+  "migration integrity": "PASS",
+  "smoke": "FAIL",
+  "rollback dry run": "PASS",
+  "kill switch dry run": "FAIL",
+  "final release gate": "NO_GO"
+}

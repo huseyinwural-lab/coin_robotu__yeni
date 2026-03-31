@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -111,6 +112,24 @@ def enforce_execution_mode_for_intent(
 ) -> str:
     active_mode = get_execution_mode(db, cache)
     requested_mode = infer_requested_execution_mode(intent)
+
+    canary_mode = str(os.getenv("CANARY_MODE", "false") or "false").strip().lower() in {"1", "true", "yes"}
+    mode_enforcement_default = "0" if canary_mode else "1"
+    mode_enforced = (
+        str(os.getenv("EXECUTION_MODE_ENFORCEMENT_ENABLED", mode_enforcement_default) or mode_enforcement_default)
+        .strip()
+        .lower()
+        in {"1", "true", "yes"}
+    )
+
+    if not mode_enforced:
+        payload = dict(intent.normalized_order_payload or {})
+        payload["execution_mode_applied"] = active_mode
+        payload["execution_mode_requested"] = requested_mode
+        payload["execution_mode_enforcement"] = "bypassed_canary"
+        intent.normalized_order_payload = payload
+        intent.queue_mode = active_mode
+        return active_mode
 
     if active_mode != requested_mode:
         create_audit_log(

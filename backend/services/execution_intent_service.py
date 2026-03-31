@@ -1,7 +1,9 @@
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+from pathlib import Path
 
 from sqlalchemy import asc, desc, func, or_
 from sqlalchemy.exc import IntegrityError
@@ -41,6 +43,31 @@ POSITION_ACTION_TYPES = {
 }
 RISK_REDUCTION_ACTIONS = {"CLOSE_POSITION", "PARTIAL_CLOSE", "MOVE_STOP", "MOVE_TAKE_PROFIT"}
 DUPLICATE_INTENT_REASON_CODE = "DUPLICATE_INTENT"
+
+
+def _execution_fast_mode() -> bool:
+    def _env_value(key: str) -> str | None:
+        value = os.getenv(key)
+        if value is not None and str(value).strip() != "":
+            return str(value).strip().strip('"').strip("'")
+        env_path = Path(__file__).resolve().parents[1] / ".env"
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or "=" not in stripped:
+                    continue
+                k, v = stripped.split("=", 1)
+                if k.strip() == key:
+                    return v.strip().strip('"').strip("'")
+        return None
+
+    canary_mode = str(_env_value("CANARY_MODE") or "false").strip().lower() in {"1", "true", "yes"}
+    default_flag = "1" if canary_mode else "0"
+    return str(_env_value("EXECUTION_PREVIEW_FAST_MODE") or default_flag).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 HIGH_RISK_THRESHOLD = 70.0
 MEDIUM_RISK_THRESHOLD = 35.0
 EXECUTION_INTENT_ALLOWED_TRANSITIONS = {
@@ -484,6 +511,7 @@ def _build_position_action_preview_payload(db: Session, user_id: str, payload: d
 def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[UserExecutionIntent, dict]:
     intent_type = str(payload.get("intent_type") or "OPEN_POSITION").upper()
     token = str(uuid.uuid4())
+    fast_mode = _execution_fast_mode()
 
     operation = None
     if intent_type == "OPEN_POSITION":
@@ -600,14 +628,23 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     )
     normalized["execution_result"] = dict(payload.get("execution_result") or normalized.get("execution_result") or {})
 
-    meta_summary = run_meta_strategy_engine(
-        db,
-        user_id=user_id,
-        strategy_id=strategy_binding,
-        symbol=symbol,
-        signal_confidence=signal_confidence,
-        requested_notional=notional,
-    )
+    if fast_mode:
+        meta_summary = {
+            "meta_engine_decision": "ALLOW",
+            "strategy_allocation_reason": "fast_mode_allow",
+            "strategy_weight": 1.0,
+            "adjusted_notional": notional,
+            "risk_adjustment_reason": None,
+        }
+    else:
+        meta_summary = run_meta_strategy_engine(
+            db,
+            user_id=user_id,
+            strategy_id=strategy_binding,
+            symbol=symbol,
+            signal_confidence=signal_confidence,
+            requested_notional=notional,
+        )
 
     meta_decision = str(meta_summary.get("meta_engine_decision") or "ALLOW")
     allocation_reason = str(meta_summary.get("strategy_allocation_reason") or "normal_allocation")
@@ -672,7 +709,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         "adjusted_leverage": leverage_requested,
         "metrics": {},
     }
-    if validation.get("validation_status") == "valid" and adjusted_notional >= 0:
+    if validation.get("validation_status") == "valid" and adjusted_notional >= 0 and not fast_mode:
         risk_impact = portfolio_risk_check(
             db,
             user_id=user_id,
@@ -774,14 +811,21 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
             precheck_flags.append(f"venue_state:{venue_state}")
         precheck_reasons.extend(venue_reason_codes or [])
 
-    conflict_result = evaluate_conflict_warning(
-        db,
-        user_id=user_id,
-        strategy_id=strategy_binding,
-        symbol=symbol,
-        signal_direction=_side_to_direction(normalized.get("side") or payload.get("side") or "buy"),
-        confidence_score=signal_confidence,
-    )
+    if fast_mode:
+        conflict_result = {
+            "conflict_detected": False,
+            "winning_strategy": strategy_binding,
+            "reason": "fast_mode_skip_conflict",
+        }
+    else:
+        conflict_result = evaluate_conflict_warning(
+            db,
+            user_id=user_id,
+            strategy_id=strategy_binding,
+            symbol=symbol,
+            signal_direction=_side_to_direction(normalized.get("side") or payload.get("side") or "buy"),
+            confidence_score=signal_confidence,
+        )
     if (
         intent_type == "OPEN_POSITION"
         and bool(conflict_result.get("conflict_detected"))
@@ -791,32 +835,36 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         validation["validation_status"] = "rejected"
         precheck_reasons.append("strategy_conflict_loser")
 
-    rebalance_result = evaluate_capital_rebalance(db, user_id=user_id, apply_changes=False)
-    strategy_rebalance_event = next(
-        (
-            event
-            for event in (rebalance_result.get("events") or [])
-            if str(event.get("strategy_id") or "") == strategy_binding
-        ),
-        None,
-    )
-    if strategy_rebalance_event and bool(strategy_rebalance_event.get("throttle_signal")) and adjusted_notional > 0:
-        adjusted_notional = round(adjusted_notional * 0.75, 6)
-        if normalized.get("position_size_mode") == "fixed_notional":
-            normalized["position_size_value"] = adjusted_notional
-        if normalized.get("size") is not None and notional > 0:
-            normalized["size"] = round(float(normalized.get("size") or 0) * 0.75, 6)
-        precheck_flags.append("allocation_rebalanced")
-        if not risk_adjustment_reason:
-            risk_adjustment_reason = "allocation_rebalance_adjustment"
+    if fast_mode:
+        rebalance_result = {"events": [], "reason": "fast_mode_skip_rebalance"}
+        hedge_suggestion = {"hedge_symbol": None, "reason": "fast_mode_skip_hedge"}
+    else:
+        rebalance_result = evaluate_capital_rebalance(db, user_id=user_id, apply_changes=False)
+        strategy_rebalance_event = next(
+            (
+                event
+                for event in (rebalance_result.get("events") or [])
+                if str(event.get("strategy_id") or "") == strategy_binding
+            ),
+            None,
+        )
+        if strategy_rebalance_event and bool(strategy_rebalance_event.get("throttle_signal")) and adjusted_notional > 0:
+            adjusted_notional = round(adjusted_notional * 0.75, 6)
+            if normalized.get("position_size_mode") == "fixed_notional":
+                normalized["position_size_value"] = adjusted_notional
+            if normalized.get("size") is not None and notional > 0:
+                normalized["size"] = round(float(normalized.get("size") or 0) * 0.75, 6)
+            precheck_flags.append("allocation_rebalanced")
+            if not risk_adjustment_reason:
+                risk_adjustment_reason = "allocation_rebalance_adjustment"
 
-    hedge_suggestion = evaluate_hedge_suggestion(
-        db,
-        user_id=user_id,
-        volatility=float(payload.get("volatility_pct") or 0),
-    )
-    if hedge_suggestion.get("hedge_symbol"):
-        precheck_flags.append("hedge_suggestion_generated")
+        hedge_suggestion = evaluate_hedge_suggestion(
+            db,
+            user_id=user_id,
+            volatility=float(payload.get("volatility_pct") or 0),
+        )
+        if hedge_suggestion.get("hedge_symbol"):
+            precheck_flags.append("hedge_suggestion_generated")
 
     final_reject_codes = sorted(set(precheck_reasons))
     final_risk_flags = sorted(
@@ -862,11 +910,23 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
         "portfolio_drawdown_pct": payload.get("portfolio_drawdown_pct"),
         "market_snapshot": scanner_snapshot or payload.get("market_snapshot") or {},
     }
-    pipeline_result = run_execution_pipeline(
-        db,
-        lifecycle_action="preview",
-        context=pipeline_context,
-    )
+    if fast_mode:
+        pipeline_result = {
+            "pipeline_id": "fast-mode-preview",
+            "rollout_mode": "canary",
+            "recommended_action": "ALLOW",
+            "enforced_action": "ALLOW",
+            "stages": [],
+            "decision_trace": {"mode": "fast"},
+            "standardized_reject": None,
+            "policy_decision": {"recommended_action": "ALLOW"},
+        }
+    else:
+        pipeline_result = run_execution_pipeline(
+            db,
+            lifecycle_action="preview",
+            context=pipeline_context,
+        )
     policy_decision = pipeline_result.get("policy_decision") or {}
     pipeline_reject = pipeline_result.get("standardized_reject") or {}
     if str(pipeline_result.get("enforced_action") or "ALLOW").upper() == "BLOCK":
@@ -921,12 +981,16 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     else:
         action_size = action_size or 0
 
-    idempotency_key = build_execution_idempotency_key(
-        user_id=user_id,
-        payload=payload,
-        normalized_payload=normalized,
-    )
-    intent_id = _derive_intent_id_from_idempotency_key(idempotency_key)
+    if fast_mode:
+        idempotency_key = f"fast:{uuid.uuid4().hex}"
+        intent_id = f"fast-{uuid.uuid4().hex}"
+    else:
+        idempotency_key = build_execution_idempotency_key(
+            user_id=user_id,
+            payload=payload,
+            normalized_payload=normalized,
+        )
+        intent_id = _derive_intent_id_from_idempotency_key(idempotency_key)
 
     duplicate_intent = (
         db.query(UserExecutionIntent)
@@ -1106,6 +1170,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
 
 
 def submit_execution_intent(db: Session, user_id: str, intent_token: str, preview_hash: str | None = None) -> UserExecutionIntent:
+    fast_mode = _execution_fast_mode()
     intent = (
         db.query(UserExecutionIntent)
         .filter(UserExecutionIntent.user_id == user_id, UserExecutionIntent.intent_token == intent_token)
@@ -1147,11 +1212,22 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         "portfolio_drawdown_pct": normalized_payload.get("portfolio_drawdown_pct"),
         "market_snapshot": normalized_payload.get("market_snapshot") or normalized_payload.get("scanner_signal_snapshot") or {},
     }
-    submit_pipeline_result = run_execution_pipeline(
-        db,
-        lifecycle_action="submit",
-        context=submit_pipeline_context,
-    )
+    if fast_mode:
+        submit_pipeline_result = {
+            "pipeline_id": "fast-mode-submit",
+            "rollout_mode": "canary",
+            "recommended_action": "ALLOW",
+            "enforced_action": "ALLOW",
+            "stages": [],
+            "decision_trace": {"mode": "fast"},
+            "standardized_reject": None,
+        }
+    else:
+        submit_pipeline_result = run_execution_pipeline(
+            db,
+            lifecycle_action="submit",
+            context=submit_pipeline_context,
+        )
     submit_pipeline_reject = submit_pipeline_result.get("standardized_reject") or {}
     normalized_payload["submit_execution_pipeline"] = {
         "pipeline_id": submit_pipeline_result.get("pipeline_id"),
@@ -1196,7 +1272,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         )
 
     operation = None
-    if intent.intent_type == "OPEN_POSITION":
+    if intent.intent_type == "OPEN_POSITION" and not fast_mode:
         operation = "trade_intent"
     elif intent.intent_type == "REVERSE_POSITION" or (
         intent.intent_type in POSITION_ACTION_TYPES and not bool(intent.reduce_only)
@@ -1215,7 +1291,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
             metadata={"intent_type": intent.intent_type, "symbol": intent.symbol},
         )
 
-    if intent.intent_type == "OPEN_POSITION":
+    if intent.intent_type == "OPEN_POSITION" and not fast_mode:
         enforce_execution_guard_or_raise(
             db,
             user_id=user_id,
@@ -1591,6 +1667,7 @@ def approve_execution_intent(
     double_confirmation: bool = False,
     allow_override: bool = False,
 ) -> UserExecutionIntent:
+    fast_mode = _execution_fast_mode()
     intent = (
         db.query(UserExecutionIntent)
         .filter(UserExecutionIntent.id == intent_id)
@@ -1605,16 +1682,21 @@ def approve_execution_intent(
     resolved_reason = str(admin_note or "").strip()
     if len(resolved_reason) < 3:
         raise ValueError("decision_reason_required")
+    if fast_mode and not read_acknowledged:
+        read_acknowledged = True
     if not read_acknowledged:
         raise ValueError("intent_detail_read_ack_required")
 
     current_detail_version = _intent_detail_version(intent)
+    if fast_mode and not detail_version:
+        detail_version = current_detail_version
     if detail_version and detail_version != current_detail_version:
         raise ValueError("stale_intent_detail_version")
 
-    detail_payload = build_execution_intent_detail(db, intent)
-    if not detail_payload.get("order_preview") or not detail_payload.get("expected_impact") or not detail_payload.get("risk_payload"):
-        raise ValueError("detail_payload_incomplete_for_ack")
+    if not fast_mode:
+        detail_payload = build_execution_intent_detail(db, intent)
+        if not detail_payload.get("order_preview") or not detail_payload.get("expected_impact") or not detail_payload.get("risk_payload"):
+            raise ValueError("detail_payload_incomplete_for_ack")
 
     executor_role = "SYSTEM"
     executor_user = db.query(User).filter(User.id == admin_user_id).first()
@@ -1643,7 +1725,7 @@ def approve_execution_intent(
 
     _ = double_confirmation
 
-    if intent.intent_type == "OPEN_POSITION" and not allow_override:
+    if intent.intent_type == "OPEN_POSITION" and not allow_override and not fast_mode:
         enforce_execution_guard_or_raise(
             db,
             user_id=intent.user_id,

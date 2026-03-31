@@ -27,6 +27,13 @@ def _has_column(bind, table_name: str, column_name: str) -> bool:
     return any(column.get("name") == column_name for column in inspector.get_columns(table_name))
 
 
+def _has_index(bind, table_name: str, index_name: str) -> bool:
+    inspector = sa.inspect(bind)
+    if table_name not in inspector.get_table_names():
+        return False
+    return any(index.get("name") == index_name for index in inspector.get_indexes(table_name))
+
+
 def upgrade() -> None:
     bind = op.get_bind()
 
@@ -70,8 +77,10 @@ def upgrade() -> None:
         op.execute(sa.text("UPDATE user_onboarding_profiles SET trading_eligibility = COALESCE(trading_eligibility, false)"))
         op.execute(sa.text("UPDATE user_onboarding_profiles SET precheck_reasons = COALESCE(precheck_reasons, '[]'::json)"))
 
-        op.create_index("ix_user_onboarding_profiles_kyc_status", "user_onboarding_profiles", ["kyc_status"], unique=False)
-        op.create_index("ix_user_onboarding_profiles_aml_flag", "user_onboarding_profiles", ["aml_flag"], unique=False)
+        if not _has_index(bind, "user_onboarding_profiles", "ix_user_onboarding_profiles_kyc_status"):
+            op.create_index("ix_user_onboarding_profiles_kyc_status", "user_onboarding_profiles", ["kyc_status"], unique=False)
+        if not _has_index(bind, "user_onboarding_profiles", "ix_user_onboarding_profiles_aml_flag"):
+            op.create_index("ix_user_onboarding_profiles_aml_flag", "user_onboarding_profiles", ["aml_flag"], unique=False)
 
     if not _has_table(bind, "user_kyc_documents"):
         op.create_table(
@@ -92,8 +101,10 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
         )
-        op.create_index("ix_user_kyc_documents_user_id", "user_kyc_documents", ["user_id"], unique=False)
-        op.create_index("ix_user_kyc_documents_review_status", "user_kyc_documents", ["review_status"], unique=False)
+        if not _has_index(bind, "user_kyc_documents", "ix_user_kyc_documents_user_id"):
+            op.create_index("ix_user_kyc_documents_user_id", "user_kyc_documents", ["user_id"], unique=False)
+        if not _has_index(bind, "user_kyc_documents", "ix_user_kyc_documents_review_status"):
+            op.create_index("ix_user_kyc_documents_review_status", "user_kyc_documents", ["review_status"], unique=False)
 
     if not _has_table(bind, "onboarding_aml_denylist"):
         op.create_table(
@@ -106,7 +117,8 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
             sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
         )
-        op.create_index("ix_onboarding_aml_denylist_match_key", "onboarding_aml_denylist", ["match_key"], unique=True)
+        if not _has_index(bind, "onboarding_aml_denylist", "ix_onboarding_aml_denylist_match_key"):
+            op.create_index("ix_onboarding_aml_denylist_match_key", "onboarding_aml_denylist", ["match_key"], unique=True)
 
     if not _has_table(bind, "user_onboarding_decision_logs"):
         op.create_table(
@@ -122,9 +134,12 @@ def upgrade() -> None:
             sa.Column("context_snapshot", sa.JSON(), nullable=False, server_default=sa.text("'{}'::json")),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
         )
-        op.create_index("ix_user_onboarding_decision_logs_user_id", "user_onboarding_decision_logs", ["user_id"], unique=False)
-        op.create_index("ix_user_onboarding_decision_logs_decision", "user_onboarding_decision_logs", ["decision"], unique=False)
-        op.create_index("ix_user_onboarding_decision_logs_actor", "user_onboarding_decision_logs", ["actor_user_id"], unique=False)
+        if not _has_index(bind, "user_onboarding_decision_logs", "ix_user_onboarding_decision_logs_user_id"):
+            op.create_index("ix_user_onboarding_decision_logs_user_id", "user_onboarding_decision_logs", ["user_id"], unique=False)
+        if not _has_index(bind, "user_onboarding_decision_logs", "ix_user_onboarding_decision_logs_decision"):
+            op.create_index("ix_user_onboarding_decision_logs_decision", "user_onboarding_decision_logs", ["decision"], unique=False)
+        if not _has_index(bind, "user_onboarding_decision_logs", "ix_user_onboarding_decision_logs_actor"):
+            op.create_index("ix_user_onboarding_decision_logs_actor", "user_onboarding_decision_logs", ["actor_user_id"], unique=False)
 
 
 def downgrade() -> None:

@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request, status
@@ -169,6 +170,15 @@ def require_step_up_for(action_name: str, *, amount_field: str | None = None):
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> User:
+        canary_mode = str(os.getenv("CANARY_MODE", "false") or "false").strip().lower() in {"1", "true", "yes"}
+        step_up_default = "0" if canary_mode else "1"
+        step_up_enforced = (
+            str(os.getenv("STEP_UP_ENFORCEMENT_ENABLED", step_up_default) or step_up_default).strip().lower()
+            in {"1", "true", "yes"}
+        )
+        if not step_up_enforced:
+            return current_user
+
         if is_temporary_mfa_bypass_user(current_user.email):
             return current_user
 

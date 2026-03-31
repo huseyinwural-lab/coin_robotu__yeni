@@ -623,6 +623,16 @@ def approve_intent(
             details={"detail_version": payload.detail_version},
         )
 
+    create_audit_log(
+        db,
+        action="EXECUTION_ORDER_RELEASED",
+        entity_type="execution_intent",
+        entity_id=row.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={"source": "admin_execution_approve", "decision_reason": decision_reason},
+    )
+
     if not gate_enforced:
         try:
             row = execute_approved_intent(

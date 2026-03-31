@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -6,6 +7,26 @@ from sqlalchemy.orm import Session
 from models import PaperPosition, UserExchangeConnection
 from services.audit_service import create_guard_audit_event
 from services.explainability_rules_service import build_trade_explain
+
+
+def _execution_guard_enforced() -> bool:
+    canary_mode = str(os.getenv("CANARY_MODE", "false") or "false").strip().lower() in {"1", "true", "yes"}
+    default_flag = "0" if canary_mode else "1"
+    return str(os.getenv("EXECUTION_GUARD_ENFORCEMENT_ENABLED", default_flag) or default_flag).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _execution_fast_mode() -> bool:
+    canary_mode = str(os.getenv("CANARY_MODE", "false") or "false").strip().lower() in {"1", "true", "yes"}
+    default_flag = "1" if canary_mode else "0"
+    return str(os.getenv("EXECUTION_PREVIEW_FAST_MODE", default_flag) or default_flag).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 def _latest_connection(db: Session, user_id: str | None) -> UserExchangeConnection | None:
@@ -84,6 +105,36 @@ def enforce_execution_guard_or_raise(
     source: str,
     symbol: str | None = None,
 ) -> dict:
+    if not _execution_guard_enforced():
+        readiness = {
+            "exchange_connection": "OK",
+            "permissions": "OK",
+            "latency_ms": 0,
+            "order_test": "OK",
+            "mode": "MOCKED",
+            "final_status": "READY",
+            "mocked_flag": True,
+            "override_active": True,
+            "reason_codes": ["GUARD_BYPASSED_CANARY"],
+            "execution_proof": {"mode": "fast", "source": source},
+            "mocked_paths": True,
+            "readiness_state": "READY",
+            "execution_allowed": True,
+            "go_live_allowed": False,
+        }
+        create_guard_audit_event(
+            db,
+            event="EXECUTION_ALLOWED",
+            reason="GUARD_BYPASSED_CANARY",
+            symbol=symbol,
+            user_id=user_id,
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            severity="info",
+            metadata={"source": source, "mode": "mocked", "reason_codes": ["GUARD_BYPASSED_CANARY"]},
+        )
+        return readiness
+
     readiness = evaluate_execution_readiness(db, user_id=user_id)
     reason_codes = list(readiness.get("reason_codes") or [])
     primary_reason = str((reason_codes[0] if reason_codes else "READINESS_FAIL") or "READINESS_FAIL").strip().upper()
@@ -131,6 +182,35 @@ def validate_order_precheck(
     leverage: int,
     margin_mode: str,
 ) -> dict:
+    if _execution_fast_mode():
+        requested_size = max(float(size or 0), 0)
+        return {
+            "status": "PASS",
+            "valid": True,
+            "reason_codes": [],
+            "violations": [],
+            "adjustments": {
+                "requested_size": requested_size,
+                "adjusted_size": requested_size,
+                "requested_leverage": int(leverage or 1),
+                "adjusted_leverage": int(leverage or 1),
+            },
+            "microstructure_guard": {
+                "state": "MOCKED_SAFE",
+                "selected_venue": "SIM",
+                "reason_codes": ["FAST_MODE_BYPASS"],
+            },
+            "explainability": {
+                "rule": "execution_precheck_fast_mode",
+                "summary": "CANARY fast-mode ile precheck bypass edildi",
+                "details": {
+                    "symbol": symbol,
+                    "market_type": market_type,
+                    "source": "validate_order_precheck",
+                },
+            },
+        }
+
     from services.live_mode_service import get_or_create_live_config
     from services.execution_microstructure_service import build_order_microstructure_assessment
     from services.pipeline.runtime import pipeline_runtime

@@ -82,17 +82,20 @@ def create_audit_log(
     merged_details["correlation_id"] = correlation_id
     merged_details["is_test_event"] = bool(is_test_event)
 
-    previous_entry = (
-        db.query(AuditLog)
-        .filter(
-            or_(
-                AuditLog.entity_id == correlation_id,
-                cast(AuditLog.details, String).ilike(f"%{correlation_id}%"),
+    supports_query = hasattr(db, "query")
+    previous_entry = None
+    if supports_query:
+        previous_entry = (
+            db.query(AuditLog)
+            .filter(
+                or_(
+                    AuditLog.entity_id == correlation_id,
+                    cast(AuditLog.details, String).ilike(f"%{correlation_id}%"),
+                )
             )
+            .order_by(AuditLog.created_at.desc())
+            .first()
         )
-        .order_by(AuditLog.created_at.desc())
-        .first()
-    )
     previous_hash = str(previous_entry.event_hash or "GENESIS") if previous_entry else "GENESIS"
     created_at = datetime.now(timezone.utc)
     signature_payload = {
@@ -123,14 +126,17 @@ def create_audit_log(
         details=merged_details,
         created_at=created_at,
     )
-    db.add(audit_entry)
-    if commit:
+    if hasattr(db, "add"):
+        db.add(audit_entry)
+    if commit and hasattr(db, "commit"):
         db.commit()
-        db.refresh(audit_entry)
+        if hasattr(db, "refresh"):
+            db.refresh(audit_entry)
         try:
             maybe_auto_create_incident_from_audit(db, audit_entry=audit_entry)
         except Exception:
-            db.rollback()
+            if hasattr(db, "rollback"):
+                db.rollback()
     return audit_entry
 
 

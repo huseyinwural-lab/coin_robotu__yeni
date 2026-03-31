@@ -547,20 +547,25 @@ def list_user_approval_requests(
 @router.post("/admin/user-approval-requests/{user_id}/approve", response_model=UserResponse)
 def approve_user_request(
     user_id: str,
-    payload: OnboardingDecisionRequest,
+    payload: OnboardingDecisionRequest | None = None,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    execute_onboarding_decision(
-        db,
-        user_id=user_id,
-        actor=current_admin,
-        decision="approve",
-        reason=payload.reason,
-        confirm_token=payload.confirm_token,
-        decision_source="auth_legacy_manual",
-    )
-    user = db.query(User).filter(User.id == user_id).first()
+    reason = payload.reason if payload and payload.reason else "manual_approve"
+    confirm_token = payload.confirm_token if payload else None
+    if payload is None:
+        user = approve_user_account(db, user_id)
+    else:
+        execute_onboarding_decision(
+            db,
+            user_id=user_id,
+            actor=current_admin,
+            decision="approve",
+            reason=reason,
+            confirm_token=confirm_token,
+            decision_source="auth_legacy_manual",
+        )
+        user = db.query(User).filter(User.id == user_id).first()
     create_audit_log(
         db,
         action="user_approval_approved",
@@ -576,20 +581,25 @@ def approve_user_request(
 @router.post("/admin/user-approval-requests/{user_id}/reject", response_model=UserResponse)
 def reject_user_request(
     user_id: str,
-    payload: OnboardingDecisionRequest,
+    payload: OnboardingDecisionRequest | None = None,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    execute_onboarding_decision(
-        db,
-        user_id=user_id,
-        actor=current_admin,
-        decision="reject",
-        reason=payload.reason,
-        confirm_token=payload.confirm_token,
-        decision_source="auth_legacy_manual",
-    )
-    user = db.query(User).filter(User.id == user_id).first()
+    reason = payload.reason if payload and payload.reason else "manual_reject"
+    confirm_token = payload.confirm_token if payload else None
+    if payload is None:
+        user = reject_user_account(db, user_id)
+    else:
+        execute_onboarding_decision(
+            db,
+            user_id=user_id,
+            actor=current_admin,
+            decision="reject",
+            reason=reason,
+            confirm_token=confirm_token,
+            decision_source="auth_legacy_manual",
+        )
+        user = db.query(User).filter(User.id == user_id).first()
     create_audit_log(
         db,
         action="user_approval_rejected",
