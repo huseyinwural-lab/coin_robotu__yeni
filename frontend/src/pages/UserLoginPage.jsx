@@ -56,7 +56,7 @@ export const UserLoginPage = () => {
     }
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
     if (adminRoles.has(user.role)) {
-      navigate("/admin/dashboard", { replace: true });
+      setPanelHint("admin");
       return;
     }
     navigate("/user/dashboard", { replace: true });
