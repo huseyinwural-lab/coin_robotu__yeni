@@ -2171,7 +2171,7 @@ class UserTradeResponse(BaseModel):
     side: str
     status: str
     quantity: float
-    entry_price: float
+    entry_price: float | None
     exit_price: float | None
     realized_pnl: float | None
     unrealized_pnl: float | None

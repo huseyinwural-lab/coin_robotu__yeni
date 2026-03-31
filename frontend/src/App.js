@@ -58,6 +58,7 @@ import { UserExchangeDiagnosticsPage } from "@/pages/UserExchangeDiagnosticsPage
 import { UserDashboardPage } from "@/pages/UserDashboardPage";
 import { UserPortfolioPage } from "@/pages/UserPortfolioPage";
 import { UserTradesPage } from "@/pages/UserTradesPage";
+import { UserTradeDetailPage } from "@/pages/UserTradeDetailPage";
 import { UserExecutionPage } from "@/pages/UserExecutionPage";
 import { UserAlertCenterPage } from "@/pages/UserAlertCenterPage";
 import { UserSettingsPage } from "@/pages/UserSettingsPage";
@@ -249,6 +250,7 @@ function App() {
             <Route path="overview" element={<UserDashboardPage />} />
             <Route path="portfolio" element={<UserPortfolioPage />} />
             <Route path="trades" element={<UserTradesPage />} />
+            <Route path="trades/:tradeId" element={<UserTradeDetailPage />} />
             <Route path="execution" element={<UserExecutionPage />} />
             <Route path="alerts" element={<UserAlertCenterPage />} />
             <Route path="activity-log" element={<UserActivityLogPage />} />
