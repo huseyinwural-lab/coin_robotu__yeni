@@ -61,7 +61,7 @@ export const AdminLoginPage = () => {
       navigate("/admin/dashboard", { replace: true });
       return;
     }
-    navigate("/user/dashboard", { replace: true });
+    setForm((prev) => ({ ...prev, email: user?.email || prev.email }));
   }, [loading, logout, mfaState?.mfaRequired, navigate, submitting, user]);
 
   const onSubmit = async (event) => {
