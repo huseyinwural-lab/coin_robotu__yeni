@@ -51,7 +51,7 @@ if ! command -v pg_dump >/dev/null 2>&1; then
 fi
 
 log "BACKUP_START path=$OUT_PATH"
-if ! pg_dump "$PSQL_DB_URL" --clean --if-exists --no-owner --no-privileges --format=plain > "$OUT_PATH"; then
+if ! pg_dump "$PSQL_DB_URL" --schema=public --no-owner --no-privileges --format=plain > "$OUT_PATH"; then
   log "ERROR: pg_dump başarısız"
   exit 1
 fi

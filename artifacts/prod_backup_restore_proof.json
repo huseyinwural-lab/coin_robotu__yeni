@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "generated_at": "2026-03-31T20:54:46.264717+00:00",
+  "proof": {
+    "backup_path": "/app/backups/db_2026-03-31_20-54-29.sql",
+    "row_count_before": 1,
+    "row_count_after": 1,
+    "marker_row_count_after": 1,
+    "table_count_before_reset": 1,
+    "table_count_after_reset": 0,
+    "table_count_after_restore": 1,
+    "sample_marker_after_restore": "backup_test"
+  }
+}

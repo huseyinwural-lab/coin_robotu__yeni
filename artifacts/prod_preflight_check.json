@@ -1,7 +1,7 @@
 {
-  "phase": "FAZ_D0_TASK_3",
-  "status": "FAIL",
-  "generated_at": "2026-03-29T10:11:40.712430+00:00",
+  "phase": "FAZ_0_FINAL_BLOCKER_CLEANUP",
+  "status": "PASS",
+  "generated_at": "2026-03-31T20:55:02.575606+00:00",
   "checks": [
     {
       "name": "DATABASE_URL not empty",
@@ -20,7 +20,7 @@
     },
     {
       "name": "REDIS_URL non-localhost",
-      "status": "FAIL",
+      "status": "PASS",
       "detail": "REDIS_URL localhost/127.0.0.1 içermemeli"
     },
     {
@@ -32,12 +32,83 @@
       "name": "REACT_APP_BACKEND_URL production format",
       "status": "PASS",
       "detail": "REACT_APP_BACKEND_URL https://domain formatında olmalı"
+    },
+    {
+      "name": "pg_dump available",
+      "status": "PASS",
+      "detail": "pg_dump kurulu olmalı"
+    },
+    {
+      "name": "psql available",
+      "status": "PASS",
+      "detail": "psql kurulu olmalı"
+    },
+    {
+      "name": "Redis ping",
+      "status": "PASS",
+      "detail": "Redis bağlantısı başarılı olmalı"
+    },
+    {
+      "name": "Redis persistence enabled",
+      "status": "PASS",
+      "detail": "Redis AOF veya RDB aktif olmalı"
+    },
+    {
+      "name": "Redis maxclients sufficient",
+      "status": "PASS",
+      "detail": "Redis maxclients >= 1000 olmalı"
+    },
+    {
+      "name": "Redis timeout configured",
+      "status": "PASS",
+      "detail": "Redis timeout 0 olmamalı"
+    },
+    {
+      "name": "Redis eviction policy configured",
+      "status": "PASS",
+      "detail": "Redis maxmemory-policy noeviction olmamalı"
+    },
+    {
+      "name": "App boot Redis connect success log",
+      "status": "PASS",
+      "detail": "Backend log içinde REDIS_CONNECT_OK bulunmalı"
+    },
+    {
+      "name": "Healthcheck endpoint Redis OK",
+      "status": "PASS",
+      "detail": "health endpoint redis.status=ready dönmeli"
+    },
+    {
+      "name": "Redis fail-fast behavior",
+      "status": "PASS",
+      "detail": "Redis erişilemezse app boot fail fast yapmalı"
     }
   ],
   "resolved_values_preview": {
     "DATABASE_URL": "postgresql+psycopg2://postgres.wpaejjyirhblphihxnli:iY9yPPYAe4dLU3+@aws-1-eu-wes...",
-    "REDIS_URL": "redis://localhost:6379/0",
+    "REDIS_URL": "redis://10.79.128.174:6379/0",
     "REACT_APP_BACKEND_URL": "https://trade-trace-engine.preview.emergentagent.com",
     "JWT_SECRET_length": 64
+  },
+  "redis_runtime": {
+    "ping_ok": true,
+    "appendonly": "yes",
+    "save_rules": "900 1 300 10 60 10000",
+    "maxclients": 10000,
+    "timeout": 300,
+    "maxmemory_policy": "allkeys-lru"
+  },
+  "health_probe": {
+    "source": "inprocess_probe",
+    "status_code": 503,
+    "redis": {
+      "status": "ready",
+      "reason": null
+    },
+    "status": "degraded"
+  },
+  "failfast_probe": {
+    "return_code": 1,
+    "matched": true
   }
 }

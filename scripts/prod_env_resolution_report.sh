@@ -11,8 +11,11 @@ python - <<'PY'
 import json
 import os
 import re
+from urllib.parse import urlparse
 from datetime import datetime, timezone
 from pathlib import Path
+
+import redis
 
 root = Path('/app')
 backend_env_path = root / 'backend' / '.env'
@@ -57,11 +60,41 @@ targets = {
 localhost_pattern = re.compile(r"(localhost|127\.0\.0\.1|0\.0\.0\.0)", re.IGNORECASE)
 container_local_pattern = re.compile(r"(postgres(:\d+)?$|redis(:\d+)?$|db(:\d+)?$)", re.IGNORECASE)
 
+redis_runtime = {
+    'reachable': False,
+    'appendonly': None,
+    'save_rules': None,
+    'maxclients': None,
+    'timeout': None,
+    'maxmemory_policy': None,
+    'error': None,
+}
+
+try:
+    redis_client = redis.Redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
+    redis_runtime['reachable'] = bool(redis_client.ping())
+    cfg = redis_client.config_get('*')
+    redis_runtime['appendonly'] = str(cfg.get('appendonly', 'no')).strip().lower()
+    redis_runtime['save_rules'] = str(cfg.get('save', '')).strip()
+    redis_runtime['maxclients'] = int(cfg.get('maxclients', 0) or 0)
+    redis_runtime['timeout'] = int(cfg.get('timeout', 0) or 0)
+    redis_runtime['maxmemory_policy'] = str(cfg.get('maxmemory-policy', '')).strip().lower()
+except Exception as exc:  # noqa: BLE001
+    redis_runtime['error'] = str(exc)[:300]
+
 checks = []
 for key, value in targets.items():
     is_set = bool(value)
     has_localhost = bool(localhost_pattern.search(value or ''))
-    has_container_local = bool(container_local_pattern.search((value or '').split('@')[-1])) if value else False
+    parsed_host = ""
+    if value:
+        normalized = value.replace("postgresql+psycopg2://", "postgresql://", 1)
+        try:
+            parsed_host = urlparse(normalized).hostname or ""
+        except Exception:  # noqa: BLE001
+            parsed_host = ""
+    host_to_check = parsed_host or ((value or '').split('@')[-1].split('/')[0])
+    has_container_local = bool(container_local_pattern.search(host_to_check)) if value else False
     checks.append(
         {
             'key': key,
@@ -74,6 +107,60 @@ for key, value in targets.items():
         }
     )
 
+redis_parsed = urlparse(redis_url or '')
+checks.append(
+    {
+        'key': 'REDIS_RUNTIME_CONNECTIVITY',
+        'is_set': True,
+        'contains_localhost': False,
+        'contains_container_local': False,
+        'resolved_source': 'runtime_probe',
+        'value_preview': f"{redis_parsed.scheme}://{redis_parsed.hostname}:{redis_parsed.port}",
+        'status': 'PASS' if redis_runtime['reachable'] else 'FAIL',
+        'detail': 'Redis ping başarılı olmalı',
+    }
+)
+
+persistence_ok = (redis_runtime.get('appendonly') == 'yes') or bool(redis_runtime.get('save_rules'))
+checks.append(
+    {
+        'key': 'REDIS_PERSISTENCE',
+        'is_set': True,
+        'contains_localhost': False,
+        'contains_container_local': False,
+        'resolved_source': 'runtime_probe',
+        'value_preview': json.dumps({'appendonly': redis_runtime.get('appendonly'), 'save': redis_runtime.get('save_rules')}, ensure_ascii=False),
+        'status': 'PASS' if persistence_ok else 'FAIL',
+        'detail': 'Redis AOF veya RDB aktif olmalı',
+    }
+)
+
+checks.append(
+    {
+        'key': 'REDIS_CAPACITY_MAXCLIENTS',
+        'is_set': True,
+        'contains_localhost': False,
+        'contains_container_local': False,
+        'resolved_source': 'runtime_probe',
+        'value_preview': str(redis_runtime.get('maxclients')),
+        'status': 'PASS' if int(redis_runtime.get('maxclients') or 0) >= 1000 else 'FAIL',
+        'detail': 'Redis maxclients >= 1000 olmalı',
+    }
+)
+
+checks.append(
+    {
+        'key': 'REDIS_TIMEOUT_AND_EVICTION',
+        'is_set': True,
+        'contains_localhost': False,
+        'contains_container_local': False,
+        'resolved_source': 'runtime_probe',
+        'value_preview': json.dumps({'timeout': redis_runtime.get('timeout'), 'policy': redis_runtime.get('maxmemory_policy')}, ensure_ascii=False),
+        'status': 'PASS' if int(redis_runtime.get('timeout') or 0) > 0 and str(redis_runtime.get('maxmemory_policy') or '') not in {'', 'noeviction'} else 'FAIL',
+        'detail': 'Redis timeout>0 ve eviction policy noeviction dışı olmalı',
+    }
+)
+
 status = 'PASS' if all(item['status'] == 'PASS' for item in checks) else 'FAIL'
 
 report = {
@@ -81,6 +168,7 @@ report = {
     'status': status,
     'generated_at': datetime.now(timezone.utc).isoformat(),
     'checks': checks,
+    'redis_runtime': redis_runtime,
     'notes': [
         'Production runtime değerlerinde localhost/container-local host kalmamalı.',
         'Bu rapor sadece çözümlenen env değerlerine göre deterministik kontrol üretir.',
@@ -89,4 +177,5 @@ report = {
 
 report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 print(json.dumps({'status': status, 'artifact': str(report_path)}, ensure_ascii=False))
+raise SystemExit(0 if status == 'PASS' else 1)
 PY

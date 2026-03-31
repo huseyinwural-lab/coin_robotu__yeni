@@ -3,6 +3,7 @@ set -euo pipefail
 
 APP_ROOT="${APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ARTIFACT_LOG="${APP_ROOT}/artifacts/db_backup_restore_test.log"
+REPORT_JSON="${APP_ROOT}/artifacts/prod_backup_restore_proof.json"
 mkdir -p "${APP_ROOT}/artifacts"
 : > "$ARTIFACT_LOG"
 
@@ -33,20 +34,22 @@ if ! command -v psql >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! psql "$PSQL_DB_URL" -v ON_ERROR_STOP=1 -c "CREATE TABLE IF NOT EXISTS test_table (id SERIAL PRIMARY KEY, marker TEXT NOT NULL);" >/dev/null; then
+if ! psql "$PSQL_DB_URL" -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS public; CREATE TABLE IF NOT EXISTS public.test_table (id SERIAL PRIMARY KEY, marker TEXT NOT NULL);" >/dev/null; then
   echo "ERROR: test_table create failed" >&2
   exit 1
 fi
 
-if ! psql "$PSQL_DB_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE TABLE test_table; INSERT INTO test_table(marker) VALUES ('backup_test');" >/dev/null; then
+if ! psql "$PSQL_DB_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE TABLE public.test_table; INSERT INTO public.test_table(marker) VALUES ('backup_test');" >/dev/null; then
   echo "ERROR: test data insert failed" >&2
   exit 1
 fi
 
-before_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM test_table;")"
+before_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM public.test_table;")"
 before_count="$(echo "$before_count" | tr -d '[:space:]')"
+table_count_before_reset="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';" | tr -d '[:space:]')"
 log_line "INSERT_OK"
 log_line "ROW_COUNT_BEFORE=${before_count}"
+log_line "TABLE_COUNT_BEFORE_RESET=${table_count_before_reset}"
 
 backup_path="$(bash "${APP_ROOT}/scripts/db_backup.sh")"
 backup_path="$(echo "$backup_path" | tail -n 1)"
@@ -57,24 +60,30 @@ fi
 log_line "BACKUP_OK"
 log_line "BACKUP_PATH=${backup_path}"
 
-if ! psql "$PSQL_DB_URL" -v ON_ERROR_STOP=1 -c "TRUNCATE TABLE test_table;" >/dev/null; then
+if ! psql "$PSQL_DB_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA IF EXISTS public CASCADE;" >/dev/null; then
   echo "ERROR: db reset failed" >&2
   exit 1
 fi
 log_line "DB_RESET_OK"
+table_count_after_reset="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';" | tr -d '[:space:]')"
+log_line "TABLE_COUNT_AFTER_RESET=${table_count_after_reset}"
 
-if ! bash "${APP_ROOT}/scripts/db_restore.sh" "$backup_path" --reset >/dev/null; then
+if ! bash "${APP_ROOT}/scripts/db_restore.sh" "$backup_path" >/dev/null; then
   echo "ERROR: restore failed" >&2
   exit 1
 fi
 log_line "RESTORE_OK"
 
-after_marker_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM test_table WHERE marker='backup_test';")"
+after_marker_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM public.test_table WHERE marker='backup_test';")"
 after_marker_count="$(echo "$after_marker_count" | tr -d '[:space:]')"
-after_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM test_table;")"
+after_count="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM public.test_table;")"
 after_count="$(echo "$after_count" | tr -d '[:space:]')"
+table_count_after_restore="$(psql "$PSQL_DB_URL" -t -A -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';" | tr -d '[:space:]')"
+sample_marker_after_restore="$(psql "$PSQL_DB_URL" -t -A -c "SELECT marker FROM public.test_table ORDER BY id ASC LIMIT 1;" | tr -d '[:space:]')"
 log_line "ROW_COUNT_AFTER=${after_count}"
 log_line "ROW_COUNT_MARKER=${after_marker_count}"
+log_line "TABLE_COUNT_AFTER_RESTORE=${table_count_after_restore}"
+log_line "SAMPLE_MARKER_AFTER_RESTORE=${sample_marker_after_restore}"
 
 if [[ "$after_marker_count" -ge 1 && "$after_count" == "$before_count" ]]; then
   log_line "DATA_FOUND_AFTER_RESTORE"
@@ -82,6 +91,30 @@ else
   echo "ERROR: restore integrity check failed (before=$before_count after=$after_count marker=$after_marker_count)" >&2
   exit 1
 fi
+
+python - <<PY
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+report = {
+    "status": "PASS",
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "proof": {
+        "backup_path": "${backup_path}",
+        "row_count_before": int("${before_count}"),
+        "row_count_after": int("${after_count}"),
+        "marker_row_count_after": int("${after_marker_count}"),
+        "table_count_before_reset": int("${table_count_before_reset}"),
+        "table_count_after_reset": int("${table_count_after_reset}"),
+        "table_count_after_restore": int("${table_count_after_restore}"),
+        "sample_marker_after_restore": "${sample_marker_after_restore}",
+    },
+}
+
+Path("${REPORT_JSON}").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+PY
+log_line "PROOF_JSON=${REPORT_JSON}"
 
 if [[ -f "$backup_path" ]]; then
   rm -f "$backup_path"

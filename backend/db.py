@@ -1,8 +1,10 @@
 import logging
+import os
 import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 
 import redis
 from fastapi import HTTPException, status
@@ -337,13 +339,22 @@ def reset_database_runtime_state_for_tests() -> None:
 
 
 def _build_redis_client():
-    client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+    client = redis.Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        socket_connect_timeout=3,
+        socket_timeout=3,
+        health_check_interval=30,
+    )
+    parsed = urlparse(settings.redis_url)
+    redis_preview = f"{parsed.scheme}://{parsed.hostname}:{parsed.port}/{str(parsed.path or '/').lstrip('/')}"
     try:
         client.ping()
+        logger.warning("REDIS_CONNECT_OK", extra={"redis_url": redis_preview, "mode": "fail_fast"})
         return client
-    except redis.exceptions.RedisError:
-        logger.warning("Redis unavailable in this runtime, using in-memory state fallback.")
-        return InMemoryRedis()
+    except redis.exceptions.RedisError as exc:
+        logger.error("REDIS_CONNECT_FAIL", extra={"redis_url": redis_preview, "reason": _sanitize_error(exc), "mode": "fail_fast"})
+        raise RuntimeError("redis_init_failed_fail_fast") from exc
 
 
 Base = declarative_base()

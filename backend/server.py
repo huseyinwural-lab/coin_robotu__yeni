@@ -180,10 +180,19 @@ api_router = APIRouter(prefix="/api")
 def health_check():
     db_state = get_database_runtime_state()
     db_healthy = bool(db_state.get("reachable") and db_state.get("initialized"))
-    process_status = "up" if db_healthy else "degraded"
-    status_code = 200 if db_healthy else 503
+    redis_healthy = False
+    redis_reason = None
+    try:
+        redis_healthy = bool(redis_client.ping())
+    except Exception as exc:  # noqa: BLE001
+        redis_healthy = False
+        redis_reason = str(exc)[:200]
+
+    all_healthy = db_healthy and redis_healthy
+    process_status = "up" if all_healthy else "degraded"
+    status_code = 200 if all_healthy else 503
     payload = {
-        "status": "ok" if db_healthy else "degraded",
+        "status": "ok" if all_healthy else "degraded",
         "service": "backend-api",
         "checks": {
             "process": {
@@ -191,6 +200,10 @@ def health_check():
                 "uptime_seconds": int((datetime.now(timezone.utc) - PROCESS_STARTED_AT).total_seconds()),
             },
             "database": db_state,
+            "redis": {
+                "status": "ready" if redis_healthy else "not_ready",
+                "reason": redis_reason,
+            },
             "startup": STARTUP_RUNTIME_STATE,
         },
         "timestamp": datetime.now(timezone.utc).isoformat(),
