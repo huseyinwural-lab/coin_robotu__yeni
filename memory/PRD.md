@@ -317,12 +317,16 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
   - `/api/strategy-templates/{id}` → 200
   - `/api/strategy-templates/{id}/resolve` → 200
 - Frontend local lint PASS
-- Browser acceptance denendi:
-  - local environment tarafında admin auth persistence + backend responsiveness nedeniyle tam PASS alınamadı
-  - testing sonucu bunu **environment blocker** olarak işaretledi
+- Browser acceptance doğrulaması lokal ortamda tamamlandı:
+  - admin login local browser oturumunda token/session üretimi doğrulandı
+  - `/user/strategies` erişimi doğrulandı
+  - seed templates listesi görünür
+  - detail route erişimi ve ana bloklar doğrulandı
+  - scanner template selector görünürlüğü doğrulandı
+  - bot strategy source görünürlüğü doğrulandı
 - Teknik sonuç:
   - **P1 implementation complete**
-  - **P1 browser acceptance pending (environment-stable rerun needed)**
+  - **P1 acceptance PASS (LOCAL VERIFIED)**
 
 ## 2026-03-31 — TRADES P2 (Trade Trace / Replay / Reconciliation)
 
