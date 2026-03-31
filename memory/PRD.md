@@ -257,6 +257,68 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Son kabul cümlesi:
   - **Strategy Template P0 acceptance PASS**
 
+## 2026-03-31 — STRATEGY TEMPLATE P1 (Scanner / Backtest / Execution Binding)
+
+### Tamamlananlar
+- Template modeli execution/risk bağlarıyla genişletildi:
+  - `execution_profile_ref`
+  - `risk_hint_ref`
+  - `allowed_venues`
+  - `allowed_modes`
+- Strategy Template resolution service execution compatibility üretiyor.
+- Seed/example template seti eklendi ve list endpoint ilk erişimde bunu garanti ediyor:
+  - `trend_following`
+  - `mean_reversion`
+  - `breakout`
+  - `volatility_expansion`
+
+### Yeni route / detail
+- Yeni detail route:
+  - `GET /api/strategy-templates/{id}`
+- Detail payload:
+  - `template`
+  - `current_active_version`
+  - `version_history`
+  - `param_editor_summary`
+  - `scanner_bindings`
+  - `bot_bindings`
+  - `backtest_summary`
+  - `execution_compatibility`
+  - `audit_timeline`
+  - `promotion_eligibility`
+
+### Scanner binding
+- `run_scanner_runtime(...)` artık opsiyonel `strategy_template_id` kabul ediyor.
+- Scanner payload içine yazılıyor:
+  - `selected_template.template_id`
+  - `selected_template.template_code`
+  - `selected_template.effective_params`
+  - `selected_template.validation_result`
+- `UserScannerPage` içine template seçimi ve selected-template summary eklendi.
+
+### Backtest / execution policy bağları
+- Detail ekranında gösterilir:
+  - latest backtest summary
+  - validation status
+  - promotion eligibility
+  - execution profile ref
+  - risk hint ref
+  - allowed venues/modes
+  - execution compatibility
+
+### Bot linkage
+- Bot runtime resolution artık `strategy_template_id` varsa template resolution sonucunu kullanır.
+- Bot detail tarafında template linkage görünürlüğü güçlendirildi.
+
+### Test / doğrulama
+- Local backend smoke:
+  - `/api/strategy-templates` → 200
+  - seed_count = 4
+  - `/api/strategy-templates/{id}` → 200
+  - `/api/strategy-templates/{id}/resolve` → 200
+- Frontend local lint PASS
+- Not: tam browser acceptance bu turda zorunlu alınmadı; backend sözleşmesi ve UI wiring doğrulandı.
+
 ## 2026-03-31 — TRADES P2 (Trade Trace / Replay / Reconciliation)
 
 ### Tamamlananlar
