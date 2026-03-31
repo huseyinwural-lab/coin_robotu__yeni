@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createChart, CrosshairMode } from "lightweight-charts";
+import { createChart, CrosshairMode, CandlestickSeries, LineSeries } from "lightweight-charts";
 import { toast } from "sonner";
 
 import { apiClient } from "@/lib/api";
@@ -92,9 +92,9 @@ export const UserMarketChartPanel = ({ symbol = "BTCUSDT", initialTimeframe = "1
       handleScroll: true,
       handleScale: true,
     });
-    const candleSeries = chart.addCandlestickSeries({ upColor: "#22c55e", downColor: "#ef4444", borderVisible: false, wickUpColor: "#22c55e", wickDownColor: "#ef4444" });
-    const maFast = chart.addLineSeries({ color: "#38bdf8", lineWidth: 2, title: "MA20" });
-    const maSlow = chart.addLineSeries({ color: "#f59e0b", lineWidth: 2, title: "MA50" });
+    const candleSeries = chart.addSeries(CandlestickSeries, { upColor: "#22c55e", downColor: "#ef4444", borderVisible: false, wickUpColor: "#22c55e", wickDownColor: "#ef4444" });
+    const maFast = chart.addSeries(LineSeries, { color: "#38bdf8", lineWidth: 2, title: "MA20" });
+    const maSlow = chart.addSeries(LineSeries, { color: "#f59e0b", lineWidth: 2, title: "MA50" });
     chartRef.current = chart;
     seriesRef.current = { candle: candleSeries, maFast, maSlow };
     const observer = new ResizeObserver((entries) => {
