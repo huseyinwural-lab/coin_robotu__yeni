@@ -443,6 +443,15 @@ export const BotProfilesPage = () => {
             </div>
           </div>
           {detailTab === 'overview' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-overview-json">{JSON.stringify((botStatus || {}).runtime_summary || selectedBot, null, 2)}</pre>}
+          {detailTab === 'overview' && (
+            <div className="rounded-xl border border-black/10 bg-white/70 p-3 text-sm text-black" data-testid="bot-detail-strategy-source-card">
+              <p className="font-semibold" data-testid="bot-detail-strategy-source-title">Strategy Source</p>
+              <p data-testid="bot-detail-strategy-template-name">template: {botStatus?.strategy_binding?.selected_strategy_template_id || '-'}</p>
+              <p data-testid="bot-detail-strategy-runtime-id">runtime strategy: {botStatus?.strategy_binding?.effective_runtime_strategy_id || '-'}</p>
+              <p data-testid="bot-detail-strategy-lifecycle">lifecycle: {botStatus?.compatibility?.parity || '-'}</p>
+              <pre className="mt-2 overflow-x-auto bg-white/60 p-2 text-[11px]" data-testid="bot-detail-strategy-effective-config">{JSON.stringify(botStatus?.strategy_binding?.effective_params || {}, null, 2)}</pre>
+            </div>
+          )}
           {detailTab === 'runtime' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-runtime-json">{JSON.stringify((botStatus || {}).runtime_summary || {}, null, 2)}</pre>}
           {detailTab === 'bindings' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-bindings-json">{JSON.stringify({ strategy_binding: botStatus?.strategy_binding, risk_binding: botStatus?.risk_binding, execution_binding: botStatus?.execution_binding, binding_validation: botStatus?.binding_validation, compatibility: botStatus?.compatibility, last_execution_summary: botStatus?.last_execution_summary }, null, 2)}</pre>}
           {detailTab === 'performance' && <pre className="overflow-x-auto rounded-xl border border-black/10 bg-white/70 p-3 text-xs text-black" data-testid="bot-detail-performance-json">{JSON.stringify(botPerformance || {}, null, 2)}</pre>}
