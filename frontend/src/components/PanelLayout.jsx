@@ -29,15 +29,32 @@ import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 
 const userMenuGroups = [
-  { id: "dashboard", label: "Dashboard", items: [{ to: "/user/dashboard", label: "Global Dashboard", icon: BarChart3, testId: "nav-user-dashboard-link" }] },
-  { id: "market", label: "Market", items: [{ to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" }] },
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    items: [
+      { to: "/user/overview", label: "User Dashboard", icon: BarChart3, testId: "nav-user-overview-link" },
+      { to: "/user/dashboard", label: "Live Trading", icon: Gauge, testId: "nav-user-dashboard-link" },
+    ],
+  },
+  {
+    id: "market",
+    label: "Market",
+    items: [
+      { to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" },
+      { to: "/user/indicator-screener", label: "Indicator Screener", icon: LineChart, testId: "nav-user-indicator-screener-link" },
+      { to: "/user/signals", label: "Signal", icon: Radio, testId: "nav-user-signals-link" },
+      { to: "/user/trade", label: "Trade Entry", icon: Wrench, testId: "nav-user-trade-entry-link" },
+    ],
+  },
   {
     id: "execution",
     label: "Execution",
     items: [
       { to: "/user/execution", label: "Execution View", icon: Activity, testId: "nav-user-execution-link" },
+      { to: "/user/trades", label: "Trades", icon: Activity, testId: "nav-user-trades-link" },
       { to: "/user/positions", label: "Positions", icon: Activity, testId: "nav-user-positions-link" },
-      { to: "/user/trades", label: "History", icon: Activity, testId: "nav-user-trades-link" },
+      { to: "/user/paper-positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
     ],
   },
   {
@@ -53,7 +70,8 @@ const userMenuGroups = [
     label: "Strategy",
     items: [
       { to: "/user/bot-profiles", label: "Bot Profiles", icon: TrendingUp, testId: "nav-bot-profiles-link" },
-      { to: "/user/backtest-insights", label: "Backtests", icon: LineChart, testId: "nav-backtest-insights-link" },
+      { to: "/user/strategies", label: "Strategy Template", icon: ClipboardList, testId: "nav-strategy-templates-link" },
+      { to: "/user/backtest-insights", label: "Backtest Insights", icon: LineChart, testId: "nav-backtest-insights-link" },
     ],
   },
   {
@@ -69,6 +87,8 @@ const userMenuGroups = [
     id: "settings",
     label: "Settings",
     items: [
+      { to: "/user/exchange-settings", label: "Exchange Settings", icon: Globe, testId: "nav-user-exchange-settings-link" },
+      { to: "/user/risk-policy", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
       { to: "/user/settings", label: "Profile / API Keys / Risk", icon: Settings2, testId: "nav-user-settings-link" },
       { to: "/user/mfa-settings", label: "MFA", icon: ShieldAlert, testId: "nav-user-mfa-settings-link" },
     ],
