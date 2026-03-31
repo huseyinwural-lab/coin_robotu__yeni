@@ -266,7 +266,7 @@ function App() {
             <Route path="bots" element={<Navigate to="/user/bot-profiles" replace />} />
             <Route path="risk-policy" element={<Navigate to="/user/settings" replace />} />
             <Route path="risk-policies" element={<Navigate to="/user/settings" replace />} />
-            <Route path="strategies" element={<Navigate to="/user/bot-profiles" replace />} />
+            <Route path="strategies" element={<StrategyTemplatesPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
             <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />
             <Route path="exchange-diagnostics" element={<UserExchangeDiagnosticsPage />} />

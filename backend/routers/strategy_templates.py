@@ -29,6 +29,7 @@ def create_strategy_template(
     if duplicate:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Template name already exists")
 
+    payload_data = payload.model_dump(exclude={"template_code", "backtest_result_ref", "reason_note", "param_schema", "logic_schema", "indicator_schema"})
     strategy_template = StrategyTemplate(
         created_by=current_admin.id,
         template_code=payload.template_code or f"tpl_{uuid.uuid4().hex[:10]}",
@@ -40,7 +41,7 @@ def create_strategy_template(
         indicator_schema=payload.indicator_schema or {},
         backtest_result_ref=payload.backtest_result_ref,
         last_validated_at=datetime.now(timezone.utc),
-        **payload.model_dump(exclude={"template_code", "backtest_result_ref", "reason_note"}),
+        **payload_data,
     )
     db.add(strategy_template)
     db.commit()
