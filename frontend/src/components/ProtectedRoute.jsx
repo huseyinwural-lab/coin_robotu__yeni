@@ -31,7 +31,8 @@ export const ProtectedRoute = ({ children, role = null }) => {
   const roleMatched =
     !role
     || (role === "admin" && adminRoles.has(user.role))
-    || (role !== "admin" && user.role === role);
+    || (role === "user" && (user.role === "user" || adminRoles.has(user.role)))
+    || (role !== "admin" && role !== "user" && user.role === role);
 
   if (!roleMatched) {
     return <Navigate to={adminRoles.has(user.role) ? "/admin/dashboard" : "/user/dashboard"} replace />;
