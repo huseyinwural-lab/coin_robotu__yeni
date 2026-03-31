@@ -443,24 +443,63 @@ class StrategyTemplateBase(BaseModel):
     name: str
     strategy_type: str
     parameters: dict
+    param_schema: dict = Field(default_factory=dict)
+    logic_schema: dict = Field(default_factory=dict)
+    indicator_schema: dict = Field(default_factory=dict)
     is_active: bool = True
 
 
 class StrategyTemplateCreate(StrategyTemplateBase):
-    pass
+    template_code: str | None = None
+    backtest_result_ref: str | None = None
+    reason_note: str | None = None
 
 
 class StrategyTemplateUpdate(StrategyTemplateBase):
-    pass
+    backtest_result_ref: str | None = None
+    reason_note: str | None = None
 
 
 class StrategyTemplateResponse(StrategyTemplateBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    template_code: str
+    version_group_id: str
+    version_num: int
+    lifecycle_state: str
+    parent_template_id: str | None = None
+    rollback_from_template_id: str | None = None
+    backtest_result_ref: str | None = None
+    last_validated_at: datetime | None = None
     created_by: str
     created_at: datetime
     updated_at: datetime
+
+
+class StrategyTemplateReasonRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=400)
+
+
+class StrategyTemplateCloneVersionRequest(BaseModel):
+    name: str | None = None
+    reason: str = Field(min_length=3, max_length=400)
+
+
+class StrategyTemplatePreviewImpactRequest(BaseModel):
+    volatility_regime: str = "normal"
+    risk_regime: str = "balanced"
+    market_regime: str = "neutral"
+
+
+class StrategyTemplateResolvedConfigResponse(BaseModel):
+    template_id: str
+    template_code: str
+    version_group_id: str
+    version_num: int
+    lifecycle_state: str
+    effective_runtime_config: dict = Field(default_factory=dict)
+    validation_result: dict = Field(default_factory=dict)
 
 
 class AuditLogResponse(BaseModel):

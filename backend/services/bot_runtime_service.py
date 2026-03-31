@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from core.bot_runtime_engine import bind_bot_runtime, heartbeat_bot_runtime, initialize_bot_runtime, load_bot_runtime, set_bot_runtime_state
 from db import redis_client
 from models import BotProfile, ExecutionMetric, PaperPosition, PendingSignal, RiskPolicy, SignalEvent, UserExchangeConnection, UserScannerResult
+from services.strategy_template_resolution_service import resolve_effective_strategy_config
 
 
 def _now_iso() -> str:
@@ -26,6 +27,7 @@ def _json_safe(value):
 
 
 def _resolve_bindings(db, bot: BotProfile) -> dict:
+    resolved_template = resolve_effective_strategy_config(db, template_id=getattr(bot, "strategy_template_id", None), strategy_type=bot.strategy_type)
     risk_policy = (
         db.query(RiskPolicy)
         .filter(RiskPolicy.user_id == bot.user_id)
@@ -39,7 +41,8 @@ def _resolve_bindings(db, bot: BotProfile) -> dict:
         .first()
     )
     return {
-        "strategy_id": bot.strategy_type,
+        "strategy_id": resolved_template.get("template_code") or bot.strategy_type,
+        "strategy_resolution": resolved_template,
         "risk_profile_id": risk_policy.id if risk_policy else None,
         "risk_source": "user_active_policy" if risk_policy else "default",
         "execution_profile_id": connection.id if connection else None,
@@ -81,11 +84,13 @@ def _ensure_runtime(db, bot: BotProfile) -> dict:
     bindings = _resolve_bindings(db, bot)
     runtime = initialize_bot_runtime(redis_client, bot=bot, strategy_id=bindings["strategy_id"], risk_profile_id=bindings["risk_profile_id"], execution_profile_id=bindings["execution_profile_id"])
     runtime.setdefault("runtime_context", {})["binding_sources"] = bindings
+    runtime.setdefault("runtime_context", {})["strategy_resolution"] = bindings.get("strategy_resolution") or {}
     return runtime
 
 
 def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution: dict) -> tuple[dict, dict, dict, dict, dict]:
     binding_sources = dict((runtime.get("runtime_context") or {}).get("binding_sources") or {})
+    strategy_resolution = dict((runtime.get("runtime_context") or {}).get("strategy_resolution") or {})
     strategy_binding = {
         "selected_strategy_id": bot.strategy_type,
         "selected_strategy_template_id": getattr(bot, "strategy_template_id", None),
@@ -94,8 +99,10 @@ def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution:
             "timeframe": bot.timeframe,
             "trend_timeframe": bot.trend_timeframe,
             "market_type": bot.market_type,
+            **((strategy_resolution.get("effective_runtime_config") or {}).get("parameters") or {}),
         },
-        "override": False,
+        "override": bool(getattr(bot, "strategy_template_id", None)),
+        "validation_result": strategy_resolution.get("validation_result") or {},
     }
     risk_binding = {
         "risk_source": binding_sources.get("risk_source", "default"),
@@ -116,11 +123,12 @@ def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution:
         },
         "resolved": {
             "strategy_id": runtime.get("strategy_id"),
+            "strategy_template_id": getattr(bot, "strategy_template_id", None),
             "resolved_symbols": symbol_resolution.get("symbols") or [],
             "resolved_symbol_count": len(symbol_resolution.get("symbols") or []),
             "resolution_timestamp": runtime.get("last_heartbeat"),
         },
-        "result": "ok" if symbol_resolution.get("ok") and runtime.get("execution_profile_id") and runtime.get("strategy_id") else "failed",
+        "result": "ok" if symbol_resolution.get("ok") and runtime.get("execution_profile_id") and runtime.get("strategy_id") and strategy_resolution.get("validation_result", {}).get("ok", True) else "failed",
     }
     compatibility = {
         "parity": "ok",
