@@ -199,7 +199,9 @@ export const AuthProvider = ({ children }) => {
       const response = await apiClient.post(panelPath, { email, password }, { timeout: 30000 });
       data = response.data;
     } catch (error) {
-      const isNetworkLike = String(error?.code || "").toUpperCase() === "ERR_NETWORK" || String(error?.name || "").toLowerCase() === "aborterror" || String(error?.message || "").toLowerCase().includes("network") || String(error?.message || "").toLowerCase().includes("canceled");
+      const code = String(error?.code || "").toUpperCase();
+      const message = String(error?.message || "").toLowerCase();
+      const isNetworkLike = code === "ERR_NETWORK" || code === "ERR_ABORTED" || String(error?.name || "").toLowerCase() === "aborterror" || message.includes("network") || message.includes("canceled") || message.includes("aborted");
       if (!isNetworkLike) {
         throw error;
       }
@@ -240,7 +242,9 @@ export const AuthProvider = ({ children }) => {
       }, { timeout: 30000 });
       data = response.data;
     } catch (error) {
-      const isNetworkLike = String(error?.code || "").toUpperCase() === "ERR_NETWORK" || String(error?.name || "").toLowerCase() === "aborterror" || String(error?.message || "").toLowerCase().includes("network") || String(error?.message || "").toLowerCase().includes("canceled");
+      const code = String(error?.code || "").toUpperCase();
+      const message = String(error?.message || "").toLowerCase();
+      const isNetworkLike = code === "ERR_NETWORK" || code === "ERR_ABORTED" || String(error?.name || "").toLowerCase() === "aborterror" || message.includes("network") || message.includes("canceled") || message.includes("aborted");
       if (!isNetworkLike) {
         throw error;
       }
