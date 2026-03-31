@@ -225,6 +225,50 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Ayrıntılı matris:
   - `/app/memory/FINAL_READINESS_MATRIX.md`
 
+## 2026-03-31 — TRADES P2 (Trade Trace / Replay / Reconciliation)
+
+### Tamamlananlar
+- Ayrı kanonik trade projection katmanı kuruldu:
+  - `UserTradeProjection`
+  - `UserTradeLifecycleEvent`
+- Yeni kullanıcı trade route’ları:
+  - `GET /api/user/trades`
+  - `GET /api/user/trades/open-orders`
+  - `GET /api/user/trades/pending-orders`
+  - `GET /api/user/trades/{trade_id}`
+- Trade list artık hafif ve kanonik projection üstünden besleniyor.
+- Trade detail artık ayrı sayfa:
+  - lifecycle timeline
+  - fills / fee / slippage
+  - queue / execution trace
+  - risk/policy summary
+  - why-this-trade-happened
+  - pnl reconciliation
+- Trades ekranı analitik yüzeye taşındı:
+  - pnl analysis bloğu
+  - symbol / strategy / status / side / date filters
+  - open orders paneli
+  - pending orders paneli
+  - reconciliation badge
+
+### Local browser acceptance
+- Trades flow local browser acceptance sonucu:
+  - **LOCAL VERIFIED PASS (8/8)**
+- Doğrulanan akış:
+  - login
+  - `/user/trades`
+  - filters
+  - reconciliation badge
+  - trade detail page
+  - open/pending orders surfaces
+- Test sonucu notu:
+  - trade detail API ~4.5s
+  - trades list API ~3.9s
+  - fonksiyonel olarak PASS, ileride performans optimizasyonu düşünülebilir
+
+### Operasyonel not
+- Local acceptance için frontend kısa süreli local backend hedefiyle çalıştırıldı ve test sonrası preview backend URL’ye geri döndürüldü.
+
 ## 2026-03-30 — FINAL REMAINING GAP CLOSURE (Risk Policy / Alert Center / Execution Analytics / Signals Cleanup)
 
 ### Risk Policy lifecycle
