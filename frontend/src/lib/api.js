@@ -103,7 +103,7 @@ apiClient.interceptors.request.use((config) => {
   nextConfig.headers = nextConfig.headers || {};
   nextConfig.__authTokenSnapshot = readStoredToken();
   if (isAuthPath(nextConfig.url)) {
-    nextConfig.timeout = 15000;
+    nextConfig.timeout = 30000;
   }
 
   if (!nextConfig.headers.Authorization) {
