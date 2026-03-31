@@ -254,6 +254,6 @@ def require_super_admin(current_user: User = Depends(require_admin)) -> User:
 
 
 def require_user(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != UserRole.USER:
+    if current_user.role != UserRole.USER and not is_admin_role(current_user.role):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bu endpoint sadece user hesabı ile kullanılabilir")
     return current_user
