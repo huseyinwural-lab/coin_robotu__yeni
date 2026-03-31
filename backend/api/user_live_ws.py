@@ -26,22 +26,19 @@ def _extract_token(websocket: WebSocket) -> str | None:
 async def user_live_stream(websocket: WebSocket):
     token = _extract_token(websocket)
     if not token:
-        await websocket.accept()
-        await websocket.close(code=4401)
+        await websocket.close(code=1008)
         return
     try:
         payload = decode_access_token(token)
     except ValueError:
-        await websocket.accept()
-        await websocket.close(code=4401)
+        await websocket.close(code=1008)
         return
     subject = str(payload.get("sub") or "").strip()
     role = str(payload.get("role") or "").strip().lower()
     token_device_id = str(payload.get("device_id") or "").strip()
     provided_device_id = str(websocket.query_params.get("device_id") or websocket.headers.get(DEVICE_HEADER_NAME) or "").strip()
     if not subject or role != UserRole.USER.value or not token_device_id or token_device_id != provided_device_id:
-        await websocket.accept()
-        await websocket.close(code=4401)
+        await websocket.close(code=1008)
         return
 
     await websocket.accept()
