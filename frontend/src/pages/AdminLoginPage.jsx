@@ -49,7 +49,6 @@ export const AdminLoginPage = () => {
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     if (!storedToken && user) {
-      logout();
       return;
     }
 
@@ -62,7 +61,7 @@ export const AdminLoginPage = () => {
       return;
     }
     setForm((prev) => ({ ...prev, email: user?.email || prev.email }));
-  }, [loading, logout, mfaState?.mfaRequired, navigate, submitting, user]);
+  }, [loading, mfaState?.mfaRequired, navigate, submitting, user]);
 
   const onSubmit = async (event) => {
     event.preventDefault();
