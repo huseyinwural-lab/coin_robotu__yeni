@@ -176,6 +176,7 @@ from model_domains.commercial_ops import (
     UserEconomicsAggregate,
     UserEconomicsSnapshot,
 )
+from model_domains.trade_projection import UserTradeLifecycleEvent, UserTradeProjection
 from model_domains.credential_orchestration import AdminExchangeCredential, CredentialAssignmentRule
 
 _ = immutability_listeners
@@ -330,6 +331,8 @@ __all__ = [
     "RevenueLedger",
     "UserEconomicsAggregate",
     "UserEconomicsSnapshot",
+    "UserTradeProjection",
+    "UserTradeLifecycleEvent",
     "AnalyticsSnapshot",
     "CommercialSubscriptionProfile",
     "CommercialUsageEvent",
