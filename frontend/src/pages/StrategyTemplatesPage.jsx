@@ -221,6 +221,9 @@ export const StrategyTemplatesPage = () => {
                     <span className={`rounded px-2 py-1 ${item.is_active ? "bg-emerald-800 text-emerald-200" : "bg-slate-700 text-slate-200"}`}>{item.lifecycle_state}</span>
                     {item.is_active && <span className="rounded bg-cyan-800 px-2 py-1 text-cyan-100">ACTIVE</span>}
                   </div>
+                  <div className="mt-2">
+                    <Button type="button" variant="outline" onClick={(event) => { event.stopPropagation(); navigate(`/user/strategies/${item.id}`); }} data-testid={`strategy-template-open-detail-${idx}`}>Open detail</Button>
+                  </div>
                 </button>
               ))}
             </div>

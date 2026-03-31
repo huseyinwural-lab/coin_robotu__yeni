@@ -52,6 +52,7 @@ import { Phase4LiveControlPage } from "@/pages/Phase4LiveControlPage";
 import { RiskPoliciesPage } from "@/pages/RiskPoliciesPage";
 import { StateRebuildLogsPage } from "@/pages/StateRebuildLogsPage";
 import { StrategyTemplatesPage } from "@/pages/StrategyTemplatesPage";
+import { StrategyTemplateDetailPage } from "@/pages/StrategyTemplateDetailPage";
 import { UserLoginPage } from "@/pages/UserLoginPage";
 import { UserExchangeSettingsPage } from "@/pages/UserExchangeSettingsPage";
 import { UserExchangeDiagnosticsPage } from "@/pages/UserExchangeDiagnosticsPage";
@@ -267,6 +268,7 @@ function App() {
             <Route path="risk-policy" element={<Navigate to="/user/settings" replace />} />
             <Route path="risk-policies" element={<Navigate to="/user/settings" replace />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />
+            <Route path="strategies/:templateId" element={<StrategyTemplateDetailPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
             <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />
             <Route path="exchange-diagnostics" element={<UserExchangeDiagnosticsPage />} />

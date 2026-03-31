@@ -267,6 +267,9 @@ export const UserScannerPage = () => {
   const [chartSymbol, setChartSymbol] = useState("BTCUSDT");
   const [chartTimeframe, setChartTimeframe] = useState("1h");
   const [scannerSection, setScannerSection] = useState(searchParams.get("section") === "screener" ? "screener" : "results");
+  const [scannerTemplates, setScannerTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [lastRunEnvelope, setLastRunEnvelope] = useState(null);
   const [requestTrend, setRequestTrend] = useState(() => buildTrendPoints([], 5));
   const [requestEndpointBreakdown, setRequestEndpointBreakdown] = useState({
     oneMinute: summarizeEndpointBreakdown([], { windowMs: 60_000 }),
@@ -691,6 +694,7 @@ export const UserScannerPage = () => {
             },
           }),
         },
+        { key: "strategy_templates", request: apiClient.get("/strategy-templates") },
         { key: "scanner_automation", request: apiClient.get("/user/scanner/automation") },
         { key: "scanner_profiles", request: apiClient.get("/user/scanner/automation-profiles") },
         { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 } }) },
@@ -723,18 +727,22 @@ export const UserScannerPage = () => {
       const modeRes = responses[0].status === "fulfilled" ? responses[0].value : null;
       const overviewRes = responses[1].status === "fulfilled" ? responses[1].value : null;
       const resultsRes = responses[2].status === "fulfilled" ? responses[2].value : null;
-      const automationRes = responses[3].status === "fulfilled" ? responses[3].value : null;
-      const profilesRes = responses[4].status === "fulfilled" ? responses[4].value : null;
-      const cardsRes = responses[5].status === "fulfilled" ? responses[5].value : null;
-      const persistedSelectionRes = responses[6].status === "fulfilled" ? responses[6].value : null;
-      const runtimeRes = responses[7].status === "fulfilled" ? responses[7].value : null;
-      const readinessRes = responses[8].status === "fulfilled" ? responses[8].value : null;
-      const dailyRes = responses[9].status === "fulfilled" ? responses[9].value : null;
-      const schedulerRes = responses[10].status === "fulfilled" ? responses[10].value : null;
+      const templatesRes = responses[3].status === "fulfilled" ? responses[3].value : null;
+      const automationRes = responses[4].status === "fulfilled" ? responses[4].value : null;
+      const profilesRes = responses[5].status === "fulfilled" ? responses[5].value : null;
+      const cardsRes = responses[6].status === "fulfilled" ? responses[6].value : null;
+      const persistedSelectionRes = responses[7].status === "fulfilled" ? responses[7].value : null;
+      const runtimeRes = responses[8].status === "fulfilled" ? responses[8].value : null;
+      const readinessRes = responses[9].status === "fulfilled" ? responses[9].value : null;
+      const dailyRes = responses[10].status === "fulfilled" ? responses[10].value : null;
+      const schedulerRes = responses[11].status === "fulfilled" ? responses[11].value : null;
 
       setMode((prev) => modeRes?.data?.mode || prev || "ASSISTED");
       setOverview((prev) => overviewRes?.data || prev || null);
       setScannerResults((prev) => resultsRes?.data || prev || []);
+      const activeTemplates = (templatesRes?.data || []).filter((item) => item.is_active);
+      setScannerTemplates(activeTemplates);
+      setSelectedTemplateId((prev) => prev || activeTemplates[0]?.id || "");
       const automation = automationRes?.data || null;
       const profiles = profilesRes?.data || [];
       setAutomationConfig(automation);
@@ -941,7 +949,9 @@ export const UserScannerPage = () => {
         symbol_source: symbolSource,
         symbol_selection_mode: effectiveMode,
         selected_symbols: selectedSymbols,
+        strategy_template_id: selectedTemplateId || null,
       });
+      setLastRunEnvelope(data);
       await load();
       if ((data?.warnings || []).length > 0) {
         toast.warning((data.warnings || []).join(","));
@@ -984,7 +994,9 @@ export const UserScannerPage = () => {
         symbol_source: symbolSource,
         symbol_selection_mode: effectiveMode,
         selected_symbols: selectedSymbols,
+        strategy_template_id: selectedTemplateId || null,
       });
+      setLastRunEnvelope(data);
       await load();
       if ((data?.warnings || []).length > 0) {
         toast.warning((data.warnings || []).join(","));
@@ -1500,6 +1512,12 @@ export const UserScannerPage = () => {
           <Button onClick={runScanner} disabled={isRunning} data-testid="user-scanner-run-button" aria-label="Scanner çalıştır">
             {isRunning ? "Çalışıyor..." : "Scanner Run"}
           </Button>
+          <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)} className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-scanner-template-select">
+            <option value="">No template</option>
+            {(scannerTemplates || []).map((item) => (
+              <option key={item.id} value={item.id}>{item.name} · v{item.version_num}</option>
+            ))}
+          </select>
           <Button variant="outline" onClick={load} data-testid="user-scanner-refresh-button" aria-label="Scanner verisini yenile">Yenile</Button>
           <Button
             variant="outline"
@@ -1518,6 +1536,12 @@ export const UserScannerPage = () => {
           <p className="text-sm" data-testid="user-scanner-last-scan-value">Last Scan: {formatDateLabel(activeAutomation?.last_run_at || overview?.latest_generated_at)}</p>
           <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan: {formatDateLabel(schedulerState?.next_run_at || activeAutomation?.next_run_at)}</p>
         </div>
+        {lastRunEnvelope?.selected_template && (
+          <div className="rounded border border-cyan-700 bg-cyan-950/20 p-3 text-sm" data-testid="user-scanner-selected-template-summary">
+            <p>selected template: {lastRunEnvelope.selected_template.template_code || '-'}</p>
+            <pre className="mt-2 overflow-x-auto bg-slate-950 p-2 text-[11px] text-slate-200">{JSON.stringify(lastRunEnvelope.selected_template.effective_params || {}, null, 2)}</pre>
+          </div>
+        )}
         {showSlowLoadingHint && (
           <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="user-scanner-slow-loading-hint">
             Tarama yanıtı uzadı. Mevcut sonuçlar korunuyor; isterseniz yeniden deneyebilir veya kısmi görünümle devam edebilirsiniz.
