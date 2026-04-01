@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiClient, FRONTEND_BACKEND_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -115,7 +115,7 @@ export const ExecutionStatesPage = () => {
     setSearchParams(next, { replace: true });
   };
 
-  const buildControlParams = () => {
+  const buildControlParams = useCallback(() => {
     const params = new URLSearchParams();
     params.set("limit", "500");
     Object.entries(filters).forEach(([key, value]) => {
@@ -123,9 +123,9 @@ export const ExecutionStatesPage = () => {
       params.set(key, value);
     });
     return params;
-  };
+  }, [filters]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = buildControlParams();
@@ -144,9 +144,9 @@ export const ExecutionStatesPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [buildControlParams]);
 
-  const loadDetail = async (eventId) => {
+  const loadDetail = useCallback(async (eventId) => {
     if (!eventId) return;
     try {
       const { data } = await apiClient.get(`/admin-phase3/execution-state-transitions/${encodeURIComponent(eventId)}/detail`);
@@ -156,16 +156,16 @@ export const ExecutionStatesPage = () => {
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Event detail alınamadı");
     }
-  };
+  }, []);
 
   useEffect(() => {
     load();
-  }, [searchParams]);
+  }, [load]);
 
   useEffect(() => {
     const id = setInterval(load, refreshMs);
     return () => clearInterval(id);
-  }, [refreshMs, searchParams]);
+  }, [refreshMs, load]);
 
   useEffect(() => {
     if (!compareEnabled || !diffSnapshot?.diff) {
@@ -173,14 +173,6 @@ export const ExecutionStatesPage = () => {
     }
     loadPlaybookPreflight({ silent: true });
   }, [compareEnabled, diffSnapshot?.diff]);
-
-  useEffect(() => {
-    if (!playbookRunId) {
-      setPlaybookRunDetail(null);
-      return;
-    }
-    loadPlaybookRunDetail(playbookRunId, { silent: true });
-  }, [playbookRunId]);
 
   const handleSimulate = async (outcome) => {
     try {
@@ -300,7 +292,7 @@ export const ExecutionStatesPage = () => {
     return fallback;
   };
 
-  const buildSnapshotRequestBody = ({ silent = false } = {}) => {
+  const buildSnapshotRequestBody = useCallback(({ silent = false } = {}) => {
     const body = {
       search: filters.search || null,
       state: filters.state !== "all" ? filters.state : null,
@@ -355,9 +347,19 @@ export const ExecutionStatesPage = () => {
       }
     }
     return body;
-  };
+  }, [
+    compareEnabled,
+    compareScopeType,
+    compareScopeValue,
+    compareTimeFrom,
+    compareTimeTo,
+    exportScopeType,
+    exportScopeValue,
+    filters,
+    selectedEventId,
+  ]);
 
-  const loadDiffPreview = async ({ showError = false } = {}) => {
+  const loadDiffPreview = useCallback(async ({ showError = false } = {}) => {
     const body = buildSnapshotRequestBody({ silent: !showError });
     if (!body) {
       setDiffSnapshot(null);
@@ -421,7 +423,12 @@ export const ExecutionStatesPage = () => {
     } finally {
       setDiffPreviewLoading(false);
     }
-  };
+  }, [
+    buildSnapshotRequestBody,
+    compareEnabled,
+    compareScopeType,
+    exportScopeType,
+  ]);
 
   const loadPlaybookPreflight = async ({ silent = false } = {}) => {
     setPlaybookPreflightLoading(true);
@@ -443,7 +450,7 @@ export const ExecutionStatesPage = () => {
     }
   };
 
-  const loadPlaybookRunDetail = async (runIdParam = playbookRunId, { silent = true } = {}) => {
+  const loadPlaybookRunDetail = useCallback(async (runIdParam = playbookRunId, { silent = true } = {}) => {
     const targetRunId = String(runIdParam || "").trim();
     if (!targetRunId) {
       setPlaybookRunDetail(null);
@@ -467,7 +474,15 @@ export const ExecutionStatesPage = () => {
     } finally {
       setPlaybookRunDetailLoading(false);
     }
-  };
+  }, [playbookRunId]);
+
+  useEffect(() => {
+    if (!playbookRunId) {
+      setPlaybookRunDetail(null);
+      return;
+    }
+    loadPlaybookRunDetail(playbookRunId, { silent: true });
+  }, [playbookRunId, loadPlaybookRunDetail]);
 
   const previewDiffPlaybook = async () => {
     if (!playbookPreflightActionAllowed) {
@@ -799,26 +814,7 @@ export const ExecutionStatesPage = () => {
       loadDiffPreview({ showError: false });
     }, 400);
     return () => clearTimeout(timer);
-  }, [
-    filters.search,
-    filters.state,
-    filters.status,
-    filters.source_type,
-    filters.symbol,
-    filters.strategy,
-    filters.correlation_id,
-    filters.order_id,
-    filters.time_from,
-    filters.time_to,
-    exportScopeType,
-    exportScopeValue,
-    compareEnabled,
-    compareScopeType,
-    compareScopeValue,
-    compareTimeFrom,
-    compareTimeTo,
-    selectedEventId,
-  ]);
+  }, [loadDiffPreview]);
 
   useEffect(() => {
     const next = new URLSearchParams(searchParams);
@@ -863,7 +859,7 @@ export const ExecutionStatesPage = () => {
     return ["all", ...Array.from(set)];
   }, [rows]);
 
-  const statePath = detail?.full_state_path?.length ? detail.full_state_path : [];
+  const statePath = useMemo(() => (detail?.full_state_path?.length ? detail.full_state_path : []), [detail?.full_state_path]);
   const diagramSteps = useMemo(() => {
     const dynamic = statePath.filter((item) => !DEFAULT_STATE_STEPS.includes(item));
     return [...DEFAULT_STATE_STEPS, ...dynamic];

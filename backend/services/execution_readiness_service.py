@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -7,6 +8,14 @@ from sqlalchemy.orm import Session
 from models import PaperPosition, UserExchangeConnection
 from services.audit_service import create_guard_audit_event
 from services.explainability_rules_service import build_trade_explain
+
+
+_READINESS_CACHE_TTL_SECONDS = 30.0
+_READINESS_CACHE: dict[str, tuple[float, dict]] = {}
+
+
+def _readiness_cache_key(user_id: str | None) -> str:
+    return str(user_id or "global")
 
 
 def _execution_guard_enforced() -> bool:
@@ -36,7 +45,14 @@ def _latest_connection(db: Session, user_id: str | None) -> UserExchangeConnecti
     return query.order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc()).first()
 
 
-def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> dict:
+def evaluate_execution_readiness(db: Session, *, user_id: str | None = None, force_refresh: bool = False) -> dict:
+    cache_key = _readiness_cache_key(user_id)
+    now_mono = time.monotonic()
+    if not force_refresh:
+        cached = _READINESS_CACHE.get(cache_key)
+        if cached and cached[0] > now_mono:
+            return dict(cached[1])
+
     from services.live_mode_service import release_gate_view
     from services.pipeline.runtime import pipeline_runtime
     from core.readiness.go_live_validator import evaluate_go_live_readiness
@@ -78,7 +94,7 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> 
     if has_mocked_paths and "EXECUTION_PROOF_MOCKED_PATHS" not in reason_codes:
         reason_codes.append("EXECUTION_PROOF_MOCKED_PATHS")
 
-    return {
+    payload = {
         "exchange_connection": exchange_connection_status,
         "permissions": permissions_status,
         "latency_ms": latency_ms,
@@ -94,6 +110,8 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None) -> 
         "execution_allowed": bool(validator.get("execution_allowed")),
         "go_live_allowed": bool(validator.get("go_live_allowed")),
     }
+    _READINESS_CACHE[cache_key] = (now_mono + _READINESS_CACHE_TTL_SECONDS, dict(payload))
+    return payload
 
 
 def enforce_execution_guard_or_raise(

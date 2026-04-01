@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ export const FailedEventsPage = () => {
   const [selected, setSelected] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       params.set("limit", "400");
@@ -28,13 +28,13 @@ export const FailedEventsPage = () => {
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Failed events yüklenemedi");
     }
-  };
+  }, [search, statusFilter]);
 
   useEffect(() => {
     load();
     const id = setInterval(load, 10000);
     return () => clearInterval(id);
-  }, [search, statusFilter]);
+  }, [load]);
 
   useEffect(() => {
     const correlationId = searchParams.get("correlation_id") || "";

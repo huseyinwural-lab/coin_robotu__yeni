@@ -119,7 +119,7 @@ export const AdminSnapshotsPage = () => {
     }
   };
 
-  const kpiRows = comparePayload?.delta?.kpis || [];
+  const kpiRows = useMemo(() => comparePayload?.delta?.kpis || [], [comparePayload]);
   const topUserDelta = comparePayload?.delta?.top_users || [];
   const segmentDelta = comparePayload?.delta?.segments || [];
 

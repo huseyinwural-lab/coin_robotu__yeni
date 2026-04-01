@@ -77,7 +77,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       page: 1,
     }));
     setSelectedUserIds([]);
-  }, [scope]);
+  }, [isAdminScope]);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);

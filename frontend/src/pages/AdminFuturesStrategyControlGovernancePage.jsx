@@ -275,7 +275,7 @@ export const AdminFuturesStrategyControlGovernancePage = () => {
     if (!postActionMonitor?.active || !postActionMonitor?.expiresAt) return 0;
     const remainingMs = Math.max(0, Number(postActionMonitor.expiresAt) - Date.now());
     return Math.floor(remainingMs / 1000);
-  }, [postActionMonitor?.active, postActionMonitor?.expiresAt, postActionMonitor?.lastRefreshedAt]);
+  }, [postActionMonitor?.active, postActionMonitor?.expiresAt]);
 
   const loadOverview = useCallback(async () => {
     const response = await apiClient.get("/admin/futures/strategy-control/overview");

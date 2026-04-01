@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ export const ExecutionIdempotencyPage = () => {
   const [search, setSearch] = useState(searchParams.get("correlation_id") || "");
   const [selected, setSelected] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status_filter", statusFilter);
@@ -27,13 +27,13 @@ export const ExecutionIdempotencyPage = () => {
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Collision listesi yüklenemedi");
     }
-  };
+  }, [search, statusFilter]);
 
   useEffect(() => {
     load();
     const id = setInterval(load, 10000);
     return () => clearInterval(id);
-  }, [search, statusFilter]);
+  }, [load]);
 
   useEffect(() => {
     const correlationId = searchParams.get("correlation_id") || "";

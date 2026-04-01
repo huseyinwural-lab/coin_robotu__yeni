@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -59,16 +59,16 @@ export const ExecutionAnalyticsPage = () => {
     setSearchParams(next, { replace: true });
   };
 
-  const buildParams = () => {
+  const buildParams = useCallback(() => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
       if (!value || value === "all") return;
       params.set(key, value);
     });
     return params.toString();
-  };
+  }, [filters]);
 
-  const loadAnalytics = async () => {
+  const loadAnalytics = useCallback(async () => {
     setLoading(true);
     try {
       const query = buildParams();
@@ -92,16 +92,16 @@ export const ExecutionAnalyticsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [alertStatusFilter, buildParams]);
 
   useEffect(() => {
     loadAnalytics();
-  }, [searchParams, alertStatusFilter]);
+  }, [loadAnalytics]);
 
   useEffect(() => {
     const timer = setInterval(loadAnalytics, refreshMs);
     return () => clearInterval(timer);
-  }, [refreshMs, searchParams, alertStatusFilter]);
+  }, [refreshMs, loadAnalytics]);
 
   const markAlertSeen = async (alertId) => {
     try {

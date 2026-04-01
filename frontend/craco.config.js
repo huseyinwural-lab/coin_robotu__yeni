@@ -6,6 +6,16 @@ require("dotenv").config();
 // Craco sets NODE_ENV=development for start, NODE_ENV=production for build
 const isDevServer = process.env.NODE_ENV !== "production";
 
+if (!isDevServer) {
+  const backendUrl = String(process.env.REACT_APP_BACKEND_URL || "").trim();
+  if (!backendUrl) {
+    throw new Error("Missing required frontend env: REACT_APP_BACKEND_URL");
+  }
+  if (!/^https?:\/\//i.test(backendUrl)) {
+    throw new Error("Invalid REACT_APP_BACKEND_URL: expected absolute http(s) URL");
+  }
+}
+
 // Environment variable overrides
 const config = {
   enableHealthCheck: process.env.ENABLE_HEALTH_CHECK === "true",

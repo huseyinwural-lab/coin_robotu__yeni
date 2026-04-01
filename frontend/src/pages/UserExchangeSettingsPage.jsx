@@ -158,7 +158,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
     if (exactAny) return exactAny;
 
     return connectionProfiles.find((item) => item.is_default) || connectionProfiles[0] || null;
-  }, [connectionProfiles, selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
+  }, [activeProfileId, connectionProfiles, selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
 
   const actionRequiredProfiles = useMemo(
     () => (connectionProfiles || []).filter((item) => Boolean(item?.action_required)),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -17,7 +17,7 @@ export const UserAlertCenterPage = () => {
   const [noteById, setNoteById] = useState({});
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const params = { limit: 100 };
@@ -31,11 +31,11 @@ export const UserAlertCenterPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters.category, filters.query, filters.severity]);
 
   useEffect(() => {
     load();
-  }, [filters.severity, filters.category, filters.query]);
+  }, [load]);
 
   const updateAlert = async (alertId, action) => {
     try {

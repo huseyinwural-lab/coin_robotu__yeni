@@ -82,7 +82,7 @@ export const AdminUserEconomicsPage = () => {
   }, [fetchEconomics]);
 
   const kpis = payload?.kpis || {};
-  const retentionPoints = retentionPayload?.points || [];
+  const retentionPoints = useMemo(() => retentionPayload?.points || [], [retentionPayload]);
   const segmentCards = segmentPayload?.segment_cards || [];
   const retentionMax = useMemo(
     () => Math.max(1, retentionPoints.reduce((acc, item) => Math.max(acc, Number(item.retention_rate_pct || 0)), 0)),

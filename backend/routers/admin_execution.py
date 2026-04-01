@@ -1389,8 +1389,7 @@ def revalidate_intent_owner_connection(
 
 @router.get("/execution-readiness", response_model=ExecutionReadinessResponse)
 def execution_readiness(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    _ = current_user
-    return ExecutionReadinessResponse(**evaluate_execution_readiness(db))
+    return ExecutionReadinessResponse(**evaluate_execution_readiness(db, user_id=current_user.id))
 
 
 @router.get("/guard-telemetry", response_model=GuardTelemetryResponse)

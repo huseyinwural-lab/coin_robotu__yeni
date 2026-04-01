@@ -43,7 +43,7 @@ export const AdminRevenuePage = () => {
     loadSummary();
   }, [loadSummary]);
 
-  const dailyRows = summary?.daily_revenue || [];
+  const dailyRows = useMemo(() => summary?.daily_revenue || [], [summary]);
   const maxDaily = useMemo(() => {
     const max = dailyRows.reduce((acc, row) => Math.max(acc, Number(row.total_revenue_usd || 0)), 0);
     return max > 0 ? max : 1;

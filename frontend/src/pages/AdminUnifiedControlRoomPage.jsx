@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ export default function AdminUnifiedControlRoomPage() {
   const [learningReason, setLearningReason] = useState("control_room_learning_action");
   const [actionLoading, setActionLoading] = useState("");
 
-  const loadOverview = async () => {
+  const loadOverview = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await apiClient.get("/admin/unified-control-room/overview", { params: { window: windowRange } });
@@ -31,11 +31,11 @@ export default function AdminUnifiedControlRoomPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [windowRange]);
 
   useEffect(() => {
     loadOverview();
-  }, [windowRange]);
+  }, [loadOverview]);
 
   const selectedIncident = useMemo(
     () => overview?.live_operations?.incidents?.find((item) => item.incident_id === selectedIncidentId) || overview?.live_operations?.incidents?.[0] || null,

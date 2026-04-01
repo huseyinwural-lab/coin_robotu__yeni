@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ export default function AdminOnboardingObservabilityPage() {
   const [loading, setLoading] = useState(false);
   const [payload, setPayload] = useState(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await apiClient.get("/admin/onboarding/observability/summary", { params: { days } });
@@ -18,15 +18,14 @@ export default function AdminOnboardingObservabilityPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [days]);
 
   useEffect(() => {
     load();
-  }, [days]);
+  }, [load]);
 
-  const kpis = payload?.kpis || {};
   const funnelRows = useMemo(() => {
-    const funnel = kpis.funnel || {};
+    const funnel = payload?.kpis?.funnel || {};
     return [
       ["signup", funnel.signup ?? 0],
       ["kyc_started", funnel.kyc_started ?? 0],
@@ -34,7 +33,8 @@ export default function AdminOnboardingObservabilityPage() {
       ["approved", funnel.approved ?? 0],
       ["activated", funnel.activated ?? 0],
     ];
-  }, [kpis]);
+  }, [payload]);
+  const kpis = payload?.kpis || {};
 
   return (
     <section className="space-y-4" data-testid="admin-onboarding-observability-page">

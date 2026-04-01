@@ -177,15 +177,17 @@ export const AdminCommercialOpsPage = () => {
   const operationalControls = overview?.operational_controls || {};
   const appliedFilters = overview?.applied_filters || {};
 
-  const executive = useMemo(
-    () => ({
-      netTotal: Number(financialAccuracy.net_total_usd || 0),
-      grossTotal: Number(financialAccuracy.gross_total_usd || 0),
-      totalRevenue: Number(revenueModel.total_revenue_usd || 0),
-      riskExposure: Number(riskSummary.risk_exposure_usd || 0),
-    }),
-    [financialAccuracy, revenueModel, riskSummary],
-  );
+  const executive = useMemo(() => {
+    const financial = overview?.financial_accuracy || {};
+    const revenue = overview?.revenue_model || {};
+    const risk = overview?.risk_summary || {};
+    return {
+      netTotal: Number(financial.net_total_usd || 0),
+      grossTotal: Number(financial.gross_total_usd || 0),
+      totalRevenue: Number(revenue.total_revenue_usd || 0),
+      riskExposure: Number(risk.risk_exposure_usd || 0),
+    };
+  }, [overview]);
 
   if (!isSuperAdmin) {
     return (

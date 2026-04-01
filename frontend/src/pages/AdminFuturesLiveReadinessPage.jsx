@@ -90,7 +90,7 @@ export const AdminFuturesLiveReadinessPage = () => {
     return { total, passed, progress };
   }, [readinessPayload]);
 
-  const blockingFailures = readinessPayload?.blocking_failures || [];
+  const blockingFailures = useMemo(() => readinessPayload?.blocking_failures || [], [readinessPayload]);
   const warnings = readinessPayload?.warnings || [];
   const unknowns = readinessPayload?.unknowns || [];
   const topBlockers = historyPayload?.top_blockers || [];

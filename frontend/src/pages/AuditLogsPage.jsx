@@ -112,20 +112,7 @@ export const AuditLogsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [
-    filters.end_time,
-    filters.environment,
-    filters.event_type,
-    filters.payload_query,
-    filters.q,
-    filters.severity,
-    filters.start_time,
-    filters.strategy_id,
-    filters.symbol,
-    filters.user_id,
-    archiveMode,
-    showTestEvents,
-  ]);
+  }, [archiveMode, filters, showTestEvents]);
 
   useEffect(() => {
     fetchSummaries(null);
