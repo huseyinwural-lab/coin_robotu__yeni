@@ -321,7 +321,7 @@ class P0BackendValidator:
         # Test 3.1: Create new user (register)
         print("\n3.1) Creating new test user")
         test_user_email = f"test_user_{int(time.time())}@example.com"
-        test_user_password = "TestPassword123!"
+        test_user_password = "DummyPass9!"
         
         try:
             register_data = {

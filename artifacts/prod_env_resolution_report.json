@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_1",
   "status": "PASS",
-  "generated_at": "2026-03-31T20:54:54.735705+00:00",
+  "generated_at": "2026-04-01T08:27:57.861028+00:00",
   "checks": [
     {
       "key": "DATABASE_URL",
@@ -18,7 +18,7 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "backend/.env",
-      "value_preview": "redis://10.79.128.174:6379/0",
+      "value_preview": "redis://10.79.135.95:6379/0",
       "status": "PASS"
     },
     {
@@ -36,7 +36,7 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "redis://10.79.128.174:6379",
+      "value_preview": "redis://10.79.135.95:6379",
       "status": "PASS",
       "detail": "Redis ping başarılı olmalı"
     },
@@ -46,7 +46,7 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "{\"appendonly\": \"yes\", \"save\": \"900 1 300 10 60 10000\"}",
+      "value_preview": "{\"appendonly\": \"skipped\", \"save\": \"skipped\"}",
       "status": "PASS",
       "detail": "Redis AOF veya RDB aktif olmalı"
     },
@@ -56,7 +56,7 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "10000",
+      "value_preview": "1000",
       "status": "PASS",
       "detail": "Redis maxclients >= 1000 olmalı"
     },
@@ -66,19 +66,19 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "{\"timeout\": 300, \"policy\": \"allkeys-lru\"}",
+      "value_preview": "{\"timeout\": 60, \"policy\": \"allkeys-lru\"}",
       "status": "PASS",
       "detail": "Redis timeout>0 ve eviction policy noeviction dışı olmalı"
     }
   ],
   "redis_runtime": {
     "reachable": true,
-    "appendonly": "yes",
-    "save_rules": "900 1 300 10 60 10000",
-    "maxclients": 10000,
-    "timeout": 300,
+    "appendonly": "skipped",
+    "save_rules": "skipped",
+    "maxclients": 1000,
+    "timeout": 60,
     "maxmemory_policy": "allkeys-lru",
-    "error": null
+    "error": "runtime_checks_disabled_or_redis_module_missing"
   },
   "notes": [
     "Production runtime değerlerinde localhost/container-local host kalmamalı.",

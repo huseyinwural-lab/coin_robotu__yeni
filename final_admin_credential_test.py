@@ -5,12 +5,13 @@ Final Admin Credential Orchestration Layer Test Summary
 
 import requests
 import json
+import os
 
 BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
 ADMIN_EMAIL = "canary.admin@platform.local"
-ADMIN_PASSWORD = "CanaryAdmin123!"
-USER_EMAIL = "huseyinwural@gmail.com"
-USER_PASSWORD = "HuseyinWural123!"
+ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "CHANGE_ME_ADMIN_PASSWORD")
+USER_EMAIL = os.getenv("TEST_USER_EMAIL", "CHANGE_ME_USER_EMAIL@example.com")
+USER_PASSWORD = os.getenv("TEST_USER_PASSWORD", "CHANGE_ME_USER_PASSWORD")
 
 def test_admin_credential_orchestration():
     print("=== ADMIN CREDENTIAL ORCHESTRATION LAYER BACKEND TEST ===")
