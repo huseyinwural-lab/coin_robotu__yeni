@@ -1807,6 +1807,38 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     if use_spot_market_fallback:
         execution_route = "spot_market_quote_order_qty"
         state_path.append("spot_market_submit")
+        fallback_alert_details = {
+            "symbol": symbol,
+            "environment": environment,
+            "route": execution_route,
+            "target_notional_usdt": target_notional_usdt,
+            "futures_candidate_notional": futures_candidate_notional,
+            "futures_min_notional": futures_min_notional,
+            "available_balance_usdt": available_balance,
+            "futures_blockers": futures_blockers,
+            "user_id": user.id,
+        }
+        create_system_alert(
+            db,
+            alert_type="canary_auto_heal_spot_fallback",
+            severity="WARNING",
+            message="Canary order futures yerine spot fallback ile yürütüldü",
+            details=fallback_alert_details,
+            entity_key=symbol,
+            root_cause_code="futures_notional_or_balance_block",
+            state_key="spot_fallback",
+        )
+        db.add(
+            AuditLog(
+                action="CANARY_AUTO_HEAL_SPOT_FALLBACK",
+                entity_type="testnet_execution",
+                entity_id=f"test-order:{user.id}:{symbol}",
+                actor_user_id=user.id,
+                actor_role=user.role.value,
+                severity="warning",
+                details=fallback_alert_details,
+            )
+        )
         primary_order, primary_status = adapter.create_spot_market_order(
             api_key or "",
             api_secret or "",

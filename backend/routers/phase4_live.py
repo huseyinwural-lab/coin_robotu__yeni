@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core.users.user_exchange_connector import credential_fingerprint, mask_secret
@@ -94,6 +95,17 @@ from services.production_gate_service import (
     update_production_gate_checklist_item,
     validate_production_gate_analytics_cross_check,
 )
+from services.faz56_live_expansion_service import (
+    advance_expansion_step,
+    apply_auto_rollback_if_needed,
+    build_closure_proof_bundle,
+    build_operator_cheat_sheet,
+    compute_live_session_metrics,
+    finalize_closure_artifact,
+    generate_daily_live_report_artifact,
+    get_or_create_expansion_state,
+    latest_daily_live_report,
+)
 
 router = APIRouter(prefix="/phase4", tags=["phase4_live"])
 logger = logging.getLogger(__name__)
@@ -104,6 +116,11 @@ MODE_TRANSITION_PHRASES = {
     "PAPER": "SWITCH TO PAPER",
     "MOCK": "SWITCH TO MOCK",
 }
+
+
+class Faz56ActionRequest(BaseModel):
+    reason: str = Field(default="faz56_progress", min_length=3, max_length=240)
+    timezone: str = Field(default="Europe/Istanbul", min_length=3, max_length=64)
 
 
 def _quality_response(item) -> ExecutionQualitySummaryResponse:
@@ -1041,3 +1058,93 @@ def disable_futures(current_admin: User = Depends(require_admin), db: Session = 
         actor_role=current_admin.role.value,
     )
     return {"status": "ok", "action": "disable_futures"}
+
+
+@router.get("/faz56/expansion/state")
+def faz56_expansion_state(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    timezone_name: str = Query(default="Europe/Istanbul"),
+):
+    _ = db
+    return get_or_create_expansion_state(redis_client, timezone_name=timezone_name)
+
+
+@router.post("/faz56/expansion/advance")
+def faz56_expansion_advance(
+    payload: Faz56ActionRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return advance_expansion_step(
+        db,
+        redis_client,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        reason=payload.reason,
+        timezone_name=payload.timezone,
+    )
+
+
+@router.get("/faz56/live-session-metrics")
+def faz56_live_session_metrics(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    window_minutes: int = Query(default=120, ge=30, le=1440),
+):
+    return compute_live_session_metrics(db, window_minutes=window_minutes)
+
+
+@router.post("/faz56/auto-rollback/evaluate")
+def faz56_auto_rollback_evaluate(
+    payload: Faz56ActionRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    metrics = compute_live_session_metrics(db, window_minutes=120)
+    rollback = apply_auto_rollback_if_needed(
+        db,
+        redis_client,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        reason=payload.reason,
+        metrics=metrics,
+    )
+    return {"metrics": metrics, "rollback": rollback}
+
+
+@router.post("/faz56/daily-report/generate")
+def faz56_generate_daily_report(
+    payload: Faz56ActionRequest,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return generate_daily_live_report_artifact(db, redis_client, timezone_name=payload.timezone)
+
+
+@router.get("/faz56/daily-report/latest")
+def faz56_daily_report_latest(_: User = Depends(require_admin)):
+    return latest_daily_live_report(redis_client)
+
+
+@router.get("/faz56/closure/proofs")
+def faz56_closure_proofs(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    timezone_name: str = Query(default="Europe/Istanbul"),
+):
+    return build_closure_proof_bundle(db, redis_client, timezone_name=timezone_name)
+
+
+@router.post("/faz56/closure/finalize")
+def faz56_closure_finalize(
+    payload: Faz56ActionRequest,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return finalize_closure_artifact(db, redis_client, timezone_name=payload.timezone)
+
+
+@router.get("/faz56/operator-cheat-sheet")
+def faz56_operator_cheat_sheet(_: User = Depends(require_admin)):
+    return build_operator_cheat_sheet()

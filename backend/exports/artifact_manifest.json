@@ -1666,6 +1666,34 @@
       "chain_position": 119,
       "prev_chain_hash": "bc157b073ffe30ed9979ca991e756bb6c45cfe9aa7b50b8db7a9892bfbaee441",
       "chain_hash": "ceb81930e6b63977f927cdc0d79606edc6eeab5e3c6f2174375020f2d894bbaa"
+    },
+    {
+      "artifact_id": "8b6121fd-4dfa-42d1-8cbb-398dba907c40",
+      "filename": "faz56_daily_live_report_20260401154802_8b6121fd.json",
+      "artifact_type": "faz56_daily_live_report",
+      "sha256": "f5d54441d1408cda48a01533c69ef21b01164470e7ff28dfffb8a70f196a344d",
+      "size": 2411,
+      "created_at": "2026-04-01T15:48:02.869877+00:00",
+      "proof_id": "8b6121fd-4dfa-42d1-8cbb-398dba907c40",
+      "evidence_type": "faz56_daily_live_report",
+      "status": "generated",
+      "chain_position": 120,
+      "prev_chain_hash": "ceb81930e6b63977f927cdc0d79606edc6eeab5e3c6f2174375020f2d894bbaa",
+      "chain_hash": "827e73831ad485d316ea3bfc696cdf10664a93e27c909311083d4a66b3579c72"
+    },
+    {
+      "artifact_id": "5989e7c5-030a-4a2a-8f0d-ffbf4d6d6e45",
+      "filename": "faz6_closure_bundle_20260401154827_5989e7c5.json",
+      "artifact_type": "faz6_closure_bundle",
+      "sha256": "9f6aa2ea342a47a47c0c808fe6287023a0e8aed28b4ec8cae8c8aab4e97f8954",
+      "size": 7337,
+      "created_at": "2026-04-01T15:48:27.997257+00:00",
+      "proof_id": "5989e7c5-030a-4a2a-8f0d-ffbf4d6d6e45",
+      "evidence_type": "faz6_closure_bundle",
+      "status": "generated",
+      "chain_position": 121,
+      "prev_chain_hash": "827e73831ad485d316ea3bfc696cdf10664a93e27c909311083d4a66b3579c72",
+      "chain_hash": "e0d71f08689ef1ef009f4c26b12e5849f30016d920ec387485ed62e9846cbd17"
     }
   ]
 }

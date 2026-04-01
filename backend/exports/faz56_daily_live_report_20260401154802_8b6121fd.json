@@ -1,0 +1,94 @@
+{
+  "date": "2026-04-01",
+  "timezone": "Europe/Istanbul",
+  "generated_at": "2026-04-01T18:47:59.626628+03:00",
+  "pass_fail": "FAIL",
+  "total_trades": 2,
+  "filled_vs_failed": {
+    "filled": 1,
+    "failed": 1
+  },
+  "risk_block_count": 13,
+  "kill_switch_usage_count": 19,
+  "anomaly_list": [
+    {
+      "code": "low_fill_rate",
+      "value": 0.5,
+      "threshold": 0.85
+    },
+    {
+      "code": "high_failed_order_rate",
+      "value": 0.5,
+      "threshold": 0.15
+    }
+  ],
+  "session_metrics": {
+    "window_minutes": 1440,
+    "generated_at": "2026-04-01T15:47:59.962570+00:00",
+    "sample_size": 2,
+    "fill_rate": 0.5,
+    "rejection_rate": 0.5,
+    "failed_order_rate": 0.5,
+    "retry_count": 0,
+    "execution_latency_p95_ms": 1073.68,
+    "pnl_drift_pct": 0.05554,
+    "exposure": {
+      "total_notional": 840.0,
+      "symbol_top": []
+    },
+    "failed_orders_count": 0,
+    "thresholds": {
+      "fill_rate_min": 0.85,
+      "failed_order_rate_max": 0.15,
+      "latency_p95_ms_max": 2500.0
+    },
+    "anomalies": [
+      {
+        "code": "low_fill_rate",
+        "value": 0.5,
+        "threshold": 0.85
+      },
+      {
+        "code": "high_failed_order_rate",
+        "value": 0.5,
+        "threshold": 0.15
+      }
+    ],
+    "is_anomaly": true
+  },
+  "base_report": {
+    "date": "2026-04-01",
+    "generated_at": "2026-04-01 15:48:01.179710+00:00",
+    "execution_mode": "TESTNET",
+    "trades_count": 0,
+    "win_rate": 0.0,
+    "pnl_usdt": 0.0,
+    "max_drawdown_pct": 0.0,
+    "open_positions": 0,
+    "execution_quality_score": 48.335,
+    "fallback_rate": 0.0,
+    "scan_latency_avg_ms": 0.0,
+    "decision_latency_avg_ms": 0.0,
+    "risk_reject_rate": 0.0,
+    "allow_count": 0,
+    "reduce_size_count": 0,
+    "pass_count": 0,
+    "block_count": 0,
+    "top_3_strategy_stats": [],
+    "top_3_symbol_stats": [],
+    "critical_errors": [
+      "reject_rate_high"
+    ]
+  },
+  "schema_version": "1.0",
+  "metadata": {
+    "schema_version": "1.0",
+    "artifact_type": "faz56_daily_live_report",
+    "created_at": "2026-04-01T15:48:02.869877+00:00",
+    "artifact_id": "8b6121fd-4dfa-42d1-8cbb-398dba907c40",
+    "sha256": "f5d54441d1408cda48a01533c69ef21b01164470e7ff28dfffb8a70f196a344d"
+  },
+  "artifact_type": "faz56_daily_live_report",
+  "created_at": "2026-04-01T15:48:02.869877+00:00",
+  "sha256": "f5d54441d1408cda48a01533c69ef21b01164470e7ff28dfffb8a70f196a344d"
+}

@@ -1,3 +1,42 @@
+## 2026-04-01 — FAZ 5–6 IMPLEMENTATION (CANLI GENİŞLEME + KAPANIŞ ALTYAPISI)
+
+### Uygulanan backend modülleri
+- Yeni servis: `/app/backend/services/faz56_live_expansion_service.py`
+  - Kademeli canlı genişleme state-machine (120 dk gözlem penceresi)
+  - Zorunlu canlı metrik hesaplama: `fill_rate`, `rejection_rate`, `retry_count`, `latency_p95`, `pnl_drift`, `exposure`, `failed_orders`
+  - Anomali eşiği: `fill_rate<0.85`, `failed_order_rate>0.15`, `latency_p95>2500ms`
+  - Anomali halinde otomatik geri çekilme (size düşür + symbol daralt + risk sıkılaştır), **SIM’e otomatik geçiş YOK** (sadece öneri/uyarı)
+  - Günlük canlı rapor artefact üretimi (Europe/Istanbul)
+  - Faz 6 kapanış proof bundle + finalize artefact
+  - Operatör cheat sheet üretimi
+
+### Yeni API uçları (admin)
+- `GET /api/phase4/faz56/expansion/state`
+- `POST /api/phase4/faz56/expansion/advance`
+- `GET /api/phase4/faz56/live-session-metrics`
+- `POST /api/phase4/faz56/auto-rollback/evaluate`
+- `POST /api/phase4/faz56/daily-report/generate`
+- `GET /api/phase4/faz56/daily-report/latest`
+- `GET /api/phase4/faz56/closure/proofs`
+- `POST /api/phase4/faz56/closure/finalize`
+- `GET /api/phase4/faz56/operator-cheat-sheet`
+
+### Canary Auto-Heal güçlendirmesi
+- `/app/backend/services/live_mode_service.py` içinde futures uygun değilse spot fallback olduğunda:
+  - `SystemAlert` üretimi: `canary_auto_heal_spot_fallback`
+  - `AuditLog` kaydı: `CANARY_AUTO_HEAL_SPOT_FALLBACK`
+
+### Doğrulama (lokal backend, auth + canlı veri ile)
+- Faz56 endpointleri login sonrası 200 yanıt verdi.
+- `expansion/advance` anomali tespitinde genişlemeyi otomatik durdurdu ve rollback uyguladı.
+- `daily-report/generate` PASS/FAIL + trade/fail/risk-block/kill-switch/anomali alanlarını üretti.
+- `closure/proofs` ve `closure/finalize` proof bundle döndürdü.
+
+### Durum
+- Faz 5 altyapısı: **AKTİF** (kural tabanlı kademeli genişleme)
+- Faz 6 altyapısı: **AKTİF** (kanıt paketleme + final karar hesaplama)
+- Nihai kapanış koşulu: canlı metriklerin eşik içinde stabilize edilmesi ve release gate `GO/PASS`.
+
 ## 2026-04-01 — FAZ 4B LIVE ORDER FILL RECOVERY (CANARY LIVE)
 
 ### Kök neden (tespit)

@@ -1,0 +1,245 @@
+{
+  "timezone": "Europe/Istanbul",
+  "generated_at": "2026-04-01T15:48:20.800215+00:00",
+  "principle": "Sistem para kaybetmeden büyümeli, hızlı değil kontrollü büyümeli.",
+  "proofs": {
+    "final_release_gate_go": false,
+    "canary_live_report_pass": true,
+    "execution_proof": {
+      "exists": true,
+      "execution_id": "82fb2df4-b515-4d06-a489-4122001bf18a",
+      "filled_at": "2026-04-01T15:36:17.256076+00:00",
+      "details": {
+        "order_type": "spot_market",
+        "fallback": "none",
+        "strategy_type": "trend_following",
+        "volatility_pct": 0.015,
+        "volatility_regime": "low",
+        "max_position_pct": 0.1,
+        "max_notional": 150,
+        "leverage": 1,
+        "position_size": 0.001,
+        "execution_route": "spot_market_quote_order_qty",
+        "target_notional_usdt": 5.0,
+        "futures_candidate_notional": 68.79780000000001,
+        "futures_min_notional": 100.0,
+        "available_balance_usdt": 12.76666074,
+        "futures_blockers": [
+          "futures_min_notional_block",
+          "insufficient_futures_balance"
+        ],
+        "primary_order_status_code": 200,
+        "primary_order_payload": {
+          "symbol": "BTCUSDT",
+          "orderId": 59990602732,
+          "orderListId": -1,
+          "clientOrderId": "bZQzfSxqIgYC82UkLkVfiv",
+          "transactTime": 1775057776551,
+          "price": "0.00000000",
+          "origQty": "0.00007000",
+          "executedQty": "0.00007000",
+          "origQuoteOrderQty": "5.00000000",
+          "cummulativeQuoteQty": "4.81852070",
+          "status": "FILLED",
+          "timeInForce": "GTC",
+          "type": "MARKET",
+          "side": "BUY",
+          "workingTime": 1775057776551,
+          "fills": [
+            {
+              "price": "68836.01000000",
+              "qty": "0.00007000",
+              "commission": "0.00000007",
+              "commissionAsset": "BTC",
+              "tradeId": 6175553404
+            }
+          ],
+          "selfTradePreventionMode": "EXPIRE_MAKER"
+        },
+        "fallback_order_status_code": null,
+        "fallback_order_payload": {},
+        "final_order_payload": {
+          "symbol": "BTCUSDT",
+          "orderId": 59990602732,
+          "orderListId": -1,
+          "clientOrderId": "bZQzfSxqIgYC82UkLkVfiv",
+          "price": "0.00000000",
+          "origQty": "0.00007000",
+          "executedQty": "0.00007000",
+          "cummulativeQuoteQty": "4.81852070",
+          "status": "FILLED",
+          "timeInForce": "GTC",
+          "type": "MARKET",
+          "side": "BUY",
+          "stopPrice": "0.00000000",
+          "icebergQty": "0.00000000",
+          "time": 1775057776551,
+          "updateTime": 1775057776551,
+          "isWorking": true,
+          "workingTime": 1775057776551,
+          "origQuoteOrderQty": "5.00000000",
+          "selfTradePreventionMode": "EXPIRE_MAKER"
+        },
+        "failure_reason": ""
+      }
+    },
+    "kill_switch_proof": {
+      "exists": true,
+      "events_last_24h": 19
+    },
+    "rollback_proof": {
+      "exists": true,
+      "payload": {
+        "status": "applied",
+        "reason": "rollback_eval_test",
+        "evaluated_at": "2026-04-01T15:48:06.467372+00:00",
+        "actions": [
+          "size_dusuruldu",
+          "symbol_seti_daraltildi",
+          "risk_limitleri_sikilastirildi"
+        ],
+        "before": {
+          "canary_max_capital_usdt": 35.0,
+          "canary_symbols": [
+            "BTCUSDT"
+          ],
+          "max_position_pct": 0.09,
+          "leverage_cap": 1
+        },
+        "after": {
+          "canary_max_capital_usdt": 24.5,
+          "canary_symbols": [
+            "BTCUSDT"
+          ],
+          "max_position_pct": 0.08,
+          "leverage_cap": 1
+        },
+        "sim_switch_recommended": true,
+        "sim_auto_switch_enabled": false,
+        "anomalies": [
+          {
+            "code": "low_fill_rate",
+            "value": 0.5,
+            "threshold": 0.85
+          },
+          {
+            "code": "high_failed_order_rate",
+            "value": 0.5,
+            "threshold": 0.15
+          }
+        ]
+      }
+    },
+    "stability_24h": false,
+    "ui_backend_sync": true
+  },
+  "metrics_24h": {
+    "window_minutes": 1440,
+    "generated_at": "2026-04-01T15:48:24.998316+00:00",
+    "sample_size": 2,
+    "fill_rate": 0.5,
+    "rejection_rate": 0.5,
+    "failed_order_rate": 0.5,
+    "retry_count": 0,
+    "execution_latency_p95_ms": 1073.68,
+    "pnl_drift_pct": 0.05554,
+    "exposure": {
+      "total_notional": 840.0,
+      "symbol_top": []
+    },
+    "failed_orders_count": 0,
+    "thresholds": {
+      "fill_rate_min": 0.85,
+      "failed_order_rate_max": 0.15,
+      "latency_p95_ms_max": 2500.0
+    },
+    "anomalies": [
+      {
+        "code": "low_fill_rate",
+        "value": 0.5,
+        "threshold": 0.85
+      },
+      {
+        "code": "high_failed_order_rate",
+        "value": 0.5,
+        "threshold": 0.15
+      }
+    ],
+    "is_anomaly": true
+  },
+  "final_release_gate": {
+    "status": "BLOCKED",
+    "reasons": [
+      "execution_quality_score",
+      "permission_check_bypassed",
+      "kill_switch_not_tested",
+      "chain_integrity_bypassed",
+      "live_mode_disabled"
+    ],
+    "fail_reasons": [
+      "execution_quality_score"
+    ],
+    "warning_reasons": [
+      "permission_check_bypassed",
+      "kill_switch_not_tested",
+      "chain_integrity_bypassed",
+      "live_mode_disabled"
+    ],
+    "reason_codes": [
+      "execution_quality_score"
+    ],
+    "blocking_metrics": {
+      "exchange_health": true,
+      "execution_quality_score": 51.12,
+      "permission_drift_alert": false,
+      "active_override": false,
+      "live_mode_enabled": false,
+      "clock_drift_seconds": 0.08757,
+      "worker_lag_seconds": 0.0,
+      "rate_limit_health": "ok",
+      "risk_orchestrator_enabled": true,
+      "kill_switch_tested": false,
+      "chain_integrity_broken": true,
+      "failed_event_backlog": 0
+    },
+    "deploy_enable_flag": false,
+    "live_activation": "disabled",
+    "override_active": false,
+    "override_expires_at": null,
+    "override_id": null,
+    "environment": "prod",
+    "reason_code": "execution_quality_score",
+    "metrics": {
+      "exchange_health": true,
+      "execution_quality_score": 51.12,
+      "permission_drift_alert": false,
+      "active_override": false,
+      "live_mode_enabled": false,
+      "clock_drift_seconds": 0.08757,
+      "worker_lag_seconds": 0.0,
+      "rate_limit_health": "ok",
+      "risk_orchestrator_enabled": true,
+      "kill_switch_tested": false,
+      "chain_integrity_broken": true,
+      "failed_event_backlog": 0
+    }
+  },
+  "system_status": "HARDENING_IN_PROGRESS",
+  "closure_ready": false,
+  "backlog_post_production": [
+    "Visual Policy Builder",
+    "advanced capital allocation",
+    "explainability graph"
+  ],
+  "schema_version": "1.0",
+  "metadata": {
+    "schema_version": "1.0",
+    "artifact_type": "faz6_closure_bundle",
+    "created_at": "2026-04-01T15:48:27.997257+00:00",
+    "artifact_id": "5989e7c5-030a-4a2a-8f0d-ffbf4d6d6e45",
+    "sha256": "9f6aa2ea342a47a47c0c808fe6287023a0e8aed28b4ec8cae8c8aab4e97f8954"
+  },
+  "artifact_type": "faz6_closure_bundle",
+  "created_at": "2026-04-01T15:48:27.997257+00:00",
+  "sha256": "9f6aa2ea342a47a47c0c808fe6287023a0e8aed28b4ec8cae8c8aab4e97f8954"
+}
