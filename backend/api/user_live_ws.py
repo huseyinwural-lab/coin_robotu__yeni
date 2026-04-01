@@ -1,5 +1,4 @@
 import asyncio
-import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from core.security import decode_access_token

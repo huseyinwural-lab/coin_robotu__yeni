@@ -13,7 +13,6 @@ Iteration 77 - P2 Features Testing
 import os
 import pytest
 import requests
-import json
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 

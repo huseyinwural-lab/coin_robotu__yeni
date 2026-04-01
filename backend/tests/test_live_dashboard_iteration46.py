@@ -219,7 +219,7 @@ class TestFailedOrdersPanel:
             assert "entity_id" in item  # order_id
             assert "error_message" in item  # reason
             assert "created_at" in item or "updated_at" in item  # timestamp
-            print(f"PASS: Failed orders list shows required fields")
+            print("PASS: Failed orders list shows required fields")
         else:
             print("PASS: Failed orders list endpoint working (no items)")
 
@@ -315,7 +315,7 @@ class TestScannerControlEndpoints:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "runtime" in data or "symbol_universe" in data
-        print(f"PASS: Scanner control state endpoint working")
+        print("PASS: Scanner control state endpoint working")
 
     def test_scanner_restart_wrong_phrase(self, admin_headers):
         """Test scanner restart with wrong phrase is rejected"""
@@ -424,7 +424,7 @@ class TestScannerControlEndpoints:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert data.get("status") == "ok"
-        print(f"PASS: Scanner symbol universe remove successful")
+        print("PASS: Scanner symbol universe remove successful")
 
 
 # ============================================================================

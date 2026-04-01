@@ -58,7 +58,7 @@ class TestAuthSessionBinding:
         session.headers["Authorization"] = f"Bearer {token}"
         session.headers["X-Session-Device"] = device_id
         
-        print(f"Login successful, token obtained")
+        print("Login successful, token obtained")
         return token
 
     def test_02_auth_me_with_device_header(self, session, device_id):
@@ -93,7 +93,7 @@ class TestAuthSessionBinding:
         assert me_response.status_code == 200, f"/auth/me failed: {me_response.text}"
         user_data = me_response.json()
         assert "email" in user_data or "user" in user_data, "Missing user data in response"
-        print(f"/auth/me successful with device header")
+        print("/auth/me successful with device header")
 
     def test_03_auth_me_without_device_header_should_fail(self, session, device_id):
         """Test /api/auth/me without X-Session-Device header - should fail with session_device_mismatch"""
@@ -196,7 +196,7 @@ class TestExecutionReadinessP1Endpoints:
         assert "package_id" in data, "Missing package_id"
         assert "generated_at" in data, "Missing generated_at"
         
-        print(f"Incident export contract verified successfully")
+        print("Incident export contract verified successfully")
 
     def test_reconciliation_summary_contract(self, auth_headers):
         """GET /api/execution-readiness/reconciliation/summary contract"""

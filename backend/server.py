@@ -125,7 +125,6 @@ from services.incident_intelligence_service import run_incident_intelligence_cyc
 from core.incident_stream import incident_stream_hub
 from services.commercial_preview_smoke_service import (
     run_commercial_preview_http_gate_once,
-    run_commercial_preview_smoke_gate,
 )
 from db import (
     engine,

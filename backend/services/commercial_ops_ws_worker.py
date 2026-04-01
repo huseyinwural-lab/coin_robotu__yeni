@@ -2,7 +2,6 @@ import asyncio
 import json
 import threading
 import time
-from collections import defaultdict
 from datetime import datetime, timezone
 
 import websockets

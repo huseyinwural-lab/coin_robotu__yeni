@@ -25,11 +25,8 @@ import pytest
 from db import SessionLocal
 from core.security import hash_password
 from models import (
-    BrandSetting,
     ExecutionPolicy,
     ExecutionPolicyDecisionLog,
-    ExecutionPolicyVersion,
-    ExecutionRemediationRecommendation,
     ExecutionStrategyBinding,
     User,
     UserRole,
@@ -46,7 +43,6 @@ from services.execution_governance_service import (
     create_remediation_recommendation,
     evaluate_strategy_binding_constraints,
     get_governance_config,
-    get_strategy_binding,
     list_policy_versions,
     list_remediation_recommendations,
     resolve_policy_version_override,
@@ -59,7 +55,6 @@ from services.execution_policy_service import (
     append_execution_policy_decision_log,
     build_execution_policy_observability,
     ensure_dynamic_execution_policies,
-    get_decision_trace_detail,
 )
 from services.execution_pipeline_orchestrator import run_execution_pipeline
 

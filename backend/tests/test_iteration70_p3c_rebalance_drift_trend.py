@@ -204,7 +204,7 @@ class TestTrend5dFields:
                 # When not available, should be "5g trend unavailable"
                 assert trend_line == "5g trend unavailable", f"Expected '5g trend unavailable' when not available, got: {trend_line}"
 
-        print(f"PASS: trend_5d_line format is correct for all strategies")
+        print("PASS: trend_5d_line format is correct for all strategies")
 
 
 class TestP3abRegression:
@@ -275,7 +275,7 @@ class TestP3abRegression:
         assert data["drawdown_threshold_pct"] == 8.0, f"Expected drawdown_threshold_pct=8.0, got {data['drawdown_threshold_pct']}"
         assert data["drawdown_enforce_threshold_pct"] == 12.0, f"Expected drawdown_enforce_threshold_pct=12.0, got {data['drawdown_enforce_threshold_pct']}"
 
-        print(f"PASS: Summary has all risk binding fields with correct thresholds (P3.b regression OK)")
+        print("PASS: Summary has all risk binding fields with correct thresholds (P3.b regression OK)")
 
     def test_state_history_has_reason_fields(self, admin_headers):
         """Verify state history entries have reason_code and reason_detail"""
@@ -294,7 +294,7 @@ class TestP3abRegression:
             assert "reason_code" in entry, "Missing 'reason_code' in state history entry"
             assert "reason_detail" in entry, "Missing 'reason_detail' in state history entry"
 
-        print(f"PASS: State history entries have reason fields (P3.a regression OK)")
+        print("PASS: State history entries have reason fields (P3.a regression OK)")
 
 
 class TestRebalanceSuggestionNoAutoSave:

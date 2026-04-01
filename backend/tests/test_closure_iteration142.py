@@ -122,7 +122,7 @@ class TestHealthEndpoints:
         
         data = response.json()
         assert data.get("status") == "ok", f"Expected status=ok, got {data.get('status')}"
-        assert data.get("service") == "backend-api", f"Expected service=backend-api"
+        assert data.get("service") == "backend-api", "Expected service=backend-api"
         
         # Verify lightweight - only process check
         checks = data.get("checks", {})
@@ -297,7 +297,7 @@ class TestClosureRegressionChecks:
         
         assert login_check.get("pass") is True, "Login check should pass"
         assert login_check.get("status_code") == 200, "Login should return 200"
-        print(f"✓ Closure regression login check: PASS")
+        print("✓ Closure regression login check: PASS")
 
     def test_closure_regression_smoke_check(self):
         """Verify smoke check passed in closure regression"""
@@ -306,7 +306,7 @@ class TestClosureRegressionChecks:
         
         assert smoke_check.get("pass") is True, "Smoke check should pass"
         assert smoke_check.get("overall_status") == "PASS", "Smoke overall_status should be PASS"
-        print(f"✓ Closure regression smoke check: PASS")
+        print("✓ Closure regression smoke check: PASS")
 
     def test_closure_regression_readiness_check(self):
         """Verify readiness check passed in closure regression"""
@@ -328,7 +328,7 @@ class TestClosureRegressionChecks:
         
         assert dry_run_check.get("pass") is True, "Dry run check should pass"
         assert dry_run_check.get("result_status") == "PASS", "Dry run result_status should be PASS"
-        print(f"✓ Closure regression dry_run check: PASS")
+        print("✓ Closure regression dry_run check: PASS")
 
     def test_closure_regression_wizard_auth_check(self):
         """Verify wizard auth super_admin only check passed"""
@@ -337,7 +337,7 @@ class TestClosureRegressionChecks:
         
         assert wizard_auth_check.get("pass") is True, "Wizard auth check should pass"
         assert wizard_auth_check.get("status_code") == 403, "Non-super_admin should get 403"
-        print(f"✓ Closure regression wizard_auth_super_admin_only check: PASS")
+        print("✓ Closure regression wizard_auth_super_admin_only check: PASS")
 
 
 if __name__ == "__main__":

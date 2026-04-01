@@ -11,7 +11,6 @@ Iteration 131: P1 Revenue Engine Tests
 import os
 import pytest
 import requests
-from datetime import datetime, timezone
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 ADMIN_EMAIL = "canary.admin@platform.local"

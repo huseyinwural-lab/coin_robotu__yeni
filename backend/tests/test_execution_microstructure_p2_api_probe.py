@@ -123,7 +123,7 @@ def main():
             required = ["same_symbol_open_notional", "same_strategy_open_notional", "combined_load_notional", "combined_load_ratio", "performance_degradation_pct"]
             missing = [f for f in required if f not in capacity]
             if not missing:
-                log_result("guard_preview_portfolio_capacity", True, f"All P2 portfolio_capacity fields present")
+                log_result("guard_preview_portfolio_capacity", True, "All P2 portfolio_capacity fields present")
             else:
                 log_result("guard_preview_portfolio_capacity", False, f"Missing fields: {missing}")
         else:
@@ -230,7 +230,7 @@ def main():
                 if "should_have_been_sliced" in data and "slicing_plan" in data:
                     log_result("execution_replay_latest_p2_fields", True, f"should_have_been_sliced={data['should_have_been_sliced']}")
                 else:
-                    log_result("execution_replay_latest_p2_fields", False, f"Missing P2 fields in execution replay")
+                    log_result("execution_replay_latest_p2_fields", False, "Missing P2 fields in execution replay")
             else:
                 log_result("execution_replay_latest_p2_fields", True, f"status={data.get('status')} (no execution data)")
         else:
@@ -248,7 +248,7 @@ def main():
         if resp.status_code == 200:
             data = resp.json()
             if "portfolio_microstructure_state" in data:
-                log_result("p0_regression_status", True, f"portfolio_microstructure_state present")
+                log_result("p0_regression_status", True, "portfolio_microstructure_state present")
             else:
                 log_result("p0_regression_status", False, "Missing portfolio_microstructure_state")
         else:
@@ -268,7 +268,7 @@ def main():
             if "tracked_symbols" in data and "venues" in data:
                 binance = data.get("venues", {}).get("binance", {})
                 if "venue_health_score" in binance and "liquidity_stress_score" in binance:
-                    log_result("p1_regression_venues", True, f"P1 venue health fields present")
+                    log_result("p1_regression_venues", True, "P1 venue health fields present")
                 else:
                     log_result("p1_regression_venues", False, "Missing P1 venue health fields")
             else:

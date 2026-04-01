@@ -21,7 +21,6 @@ from services.learning_memory_service import (
     reject_learning_recommendation,
     refresh_learning_memory,
     rollback_learning_recommendation,
-    serialize_learning_recommendation,
     simulate_learning_recommendation_impact,
     simulate_recommendation_row_impact,
 )

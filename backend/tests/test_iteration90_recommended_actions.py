@@ -382,14 +382,14 @@ class TestImprovementAndIdempotency:
         
         if has_improvement:
             assert len(info_actions) > 0, "Improvement should produce INFO 'keep current policy' action"
-            print(f"PASS: Improvement detected, INFO 'keep current policy' action present")
+            print("PASS: Improvement detected, INFO 'keep current policy' action present")
         else:
             # Even without improvement, if no issues, should have keep current policy
             if not any(a["severity"] in ["CRITICAL", "WARNING"] for a in recommended_actions):
                 assert len(info_actions) > 0, "Stable state should produce INFO 'keep current policy' action"
-                print(f"PASS: Stable state, INFO 'keep current policy' action present")
+                print("PASS: Stable state, INFO 'keep current policy' action present")
             else:
-                print(f"INFO: Issues detected, no INFO keep policy expected")
+                print("INFO: Issues detected, no INFO keep policy expected")
 
     def test_idempotency_collision_increase_produces_action(self, auth_headers):
         """

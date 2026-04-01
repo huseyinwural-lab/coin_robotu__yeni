@@ -1,4 +1,3 @@
-from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session

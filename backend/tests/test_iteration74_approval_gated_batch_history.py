@@ -77,12 +77,12 @@ class TestApprovalGatedStateMachine:
     def test_super_admin_login_success(self, super_admin_token):
         """Test super_admin can login successfully"""
         assert super_admin_token is not None
-        print(f"PASS: Super admin login successful, token obtained")
+        print("PASS: Super admin login successful, token obtained")
 
     def test_admin_login_or_skip(self, admin_token):
         """Test admin can login or skip if account doesn't exist"""
         if admin_token:
-            print(f"PASS: Admin login successful, token obtained")
+            print("PASS: Admin login successful, token obtained")
         else:
             pytest.skip("Admin account not available")
 
@@ -97,7 +97,7 @@ class TestApprovalGatedStateMachine:
         assert "generated_at" in data
         assert "strategy_conflicts" in data
         assert "hedge_suggestions" in data
-        print(f"PASS: Strategy intelligence dashboard loaded successfully")
+        print("PASS: Strategy intelligence dashboard loaded successfully")
 
     def test_risk_simulation_returns_confidence_adjusted_risk_score(self, super_admin_token, super_admin_user_id):
         """Test single risk simulation returns confidence_adjusted_risk_score"""
@@ -208,7 +208,7 @@ class TestApprovalGatedStateMachine:
             print(f"PASS: Simulation history returned {len(items)} records")
             print(f"  Latest: run_id={item['run_id']}, mode={item['request_mode']}, status={item['status']}")
         else:
-            print(f"PASS: Simulation history endpoint working (no records yet)")
+            print("PASS: Simulation history endpoint working (no records yet)")
 
     def test_override_approval_requests_list(self, super_admin_token):
         """Test override approval requests list endpoint works"""
@@ -231,7 +231,7 @@ class TestApprovalGatedStateMachine:
             assert "reason_note" in item
             print(f"PASS: Approval requests list returned {len(items)} items")
         else:
-            print(f"PASS: Approval requests list endpoint working (no pending requests)")
+            print("PASS: Approval requests list endpoint working (no pending requests)")
 
     def test_super_admin_override_applies_directly(self, super_admin_token, super_admin_user_id):
         """Test super_admin can apply override directly (not pending_approval)"""
@@ -281,7 +281,7 @@ class TestApprovalGatedStateMachine:
         # Super admin should get "applied" status, not "pending_approval"
         assert data.get("status") == "applied", f"Expected 'applied' status for super_admin, got: {data.get('status')}"
         assert data.get("override") is not None, "Override object should be present"
-        print(f"PASS: Super admin override applied directly with status='applied'")
+        print("PASS: Super admin override applied directly with status='applied'")
 
 
 class TestAdminApprovalGatedFlow:
@@ -499,7 +499,7 @@ class TestAdminApprovalGatedFlow:
         )
         # Should get 403 Forbidden, not 404 Not Found
         assert response.status_code == 403, f"Expected 403 for non-super_admin, got: {response.status_code}"
-        print(f"PASS: Non-super_admin correctly blocked from approving (403)")
+        print("PASS: Non-super_admin correctly blocked from approving (403)")
 
     def test_non_super_admin_cannot_reject(self, admin_token):
         """Test that non-super_admin cannot reject requests"""
@@ -509,7 +509,7 @@ class TestAdminApprovalGatedFlow:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 403, f"Expected 403 for non-super_admin, got: {response.status_code}"
-        print(f"PASS: Non-super_admin correctly blocked from rejecting (403)")
+        print("PASS: Non-super_admin correctly blocked from rejecting (403)")
 
 
 class TestBatchSimulationSelectedSymbols:
@@ -584,7 +584,7 @@ class TestBatchSimulationSelectedSymbols:
             headers={"Authorization": f"Bearer {super_admin_token}"},
         )
         assert response.status_code == 400, f"Expected 400 for empty symbols, got: {response.status_code}"
-        print(f"PASS: Empty symbols list correctly rejected with 400")
+        print("PASS: Empty symbols list correctly rejected with 400")
 
     def test_batch_simulation_persists_to_history(self, super_admin_token, super_admin_user_id):
         """Test batch simulation runs are persisted to history"""

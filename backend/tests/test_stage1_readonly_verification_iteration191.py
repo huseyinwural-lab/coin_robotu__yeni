@@ -13,7 +13,6 @@ Tests verify:
 import os
 import pytest
 import requests
-from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
@@ -513,7 +512,7 @@ class TestStage1RiskVisibility:
         for field in risk_fields:
             assert field in data, f"Missing risk field: {field}"
         
-        print(f"✓ Risk visible in live/risk endpoint")
+        print("✓ Risk visible in live/risk endpoint")
         print(f"  - Portfolio exposure: {data.get('own_portfolio_exposure')}")
         print(f"  - Daily loss limit: {data.get('daily_loss_limit_pct')}")
 

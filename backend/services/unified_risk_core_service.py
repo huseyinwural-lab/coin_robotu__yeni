@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from models import PaperPosition, UserExecutionIntent, UserRiskSetting
+from models import PaperPosition, UserRiskSetting
 from services.audit_service import create_audit_log
 
 

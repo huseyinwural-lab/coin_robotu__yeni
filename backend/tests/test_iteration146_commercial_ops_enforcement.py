@@ -13,7 +13,6 @@ Tests for:
 """
 
 from datetime import datetime, timedelta, timezone
-import uuid
 
 from fastapi.testclient import TestClient
 import pytest
@@ -25,9 +24,7 @@ from models import (
     CommercialExportAudit,
     CommercialExportManifest,
     CommercialExportSchedule,
-    CommercialOperationalControlState,
     CommercialOperationalControlTransition,
-    User,
 )
 from server import fastapi_app
 from services.commercial_export_scheduler_service import run_commercial_export_scheduler_cycle
@@ -38,7 +35,6 @@ from services.commercial_controls_enforcement_service import (
     COMMERCIAL_WITHDRAW_LOCKED,
     CommercialControlViolation,
     enforce_commercial_control_or_raise,
-    get_user_operational_control_state,
 )
 
 

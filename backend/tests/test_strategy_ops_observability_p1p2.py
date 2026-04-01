@@ -180,7 +180,7 @@ class TestExecutionPreview:
         assert "decision_trace" in trace, "Missing 'decision_trace' in explainability_trace"
         assert "selection" in trace, "Missing 'selection' in explainability_trace"
         
-        print(f"Execution preview returned all required fields successfully")
+        print("Execution preview returned all required fields successfully")
         print(f"Decision result: {decision.get('result')}, score: {decision.get('score')}")
 
 
@@ -212,7 +212,7 @@ class TestVersionMetrics:
         for field in expected_metrics:
             assert field in metrics, f"Missing '{field}' in metrics"
         
-        print(f"Metrics endpoint returned all required fields")
+        print("Metrics endpoint returned all required fields")
         print(f"Metrics: {metrics}")
 
 
@@ -269,7 +269,7 @@ class TestFalseSignalReport:
         assert "execution_quality" in data, "Missing 'execution_quality'"
         assert "evidence" in data, "Missing 'evidence'"
         
-        print(f"False signal report returned structure correctly")
+        print("False signal report returned structure correctly")
         print(f"false_allow_rate: {data['false_allow_rate']}, false_reject_rate: {data['false_reject_rate']}")
 
 
@@ -573,7 +573,7 @@ class TestAuditExport:
         
         assert response.status_code == 200, f"Audit export CSV failed: {response.text}"
         # CSV format should return different structure
-        print(f"Audit export CSV returned successfully")
+        print("Audit export CSV returned successfully")
 
 
 class TestRollbackChain:

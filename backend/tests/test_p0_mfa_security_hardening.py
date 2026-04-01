@@ -54,7 +54,7 @@ class TestAdminLoginMfaRequired:
         mfa_methods = data.get("mfa_methods", [])
         assert "totp" in mfa_methods, f"Expected 'totp' in mfa_methods, got {mfa_methods}"
         
-        print(f"✓ Admin login returns mfa_required=true with challenge token")
+        print("✓ Admin login returns mfa_required=true with challenge token")
 
     def test_admin_login_returns_user_info(self):
         """Admin login returns user info even without token"""
@@ -115,7 +115,7 @@ class TestMfaVerifyEndpoints:
         # Should return 400 for invalid code, not 404
         assert response.status_code in [400, 401, 403], f"Expected 400/401/403, got {response.status_code}"
         
-        print(f"✓ POST /api/mfa/verify endpoint exists and rejects invalid code")
+        print("✓ POST /api/mfa/verify endpoint exists and rejects invalid code")
 
     def test_auth_mfa_verify_endpoint_exists(self):
         """POST /api/auth/mfa/verify endpoint exists"""
@@ -136,7 +136,7 @@ class TestMfaVerifyEndpoints:
         )
         assert response.status_code in [400, 401, 403], f"Expected 400/401/403, got {response.status_code}"
         
-        print(f"✓ POST /api/auth/mfa/verify endpoint exists and rejects invalid code")
+        print("✓ POST /api/auth/mfa/verify endpoint exists and rejects invalid code")
 
     def test_auth_mfa_challenge_verify_endpoint_exists(self):
         """POST /api/auth/mfa/challenge/verify endpoint exists"""
@@ -157,7 +157,7 @@ class TestMfaVerifyEndpoints:
         )
         assert response.status_code in [400, 401, 403], f"Expected 400/401/403, got {response.status_code}"
         
-        print(f"✓ POST /api/auth/mfa/challenge/verify endpoint exists")
+        print("✓ POST /api/auth/mfa/challenge/verify endpoint exists")
 
 
 class TestDeviceIdCookieBinding:
@@ -169,7 +169,7 @@ class TestDeviceIdCookieBinding:
         response = requests.get(f"{BASE_URL}/api/auth/me")
         assert response.status_code == 401, f"Expected 401, got {response.status_code}"
         
-        print(f"✓ Auth-protected endpoint requires authentication")
+        print("✓ Auth-protected endpoint requires authentication")
 
     def test_token_without_device_cookie_rejected(self):
         """Token without matching device_id cookie is rejected"""
@@ -195,7 +195,7 @@ class TestDeviceIdCookieBinding:
         # Should be rejected due to device mismatch or user not found
         assert response.status_code in [401, 403], f"Expected 401/403, got {response.status_code}"
         
-        print(f"✓ Token without matching device cookie is rejected")
+        print("✓ Token without matching device cookie is rejected")
 
 
 class TestJwtClaims:
@@ -224,7 +224,7 @@ class TestJwtClaims:
         assert decoded["mfa_verified"] is True
         assert decoded["device_id"] == "test-device-id"
         
-        print(f"✓ JWT structure includes mfa_verified and device_id claims")
+        print("✓ JWT structure includes mfa_verified and device_id claims")
 
 
 class TestBruteForceProtection:
@@ -288,7 +288,7 @@ class TestTotpAntiReplay:
         error_detail = response1.json().get("detail", "")
         assert "invalid_totp_code" in str(error_detail) or "invalid" in str(error_detail).lower()
         
-        print(f"✓ TOTP verification rejects invalid codes")
+        print("✓ TOTP verification rejects invalid codes")
 
 
 class TestStepUpFreshness:
@@ -303,7 +303,7 @@ class TestStepUpFreshness:
         )
         assert response.status_code == 401, f"Expected 401 without auth, got {response.status_code}"
         
-        print(f"✓ POST /api/auth/step-up endpoint exists and requires auth")
+        print("✓ POST /api/auth/step-up endpoint exists and requires auth")
 
     def test_critical_endpoints_require_step_up(self):
         """Critical endpoints require step-up freshness"""
@@ -336,7 +336,7 @@ class TestStepUpFreshness:
             assert response.status_code in [401, 403, 404, 422], \
                 f"{method} {endpoint}: Expected 401/403/404/422, got {response.status_code}"
         
-        print(f"✓ Critical endpoints require authentication (step-up check)")
+        print("✓ Critical endpoints require authentication (step-up check)")
 
 
 class TestGraceAckFlow:
@@ -361,11 +361,11 @@ class TestGraceAckFlow:
         
         # Either grace_ack should be in methods (if grace active) or totp (if setup complete)
         if mfa_grace_active:
-            assert "grace_ack" in mfa_methods, f"Expected grace_ack in mfa_methods when grace active"
-            print(f"✓ Grace ack method available during grace period")
+            assert "grace_ack" in mfa_methods, "Expected grace_ack in mfa_methods when grace active"
+            print("✓ Grace ack method available during grace period")
         else:
-            assert "totp" in mfa_methods, f"Expected totp in mfa_methods when TOTP configured"
-            print(f"✓ TOTP method available (grace period not active)")
+            assert "totp" in mfa_methods, "Expected totp in mfa_methods when TOTP configured"
+            print("✓ TOTP method available (grace period not active)")
 
 
 class TestMfaEnforcementForPrivilegedRoles:
@@ -404,7 +404,7 @@ class TestInvalidCredentials:
         )
         assert response.status_code == 401, f"Expected 401, got {response.status_code}"
         
-        print(f"✓ Invalid password returns 401")
+        print("✓ Invalid password returns 401")
 
     def test_invalid_email_returns_401(self):
         """Invalid email returns 401"""
@@ -414,7 +414,7 @@ class TestInvalidCredentials:
         )
         assert response.status_code in [401, 403], f"Expected 401/403, got {response.status_code}"
         
-        print(f"✓ Invalid email returns 401/403")
+        print("✓ Invalid email returns 401/403")
 
 
 class TestMfaChallengeExpiry:

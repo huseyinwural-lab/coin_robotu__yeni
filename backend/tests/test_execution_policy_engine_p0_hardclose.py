@@ -13,9 +13,8 @@ if str(BACKEND_ROOT) not in sys.path:
 
 from db import SessionLocal, redis_client
 from core.security import hash_password
-from models import BrandSetting, ExecutionPolicy, ExecutionPortfolio, LiveActivationConfig, Position, User, UserRole
+from models import BrandSetting, ExecutionPolicy, LiveActivationConfig, Position, User, UserRole
 from services.execution_pipeline_orchestrator import run_execution_pipeline
-import services.execution_policy_service as execution_policy_service
 from services.execution_policy_service import (
     FAILSAFE_REASON_CODES,
     ensure_dynamic_execution_policies,

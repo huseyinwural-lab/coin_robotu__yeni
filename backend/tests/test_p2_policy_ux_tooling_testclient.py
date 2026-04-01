@@ -268,7 +268,7 @@ class TestActivationGate:
         print(f"Prod activation response: {response.status_code} - {response.text[:300]}")
         # Either blocked (400/403) or requires approval
         assert response.status_code in [200, 400, 403], f"Unexpected status: {response.status_code}"
-        print(f"PASS: Prod approval gate tested")
+        print("PASS: Prod approval gate tested")
 
 
 class TestDiffViewer:

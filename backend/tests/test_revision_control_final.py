@@ -142,7 +142,7 @@ class TestRevisionControlEndpoints:
         # Verify revision_id is present and equals 1 for new strategy
         assert "revision_id" in data, f"Missing revision_id in response: {data.keys()}"
         assert data["revision_id"] == 1, f"Expected revision_id=1, got {data['revision_id']}"
-        print(f"✓ Create strategy returns revision_id=1")
+        print("✓ Create strategy returns revision_id=1")
         
         # Cleanup
         delete_test_strategy(self.headers, strategy_id, data["revision_id"])
@@ -198,7 +198,7 @@ class TestRevisionControlEndpoints:
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT", f"Expected REVISION_CONFLICT, got: {detail}"
         assert "conflicts" in detail, "Missing conflicts array"
-        print(f"✓ Update with wrong revision returned 409 REVISION_CONFLICT")
+        print("✓ Update with wrong revision returned 409 REVISION_CONFLICT")
         
         # Cleanup
         delete_test_strategy(self.headers, strategy_id, created["revision_id"])
@@ -231,7 +231,7 @@ class TestRevisionControlEndpoints:
         data = bulk_resp.json()
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT"
-        print(f"✓ Bulk update with wrong revision returned 409")
+        print("✓ Bulk update with wrong revision returned 409")
         
         # Cleanup
         delete_test_strategy(self.headers, strategy_id, created["revision_id"])
@@ -259,7 +259,7 @@ class TestRevisionControlEndpoints:
         data = toggle_resp.json()
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT"
-        print(f"✓ Throttle toggle with wrong revision returned 409")
+        print("✓ Throttle toggle with wrong revision returned 409")
         
         # Cleanup
         delete_test_strategy(self.headers, strategy_id, created["revision_id"])
@@ -286,7 +286,7 @@ class TestRevisionControlEndpoints:
         data = delete_resp.json()
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT"
-        print(f"✓ Delete with wrong revision returned 409")
+        print("✓ Delete with wrong revision returned 409")
         
         # Cleanup with correct revision
         delete_test_strategy(self.headers, strategy_id, created["revision_id"])
@@ -302,7 +302,7 @@ class TestRevisionControlEndpoints:
         )
         
         assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
-        print(f"✓ Normalize without expected_revisions returned 400")
+        print("✓ Normalize without expected_revisions returned 400")
 
     def test_normalize_with_wrong_revisions_returns_409(self):
         """Normalize with wrong expected_revisions should return 409"""
@@ -327,7 +327,7 @@ class TestRevisionControlEndpoints:
         data = norm_resp.json()
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT"
-        print(f"✓ Normalize with wrong revisions returned 409")
+        print("✓ Normalize with wrong revisions returned 409")
         
         # Cleanup
         delete_test_strategy(self.headers, strategy_id, created["revision_id"])
@@ -360,13 +360,13 @@ class TestRevisionControlEndpoints:
         if data.get("rows"):
             row = data["rows"][0]
             assert "weight_delta" in row, f"Missing weight_delta in row: {row.keys()}"
-            assert "projected_return_delta_pct" in row, f"Missing projected_return_delta_pct in row"
-            assert "projected_risk_delta_pct" in row, f"Missing projected_risk_delta_pct in row"
+            assert "projected_return_delta_pct" in row, "Missing projected_return_delta_pct in row"
+            assert "projected_risk_delta_pct" in row, "Missing projected_risk_delta_pct in row"
             print(f"✓ What-if row fields: weight_delta={row.get('weight_delta')}, "
                   f"return_delta={row.get('projected_return_delta_pct')}, "
                   f"risk_delta={row.get('projected_risk_delta_pct')}")
         
-        print(f"✓ What-if simulation returns all required projection fields")
+        print("✓ What-if simulation returns all required projection fields")
         
         # Cleanup
         delete_test_strategy(self.headers, strategy_id, created["revision_id"])

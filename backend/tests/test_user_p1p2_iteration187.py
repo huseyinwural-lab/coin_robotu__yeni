@@ -9,7 +9,6 @@ Tests for:
 - User activity log (/api/user/activity-log)
 - No regression on dashboard/execution/alerts/chart routes
 """
-import os
 import pytest
 import requests
 

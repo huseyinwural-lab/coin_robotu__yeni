@@ -15,7 +15,6 @@ from server import app
 from db import SessionLocal
 from models import User, UserRole
 from core.security import hash_password
-import uuid
 
 
 @pytest.fixture(scope="module")

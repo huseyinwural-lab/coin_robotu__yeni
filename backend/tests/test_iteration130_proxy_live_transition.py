@@ -281,7 +281,7 @@ class TestFuturesLiveGateRegression:
             assert "pnl_ok" in controls, "Should have pnl_ok control"
             assert "reconciliation_ok" in controls, "Should have reconciliation_ok control"
             print(f"PASS: Futures testnet live-gate - status={response.status_code}")
-            print(f"  controls structure verified")
+            print("  controls structure verified")
         else:
             print(f"INFO: Futures testnet live-gate returned {response.status_code}")
 

@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-import uuid
 
 from fastapi.testclient import TestClient
 import pytest

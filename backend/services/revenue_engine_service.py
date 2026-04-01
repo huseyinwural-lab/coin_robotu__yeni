@@ -1,7 +1,6 @@
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import CommercialTrade, RevenueLedger, User

@@ -6,7 +6,6 @@ Tests service-level functions directly without HTTP layer to bypass auth issues.
 import os
 import sys
 import pytest
-from datetime import datetime, timezone
 
 # Add backend to path
 sys.path.insert(0, "/app/backend")

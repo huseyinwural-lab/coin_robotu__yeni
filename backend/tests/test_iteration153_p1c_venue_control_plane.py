@@ -257,7 +257,7 @@ class TestRoutingPreviewV2:
         assert "policy_impact" in data, "Missing policy_impact field"
         assert "capability_impact" in data, "Missing capability_impact field"
         assert "health_impact" in data, "Missing health_impact field"
-        print(f"PASS: Impact fields present - policy_impact, capability_impact, health_impact")
+        print("PASS: Impact fields present - policy_impact, capability_impact, health_impact")
 
     def test_routing_preview_selected_path_has_route_score(self, admin_headers, approved_user_id):
         """Routing preview selected_path has route_score"""
@@ -472,7 +472,7 @@ class TestAuditTimeline:
             first_item = items[0]
             assert "diff_keys" in first_item, "Missing diff_keys field"
             assert "diff_highlights" in first_item, "Missing diff_highlights field"
-            print(f"PASS: Audit items have diff_keys and diff_highlights fields")
+            print("PASS: Audit items have diff_keys and diff_highlights fields")
         else:
             print("WARN: No audit items to validate diff_highlights")
 

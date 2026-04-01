@@ -574,7 +574,7 @@ class TestManualIntervention:
         """Manual action force_state_change works with valid params (prod guardrails)"""
         # Create a simulation with unique symbol to avoid idempotency collision
         correlation_id = f"manual_force_{uuid.uuid4().hex[:12]}"
-        unique_symbol = f"AVAXUSDT"  # Use different symbol to avoid collision
+        unique_symbol = "AVAXUSDT"  # Use different symbol to avoid collision
         sim_response = requests.post(
             f"{BASE_URL}/api/admin-phase3/execution-state-transitions/simulate"
             f"?strategy_type=breakout&symbol={unique_symbol}&side=long&outcome=filled"

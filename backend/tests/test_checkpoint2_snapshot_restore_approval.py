@@ -13,7 +13,6 @@ Tests for:
 import os
 import pytest
 import requests
-import json
 from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
@@ -207,7 +206,7 @@ class TestCheckpoint2SnapshotRestoreApproval:
             message = data.get("message", "")
             assert "invalidated_pending_requests" in message or "restore" in message.lower()
         else:
-            print(f"INFO: Restore returned pending_approval (may be expected in some configs)")
+            print("INFO: Restore returned pending_approval (may be expected in some configs)")
 
     def test_snapshot_restore_admin_creates_pending_approval(self, admin_headers, super_admin_headers):
         """POST /api/admin/strategy-allocation/snapshots/{id}/restore - admin creates pending approval request"""
@@ -344,7 +343,7 @@ class TestCheckpoint2SnapshotRestoreApproval:
         assert "summary" in data, "Missing summary in export"
         assert "rows" in data, "Missing rows in export"
         
-        print(f"PASS: JSON export contains audit_meta with all required fields")
+        print("PASS: JSON export contains audit_meta with all required fields")
         print(f"  exported_at={audit_meta.get('exported_at')}")
         print(f"  config_version={audit_meta.get('config_version')}")
         print(f"  source_context={audit_meta.get('source_context')}")
@@ -485,7 +484,7 @@ class TestCheckpoint2SnapshotRestoreApproval:
         requires_review = [r for r in all_requests if r.get("status") == "requires_review"]
         
         print(f"INFO: After restore - {len(stale_requests)} STALE requests, {len(requires_review)} requires_review")
-        print(f"PASS: Restore invalidation mechanism verified")
+        print("PASS: Restore invalidation mechanism verified")
 
 
 class TestCheckpoint2FrontendDataContract:

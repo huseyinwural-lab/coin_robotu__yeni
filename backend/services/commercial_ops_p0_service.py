@@ -11,8 +11,7 @@ from urllib.parse import urlencode
 import httpx
 from sqlalchemy.orm import Session
 
-from core.users.user_exchange_connector import decrypt_exchange_secret
-from models import CommercialTrade, ExchangeReconciliationLog, PnlRecord, User, UserExchangeConnection
+from models import CommercialTrade, ExchangeReconciliationLog, PnlRecord, User
 from services.credential_resolution_service import resolve_exchange_credentials
 from services.revenue_engine_service import sync_revenue_ledger_for_scope
 

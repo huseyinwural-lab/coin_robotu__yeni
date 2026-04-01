@@ -325,7 +325,7 @@ class TestIncidentExportRegression:
         )
         # Should return 200 with zip content or empty result
         assert response.status_code == 200, f"Export failed: {response.status_code} - {response.text[:200]}"
-        print(f"✓ Incident export with time range works")
+        print("✓ Incident export with time range works")
 
 
 class TestAlertSeenAckFlow:

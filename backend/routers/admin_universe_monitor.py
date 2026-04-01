@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 
 from db import SessionLocal, engine, get_db, redis_client
 from deps import require_admin
-from models import AdminControl, AuditLog, ExecutionMetric, ScannerFallbackEvent, ScannerPerformanceSnapshot, UniverseExportJob, User, UserRole, UserScannerResult
+from models import AdminControl, AuditLog, ExecutionMetric, ScannerPerformanceSnapshot, UniverseExportJob, User, UserRole, UserScannerResult
 from services.audit_service import create_audit_log
-from services.pipeline.cache_store import get_json, set_json
+from services.pipeline.cache_store import get_json
 from services.pipeline.universe_engine import debug_effective_universe
 from services.risk_engine_service import build_admin_risk_status, patch_risk_config
 from services.scanner_observability_service import (

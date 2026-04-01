@@ -5,7 +5,6 @@ Tests: Builder validation, Diff, Simulation, Bulk operations, Activation gate, A
 import os
 import pytest
 import requests
-import json
 from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-trace-engine.preview.emergentagent.com")

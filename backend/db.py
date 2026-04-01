@@ -339,6 +339,13 @@ def reset_database_runtime_state_for_tests() -> None:
 
 
 def _build_redis_client():
+    ci_mode = str(os.getenv("CI", "") or "").strip().lower() in {"1", "true", "yes"}
+    fail_fast_default = "false" if ci_mode else "true"
+    redis_fail_fast = str(os.getenv("REDIS_FAIL_FAST", fail_fast_default) or fail_fast_default).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     client = redis.Redis.from_url(
         settings.redis_url,
         decode_responses=True,
@@ -353,8 +360,18 @@ def _build_redis_client():
         logger.warning("REDIS_CONNECT_OK", extra={"redis_url": redis_preview, "mode": "fail_fast"})
         return client
     except redis.exceptions.RedisError as exc:
-        logger.error("REDIS_CONNECT_FAIL", extra={"redis_url": redis_preview, "reason": _sanitize_error(exc), "mode": "fail_fast"})
-        raise RuntimeError("redis_init_failed_fail_fast") from exc
+        logger.error(
+            "REDIS_CONNECT_FAIL",
+            extra={
+                "redis_url": redis_preview,
+                "reason": _sanitize_error(exc),
+                "mode": "fail_fast" if redis_fail_fast else "memory_fallback",
+            },
+        )
+        if redis_fail_fast:
+            raise RuntimeError("redis_init_failed_fail_fast") from exc
+        logger.warning("REDIS_INMEMORY_FALLBACK_ENABLED", extra={"redis_url": redis_preview})
+        return InMemoryRedis()
 
 
 Base = declarative_base()

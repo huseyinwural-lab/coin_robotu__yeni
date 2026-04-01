@@ -315,7 +315,7 @@ class TestDriftMuteAction:
         data = response.json()
         
         assert data.get("status") == "rejected", f"Expected rejected for 2h duration, got {data.get('status')}"
-        print(f"PASS: Mute action rejected 2h duration")
+        print("PASS: Mute action rejected 2h duration")
 
     def test_mute_action_rejects_48h_duration(self, admin_headers, drift_alert_id):
         """Mute action should reject 48h duration"""
@@ -333,7 +333,7 @@ class TestDriftMuteAction:
         data = response.json()
         
         assert data.get("status") == "rejected", f"Expected rejected for 48h duration, got {data.get('status')}"
-        print(f"PASS: Mute action rejected 48h duration")
+        print("PASS: Mute action rejected 48h duration")
 
 
 class TestDriftIgnoreAction:
@@ -356,7 +356,7 @@ class TestDriftIgnoreAction:
         
         assert data.get("status") == "rejected", f"Expected rejected without correct confirm, got {data.get('status')}"
         assert "IGNORE DRIFT ALERT" in data.get("message", ""), f"Message should mention required phrase: {data.get('message')}"
-        print(f"PASS: Ignore action rejected without correct confirm phrase")
+        print("PASS: Ignore action rejected without correct confirm phrase")
 
     def test_ignore_action_with_correct_confirm(self, admin_headers, drift_alert_id):
         """Ignore action should succeed with correct confirm phrase"""
@@ -402,7 +402,7 @@ class TestDriftDisableStrategyAction:
         
         assert data.get("status") == "rejected", f"Expected rejected without correct confirm, got {data.get('status')}"
         assert "DISABLE VIA DRIFT" in data.get("message", ""), f"Message should mention required phrase: {data.get('message')}"
-        print(f"PASS: Disable strategy action rejected without correct confirm phrase")
+        print("PASS: Disable strategy action rejected without correct confirm phrase")
 
     def test_disable_strategy_with_correct_confirm_dry_run(self, admin_headers, drift_alert_id):
         """Disable strategy action with correct confirm (dry_run) should show throttle->pause->disable chain"""
@@ -466,7 +466,7 @@ class TestDriftRetrainAction:
         if after_state:
             assert after_state.get("retrain_status") == "queued", f"Expected retrain_status=queued, got {after_state.get('retrain_status')}"
             assert "retrain_job_id" in after_state, "after_state should have retrain_job_id"
-            assert after_state.get("retrain_job_id", "").startswith("retrain_"), f"retrain_job_id should start with 'retrain_'"
+            assert after_state.get("retrain_job_id", "").startswith("retrain_"), "retrain_job_id should start with 'retrain_'"
             print(f"PASS: Retrain action: retrain_status={after_state.get('retrain_status')}, retrain_job_id={after_state.get('retrain_job_id')}")
         else:
             # Check state_snapshot for retrain info
@@ -557,7 +557,7 @@ class TestDriftDeepLink:
             assert alert_strategy_id == deep_link_strategy_id, \
                 f"Deep link strategy_id mismatch: alert={alert_strategy_id}, deep_link={deep_link_strategy_id}"
         
-        print(f"PASS: All drift alerts have matching strategy_id in deep_link")
+        print("PASS: All drift alerts have matching strategy_id in deep_link")
 
 
 class TestOpsUserDriftAuthorization:

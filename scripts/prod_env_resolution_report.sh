@@ -7,7 +7,7 @@ REPORT_JSON="${ARTIFACT_DIR}/prod_env_resolution_report.json"
 
 mkdir -p "${ARTIFACT_DIR}"
 
-python - <<'PY'
+ROOT_DIR="${ROOT_DIR}" ARTIFACT_DIR="${ARTIFACT_DIR}" python - <<'PY'
 import json
 import os
 import re
@@ -20,10 +20,12 @@ try:
 except Exception:  # noqa: BLE001
     redis = None
 
-root = Path('/app')
+root = Path(os.environ.get('ROOT_DIR') or '/app')
+artifact_dir = Path(os.environ.get('ARTIFACT_DIR') or (root / 'artifacts'))
+artifact_dir.mkdir(parents=True, exist_ok=True)
 backend_env_path = root / 'backend' / '.env'
 frontend_env_path = root / 'frontend' / '.env'
-report_path = root / 'artifacts' / 'prod_env_resolution_report.json'
+report_path = artifact_dir / 'prod_env_resolution_report.json'
 
 
 def parse_env(path: Path) -> dict[str, str]:

@@ -9,9 +9,8 @@ P1/P2 Readiness Validation Tests
 - Readiness history analytics endpoint
 """
 
-import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 # Strategy engine canonical health tests
 class TestStrategyEngineCanonicalHealth:
@@ -731,7 +730,7 @@ class TestReadinessHistoryService:
 
     def test_readiness_history_service_structure(self):
         """Verify readiness history service returns correct structure"""
-        from services.readiness_history_service import get_readiness_history, READINESS_ACTIONS
+        from services.readiness_history_service import READINESS_ACTIONS
 
         # Verify READINESS_ACTIONS contains expected actions
         assert "FUTURES_LIVE_READINESS_VIEWED" in READINESS_ACTIONS

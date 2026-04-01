@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import Text, cast, func, or_
+from sqlalchemy import Text, cast, or_
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -25,7 +25,6 @@ from models import (
     ExecutionEvent,
     ExecutionAlertDeliveryAttempt,
     ExecutionIntent,
-    ExecutionIntentEvent,
     ExecutionManualAction,
     ExecutionPolicy,
     ExecutionStateTransition,

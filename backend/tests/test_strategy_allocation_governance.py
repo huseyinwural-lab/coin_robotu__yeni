@@ -145,7 +145,7 @@ class TestStrategyAllocationUpdate:
         else:
             # Multiple strategies - changing one breaks total
             assert response.status_code == 400, f"Expected 400 for weight!=1, got {response.status_code}"
-            print(f"Correctly rejected weight change that breaks total=1")
+            print("Correctly rejected weight change that breaks total=1")
 
     def test_update_rejects_over_allocation(self, api_client):
         """Backend rejects when current_capital > max_capital"""
@@ -369,7 +369,7 @@ class TestStrategyAllocationThrottleToggle:
         )
         
         assert response.status_code == 400, f"Expected 400 without proper confirm, got {response.status_code}"
-        print(f"Correctly rejected throttle toggle without proper confirm")
+        print("Correctly rejected throttle toggle without proper confirm")
 
     def test_throttle_toggle_with_double_confirm(self, api_client):
         """Throttle toggle works with proper double confirm"""

@@ -10,7 +10,6 @@ Test Suite for P2-403, P2-404, P2-405 Features:
 import os
 import pytest
 import requests
-from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 TEST_EMAIL = "canary.admin@platform.local"
@@ -99,7 +98,7 @@ class TestValidationCenterP2403:
         
         data = response.json()
         assert data.get("window_hours") == 48, "window_hours should be 48"
-        print(f"PASS: Validation center with window_hours=48")
+        print("PASS: Validation center with window_hours=48")
 
 
 class TestValidationCenterRerunP2403:
@@ -214,7 +213,7 @@ class TestStrategyVenueHeatmapP2404:
         
         data = response.json()
         assert data.get("window_hours") == 48, "window_hours should be 48"
-        print(f"PASS: Heatmap with window_hours=48")
+        print("PASS: Heatmap with window_hours=48")
 
     def test_heatmap_allocation_drift_fields(self, api_client):
         """Test heatmap allocation drift items have required fields"""

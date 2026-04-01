@@ -123,7 +123,7 @@ class TestRuntimeControlUnifiedContract:
         assert "message" in data
         assert "state_snapshot" in data
         assert "audit_log_id" in data
-        print(f"✓ ws/force-new-session contract verified")
+        print("✓ ws/force-new-session contract verified")
 
     def test_pipeline_resync_returns_contract_fields(self, super_admin_headers):
         """POST /runtime/pipeline/resync returns contract fields"""
@@ -140,7 +140,7 @@ class TestRuntimeControlUnifiedContract:
         assert "message" in data
         assert "state_snapshot" in data
         assert "audit_log_id" in data
-        print(f"✓ pipeline/resync contract verified")
+        print("✓ pipeline/resync contract verified")
 
     def test_pipeline_flush_returns_contract_fields(self, super_admin_headers):
         """POST /runtime/pipeline/flush returns contract fields"""
@@ -161,7 +161,7 @@ class TestRuntimeControlUnifiedContract:
         assert "message" in data
         assert "state_snapshot" in data
         assert "audit_log_id" in data
-        print(f"✓ pipeline/flush contract verified")
+        print("✓ pipeline/flush contract verified")
 
     def test_gate_recheck_returns_contract_fields(self, super_admin_headers):
         """POST /runtime/gate/recheck returns contract fields"""
@@ -178,7 +178,7 @@ class TestRuntimeControlUnifiedContract:
         assert "message" in data
         assert "state_snapshot" in data
         assert "audit_log_id" in data
-        print(f"✓ gate/recheck contract verified")
+        print("✓ gate/recheck contract verified")
 
     def test_service_restart_returns_contract_fields(self, super_admin_headers):
         """POST /runtime/service/restart returns contract fields"""
@@ -199,7 +199,7 @@ class TestRuntimeControlUnifiedContract:
         assert "message" in data
         assert "state_snapshot" in data
         assert "audit_log_id" in data
-        print(f"✓ service/restart contract verified")
+        print("✓ service/restart contract verified")
 
     def test_override_create_returns_contract_fields(self, super_admin_headers):
         """POST /runtime/override/create returns contract fields"""
@@ -222,7 +222,7 @@ class TestRuntimeControlUnifiedContract:
         assert "message" in data
         assert "state_snapshot" in data
         assert "audit_log_id" in data
-        print(f"✓ override/create contract verified")
+        print("✓ override/create contract verified")
 
     def test_alert_policy_update_returns_contract_fields(self, super_admin_headers):
         """PUT /runtime/alert-policy returns contract fields"""
@@ -246,7 +246,7 @@ class TestRuntimeControlUnifiedContract:
         assert "message" in data
         assert "state_snapshot" in data
         assert "audit_log_id" in data
-        print(f"✓ alert-policy update contract verified")
+        print("✓ alert-policy update contract verified")
 
     def test_alert_policy_test_alert_returns_contract_fields(self, super_admin_headers):
         """POST /runtime/alert-policy/test-alert returns contract fields"""
@@ -263,7 +263,7 @@ class TestRuntimeControlUnifiedContract:
         assert "message" in data
         assert "state_snapshot" in data
         assert "audit_log_id" in data
-        print(f"✓ alert-policy/test-alert contract verified")
+        print("✓ alert-policy/test-alert contract verified")
 
     # ==================== Audit Traceability Tests ====================
 
@@ -335,11 +335,11 @@ class TestRuntimeControlUnifiedContract:
         if isinstance(detail, dict):
             assert "expected_phrase" in detail, f"Missing 'expected_phrase' in error detail: {detail}"
             assert detail["expected_phrase"] == "ROLLBACK ALERT POLICY"
-            print(f"✓ rollback wrong phrase returns 400 with expected_phrase='ROLLBACK ALERT POLICY'")
+            print("✓ rollback wrong phrase returns 400 with expected_phrase='ROLLBACK ALERT POLICY'")
         else:
             # Some implementations return string detail
             assert "ROLLBACK ALERT POLICY" in str(detail) or "expected_phrase" in str(detail)
-            print(f"✓ rollback wrong phrase returns 400 with phrase hint")
+            print("✓ rollback wrong phrase returns 400 with phrase hint")
 
     def test_ws_reconnect_wrong_phrase_returns_400(self, super_admin_headers):
         """POST /runtime/ws/reconnect with wrong phrase returns 400"""
@@ -354,7 +354,7 @@ class TestRuntimeControlUnifiedContract:
         if isinstance(detail, dict):
             assert "expected_phrase" in detail
             assert detail["expected_phrase"] == "RECONNECT WS"
-        print(f"✓ ws/reconnect wrong phrase returns 400")
+        print("✓ ws/reconnect wrong phrase returns 400")
 
     def test_pipeline_flush_wrong_phrase_returns_400(self, super_admin_headers):
         """POST /runtime/pipeline/flush with wrong phrase returns 400"""
@@ -373,7 +373,7 @@ class TestRuntimeControlUnifiedContract:
         if isinstance(detail, dict):
             assert "expected_phrase" in detail
             assert detail["expected_phrase"] == "FLUSH PIPELINE"
-        print(f"✓ pipeline/flush wrong phrase returns 400")
+        print("✓ pipeline/flush wrong phrase returns 400")
 
     # ==================== GET Endpoints Tests ====================
 
@@ -387,7 +387,7 @@ class TestRuntimeControlUnifiedContract:
         data = response.json()
         # Should have state info
         assert "state" in data or isinstance(data, dict)
-        print(f"✓ ws/health endpoint works")
+        print("✓ ws/health endpoint works")
 
     def test_gate_status_endpoint(self, super_admin_headers):
         """GET /runtime/gate/status returns gate status"""
@@ -398,7 +398,7 @@ class TestRuntimeControlUnifiedContract:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "status" in data or "final_decision" in data or isinstance(data, dict)
-        print(f"✓ gate/status endpoint works")
+        print("✓ gate/status endpoint works")
 
     def test_override_active_endpoint(self, super_admin_headers):
         """GET /runtime/override/active returns active overrides"""
@@ -421,7 +421,7 @@ class TestRuntimeControlUnifiedContract:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "items" in data
-        print(f"✓ override/history endpoint works")
+        print("✓ override/history endpoint works")
 
     def test_guard_telemetry_endpoint(self, super_admin_headers):
         """GET /runtime/guard/telemetry returns guard telemetry"""
@@ -431,7 +431,7 @@ class TestRuntimeControlUnifiedContract:
             params={"limit": 50},
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
-        print(f"✓ guard/telemetry endpoint works")
+        print("✓ guard/telemetry endpoint works")
 
     def test_exchange_monitoring_endpoint(self, super_admin_headers):
         """GET /runtime/exchange/monitoring returns exchange monitoring data"""
@@ -443,7 +443,7 @@ class TestRuntimeControlUnifiedContract:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "drift_details" in data or "connection_details" in data or "trend" in data
-        print(f"✓ exchange/monitoring endpoint works")
+        print("✓ exchange/monitoring endpoint works")
 
     def test_hardening_analytics_endpoint(self, super_admin_headers):
         """GET /runtime/hardening/analytics returns hardening analytics"""
@@ -455,7 +455,7 @@ class TestRuntimeControlUnifiedContract:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "items" in data
-        print(f"✓ hardening/analytics endpoint works")
+        print("✓ hardening/analytics endpoint works")
 
     def test_alerts_history_endpoint(self, super_admin_headers):
         """GET /runtime/alerts/history returns alerts history"""
@@ -479,7 +479,7 @@ class TestRuntimeControlUnifiedContract:
         data = response.json()
         assert "policy" in data
         assert "versions" in data
-        print(f"✓ alert-policy endpoint works")
+        print("✓ alert-policy endpoint works")
 
     # ==================== RBAC Tests ====================
 
@@ -492,7 +492,7 @@ class TestRuntimeControlUnifiedContract:
         )
         # Should be 403 Forbidden for ops
         assert response.status_code == 403, f"Expected 403 for ops, got {response.status_code}: {response.text}"
-        print(f"✓ RBAC: ops cannot execute super_admin actions (403)")
+        print("✓ RBAC: ops cannot execute super_admin actions (403)")
 
     def test_ops_can_read_runtime_data(self, ops_headers):
         """Ops role can read runtime data"""
@@ -501,7 +501,7 @@ class TestRuntimeControlUnifiedContract:
             headers=ops_headers,
         )
         assert response.status_code == 200, f"Expected 200 for ops read, got {response.status_code}: {response.text}"
-        print(f"✓ RBAC: ops can read runtime data (200)")
+        print("✓ RBAC: ops can read runtime data (200)")
 
 
 if __name__ == "__main__":

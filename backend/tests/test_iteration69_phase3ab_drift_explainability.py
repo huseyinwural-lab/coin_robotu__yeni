@@ -13,7 +13,6 @@ Tests for:
 import os
 import pytest
 import requests
-from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
@@ -332,7 +331,7 @@ class TestStateHistoryReasonFields:
         if len(rows) > 0:
             for field in required_fields:
                 assert field in rows[0], f"Missing field: {field}"
-            print(f"✓ All required fields present in state history entry")
+            print("✓ All required fields present in state history entry")
         else:
             print("✓ No state history entries to validate structure")
 
@@ -391,7 +390,7 @@ class TestAllFieldsContract:
             row = data[0]
             missing = [f for f in phase3ab_fields if f not in row]
             assert len(missing) == 0, f"Missing Phase 3a+b fields: {missing}"
-            print(f"✓ All Phase 3a+b fields present in strategy allocation response")
+            print("✓ All Phase 3a+b fields present in strategy allocation response")
             for field in phase3ab_fields:
                 print(f"  - {field}: {row.get(field)}")
 
@@ -415,7 +414,7 @@ class TestAllFieldsContract:
         
         missing = [f for f in phase3ab_fields if f not in data]
         assert len(missing) == 0, f"Missing Phase 3a+b fields in summary: {missing}"
-        print(f"✓ All Phase 3a+b fields present in summary response")
+        print("✓ All Phase 3a+b fields present in summary response")
         for field in phase3ab_fields:
             print(f"  - {field}: {data.get(field)}")
 

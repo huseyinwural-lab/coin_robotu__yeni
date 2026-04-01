@@ -11,8 +11,6 @@ Tests:
 
 Uses TestClient to avoid rate limiting and session issues.
 """
-import json
-import os
 import sys
 import uuid
 from pathlib import Path
@@ -242,9 +240,9 @@ class TestExecutionPolicyEngineSprint1API:
                 assert intent_status == "REJECTED", \
                     f"Expected REJECTED in full mode live, got {intent_status}"
                 assert "STRATEGY_POLICY_MISSING" in reject_codes, \
-                    f"Expected STRATEGY_POLICY_MISSING in reject codes"
+                    "Expected STRATEGY_POLICY_MISSING in reject codes"
             
-            print(f"PASS: Live preview with missing strategy handled correctly")
+            print("PASS: Live preview with missing strategy handled correctly")
         else:
             print("PASS: Preview returned 409 (duplicate intent)")
 
@@ -311,12 +309,12 @@ class TestExecutionPolicyEngineSprint1API:
             assert "intent_id" in data, "Missing intent_id in submit response"
             assert "policy_decision" in data, "Missing policy_decision in submit response"
             assert "pipeline_trace" in data, "Missing pipeline_trace in submit response"
-            print(f"PASS: Submit successful with policy_decision and pipeline_trace")
+            print("PASS: Submit successful with policy_decision and pipeline_trace")
         elif submit_resp.status_code == 423:
             data = submit_resp.json()
             print(f"PASS: Submit blocked by policy - reason: {data.get('reason_code', 'unknown')}")
         else:
-            print(f"PASS: Submit returned 400 - validation issue")
+            print("PASS: Submit returned 400 - validation issue")
 
     # =========================================================================
     # Test 5: Admin execution-policies endpoint
@@ -353,7 +351,7 @@ class TestExecutionPolicyEngineSprint1API:
         # Verify policy_decision_log is a list
         assert isinstance(data["policy_decision_log"], list), "policy_decision_log should be a list"
         
-        print(f"PASS: Admin execution-policies returns all required fields")
+        print("PASS: Admin execution-policies returns all required fields")
         print(f"  - engine_config.rollout_mode: {engine_config['rollout_mode']}")
         print(f"  - observability_metrics.decision_log_count: {obs_metrics['decision_log_count']}")
         print(f"  - policy_decision_log entries: {len(data['policy_decision_log'])}")
@@ -460,7 +458,7 @@ class TestExecutionPolicyEngineSprint1API:
                 assert "severity" in standardized_reject, "Missing severity in reject"
                 assert "action_taken" in standardized_reject, "Missing action_taken in reject"
                 
-                print(f"PASS: Reject contract structure verified")
+                print("PASS: Reject contract structure verified")
                 print(f"  - reason_code: {standardized_reject['reason_code']}")
                 print(f"  - stage: {standardized_reject['stage']}")
                 print(f"  - severity: {standardized_reject['severity']}")
@@ -498,7 +496,7 @@ class TestExecutionPolicyEngineSprint1API:
             for field in required_fields:
                 assert field in entry, f"Missing {field} in decision log entry"
             
-            print(f"PASS: Policy decision log entry has all required fields")
+            print("PASS: Policy decision log entry has all required fields")
             print(f"  - Sample entry: stage={entry['stage']}, recommended={entry['recommended_action']}, enforced={entry['enforced_action']}")
         else:
             print("PASS: No decision log entries yet (empty log)")
@@ -533,7 +531,7 @@ class TestExecutionPolicyEngineSprint1API:
         assert "breach_count" in risk_metrics, "Missing breach_count in risk_breach_metrics"
         assert "breach_rate" in risk_metrics, "Missing breach_rate in risk_breach_metrics"
         
-        print(f"PASS: Observability metrics structure verified")
+        print("PASS: Observability metrics structure verified")
         print(f"  - window_hours: {obs_metrics['window_hours']}")
         print(f"  - decision_log_count: {obs_metrics['decision_log_count']}")
         print(f"  - violation_count: {obs_metrics['violation_count']}")
@@ -569,7 +567,7 @@ class TestExecutionPolicyEngineSprint1API:
         # Verify progression is a list
         assert isinstance(engine_config["progression"], list), "progression should be a list"
         
-        print(f"PASS: Engine config structure verified")
+        print("PASS: Engine config structure verified")
         print(f"  - enabled: {engine_config['enabled']}")
         print(f"  - rollout_mode: {engine_config['rollout_mode']}")
         print(f"  - progression: {engine_config['progression']}")

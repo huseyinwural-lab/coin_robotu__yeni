@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import uuid
 
 from fastapi.testclient import TestClient
 
 from db import SessionLocal
-from models import User, UserOnboardingDecisionLog
+from models import UserOnboardingDecisionLog
 from server import fastapi_app
 
 

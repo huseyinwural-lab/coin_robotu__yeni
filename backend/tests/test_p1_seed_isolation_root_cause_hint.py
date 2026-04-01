@@ -97,7 +97,7 @@ class TestTimelineChainRootCauseHint:
         
         # root_cause_hint should exist (can be None for valid chains)
         assert "root_cause_hint" in summary, "root_cause_hint field missing from summary"
-        print(f"PASS: timeline chain endpoint returns root_cause_hint field")
+        print("PASS: timeline chain endpoint returns root_cause_hint field")
 
     def test_root_cause_hint_classification_label(self, admin_headers):
         """Verify root_cause_hint has 'ÖNERİ (kesin neden değildir)' classification"""
@@ -515,7 +515,7 @@ class TestRootCauseHintRuleMapping:
                         f"Unknown rule_key: {rule_key}"
         
         print(f"PASS: Found rule_keys: {found_rule_keys}")
-        print(f"INFO: All found rule_keys are in known list")
+        print("INFO: All found rule_keys are in known list")
 
 
 if __name__ == "__main__":

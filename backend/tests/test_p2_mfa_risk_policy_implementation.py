@@ -19,7 +19,6 @@ Tests cover:
 import os
 import pytest
 import requests
-from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
@@ -54,7 +53,7 @@ class TestLoginPolicyMatrix:
             assert "mfa_challenge_token" in data, "Should return mfa_challenge_token"
             print(f"PASS: Admin login returns mfa_required=true, methods={data.get('mfa_methods')}")
         else:
-            print(f"SKIP: Account locked out (423), brute-force protection active")
+            print("SKIP: Account locked out (423), brute-force protection active")
 
     def test_admin_login_returns_risk_response_fields(self):
         """Admin login should return standardized risk response fields"""

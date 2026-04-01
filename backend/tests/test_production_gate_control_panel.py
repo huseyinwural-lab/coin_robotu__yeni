@@ -80,7 +80,7 @@ class TestProductionGateControlPanel:
         assert isinstance(data["checklist"], list), "checklist should be a list"
         assert isinstance(data["checks"], list), "checks should be a list"
         
-        print(f"PASS: GET /api/phase4/admin/production-gate returns valid structure")
+        print("PASS: GET /api/phase4/admin/production-gate returns valid structure")
         print(f"  configured_state: {data['configured_state']}")
         print(f"  effective_state: {data['effective_state']}")
         print(f"  deploy_allowed: {data['deploy_allowed']}")
@@ -132,7 +132,7 @@ class TestProductionGateControlPanel:
             print(f"PASS: Setting GO state fails with 400 when preconditions not met: {response.json()}")
         elif response.status_code == 200:
             # If it succeeded, checklist was complete and checks passed
-            print(f"INFO: GO state set successfully (checklist was complete and checks passed)")
+            print("INFO: GO state set successfully (checklist was complete and checks passed)")
         else:
             pytest.fail(f"Unexpected status code: {response.status_code}: {response.text}")
     
@@ -527,7 +527,7 @@ class TestProductionGateControlPanel:
         # Find the updated item
         updated_item = next((item for item in data["checklist"] if item["item_key"] == item_key), None)
         assert updated_item is not None, f"Could not find item {item_key} in response"
-        assert updated_item["checked"] == (not current_checked), f"Checklist item not toggled correctly"
+        assert updated_item["checked"] == (not current_checked), "Checklist item not toggled correctly"
         
         print(f"PASS: Checklist item '{item_key}' toggled from {current_checked} to {not current_checked}")
     

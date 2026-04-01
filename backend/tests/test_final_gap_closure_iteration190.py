@@ -97,7 +97,7 @@ class TestFinalGapClosureEndpoints:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         # Verify risk settings structure
-        print(f"PASS: user-risk/settings returns data")
+        print("PASS: user-risk/settings returns data")
 
     def test_auth_me_endpoint(self):
         """GET /api/auth/me returns user profile"""
@@ -154,7 +154,7 @@ class TestFinalGapClosureEndpoints:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert "summary" in data, "Runtime snapshot should contain 'summary'"
-        print(f"PASS: runtime-snapshot returns data")
+        print("PASS: runtime-snapshot returns data")
 
 
 class TestCALIDeterministicEdgeCases:

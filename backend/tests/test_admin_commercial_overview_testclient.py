@@ -76,7 +76,7 @@ class TestAdminCommercialOverviewEndpoint:
         assert "usage_analytics" in data, "Missing usage_analytics block"
         assert "data_quality" in data, "Missing data_quality block"
         
-        print(f"✓ Overview endpoint returns unified payload with all 7 blocks")
+        print("✓ Overview endpoint returns unified payload with all 7 blocks")
 
     def test_default_filter_behavior(self, client, auth_headers):
         """Default filters should be time_window=last_30_days and environment=live"""
@@ -95,7 +95,7 @@ class TestAdminCommercialOverviewEndpoint:
         assert applied_filters.get("environment") == "live", \
             f"Expected environment=live, got {applied_filters.get('environment')}"
         
-        print(f"✓ Default filters: time_window=last_30_days, environment=live")
+        print("✓ Default filters: time_window=last_30_days, environment=live")
 
     def test_custom_time_window_parameter(self, client, auth_headers):
         """Query param time_window should be applied"""
@@ -113,7 +113,7 @@ class TestAdminCommercialOverviewEndpoint:
             assert applied_filters.get("time_window") == time_window, \
                 f"Expected time_window={time_window}, got {applied_filters.get('time_window')}"
         
-        print(f"✓ Custom time_window parameter works for all supported values")
+        print("✓ Custom time_window parameter works for all supported values")
 
     def test_custom_environment_parameter(self, client, auth_headers):
         """Query param environment should be applied"""
@@ -131,7 +131,7 @@ class TestAdminCommercialOverviewEndpoint:
             assert applied_filters.get("environment") == environment, \
                 f"Expected environment={environment}, got {applied_filters.get('environment')}"
         
-        print(f"✓ Custom environment parameter works for live and testnet")
+        print("✓ Custom environment parameter works for live and testnet")
 
     def test_custom_from_to_parameters(self, client, auth_headers):
         """Query params from and to should create custom time range"""
@@ -158,7 +158,7 @@ class TestAdminCommercialOverviewEndpoint:
         assert applied_filters.get("from_ts") is not None, "from_ts should be set"
         assert applied_filters.get("to_ts") is not None, "to_ts should be set"
         
-        print(f"✓ Custom from/to parameters create custom time range")
+        print("✓ Custom from/to parameters create custom time range")
 
     def test_invalid_time_range_returns_422(self, client, auth_headers):
         """from > to should return 422 with invalid_time_range error"""
@@ -181,7 +181,7 @@ class TestAdminCommercialOverviewEndpoint:
         assert "invalid_time_range" in detail, \
             f"Expected 'invalid_time_range' in error detail, got: {detail}"
         
-        print(f"✓ Invalid time range (from > to) returns 422 invalid_time_range")
+        print("✓ Invalid time range (from > to) returns 422 invalid_time_range")
 
 
 class TestFinancialAccuracyBlock:
@@ -228,7 +228,7 @@ class TestFinancialAccuracyBlock:
         assert abs(expected_gross_total - actual_gross_total) < 0.000001, \
             f"gross_total_usd mismatch: expected {expected_gross_total}, got {actual_gross_total}"
         
-        print(f"✓ gross_total_usd = realized_gross_usd + unrealized_gross_usd")
+        print("✓ gross_total_usd = realized_gross_usd + unrealized_gross_usd")
 
     def test_net_total_equals_realized_plus_unrealized(self, client, auth_headers):
         """net_total_usd should equal realized_net_usd + unrealized_net_usd"""
@@ -249,7 +249,7 @@ class TestFinancialAccuracyBlock:
         assert abs(expected_net_total - actual_net_total) < 0.000001, \
             f"net_total_usd mismatch: expected {expected_net_total}, got {actual_net_total}"
         
-        print(f"✓ net_total_usd = realized_net_usd + unrealized_net_usd")
+        print("✓ net_total_usd = realized_net_usd + unrealized_net_usd")
 
     def test_net_vs_gross_delta_calculation(self, client, auth_headers):
         """net_vs_gross_delta_usd should equal gross_total_usd - net_total_usd"""
@@ -270,7 +270,7 @@ class TestFinancialAccuracyBlock:
         assert abs(expected_delta - actual_delta) < 0.000001, \
             f"net_vs_gross_delta_usd mismatch: expected {expected_delta}, got {actual_delta}"
         
-        print(f"✓ net_vs_gross_delta_usd = gross_total_usd - net_total_usd")
+        print("✓ net_vs_gross_delta_usd = gross_total_usd - net_total_usd")
 
 
 class TestRevenueModelBlock:
@@ -290,7 +290,7 @@ class TestRevenueModelBlock:
         assert "top_symbols" in rm, "Missing top_symbols"
         assert "row_count" in rm, "Missing row_count"
         
-        print(f"✓ revenue_model block has all required fields")
+        print("✓ revenue_model block has all required fields")
 
     def test_total_revenue_equals_component_sum(self, client, auth_headers):
         """total_revenue_usd should equal sum of component_breakdown revenue_usd"""
@@ -312,7 +312,7 @@ class TestRevenueModelBlock:
         assert abs(expected_total - actual_total) < 0.000001, \
             f"total_revenue_usd mismatch: expected {expected_total} (sum of components), got {actual_total}"
         
-        print(f"✓ total_revenue_usd = sum of component_breakdown revenue_usd")
+        print("✓ total_revenue_usd = sum of component_breakdown revenue_usd")
 
     def test_component_breakdown_structure(self, client, auth_headers):
         """Each component in component_breakdown should have required fields"""
@@ -356,7 +356,7 @@ class TestRiskSummaryBlock:
         for field in required_fields:
             assert field in rs, f"Missing field: {field}"
         
-        print(f"✓ risk_summary block has all required fields")
+        print("✓ risk_summary block has all required fields")
 
     def test_risk_summary_safe_defaults(self, client, auth_headers):
         """risk_summary should return safe defaults for numeric fields"""
@@ -379,7 +379,7 @@ class TestRiskSummaryBlock:
         # top_exposure_symbols should be a list
         assert isinstance(rs.get("top_exposure_symbols"), list), "top_exposure_symbols should be a list"
         
-        print(f"✓ risk_summary returns safe defaults for all fields")
+        print("✓ risk_summary returns safe defaults for all fields")
 
 
 class TestDataQualityBlock:
@@ -404,7 +404,7 @@ class TestDataQualityBlock:
         for field in required_fields:
             assert field in dq, f"Missing field: {field}"
         
-        print(f"✓ data_quality block has all required fields")
+        print("✓ data_quality block has all required fields")
 
     def test_data_quality_status_values(self, client, auth_headers):
         """data_quality status should be one of: healthy, empty, stale, degraded"""
@@ -434,7 +434,7 @@ class TestDataQualityBlock:
         if dq.get("empty_data") is True:
             assert dq.get("status") == "empty", \
                 f"When empty_data=True, status should be 'empty', got: {dq.get('status')}"
-            print(f"✓ empty_data=True implies status='empty'")
+            print("✓ empty_data=True implies status='empty'")
         else:
             print(f"✓ Data exists, empty_data=False, status={dq.get('status')}")
 
@@ -461,7 +461,7 @@ class TestUserEconomicsBlock:
         for field in required_fields:
             assert field in ue, f"Missing field: {field}"
         
-        print(f"✓ user_economics block has all required fields")
+        print("✓ user_economics block has all required fields")
 
 
 class TestUsageAnalyticsBlock:
@@ -485,7 +485,7 @@ class TestUsageAnalyticsBlock:
         for field in required_fields:
             assert field in ua, f"Missing field: {field}"
         
-        print(f"✓ usage_analytics block has all required fields")
+        print("✓ usage_analytics block has all required fields")
 
 
 class TestAuthenticationRequirement:
@@ -519,7 +519,7 @@ class TestTimeWindowAliases:
         assert applied_filters.get("time_window") == "last_30_days", \
             f"Expected 30d to map to last_30_days, got {applied_filters.get('time_window')}"
         
-        print(f"✓ 30d alias maps to last_30_days")
+        print("✓ 30d alias maps to last_30_days")
 
     def test_time_window_alias_7d(self, client, auth_headers):
         """7d alias should map to last_7_days"""
@@ -536,7 +536,7 @@ class TestTimeWindowAliases:
         assert applied_filters.get("time_window") == "last_7_days", \
             f"Expected 7d to map to last_7_days, got {applied_filters.get('time_window')}"
         
-        print(f"✓ 7d alias maps to last_7_days")
+        print("✓ 7d alias maps to last_7_days")
 
     def test_time_window_alias_90d(self, client, auth_headers):
         """90d alias should map to last_90_days"""
@@ -553,7 +553,7 @@ class TestTimeWindowAliases:
         assert applied_filters.get("time_window") == "last_90_days", \
             f"Expected 90d to map to last_90_days, got {applied_filters.get('time_window')}"
         
-        print(f"✓ 90d alias maps to last_90_days")
+        print("✓ 90d alias maps to last_90_days")
 
     def test_time_window_alias_all(self, client, auth_headers):
         """all alias should map to all_time"""
@@ -570,7 +570,7 @@ class TestTimeWindowAliases:
         assert applied_filters.get("time_window") == "all_time", \
             f"Expected all to map to all_time, got {applied_filters.get('time_window')}"
         
-        print(f"✓ all alias maps to all_time")
+        print("✓ all alias maps to all_time")
 
     def test_invalid_time_window_falls_back_to_default(self, client, auth_headers):
         """Invalid time_window should fall back to last_30_days"""
@@ -587,7 +587,7 @@ class TestTimeWindowAliases:
         assert applied_filters.get("time_window") == "last_30_days", \
             f"Expected invalid time_window to fall back to last_30_days, got {applied_filters.get('time_window')}"
         
-        print(f"✓ Invalid time_window falls back to last_30_days")
+        print("✓ Invalid time_window falls back to last_30_days")
 
 
 if __name__ == "__main__":

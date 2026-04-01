@@ -127,7 +127,7 @@ class TestRollbackSnapshotsEndpoint:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert data.get("status") == "ok"
-        print(f"PASS: Admin requester can access rollback snapshots")
+        print("PASS: Admin requester can access rollback snapshots")
 
     def test_rollback_snapshots_ops_read_only(self, ops_token, strategy_id):
         """Test ops user can read rollback snapshots (read_only permission)"""
@@ -143,7 +143,7 @@ class TestRollbackSnapshotsEndpoint:
         # Verify permission matrix shows ops as read_only
         perm = data.get("permission_matrix", {})
         assert perm.get("ops") == "read_only"
-        print(f"PASS: Ops user can read rollback snapshots (read_only permission)")
+        print("PASS: Ops user can read rollback snapshots (read_only permission)")
 
     def test_rollback_snapshots_item_structure(self, super_admin_token, strategy_id):
         """Test rollback snapshot items have correct structure"""
@@ -549,7 +549,7 @@ class TestFullRollbackApprovalWorkflow:
         pending_items = approval_list_response.json().get("items", [])
         found = any(item.get("request_id") == request_id for item in pending_items)
         assert found, f"Request {request_id} not found in pending list"
-        print(f"Step 4: Verified request appears in pending approval list")
+        print("Step 4: Verified request appears in pending approval list")
         
         # Step 5: Approve the request
         approve_payload = {"reason": "TEST_FAZ4PLUS workflow approval"}

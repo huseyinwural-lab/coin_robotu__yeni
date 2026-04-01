@@ -210,7 +210,7 @@ class TestRevisionControlPUT:
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT", f"Expected REVISION_CONFLICT code, got: {detail}"
         assert "conflicts" in detail, "Expected conflicts array in response"
-        print(f"✓ Update with wrong revision returned 409 with REVISION_CONFLICT")
+        print("✓ Update with wrong revision returned 409 with REVISION_CONFLICT")
 
     def test_update_without_expected_revision_returns_400(self, super_admin_headers, test_strategy):
         """Update without expected_revision should return 400"""
@@ -265,7 +265,7 @@ class TestRevisionControlBulkUpdate:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert data.get("updated_count", 0) >= 1
-        print(f"✓ Bulk update with correct revision succeeded")
+        print("✓ Bulk update with correct revision succeeded")
 
     def test_bulk_update_with_wrong_revision_returns_409(self, super_admin_headers, test_strategy):
         """Bulk update with wrong expected_revision should return 409"""
@@ -292,7 +292,7 @@ class TestRevisionControlBulkUpdate:
         data = response.json()
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT"
-        print(f"✓ Bulk update with wrong revision returned 409")
+        print("✓ Bulk update with wrong revision returned 409")
 
 
 class TestRevisionControlThrottleToggle:
@@ -347,7 +347,7 @@ class TestRevisionControlThrottleToggle:
         data = response.json()
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT"
-        print(f"✓ Throttle toggle with wrong revision returned 409")
+        print("✓ Throttle toggle with wrong revision returned 409")
 
 
 class TestRevisionControlDelete:
@@ -372,7 +372,7 @@ class TestRevisionControlDelete:
         data = response.json()
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT"
-        print(f"✓ Delete with wrong revision returned 409")
+        print("✓ Delete with wrong revision returned 409")
 
 
 class TestRevisionControlNormalize:
@@ -389,7 +389,7 @@ class TestRevisionControlNormalize:
         )
         
         assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
-        print(f"✓ Normalize without expected_revisions returned 400")
+        print("✓ Normalize without expected_revisions returned 400")
 
     def test_normalize_with_wrong_revisions_returns_409(self, super_admin_headers, test_strategy):
         """Normalize with wrong expected_revisions should return 409"""
@@ -410,7 +410,7 @@ class TestRevisionControlNormalize:
         data = response.json()
         detail = data.get("detail", {})
         assert detail.get("code") == "REVISION_CONFLICT"
-        print(f"✓ Normalize with wrong revisions returned 409")
+        print("✓ Normalize with wrong revisions returned 409")
 
     def test_normalize_with_correct_revisions_succeeds(self, super_admin_headers):
         """Normalize with correct expected_revisions should succeed"""
@@ -437,7 +437,7 @@ class TestRevisionControlNormalize:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         assert data.get("status") == "success"
-        print(f"✓ Normalize with correct revisions succeeded")
+        print("✓ Normalize with correct revisions succeeded")
 
 
 class TestWhatIfEndpointParity:
@@ -473,7 +473,7 @@ class TestWhatIfEndpointParity:
                   f"return_delta={row.get('projected_return_delta_pct')}, "
                   f"risk_delta={row.get('projected_risk_delta_pct')}")
         
-        print(f"✓ What-if simulation returns all required projection fields")
+        print("✓ What-if simulation returns all required projection fields")
 
 
 class TestApprovalStaleRevalidation:
@@ -504,7 +504,7 @@ class TestApprovalStaleRevalidation:
         
         # Check that the response structure supports stale fields
         # Even if no requests exist, the endpoint should work
-        print(f"✓ Approval requests endpoint supports stale_state field structure")
+        print("✓ Approval requests endpoint supports stale_state field structure")
         
         # If there are requests with requires_review status, verify stale fields
         for row in rows:

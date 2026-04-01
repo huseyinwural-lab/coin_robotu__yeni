@@ -324,7 +324,7 @@ class TestExecutionReadinessQuarantineActionsLocal:
         assert response.status_code == 404, f"Expected 404, got {response.status_code}: {response.text[:200]}"
         data = response.json()
         assert "quarantine_event_not_found" in str(data.get("detail", "")), "Expected quarantine_event_not_found detail"
-        print(f"PASS: Invalid event_id returns 404 with correct detail")
+        print("PASS: Invalid event_id returns 404 with correct detail")
 
     def test_quarantine_action_invalid_action_returns_400(self, client, auth_headers):
         """Quarantine action with invalid action should return 400"""

@@ -13,7 +13,7 @@ log() {
   printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" | tee -a "${LOG_FILE}"
 }
 
-python - <<'PY'
+ROOT_DIR="${ROOT_DIR}" ARTIFACT_DIR="${ARTIFACT_DIR}" python - <<'PY'
 import json
 import os
 import re
@@ -30,9 +30,11 @@ try:
 except Exception:  # noqa: BLE001
     redis = None
 
-root = Path('/app')
-json_file = root / 'artifacts' / 'prod_preflight_check.json'
-log_file = root / 'artifacts' / 'prod_preflight_check.log'
+root = Path(os.environ.get('ROOT_DIR') or '/app')
+artifact_dir = Path(os.environ.get('ARTIFACT_DIR') or (root / 'artifacts'))
+artifact_dir.mkdir(parents=True, exist_ok=True)
+json_file = artifact_dir / 'prod_preflight_check.json'
+log_file = artifact_dir / 'prod_preflight_check.log'
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
@@ -179,7 +181,7 @@ if runtime_checks_enabled and not health_probe.get('redis'):
     )
     health_proc = subprocess.run(
         [sys.executable, '-c', health_script],
-        cwd='/app/backend',
+        cwd=str(root / 'backend'),
         capture_output=True,
         text=True,
         timeout=25,
@@ -201,7 +203,7 @@ if runtime_checks_enabled:
     failfast_env['REDIS_URL'] = 'redis://203.0.113.77:6399/0'
     failfast_proc = subprocess.run(
         [sys.executable, '-c', 'import db'],
-        cwd='/app/backend',
+        cwd=str(root / 'backend'),
         capture_output=True,
         text=True,
         env=failfast_env,

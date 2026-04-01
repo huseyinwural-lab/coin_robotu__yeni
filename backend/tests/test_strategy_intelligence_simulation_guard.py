@@ -398,7 +398,7 @@ class TestFullOverrideWorkflow:
         active_data = active_response.json()
         found = any(item.get("override_id") == override_id for item in active_data)
         assert found, f"Created override {override_id} not found in active-overrides"
-        print(f"✓ Step 3: Override found in active-overrides list")
+        print("✓ Step 3: Override found in active-overrides list")
         
         # Step 4: Revoke the override
         revoke_response = authenticated_client.post(
@@ -410,7 +410,7 @@ class TestFullOverrideWorkflow:
         revoke_data = revoke_response.json()
         assert revoke_data.get("status") == "revoked", f"Expected revoked status, got: {revoke_data.get('status')}"
         assert revoke_data.get("override_id") == override_id
-        print(f"✓ Step 4: Override revoked successfully")
+        print("✓ Step 4: Override revoked successfully")
         
         # Step 5: Verify override status changed to revoked (may still appear in list but with revoked status)
         active_response2 = authenticated_client.get(f"{BASE_URL}/api/admin/active-overrides")
@@ -422,9 +422,9 @@ class TestFullOverrideWorkflow:
         if found_item:
             # If still in list, verify it has revoked status
             assert found_item.get("current_status") == "revoked", f"Override should have revoked status, got: {found_item.get('current_status')}"
-            print(f"✓ Step 5: Override found with revoked status (filtering may be delayed)")
+            print("✓ Step 5: Override found with revoked status (filtering may be delayed)")
         else:
-            print(f"✓ Step 5: Revoked override no longer in active-overrides")
+            print("✓ Step 5: Revoked override no longer in active-overrides")
         
         print("\n✓ Full workflow test PASSED: simulation → override → revoke")
 
@@ -454,7 +454,7 @@ class TestStrategyIntelligenceDashboard:
         assert isinstance(data["capital_rebalance_events"], list), "capital_rebalance_events should be a list"
         assert isinstance(data["hedge_suggestions"], list), "hedge_suggestions should be a list"
         
-        print(f"✓ Strategy intelligence dashboard returned valid structure")
+        print("✓ Strategy intelligence dashboard returned valid structure")
         print(f"  conflicts: {len(data['strategy_conflicts'])}, rebalance_events: {len(data['capital_rebalance_events'])}")
         print(f"  allocation_drift: {data['allocation_drift']}, risk_adjusted_return: {data['risk_adjusted_return']}")
 

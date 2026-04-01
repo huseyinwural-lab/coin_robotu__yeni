@@ -200,7 +200,7 @@ class TestLiveActionGuardrails:
         # dry_run should have external_preview
         assert "external_preview" in action_result
         
-        print(f"PASS: Dry run action returns standardized response with external_preview")
+        print("PASS: Dry run action returns standardized response with external_preview")
         print(f"  - status: {action_result.get('status')}")
         print(f"  - mode: {action_result.get('mode')}")
         print(f"  - external_preview keys: {list(action_result.get('external_preview', {}).keys())}")
@@ -233,7 +233,7 @@ class TestLiveActionGuardrails:
         # manual_live should have external_live_result
         assert "external_live_result" in action_result
         
-        print(f"PASS: Manual live action returns standardized response with external_live_result")
+        print("PASS: Manual live action returns standardized response with external_live_result")
         print(f"  - status: {action_result.get('status')}")
         print(f"  - mode: {action_result.get('mode')}")
         print(f"  - external_live_result keys: {list(action_result.get('external_live_result', {}).keys())}")
@@ -252,7 +252,7 @@ class TestLiveActionGuardrails:
         rollback_payload = data["rollback_payload"]
         assert isinstance(rollback_payload, dict)
         
-        print(f"PASS: Rollback endpoint returns incident and rollback_payload")
+        print("PASS: Rollback endpoint returns incident and rollback_payload")
         print(f"  - rollback_payload: {rollback_payload}")
     
     def test_audit_guardrail_payloads_in_remediation_history(self, auth_session, test_incident_id):
@@ -283,7 +283,7 @@ class TestLiveActionGuardrails:
         has_rollback_payload = "rollback_payload" in latest
         has_target = "target" in latest
         
-        print(f"PASS: Remediation history entry has audit fields")
+        print("PASS: Remediation history entry has audit fields")
         print(f"  - action: {latest.get('action')}")
         print(f"  - status: {latest.get('status')}")
         print(f"  - has reason: {has_reason}")

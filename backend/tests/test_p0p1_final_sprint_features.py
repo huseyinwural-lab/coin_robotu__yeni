@@ -13,7 +13,6 @@ Tests for:
 import os
 import pytest
 import requests
-from datetime import datetime, timezone
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-trace-engine.preview.emergentagent.com").rstrip("/")
 

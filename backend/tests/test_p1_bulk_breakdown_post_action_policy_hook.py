@@ -16,7 +16,6 @@ Tests for:
 import os
 import pytest
 import requests
-import time
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 
@@ -229,7 +228,7 @@ class TestPostActionMonitorBackend:
             if "risk_score" in state_snapshot:
                 print(f"✓ Rollout response contains risk_score: {state_snapshot.get('risk_score')}")
             
-            print(f"✓ Rollout action returns state_snapshot for Post-Action Monitor")
+            print("✓ Rollout action returns state_snapshot for Post-Action Monitor")
         else:
             # May be rejected due to precheck - that's OK for this test
             print(f"Rollout rejected (expected if precheck fails): {rollout_response.json().get('message')}")
@@ -293,11 +292,11 @@ class TestPostActionMonitorBackend:
             
             # Check for before/after state
             if "before_state" in data:
-                print(f"✓ Disable response contains before_state")
+                print("✓ Disable response contains before_state")
             if "after_state" in data:
-                print(f"✓ Disable response contains after_state")
+                print("✓ Disable response contains after_state")
             
-            print(f"✓ Disable action returns state for Post-Action Monitor")
+            print("✓ Disable action returns state for Post-Action Monitor")
         else:
             print(f"Disable response: {disable_response.json()}")
 
@@ -384,7 +383,7 @@ class TestP0RegressionCriticalActionPreview:
         assert data.get("status") == "rejected", f"Disable without preview should be rejected: {data}"
         assert "preview" in data.get("message", "").lower(), f"Rejection message should mention preview: {data.get('message')}"
         
-        print(f"✓ P0 Regression PASS: Disable action correctly requires preview_token")
+        print("✓ P0 Regression PASS: Disable action correctly requires preview_token")
 
     def test_decommission_requires_preview_token(self, auth_headers):
         """Verify decommission action still requires preview_token (P0 requirement)"""
@@ -417,7 +416,7 @@ class TestP0RegressionCriticalActionPreview:
         # Should be rejected due to missing preview_token
         assert data.get("status") == "rejected", f"Decommission without preview should be rejected: {data}"
         
-        print(f"✓ P0 Regression PASS: Decommission action correctly requires preview_token")
+        print("✓ P0 Regression PASS: Decommission action correctly requires preview_token")
 
     def test_drift_disable_requires_preview_token(self, auth_headers):
         """Verify drift disable-strategy action still requires preview_token (P0 requirement)"""
@@ -452,7 +451,7 @@ class TestP0RegressionCriticalActionPreview:
         assert data.get("status") == "rejected", f"Drift disable without preview should be rejected: {data}"
         assert "preview" in data.get("message", "").lower(), f"Rejection message should mention preview: {data.get('message')}"
         
-        print(f"✓ P0 Regression PASS: Drift disable-strategy correctly requires preview_token")
+        print("✓ P0 Regression PASS: Drift disable-strategy correctly requires preview_token")
 
 
 if __name__ == "__main__":

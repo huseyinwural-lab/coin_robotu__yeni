@@ -119,7 +119,7 @@ class TestQuarantineListContract:
             
             # Validate error_snapshot structure
             error_snapshot = item.get("error_snapshot", {})
-            assert "error_message" in error_snapshot or error_snapshot == {}, f"error_snapshot should have error_message"
+            assert "error_message" in error_snapshot or error_snapshot == {}, "error_snapshot should have error_message"
         
         print(f"Validated {len(items)} quarantine items with required fields")
 
@@ -330,9 +330,9 @@ class TestBulkRecoveryEndpoints:
         
         items = data.get("items") or data.get("results", [])
         for item in items[:3]:
-            assert "target_type" in item, f"Item missing 'target_type'"
-            assert "target_id" in item, f"Item missing 'target_id'"
-            assert "result" in item, f"Item missing 'result'"
+            assert "target_type" in item, "Item missing 'target_type'"
+            assert "target_id" in item, "Item missing 'target_id'"
+            assert "result" in item, "Item missing 'result'"
         
         print(f"Bulk retry: total={data['total']}, success={data['success_count']}, failed={data['failed_count']}")
 

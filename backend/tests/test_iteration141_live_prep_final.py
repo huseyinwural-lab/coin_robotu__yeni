@@ -13,7 +13,6 @@ Tests for:
 import os
 import pytest
 import requests
-import time
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 ADMIN_EMAIL = "canary.admin@platform.local"
@@ -51,7 +50,7 @@ class TestHealthEndpoints:
         assert data.get("service") == "backend-api"
         assert "checks" in data
         assert "process" in data["checks"]
-        print(f"PASS: /api/health/live returns 200 with status=ok")
+        print("PASS: /api/health/live returns 200 with status=ok")
 
     def test_health_ready_checks_db_and_redis(self):
         """GET /api/health/ready should check DB and Redis"""
@@ -350,7 +349,7 @@ class TestAdminLiveTradingDashboard:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
         data = response.json()
         assert "window" in data or "system_health" in data, "Missing expected fields in summary"
-        print(f"PASS: /api/admin/live-trading/summary returns data")
+        print("PASS: /api/admin/live-trading/summary returns data")
 
 
 if __name__ == "__main__":

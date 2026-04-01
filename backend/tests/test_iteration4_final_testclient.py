@@ -6,7 +6,6 @@ Using TestClient for direct testing without network issues
 import os
 import pytest
 import json
-from datetime import datetime
 
 # Set environment before importing server
 os.environ["BACKUP_SCHEDULER_ENABLED"] = "0"
@@ -68,7 +67,7 @@ class TestHealthAndBasicEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data.get("access_token") or data.get("token")
-        print(f"Admin login PASS: token received")
+        print("Admin login PASS: token received")
 
 
 class TestRuntimeExecutionMode:
@@ -232,7 +231,7 @@ class TestKillSwitchVerifyRollback:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print(f"Kill-switch verify PASS")
+            print("Kill-switch verify PASS")
             
             # Verify artifact path
             assert "artifact_path" in result
@@ -331,7 +330,7 @@ class TestTestnetLifecycleValidation:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print(f"Testnet lifecycle PASS")
+            print("Testnet lifecycle PASS")
             
             # Verify artifact path
             assert "artifact_path" in result
@@ -383,7 +382,7 @@ class TestCanaryRun:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print(f"Canary run PASS")
+            print("Canary run PASS")
             
             # Verify steps
             steps = result.get("steps", {})
@@ -425,7 +424,7 @@ class TestFinalRegression:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print(f"Final regression PASS")
+            print("Final regression PASS")
             
             # Verify checks
             checks = result.get("checks", {})

@@ -14,7 +14,7 @@ from core.live.position_sync_engine import reconcile_position_state
 from core.risk_engine import evaluate_risk
 from core.security import hash_password
 from db import SessionLocal
-from models import ExecutionJob, Order, Position, User, UserRole
+from models import ExecutionJob, Position, User, UserRole
 from services.execution_intent_service import build_execution_intent_detail
 
 

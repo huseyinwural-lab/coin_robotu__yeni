@@ -169,7 +169,7 @@ class TestBotRuntimeAPI:
         # Verify last_execution_summary
         assert "last_execution_summary" in data, "Missing last_execution_summary"
         
-        print(f"✓ Bot detail contains all required sections: config_summary, runtime_summary, strategy_binding, risk_binding, execution_binding, binding_validation, compatibility, last_execution_summary")
+        print("✓ Bot detail contains all required sections: config_summary, runtime_summary, strategy_binding, risk_binding, execution_binding, binding_validation, compatibility, last_execution_summary")
 
     # ==================== Manual Symbol Source Resolution ====================
     def test_manual_symbol_source_resolves_correctly(self, auth_session, created_bot_id):
@@ -209,7 +209,7 @@ class TestBotRuntimeAPI:
         
         if data["status"] == "RUNNING":
             assert data.get("binding_ok") is True, "binding_ok should be True for RUNNING status"
-            print(f"✓ Bot started successfully with status=RUNNING")
+            print("✓ Bot started successfully with status=RUNNING")
         else:
             print(f"✓ Bot start returned ERROR (expected if no execution profile): binding_ok={data.get('binding_ok')}")
 
@@ -224,7 +224,7 @@ class TestBotRuntimeAPI:
         assert "status" in data, "Missing status in response"
         assert data["status"] == "PAUSED", f"Expected PAUSED, got {data['status']}"
         
-        print(f"✓ Bot paused successfully with status=PAUSED")
+        print("✓ Bot paused successfully with status=PAUSED")
 
     def test_bot_stop_endpoint(self, auth_session, created_bot_id):
         """POST /api/bot-profiles/{id}/stop works correctly"""
@@ -237,7 +237,7 @@ class TestBotRuntimeAPI:
         assert "status" in data, "Missing status in response"
         assert data["status"] == "STOPPED", f"Expected STOPPED, got {data['status']}"
         
-        print(f"✓ Bot stopped successfully with status=STOPPED")
+        print("✓ Bot stopped successfully with status=STOPPED")
 
     def test_bot_status_endpoint(self, auth_session, created_bot_id):
         """GET /api/bot-profiles/{id}/status works correctly"""
@@ -286,7 +286,7 @@ class TestBotRuntimeAPI:
             assert "queue_trace" in log_entry, "Log entry should have queue_trace"
             print(f"✓ Bot logs returned {len(data)} entries with queue_trace")
         else:
-            print(f"✓ Bot logs returned empty list (no signals yet)")
+            print("✓ Bot logs returned empty list (no signals yet)")
 
     def test_bot_trades_endpoint(self, auth_session, created_bot_id):
         """GET /api/bot-profiles/{id}/trades works correctly"""
@@ -304,7 +304,7 @@ class TestBotRuntimeAPI:
             assert "queue_trace" in trade_entry, "Trade entry should have queue_trace"
             print(f"✓ Bot trades returned {len(data)} entries with queue_trace")
         else:
-            print(f"✓ Bot trades returned empty list (no trades yet)")
+            print("✓ Bot trades returned empty list (no trades yet)")
 
     # ==================== No Timeout Test ====================
     def test_no_timeout_on_local_backend_path(self, auth_session, created_bot_id):
@@ -399,7 +399,7 @@ class TestScannerSymbolSourceBehavior:
             assert start_data["status"] == "ERROR", f"Expected ERROR status for empty scanner, got {start_data['status']}"
             assert start_data.get("binding_ok") is False, "binding_ok should be False for empty scanner"
             
-            print(f"✓ Scanner with empty results correctly returns ERROR on start")
+            print("✓ Scanner with empty results correctly returns ERROR on start")
             
         finally:
             # Cleanup

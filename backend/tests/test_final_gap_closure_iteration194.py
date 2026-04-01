@@ -6,7 +6,6 @@ Final Gap Closure Iteration 194 - Testing:
 4. Signals nav item removed from sidebar (frontend check)
 5. Portfolio reports redirect
 """
-import os
 import pytest
 import requests
 
@@ -45,7 +44,7 @@ class TestRiskPolicyLifecycle:
     def test_create_risk_policy(self, auth_session):
         """POST /api/risk-policies creates new policy"""
         payload = {
-            "name": f"TEST_Policy_Iter194",
+            "name": "TEST_Policy_Iter194",
             "position_size_pct": 2.5,
             "atr_stop_multiplier": 1.5,
             "risk_reward_ratio": 2.0,
@@ -302,13 +301,13 @@ class TestPortfolioReportsRedirect:
         """GET /api/user/portfolio returns portfolio data"""
         resp = auth_session.get(f"{BASE_URL}/api/user/portfolio")
         assert resp.status_code == 200, f"Portfolio endpoint failed: {resp.text}"
-        print(f"PASS: GET /api/user/portfolio returned 200")
+        print("PASS: GET /api/user/portfolio returned 200")
     
     def test_weekly_reports(self, auth_session):
         """GET /api/user/reports/weekly returns weekly reports"""
         resp = auth_session.get(f"{BASE_URL}/api/user/reports/weekly")
         assert resp.status_code == 200, f"Weekly reports failed: {resp.text}"
-        print(f"PASS: GET /api/user/reports/weekly returned 200")
+        print("PASS: GET /api/user/reports/weekly returned 200")
 
 
 class TestSettingsEndpoints:
@@ -320,19 +319,19 @@ class TestSettingsEndpoints:
         assert resp.status_code == 200, f"Auth me failed: {resp.text}"
         data = resp.json()
         assert "email" in data, "Should have email"
-        print(f"PASS: GET /api/auth/me returned user profile")
+        print("PASS: GET /api/auth/me returned user profile")
     
     def test_exchange_connections(self, auth_session):
         """GET /api/user/exchange-connections returns connections"""
         resp = auth_session.get(f"{BASE_URL}/api/user/exchange-connections")
         assert resp.status_code == 200, f"Exchange connections failed: {resp.text}"
-        print(f"PASS: GET /api/user/exchange-connections returned 200")
+        print("PASS: GET /api/user/exchange-connections returned 200")
     
     def test_user_risk_settings(self, auth_session):
         """GET /api/user-risk/settings returns risk settings"""
         resp = auth_session.get(f"{BASE_URL}/api/user-risk/settings")
         assert resp.status_code == 200, f"User risk settings failed: {resp.text}"
-        print(f"PASS: GET /api/user-risk/settings returned 200")
+        print("PASS: GET /api/user-risk/settings returned 200")
 
 
 if __name__ == "__main__":

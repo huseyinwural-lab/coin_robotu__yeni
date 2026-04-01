@@ -250,7 +250,7 @@ class TestAdminCredentialOrchestrationRevoke:
         
         # Verify lifecycle_status is revoked
         assert data.get("lifecycle_status") == "revoked", f"Expected revoked, got {data.get('lifecycle_status')}"
-        assert data.get("approval_status") == "revoked", f"Expected approval_status revoked"
+        assert data.get("approval_status") == "revoked", "Expected approval_status revoked"
         assert data.get("is_active") == False, "Revoked credential should be inactive"
         
         print(f"✓ Revoked credential {credential_id}, lifecycle_status={data['lifecycle_status']}")
@@ -398,7 +398,7 @@ class TestExecutionValidation:
             check = data["checks"][0]
             assert "check" in check, "Each check should have 'check' field"
             assert "status" in check, "Each check should have 'status' field"
-            assert check["status"] in ["PASS", "WARN", "BLOCK"], f"check status should be PASS/WARN/BLOCK"
+            assert check["status"] in ["PASS", "WARN", "BLOCK"], "check status should be PASS/WARN/BLOCK"
             assert "reason_code" in check, "Each check should have 'reason_code' field"
             assert "remediation" in check, "Each check should have 'remediation' field"
         
@@ -574,7 +574,7 @@ class TestLifecycleStatusFlow:
         
         # Verify initial lifecycle is pending_verify
         assert credential["lifecycle_status"] == "pending_verify", "Initial lifecycle should be pending_verify"
-        print(f"  Step 1: Created with lifecycle_status=pending_verify")
+        print("  Step 1: Created with lifecycle_status=pending_verify")
         
         # Probe credential (will set to verified or verify_failed)
         probe_response = requests.post(
@@ -600,7 +600,7 @@ class TestLifecycleStatusFlow:
         revoked = revoke_response.json()
         
         assert revoked["lifecycle_status"] == "revoked", "After revoke, lifecycle should be revoked"
-        print(f"  Step 3: After revoke, lifecycle_status=revoked")
+        print("  Step 3: After revoke, lifecycle_status=revoked")
         
         print(f"✓ Complete lifecycle flow verified for credential {credential_id}")
 

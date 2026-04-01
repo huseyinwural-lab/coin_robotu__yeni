@@ -15,7 +15,6 @@ Service-level function tests:
 import os
 import pytest
 import requests
-from datetime import datetime, timezone
 
 # Use preview URL from environment
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
@@ -393,7 +392,7 @@ class TestExecutionReadinessQuarantineActions:
                 pytest.skip("Preview URL returning 502")
             
             assert response.status_code == 404, f"Expected 404, got {response.status_code}: {response.text[:200]}"
-            print(f"PASS: Invalid event_id returns 404")
+            print("PASS: Invalid event_id returns 404")
         except requests.exceptions.RequestException as e:
             pytest.skip(f"Request failed: {str(e)[:200]}")
 

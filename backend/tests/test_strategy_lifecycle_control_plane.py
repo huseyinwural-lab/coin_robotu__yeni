@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import os
 import uuid
-import json
 from datetime import datetime, timezone
 
 import pytest

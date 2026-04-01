@@ -19,7 +19,6 @@ from models import (
     UserDecisionTrace,
     UserExecutionIntent,
     UserRiskSetting,
-    UserTradeLifecycleEvent,
     UserTradeProjection,
 )
 from services.decision_card_service import list_user_decision_cards

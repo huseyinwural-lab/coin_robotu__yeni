@@ -15,7 +15,7 @@ import json
 import os
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 # Backend imports
 import sys
@@ -29,16 +29,14 @@ from core.readiness.go_live_validator import (
     _load_timeout_policy,
     _load_data_quality_config,
     run_go_live_validator,
-    build_go_live_context,
     DEFAULT_LATENCY_CONFIG,
     DEFAULT_TIMEOUT_POLICY,
     DEFAULT_DATA_QUALITY_CONFIG,
 )
 from core.readiness.exposure_policy import evaluate_exposure_policy, load_exposure_policy
-from services.readiness_history_service import get_readiness_history, build_readiness_audit_details
+from services.readiness_history_service import build_readiness_audit_details
 from services.readiness_history_maintenance_service import (
     get_readiness_retention_policy,
-    run_readiness_history_maintenance,
 )
 from services.readiness_policy_service import get_readiness_policy, update_readiness_policy
 
@@ -510,7 +508,7 @@ class TestHistoryEndpointAnalytics:
         assert details["readiness_score"] == 75.5, "readiness_score must be extracted"
         assert len(details["reason_codes"]) == 2, "reason_codes must be extracted"
         assert len(details["blocking_failures"]) == 1, "blocking_failures must be extracted"
-        print(f"PASS: build_readiness_audit_details extracts correct fields")
+        print("PASS: build_readiness_audit_details extracts correct fields")
 
     def test_incident_correlation_id_format(self):
         """Verify incident_correlation_id format in history items"""
@@ -610,7 +608,7 @@ class TestReadinessPolicyEndpoints:
         """Verify update_readiness_policy rejects invalid payload"""
         with pytest.raises(ValueError, match="invalid_policy_payload"):
             update_readiness_policy("not a dict")
-        print(f"PASS: update_readiness_policy rejects invalid payload")
+        print("PASS: update_readiness_policy rejects invalid payload")
 
 
 # ============================================================================

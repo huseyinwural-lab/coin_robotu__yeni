@@ -181,7 +181,7 @@ class TestFinalGapClosureEndpoints:
         
         data = response.json()
         assert "email" in data, "User profile should contain 'email'"
-        assert data["email"] == TEST_USER_EMAIL, f"Email should match test user"
+        assert data["email"] == TEST_USER_EMAIL, "Email should match test user"
         
         print(f"✓ Auth me endpoint returns user email={data.get('email')}")
 
@@ -292,7 +292,7 @@ class TestFinalGapClosureEndpoints:
         for field in expected_fields:
             assert field in data, f"Runtime snapshot should contain '{field}'"
         
-        print(f"✓ Runtime snapshot endpoint returns all sections")
+        print("✓ Runtime snapshot endpoint returns all sections")
 
 
 class TestLegacyRouteRedirects:

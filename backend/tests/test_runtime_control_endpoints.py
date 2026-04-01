@@ -288,7 +288,7 @@ class TestRuntimeOverrideLifecycle:
         active_data = active_response.json()
         active_ids = [item.get("override_id") for item in active_data.get("items", [])]
         assert override_id in active_ids
-        print(f"Override verified in active list")
+        print("Override verified in active list")
 
         # Cancel override
         cancel_response = requests.post(
@@ -308,7 +308,7 @@ class TestRuntimeOverrideLifecycle:
         active_data2 = active_response2.json()
         active_ids2 = [item.get("override_id") for item in active_data2.get("items", [])]
         assert override_id not in active_ids2
-        print(f"Override verified removed from active list")
+        print("Override verified removed from active list")
 
     def test_override_max_ttl_cap_enforced(self, super_admin_headers):
         """Override TTL should be validated at max_ttl_minutes (120) - API rejects values > 120"""

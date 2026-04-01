@@ -11,7 +11,6 @@ Testing P1-1 + P1-2 + P1-3 features:
 import os
 import pytest
 import requests
-import json
 import time
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")

@@ -500,7 +500,7 @@ class TestCaseInsensitiveHandling:
         if isinstance(detail, dict):
             assert detail.get("error_code") == "INVALID_QUOTE_ASSET", \
                 f"Expected INVALID_QUOTE_ASSET, got: {detail}"
-        print(f"Lowercase ethbusd correctly rejected")
+        print("Lowercase ethbusd correctly rejected")
 
 
 class TestV1TradingEndpoint:
@@ -614,7 +614,7 @@ class TestExecutionSafetyServiceEnforcement:
         detail = response.json().get("detail", {})
         if isinstance(detail, dict):
             assert detail.get("error_code") == "INVALID_QUOTE_ASSET"
-        print(f"Execution safety correctly blocked invalid quote")
+        print("Execution safety correctly blocked invalid quote")
 
 
 class TestOverrideSecurityNoBypass:
@@ -659,7 +659,7 @@ class TestOverrideSecurityNoBypass:
         if isinstance(detail, dict):
             assert detail.get("error_code") == "INVALID_QUOTE_ASSET", \
                 f"Should get INVALID_QUOTE_ASSET even with override: {detail}"
-        print(f"Override does not bypass quote constraint - correctly rejected")
+        print("Override does not bypass quote constraint - correctly rejected")
 
     def test_invalid_quote_not_bypassed_by_guard_condition(self, api_client, user_token):
         """Invalid quote should not be bypassed by any guard condition"""
@@ -686,7 +686,7 @@ class TestOverrideSecurityNoBypass:
         detail = response.json().get("detail", {})
         if isinstance(detail, dict):
             assert detail.get("error_code") == "INVALID_QUOTE_ASSET"
-        print(f"Guard conditions do not bypass quote constraint")
+        print("Guard conditions do not bypass quote constraint")
 
 
 class TestScannerLayerFiltering:
@@ -720,7 +720,7 @@ class TestScannerLayerFiltering:
             
             # BTCUSDT, ETHUSDC, SOLUSDT should be present (if data available)
             print(f"Scanner results symbols: {symbols_in_results}")
-            print(f"Invalid quotes correctly filtered from scanner")
+            print("Invalid quotes correctly filtered from scanner")
         else:
             print(f"Scanner run response: {response.status_code} - {response.text[:200]}")
 

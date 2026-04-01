@@ -134,7 +134,7 @@ class TestAdminLoginWithMfa:
         verify_data = verify_response.json()
         assert "access_token" in verify_data, "Response should contain access_token"
         assert verify_data.get("mfa_required") is False, "MFA should no longer be required"
-        print(f"MFA challenge verified successfully, got access_token")
+        print("MFA challenge verified successfully, got access_token")
 
 
 def get_admin_token():

@@ -1,0 +1,6 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+per-file-ignores = { "backend/tests/**/*.py" = ["E402", "E712", "F841"], "backend/scripts/*.py" = ["E402"], "backend/cli/readiness_closure_report.py" = ["E402"] }

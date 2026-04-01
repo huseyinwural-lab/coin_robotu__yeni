@@ -443,9 +443,9 @@ class TestApprovalWorkflow:
             # Check decision_context structure
             decision_context = item.get("decision_context", {})
             if decision_context:
-                assert "preview" in decision_context or decision_context == {}, f"Missing preview in decision_context"
-                assert "risk" in decision_context or decision_context == {}, f"Missing risk in decision_context"
-                assert "recommendation" in decision_context or decision_context == {}, f"Missing recommendation in decision_context"
+                assert "preview" in decision_context or decision_context == {}, "Missing preview in decision_context"
+                assert "risk" in decision_context or decision_context == {}, "Missing risk in decision_context"
+                assert "recommendation" in decision_context or decision_context == {}, "Missing recommendation in decision_context"
                 print(f"  decision_context.preview: {decision_context.get('preview', {})}")
                 print(f"  decision_context.risk: {decision_context.get('risk', {})}")
                 print(f"  decision_context.recommendation: {decision_context.get('recommendation', {})}")

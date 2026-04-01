@@ -31,7 +31,7 @@ class TestAdminLoginFlow:
         assert response.status_code == 200, f"Admin login failed: {response.text}"
         data = response.json()
         assert "access_token" in data, "No access_token in response"
-        print(f"PASS: Admin login canonical endpoint works, token received")
+        print("PASS: Admin login canonical endpoint works, token received")
     
     def test_user_login_with_admin_credentials_returns_panel_error(self):
         """Test that admin credentials on user panel returns panel error"""
@@ -46,10 +46,10 @@ class TestAdminLoginFlow:
             detail = data.get("detail", "")
             assert "panel" in str(detail).lower() or "yanlış" in str(detail).lower(), \
                 f"Expected panel error, got: {detail}"
-            print(f"PASS: User panel correctly rejects admin credentials with panel error")
+            print("PASS: User panel correctly rejects admin credentials with panel error")
         elif response.status_code == 200:
             # Some implementations may allow login but redirect
-            print(f"INFO: Login succeeded, may redirect to admin panel")
+            print("INFO: Login succeeded, may redirect to admin panel")
         else:
             print(f"INFO: Status {response.status_code}, response: {response.text[:200]}")
 
@@ -123,7 +123,7 @@ class TestMaintenanceSchedulerEndpoints:
             assert status in ["success", "failed", "disabled", None], f"Unexpected status: {status}"
             print(f"PASS: Maintenance status endpoint returns: status={status}, trigger={data.get('trigger')}")
         else:
-            print(f"INFO: Maintenance status is empty (scheduler may not have run yet)")
+            print("INFO: Maintenance status is empty (scheduler may not have run yet)")
 
 
 class TestBybitVenueReadiness:
@@ -276,7 +276,7 @@ class TestHistoryAnalytics:
         )
         assert response.status_code == 200, f"History with filters failed: {response.text}"
         data = response.json()
-        print(f"PASS: History endpoint with filters returns data")
+        print("PASS: History endpoint with filters returns data")
     
     def test_history_endpoint_pagination(self):
         """Test history endpoint pagination fields"""
@@ -384,7 +384,7 @@ class TestReadinessPolicyEndpoints:
         # Verify patch was applied
         latency_config = data.get("latency_config", {})
         assert latency_config.get("test_key") == "test_value_iteration171", "Patch not applied correctly"
-        print(f"PASS: Policy PUT merges patch correctly")
+        print("PASS: Policy PUT merges patch correctly")
 
 
 class TestLiveReadinessEndpoint:

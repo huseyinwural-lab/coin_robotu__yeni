@@ -301,8 +301,8 @@ class TestRolloutEndpoint:
         data = response.json()
         
         assert data.get("status") == "rejected", f"Expected rejected, got {data.get('status')}"
-        assert "APPLY ROLLOUT" in data.get("message", ""), f"Message should mention required phrase"
-        print(f"PASS: Rollout rejected without correct confirm phrase")
+        assert "APPLY ROLLOUT" in data.get("message", ""), "Message should mention required phrase"
+        print("PASS: Rollout rejected without correct confirm phrase")
 
     def test_rollout_rejects_invalid_percentage(self, admin_headers):
         """Rollout should reject percentages not in [10, 25, 50, 100]"""
@@ -333,8 +333,8 @@ class TestRolloutEndpoint:
         data = response.json()
         
         assert data.get("status") == "rejected", f"Expected rejected for invalid percentage, got {data.get('status')}"
-        assert "[10, 25, 50, 100]" in data.get("message", ""), f"Message should mention valid percentages"
-        print(f"PASS: Rollout rejected invalid percentage 15%")
+        assert "[10, 25, 50, 100]" in data.get("message", ""), "Message should mention valid percentages"
+        print("PASS: Rollout rejected invalid percentage 15%")
 
     def test_rollout_with_valid_percentage(self, admin_headers):
         """Rollout with valid percentage (may trigger auto-rollback if health<50 or error>3%)"""
@@ -411,8 +411,8 @@ class TestRollbackEndpoint:
         data = response.json()
         
         assert data.get("status") == "rejected", f"Expected rejected, got {data.get('status')}"
-        assert "ROLLBACK LAST ACTION" in data.get("message", ""), f"Message should mention required phrase"
-        print(f"PASS: Rollback rejected without correct confirm phrase")
+        assert "ROLLBACK LAST ACTION" in data.get("message", ""), "Message should mention required phrase"
+        print("PASS: Rollback rejected without correct confirm phrase")
 
     def test_rollback_with_correct_confirm(self, admin_headers):
         """Rollback with correct confirm phrase (may fail if no previous action)"""
@@ -482,7 +482,7 @@ class TestBulkActionEndpoint:
         data = response.json()
         
         assert data.get("status") == "rejected", f"Expected rejected for bulk disable, got {data.get('status')}"
-        assert "pause/resume/throttle" in data.get("message", "").lower(), f"Message should mention allowed actions"
+        assert "pause/resume/throttle" in data.get("message", "").lower(), "Message should mention allowed actions"
         print(f"PASS: Bulk disable rejected: {data.get('message')}")
 
     def test_bulk_action_rejects_decommission(self, admin_headers):
@@ -545,8 +545,8 @@ class TestBulkActionEndpoint:
         data = response.json()
         
         assert data.get("status") == "rejected", f"Expected rejected for wrong confirm, got {data.get('status')}"
-        assert "BULK PAUSE" in data.get("message", ""), f"Message should mention required phrase"
-        print(f"PASS: Bulk pause rejected without correct confirm phrase")
+        assert "BULK PAUSE" in data.get("message", ""), "Message should mention required phrase"
+        print("PASS: Bulk pause rejected without correct confirm phrase")
 
     def test_bulk_pause_with_correct_confirm(self, admin_headers):
         """Bulk pause with correct confirm phrase should work"""
@@ -676,7 +676,7 @@ class TestResponseContract:
             ("POST", f"/api/admin/futures/strategy/{strategy_id}/promote-shadow", {"reason": "test", "confirm_phrase": "WRONG", "dry_run": True}),
             ("POST", f"/api/admin/futures/strategy/{strategy_id}/rollout", {"reason": "test", "confirm_phrase": "WRONG", "rollout_percentage": 10, "dry_run": True}),
             ("POST", f"/api/admin/futures/strategy/{strategy_id}/rollback", {"reason": "test", "confirm_phrase": "WRONG", "dry_run": True}),
-            ("POST", f"/api/admin/futures/strategy/bulk-action", {"reason": "test", "confirm_phrase": "WRONG", "strategy_ids": [strategy_id], "action": "pause", "dry_run": True}),
+            ("POST", "/api/admin/futures/strategy/bulk-action", {"reason": "test", "confirm_phrase": "WRONG", "strategy_ids": [strategy_id], "action": "pause", "dry_run": True}),
         ]
         
         for method, endpoint, body in endpoints:

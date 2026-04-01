@@ -66,7 +66,7 @@ class TestNewDeviceMfaChallenge:
         mfa_required = data.get("mfa_required")
         assert mfa_required is True
         
-        print(f"✓ Login returns MFA challenge (new device detection active)")
+        print("✓ Login returns MFA challenge (new device detection active)")
 
 
 class TestSessionHijackProtection:
@@ -119,7 +119,7 @@ class TestSessionHijackProtection:
         )
         assert response.status_code in [401, 403], f"Expected 401/403, got {response.status_code}"
         
-        print(f"✓ IP hash mismatch invalidates session")
+        print("✓ IP hash mismatch invalidates session")
 
 
 class TestDeviceCookieBinding:
@@ -138,7 +138,7 @@ class TestDeviceCookieBinding:
         set_cookie = response.headers.get("set-cookie", "")
         # Device cookie may be httpOnly
         
-        print(f"✓ Login response received, cookies set")
+        print("✓ Login response received, cookies set")
 
     def test_jwt_contains_device_id_claim(self):
         """JWT structure includes device_id claim"""
@@ -160,7 +160,7 @@ class TestDeviceCookieBinding:
         assert "ip_hash" in decoded, "JWT must contain ip_hash claim"
         assert "device_fingerprint" in decoded, "JWT must contain device_fingerprint claim"
         
-        print(f"✓ JWT structure includes device_id, ip_hash, device_fingerprint claims")
+        print("✓ JWT structure includes device_id, ip_hash, device_fingerprint claims")
 
 
 class TestEmailOtpHardening:
@@ -193,7 +193,7 @@ class TestEmailOtpHardening:
             assert resend_response.status_code in [200, 400, 429], \
                 f"Expected 200/400/429, got {resend_response.status_code}"
             
-            print(f"✓ Email OTP resend endpoint exists with rate limiting")
+            print("✓ Email OTP resend endpoint exists with rate limiting")
         else:
             print(f"✓ Email OTP not in available methods (TOTP configured): {mfa_methods}")
 
@@ -218,7 +218,7 @@ class TestEmailOtpHardening:
                 f"Unexpected email_delivery_status: {email_status}"
             print(f"✓ Email delivery status: {email_status}")
         else:
-            print(f"✓ Email OTP not primary method, delivery status not applicable")
+            print("✓ Email OTP not primary method, delivery status not applicable")
 
 
 class TestAuditLogs:
@@ -242,7 +242,7 @@ class TestAuditLogs:
         data = response.json()
         assert data.get("mfa_required") is True
         
-        print(f"✓ Login creates audit log (verified via successful MFA challenge)")
+        print("✓ Login creates audit log (verified via successful MFA challenge)")
 
     def test_failed_mfa_attempt_logged(self):
         """Failed MFA attempt is logged"""
@@ -271,7 +271,7 @@ class TestAuditLogs:
         # Should fail with 400
         assert verify_response.status_code == 400
         
-        print(f"✓ Failed MFA attempt logged (verified via 400 response)")
+        print("✓ Failed MFA attempt logged (verified via 400 response)")
 
 
 class TestAdminMfaReset:
@@ -287,7 +287,7 @@ class TestAdminMfaReset:
         assert response.status_code in [401, 403, 404], \
             f"Expected 401/403/404, got {response.status_code}"
         
-        print(f"✓ Admin MFA reset endpoint exists and requires auth")
+        print("✓ Admin MFA reset endpoint exists and requires auth")
 
 
 class TestStandardizedMfaApis:
@@ -300,7 +300,7 @@ class TestStandardizedMfaApis:
         assert response.status_code in [401, 403, 422], \
             f"Expected 401/403/422, got {response.status_code}"
         
-        print(f"✓ POST /api/mfa/setup endpoint exists")
+        print("✓ POST /api/mfa/setup endpoint exists")
 
     def test_mfa_challenge_endpoint_exists(self):
         """POST /api/mfa/challenge endpoint exists"""
@@ -309,7 +309,7 @@ class TestStandardizedMfaApis:
         assert response.status_code in [401, 403, 422], \
             f"Expected 401/403/422, got {response.status_code}"
         
-        print(f"✓ POST /api/mfa/challenge endpoint exists")
+        print("✓ POST /api/mfa/challenge endpoint exists")
 
     def test_mfa_verify_endpoint_exists(self):
         """POST /api/mfa/verify endpoint exists"""
@@ -337,7 +337,7 @@ class TestStandardizedMfaApis:
         assert response.status_code in [400, 401, 403], \
             f"Expected 400/401/403, got {response.status_code}"
         
-        print(f"✓ POST /api/mfa/verify endpoint exists")
+        print("✓ POST /api/mfa/verify endpoint exists")
 
     def test_mfa_disable_endpoint_exists(self):
         """POST /api/mfa/disable endpoint exists"""
@@ -346,7 +346,7 @@ class TestStandardizedMfaApis:
         assert response.status_code in [401, 403, 422], \
             f"Expected 401/403/422, got {response.status_code}"
         
-        print(f"✓ POST /api/mfa/disable endpoint exists")
+        print("✓ POST /api/mfa/disable endpoint exists")
 
     def test_mfa_challenge_resend_endpoint_exists(self):
         """POST /api/mfa/challenge/resend endpoint exists"""
@@ -358,7 +358,7 @@ class TestStandardizedMfaApis:
         assert response.status_code in [400, 401, 403, 422], \
             f"Expected 400/401/403/422, got {response.status_code}"
         
-        print(f"✓ POST /api/mfa/challenge/resend endpoint exists")
+        print("✓ POST /api/mfa/challenge/resend endpoint exists")
 
 
 class TestBackwardCompatibility:
@@ -371,7 +371,7 @@ class TestBackwardCompatibility:
         assert response.status_code in [401, 403], \
             f"Expected 401/403, got {response.status_code}"
         
-        print(f"✓ GET /api/auth/mfa/settings endpoint exists")
+        print("✓ GET /api/auth/mfa/settings endpoint exists")
 
     def test_auth_mfa_verify_endpoint_works(self):
         """POST /api/auth/mfa/verify endpoint works"""
@@ -402,9 +402,9 @@ class TestBackwardCompatibility:
         x_deprecated = response.headers.get("X-Deprecated-Endpoint")
         
         if deprecation_header or x_deprecated:
-            print(f"✓ POST /api/auth/mfa/verify works with deprecation headers")
+            print("✓ POST /api/auth/mfa/verify works with deprecation headers")
         else:
-            print(f"✓ POST /api/auth/mfa/verify works (deprecation headers may be optional)")
+            print("✓ POST /api/auth/mfa/verify works (deprecation headers may be optional)")
 
     def test_auth_mfa_challenge_verify_endpoint_works(self):
         """POST /api/auth/mfa/challenge/verify endpoint works"""
@@ -430,7 +430,7 @@ class TestBackwardCompatibility:
         assert response.status_code in [400, 401, 403], \
             f"Expected 400/401/403, got {response.status_code}"
         
-        print(f"✓ POST /api/auth/mfa/challenge/verify endpoint works")
+        print("✓ POST /api/auth/mfa/challenge/verify endpoint works")
 
     def test_auth_mfa_totp_setup_endpoint_works(self):
         """POST /api/auth/mfa/totp/setup endpoint works"""
@@ -439,7 +439,7 @@ class TestBackwardCompatibility:
         assert response.status_code in [401, 403, 422], \
             f"Expected 401/403/422, got {response.status_code}"
         
-        print(f"✓ POST /api/auth/mfa/totp/setup endpoint exists")
+        print("✓ POST /api/auth/mfa/totp/setup endpoint exists")
 
     def test_auth_mfa_backup_codes_regenerate_endpoint_works(self):
         """POST /api/auth/mfa/backup-codes/regenerate endpoint works"""
@@ -448,7 +448,7 @@ class TestBackwardCompatibility:
         assert response.status_code in [401, 403, 422], \
             f"Expected 401/403/422, got {response.status_code}"
         
-        print(f"✓ POST /api/auth/mfa/backup-codes/regenerate endpoint exists")
+        print("✓ POST /api/auth/mfa/backup-codes/regenerate endpoint exists")
 
 
 class TestMfaSettingsUxStates:
@@ -484,7 +484,7 @@ class TestStepUpEnforcement:
         )
         assert response.status_code == 401, f"Expected 401, got {response.status_code}"
         
-        print(f"✓ POST /api/auth/step-up requires authentication")
+        print("✓ POST /api/auth/step-up requires authentication")
 
     def test_critical_endpoints_require_auth(self):
         """Critical endpoints require authentication"""
@@ -509,7 +509,7 @@ class TestStepUpEnforcement:
             assert response.status_code in [401, 403, 404, 422], \
                 f"{method} {endpoint}: Expected 401/403/404/422, got {response.status_code}"
         
-        print(f"✓ Critical endpoints require authentication")
+        print("✓ Critical endpoints require authentication")
 
 
 class TestBruteForceProtection:
@@ -536,7 +536,7 @@ class TestBruteForceProtection:
         assert response.status_code in [423, 429], \
             f"Expected 423/429 for lockout, got {response.status_code}"
         
-        print(f"✓ Brute-force lockout triggered after 5 failures")
+        print("✓ Brute-force lockout triggered after 5 failures")
 
 
 class TestGeoIpService:
@@ -557,7 +557,7 @@ class TestGeoIpService:
         # Login should work - GeoIP is used internally for audit
         assert response.status_code == 200
         
-        print(f"✓ GeoIP service active (used in audit context)")
+        print("✓ GeoIP service active (used in audit context)")
 
 
 class TestMfaGracePeriod:
