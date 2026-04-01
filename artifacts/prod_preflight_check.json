@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_0_FINAL_BLOCKER_CLEANUP",
-  "status": "PASS",
-  "generated_at": "2026-04-01T11:52:42.341311+00:00",
+  "status": "FAIL",
+  "generated_at": "2026-04-01T13:24:42.774631+00:00",
   "checks": [
     {
       "name": "DATABASE_URL not empty",
@@ -35,12 +35,12 @@
     },
     {
       "name": "pg_dump available",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "pg_dump kurulu olmalı (CI modunda skip)"
     },
     {
       "name": "psql available",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "psql kurulu olmalı (CI modunda skip)"
     },
     {
@@ -75,13 +75,13 @@
     },
     {
       "name": "Healthcheck endpoint Redis OK",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "health endpoint redis.status=ready dönmeli (CI modunda skip)"
     },
     {
       "name": "Redis fail-fast behavior",
-      "status": "PASS",
-      "detail": "CI/skip modunda fail-fast import testi atlandı"
+      "status": "FAIL",
+      "detail": "Redis erişilemezse app boot fail fast yapmalı"
     }
   ],
   "resolved_values_preview": {
@@ -95,11 +95,11 @@
     "reason": "runtime_checks_disabled_or_redis_module_missing"
   },
   "health_probe": {
-    "source": "http_probe",
-    "error": "HTTP Error 403: Forbidden"
+    "source": "inprocess_probe",
+    "error": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/app/backend/server.py\", line 6, in <module>\n    from fastapi import APIRouter, Depends, FastAPI, Request\nModuleNotFoundError: No module named 'fastapi'\n"
   },
   "failfast_probe": {
-    "return_code": null,
-    "matched": true
+    "return_code": 1,
+    "matched": false
   }
 }

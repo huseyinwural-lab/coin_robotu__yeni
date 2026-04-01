@@ -1,14 +1,14 @@
 {
   "phase": "FAZ_D0_TASK_1",
   "status": "PASS",
-  "generated_at": "2026-04-01T11:46:41.160230+00:00",
+  "generated_at": "2026-04-01T13:24:42.397960+00:00",
   "checks": [
     {
       "key": "DATABASE_URL",
       "is_set": true,
       "contains_localhost": false,
       "contains_container_local": false,
-      "resolved_source": "backend/.env",
+      "resolved_source": "process_env",
       "value_preview": "postgresql+psycopg2://postgres.wpaejjyirhblphihxnli:iY9yPPYAe4dL...",
       "status": "PASS"
     },
@@ -17,7 +17,7 @@
       "is_set": true,
       "contains_localhost": false,
       "contains_container_local": false,
-      "resolved_source": "backend/.env",
+      "resolved_source": "process_env",
       "value_preview": "redis://10.79.135.95:6379/0",
       "status": "PASS"
     },

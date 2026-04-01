@@ -1,0 +1,212 @@
+{
+  "base": "https://trade-trace-engine.preview.emergentagent.com",
+  "timestamp": 1775049847.4987361,
+  "steps": {
+    "admin_login": {
+      "status": 200,
+      "ok": true
+    },
+    "user_login": {
+      "status": 200,
+      "ok": true
+    },
+    "auth_me": {
+      "admin_status": 200,
+      "user_status": 200,
+      "ok": true
+    },
+    "execution_readiness": {
+      "status": 200,
+      "ok": true,
+      "body": {
+        "exchange_connection": "FAIL",
+        "permissions": "FAIL",
+        "latency_ms": 0,
+        "order_test": "FAIL",
+        "mode": "MOCKED",
+        "final_status": "BLOCKED",
+        "mocked_flag": true,
+        "override_active": false,
+        "reason_codes": [
+          "BALANCE_DATA_MISSING",
+          "BALANCE_DATA_STALE",
+          "BINANCE_PROBE_FAIL",
+          "BYBIT_RATE_LIMIT_UNKNOWN",
+          "BYBIT_TESTNET_CREDENTIALS_MISSING",
+          "CANCEL_PATH_INVALID",
+          "CREDENTIAL_ENV_MISMATCH",
+          "DRAW_DOWN_DATA_MISSING",
+          "DRY_RUN_REQUIRED",
+          "EXCHANGE_API_UNAVAILABLE",
+          "EXCHANGE_CONNECTION_MISSING",
+          "EXECUTION_CANCEL_MOCKED",
+          "EXECUTION_LIFECYCLE_SYNC_FAIL",
+          "EXECUTION_PROOF_MOCKED_PATHS",
+          "EXECUTION_PROOF_ONLY_MOCKED",
+          "EXECUTION_TEST_MOCKED",
+          "EXPLICIT_LIVE_DISABLED",
+          "EXPOSURE_NO_EQUITY",
+          "FILL_PATH_INVALID",
+          "MARGIN_DATA_MISSING",
+          "MARKET_DATA_MISSING",
+          "MODE_MISMATCH",
+          "OPEN_ORDERS_DATA_MISSING",
+          "ORDER_EXECUTION_MISSING",
+          "ORDER_EXECUTION_PCTL_MISSING",
+          "PARTIAL_FILL_INVALID",
+          "POSITION_DATA_MISSING",
+          "REDUCE_ONLY_UNVERIFIED",
+          "REJECT_PATH_INVALID",
+          "ROUND_TRIP_MISSING",
+          "ROUND_TRIP_PCTL_MISSING",
+          "STRATEGY_ENGINE_UNKNOWN",
+          "TICK_TO_TRADE_MISSING",
+          "TICK_TO_TRADE_PCTL_MISSING",
+          "WEBSOCKET_MISSING",
+          "WORKER_STATE_UNKNOWN"
+        ],
+        "execution_proof": {
+          "real_metric_count": 0,
+          "mocked_metric_count": 0,
+          "submit_mocked": true,
+          "cancel_mocked": true,
+          "has_mocked_paths": true,
+          "proof_status": "MOCKED_ONLY"
+        },
+        "mocked_paths": true,
+        "readiness_state": "BLOCKED",
+        "execution_allowed": false,
+        "go_live_allowed": false
+      }
+    },
+    "exchange_settings_update": {
+      "status": 200,
+      "ok": true,
+      "body": {
+        "exchange": "binance",
+        "mode": "testnet",
+        "has_api_key": true,
+        "has_api_secret": true,
+        "updated_at": "2026-04-01T13:24:34.099174Z"
+      }
+    },
+    "permission_status": {
+      "status": 200,
+      "ok": true,
+      "overall": "fail",
+      "live_activation": "blocked",
+      "body": {
+        "overall_status": "fail",
+        "live_activation": "blocked",
+        "controls": [
+          {
+            "key": "can_trade",
+            "status": "fail",
+            "reason": "invalid_credentials",
+            "timestamp": "2026-04-01T13:24:37.964558+00:00"
+          },
+          {
+            "key": "can_futures",
+            "status": "fail",
+            "reason": "invalid_credentials",
+            "timestamp": "2026-04-01T13:24:37.964558+00:00"
+          },
+          {
+            "key": "timestamp_sync",
+            "status": "pass",
+            "reason": "drift_ms=70",
+            "timestamp": "2026-04-01T13:24:37.964558+00:00"
+          },
+          {
+            "key": "rate_limit_ok",
+            "status": "fail",
+            "reason": "invalid_credentials",
+            "timestamp": "2026-04-01T13:24:37.964558+00:00"
+          }
+        ]
+      }
+    },
+    "live_config_get": {
+      "status": 200,
+      "ok": true
+    },
+    "live_config_put": {
+      "status": 403,
+      "ok": false,
+      "body": {
+        "detail": {
+          "error": "production_gate_blocked",
+          "gate_state": "NO_GO",
+          "blocked_reason_codes": [
+            "state_no_go",
+            "checklist_incomplete",
+            "failing_checks_present"
+          ]
+        }
+      }
+    },
+    "kill_switch_enable_before": {
+      "status": 200,
+      "ok": true,
+      "body": {
+        "trading_enabled": true,
+        "max_total_exposure": 150.0,
+        "max_active_positions": 3,
+        "current_total_exposure": 840.0,
+        "current_active_positions": 28,
+        "open_positions_count": 0,
+        "pending_user_intents_count": 28,
+        "pending_runtime_intents_count": 0,
+        "reason_code": "TRADING_ENABLED",
+        "idempotent": true,
+        "updated_at": "2026-04-01T13:24:51.046428Z"
+      }
+    },
+    "test_order": {
+      "status": 400,
+      "ok": false,
+      "body": {
+        "detail": "Permission check başarısız. Önce API key doğrulamasını geçmelisiniz."
+      }
+    },
+    "execution_quality_latest": {
+      "status": 200,
+      "ok": true,
+      "execution_id": "awaiting_execution_evidence",
+      "status_value": "awaiting_valid_key",
+      "body": {
+        "execution_id": "awaiting_execution_evidence",
+        "symbol": "BTCUSDT",
+        "status": "awaiting_valid_key",
+        "strategy_type": "-",
+        "volatility_regime": "-",
+        "volatility_pct": 0.0,
+        "expected_price": 0.0,
+        "fill_price": null,
+        "slippage": null,
+        "execution_latency": null,
+        "execution_quality_score": 0.0,
+        "timestamp": "2026-04-01T13:24:57.398104Z"
+      }
+    },
+    "kill_switch_validation": {
+      "off_status": 200,
+      "blocked_status": 400,
+      "resume_status": 200,
+      "blocked_body": {
+        "detail": "Permission check başarısız. Önce API key doğrulamasını geçmelisiniz."
+      },
+      "ok": false
+    }
+  },
+  "summary": {
+    "order_sent": false,
+    "fill_ok": false,
+    "ui_ok": false,
+    "kill_switch_ok": false,
+    "order_status": null,
+    "latest_status": "awaiting_valid_key",
+    "permission_overall": "fail",
+    "permission_live_activation": "blocked"
+  }
+}
