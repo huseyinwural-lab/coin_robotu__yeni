@@ -49,3 +49,7 @@ release_*test.py
 phase*_*.py
 faz*_*.py
 backend_*test.py
+-e 
+# Environment files
+*.env
+*.env.*
