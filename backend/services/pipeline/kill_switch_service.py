@@ -35,7 +35,7 @@ def _flash_crash_detected(cache) -> bool:
 def _execution_health_flags(db: Session) -> dict:
     rows = (
         db.query(ExecutionMetric)
-        .order_by(ExecutionMetric.timestamp.desc())
+        .order_by(ExecutionMetric.created_at.desc())
         .limit(120)
         .all()
     )
