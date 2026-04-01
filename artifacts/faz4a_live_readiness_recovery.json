@@ -1,0 +1,36 @@
+{
+  "base": "https://trade-trace-engine.preview.emergentagent.com",
+  "logins": {
+    "admin": {
+      "status": 200
+    },
+    "user": {
+      "status": 200
+    }
+  },
+  "sequence": [
+    {
+      "step": "stop_live_tests",
+      "mode_before": "TESTNET",
+      "mode_switch_status": null,
+      "ok": true
+    },
+    {
+      "step": "testnet_user_credential_verify",
+      "exchange_settings_status": 200,
+      "validate_status": 403,
+      "validate_reason_codes": [
+        "assignment_required"
+      ],
+      "validate_hint": "Venue assignment eksik. Exchange connection profilini varsayılan yapıp tekrar deneyin.",
+      "verify": "FAIL",
+      "readiness": "BLOCKED"
+    }
+  ],
+  "summary": {
+    "verify": "FAIL",
+    "readiness": "BLOCKED",
+    "gate": "NO_GO",
+    "stop_reason": "testnet_not_passed_live_skipped"
+  }
+}
