@@ -340,6 +340,16 @@ def readiness_check():
     return JSONResponse(status_code=status_code, content=payload)
 
 
+@fastapi_app.get("/health")
+def root_health_alias():
+    return health_check()
+
+
+@fastapi_app.get("/ready")
+def root_ready_alias():
+    return readiness_check()
+
+
 @api_router.get("/metrics", response_class=PlainTextResponse)
 def metrics_export(db: Session = Depends(get_db)):
     snapshot = collect_observability_snapshot(db)
