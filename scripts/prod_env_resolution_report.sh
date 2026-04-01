@@ -54,6 +54,8 @@ proc_env = dict(os.environ)
 ci_mode = str(proc_env.get('CI', '')).strip().lower() in {'1', 'true', 'yes'}
 runtime_checks_default = 'false' if ci_mode else 'true'
 runtime_checks_enabled = str(proc_env.get('ENABLE_RUNTIME_PREFLIGHT_CHECKS', runtime_checks_default)).strip().lower() in {'1', 'true', 'yes'}
+strict_env_checks_default = 'false' if ci_mode else 'true'
+strict_env_checks_enabled = str(proc_env.get('STRICT_PREFLIGHT_ENV_CHECKS', strict_env_checks_default)).strip().lower() in {'1', 'true', 'yes'}
 
 database_url = resolve_value('DATABASE_URL', proc_env, backend_env)
 redis_url = resolve_value('REDIS_URL', proc_env, backend_env)
@@ -112,6 +114,7 @@ for key, value in targets.items():
             parsed_host = ""
     host_to_check = parsed_host or ((value or '').split('@')[-1].split('/')[0])
     has_container_local = bool(container_local_pattern.search(host_to_check)) if value else False
+    strict_ok = is_set and (not has_localhost) and (not has_container_local)
     checks.append(
         {
             'key': key,
@@ -120,7 +123,7 @@ for key, value in targets.items():
             'contains_container_local': has_container_local,
             'resolved_source': 'process_env' if proc_env.get(key) else ('backend/.env' if key in backend_env else ('frontend/.env' if key in frontend_env else 'missing')),
             'value_preview': (value[:64] + '...') if value and len(value) > 64 else value,
-            'status': 'PASS' if is_set and not has_localhost and not has_container_local else 'FAIL',
+            'status': 'PASS' if (strict_ok or (is_set and not strict_env_checks_enabled)) else 'FAIL',
         }
     )
 

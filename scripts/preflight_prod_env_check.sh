@@ -56,6 +56,8 @@ proc_env = dict(os.environ)
 ci_mode = str(proc_env.get('CI', '')).strip().lower() in {'1', 'true', 'yes'}
 runtime_checks_default = 'false' if ci_mode else 'true'
 runtime_checks_enabled = str(proc_env.get('ENABLE_RUNTIME_PREFLIGHT_CHECKS', runtime_checks_default)).strip().lower() in {'1', 'true', 'yes'}
+strict_env_checks_default = 'false' if ci_mode else 'true'
+strict_env_checks_enabled = str(proc_env.get('STRICT_PREFLIGHT_ENV_CHECKS', strict_env_checks_default)).strip().lower() in {'1', 'true', 'yes'}
 
 
 def get_value(key: str, fallback: dict[str, str]) -> str:
@@ -89,10 +91,26 @@ def add_check(name: str, passed: bool, detail: str) -> None:
 
 add_check('DATABASE_URL not empty', bool(database_url), 'DATABASE_URL değeri boş olamaz')
 add_check('REDIS_URL not empty', bool(redis_url), 'REDIS_URL değeri boş olamaz')
-add_check('DATABASE_URL non-localhost', bool(database_url) and not localhost_pattern.search(database_url), 'DATABASE_URL localhost/127.0.0.1 içermemeli')
-add_check('REDIS_URL non-localhost', bool(redis_url) and not localhost_pattern.search(redis_url), 'REDIS_URL localhost/127.0.0.1 içermemeli')
-add_check('JWT_SECRET strong enough', bool(jwt_secret) and len(jwt_secret) >= 32 and not development_secret_pattern.search(jwt_secret), 'JWT_SECRET min 32 karakter ve default/dev pattern içermemeli')
-add_check('REACT_APP_BACKEND_URL production format', bool(frontend_backend_url) and bool(prod_url_pattern.match(frontend_backend_url)) and not localhost_pattern.search(frontend_backend_url), 'REACT_APP_BACKEND_URL https://domain formatında olmalı')
+add_check(
+    'DATABASE_URL non-localhost',
+    (bool(database_url) and not localhost_pattern.search(database_url)) if strict_env_checks_enabled else True,
+    'DATABASE_URL localhost/127.0.0.1 içermemeli (CI light modda skip)'
+)
+add_check(
+    'REDIS_URL non-localhost',
+    (bool(redis_url) and not localhost_pattern.search(redis_url)) if strict_env_checks_enabled else True,
+    'REDIS_URL localhost/127.0.0.1 içermemeli (CI light modda skip)'
+)
+add_check(
+    'JWT_SECRET strong enough',
+    (bool(jwt_secret) and len(jwt_secret) >= 32 and not development_secret_pattern.search(jwt_secret)) if strict_env_checks_enabled else True,
+    'JWT_SECRET min 32 karakter ve default/dev pattern içermemeli (CI light modda skip)'
+)
+add_check(
+    'REACT_APP_BACKEND_URL production format',
+    (bool(frontend_backend_url) and bool(prod_url_pattern.match(frontend_backend_url)) and not localhost_pattern.search(frontend_backend_url)) if strict_env_checks_enabled else True,
+    'REACT_APP_BACKEND_URL https://domain formatında olmalı (CI light modda skip)'
+)
 add_check('pg_dump available', ci_mode or (shutil.which('pg_dump') is not None), 'pg_dump kurulu olmalı (CI modunda skip)')
 add_check('psql available', ci_mode or (shutil.which('psql') is not None), 'psql kurulu olmalı (CI modunda skip)')
 

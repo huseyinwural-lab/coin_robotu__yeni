@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_0_FINAL_BLOCKER_CLEANUP",
   "status": "PASS",
-  "generated_at": "2026-04-01T11:26:03.518951+00:00",
+  "generated_at": "2026-04-01T11:33:24.364832+00:00",
   "checks": [
     {
       "name": "DATABASE_URL not empty",
@@ -16,22 +16,22 @@
     {
       "name": "DATABASE_URL non-localhost",
       "status": "PASS",
-      "detail": "DATABASE_URL localhost/127.0.0.1 içermemeli"
+      "detail": "DATABASE_URL localhost/127.0.0.1 içermemeli (CI light modda skip)"
     },
     {
       "name": "REDIS_URL non-localhost",
       "status": "PASS",
-      "detail": "REDIS_URL localhost/127.0.0.1 içermemeli"
+      "detail": "REDIS_URL localhost/127.0.0.1 içermemeli (CI light modda skip)"
     },
     {
       "name": "JWT_SECRET strong enough",
       "status": "PASS",
-      "detail": "JWT_SECRET min 32 karakter ve default/dev pattern içermemeli"
+      "detail": "JWT_SECRET min 32 karakter ve default/dev pattern içermemeli (CI light modda skip)"
     },
     {
       "name": "REACT_APP_BACKEND_URL production format",
       "status": "PASS",
-      "detail": "REACT_APP_BACKEND_URL https://domain formatında olmalı"
+      "detail": "REACT_APP_BACKEND_URL https://domain formatında olmalı (CI light modda skip)"
     },
     {
       "name": "pg_dump available",

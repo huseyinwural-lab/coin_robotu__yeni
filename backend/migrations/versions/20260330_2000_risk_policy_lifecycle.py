@@ -16,15 +16,34 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("risk_policies", sa.Column("version_group_id", sa.String(length=120), nullable=False, server_default="legacy-group"))
-    op.add_column("risk_policies", sa.Column("version_num", sa.Integer(), nullable=False, server_default="1"))
-    op.add_column("risk_policies", sa.Column("lifecycle_state", sa.String(length=30), nullable=False, server_default="draft"))
-    op.add_column("risk_policies", sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("false")))
-    op.add_column("risk_policies", sa.Column("activated_at", sa.DateTime(timezone=True), nullable=True))
-    op.add_column("risk_policies", sa.Column("activated_by", sa.String(), nullable=True))
-    op.add_column("risk_policies", sa.Column("status_reason", sa.String(length=280), nullable=True))
-    op.add_column("risk_policies", sa.Column("metadata_json", sa.JSON(), nullable=False, server_default=sa.text("'{}'::json")))
-    op.create_index("ix_risk_policies_version_group_id", "risk_policies", ["version_group_id"], unique=False)
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    table_names = set(inspector.get_table_names())
+    if "risk_policies" not in table_names:
+        return
+
+    existing_columns = {col.get("name") for col in inspector.get_columns("risk_policies")}
+    existing_indexes = {idx.get("name") for idx in inspector.get_indexes("risk_policies")}
+
+    if "version_group_id" not in existing_columns:
+        op.add_column("risk_policies", sa.Column("version_group_id", sa.String(length=120), nullable=False, server_default="legacy-group"))
+    if "version_num" not in existing_columns:
+        op.add_column("risk_policies", sa.Column("version_num", sa.Integer(), nullable=False, server_default="1"))
+    if "lifecycle_state" not in existing_columns:
+        op.add_column("risk_policies", sa.Column("lifecycle_state", sa.String(length=30), nullable=False, server_default="draft"))
+    if "is_active" not in existing_columns:
+        op.add_column("risk_policies", sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("false")))
+    if "activated_at" not in existing_columns:
+        op.add_column("risk_policies", sa.Column("activated_at", sa.DateTime(timezone=True), nullable=True))
+    if "activated_by" not in existing_columns:
+        op.add_column("risk_policies", sa.Column("activated_by", sa.String(), nullable=True))
+    if "status_reason" not in existing_columns:
+        op.add_column("risk_policies", sa.Column("status_reason", sa.String(length=280), nullable=True))
+    if "metadata_json" not in existing_columns:
+        op.add_column("risk_policies", sa.Column("metadata_json", sa.JSON(), nullable=False, server_default=sa.text("'{}'::json")))
+
+    if "ix_risk_policies_version_group_id" not in existing_indexes:
+        op.create_index("ix_risk_policies_version_group_id", "risk_policies", ["version_group_id"], unique=False)
 
 
 def downgrade() -> None:
