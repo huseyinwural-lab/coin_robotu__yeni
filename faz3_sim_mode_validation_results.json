@@ -1,0 +1,61 @@
+{
+  "success": true,
+  "total": 7,
+  "passed": 7,
+  "failed": 0,
+  "chain_status": "\u2705 Zincir \u00e7al\u0131\u015ft\u0131",
+  "risk_status": "\u2705 Risk block do\u011fru",
+  "kill_switch_status": "\u2705 Kill switch \u00e7al\u0131\u015ft\u0131",
+  "weakness": "Zay\u0131f nokta tespit edilmedi",
+  "results": [
+    {
+      "test": "Backend Architecture",
+      "status": "PASS",
+      "details": "Core SIM mode files present: 8/8",
+      "data": null,
+      "timestamp": "2026-04-01 12:17:48"
+    },
+    {
+      "test": "Configuration",
+      "status": "PASS",
+      "details": "SIM mode configs found: ['EXECUTION_MODE', 'LIVE_TRADING_ENABLED', 'TESTNET_TRADING_ENABLED', 'CANARY_MODE', 'EXECUTION_GUARD_ENFORCEMENT_ENABLED', 'EXECUTION_PREVIEW_FAST_MODE'], sim_mode: True",
+      "data": null,
+      "timestamp": "2026-04-01 12:17:48"
+    },
+    {
+      "test": "Service Components",
+      "status": "PASS",
+      "details": "SIM mode components: services(6), routers(4)",
+      "data": null,
+      "timestamp": "2026-04-01 12:17:48"
+    },
+    {
+      "test": "Database & Models",
+      "status": "PASS",
+      "details": "DB files: 3, model domains: 19, audit: True, execution: True",
+      "data": null,
+      "timestamp": "2026-04-01 12:17:48"
+    },
+    {
+      "test": "Runtime Control",
+      "status": "PASS",
+      "details": "Runtime controllers: ['pipeline_controller.py', 'service_controller.py', 'override_controller.py'], config files: 9",
+      "data": null,
+      "timestamp": "2026-04-01 12:17:48"
+    },
+    {
+      "test": "Observability",
+      "status": "PASS",
+      "details": "Observability components: services(4), core(10), audit(2)",
+      "data": null,
+      "timestamp": "2026-04-01 12:17:48"
+    },
+    {
+      "test": "SIM Mode Readiness",
+      "status": "PASS",
+      "details": "Readiness check: backend(True), supervisor(True), mongo(True), credentials(True)",
+      "data": null,
+      "timestamp": "2026-04-01 12:17:48"
+    }
+  ]
+}

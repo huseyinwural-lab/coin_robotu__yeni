@@ -101,3 +101,7 @@ google-chrome-stable_current_amd64.deb
 
 # keep frontend backend URL in repo for CI
 !frontend/.env
+-e 
+# Environment files
+*.env
+*.env.*
