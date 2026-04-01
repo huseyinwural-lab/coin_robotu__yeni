@@ -119,14 +119,6 @@ export const AuditLogsPage = () => {
     fetchSavedQueries();
   }, [fetchSavedQueries, fetchSummaries]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(location.search || "");
-    const correlationId = params.get("correlation_id");
-    if (correlationId && correlationId !== selectedCorrelation) {
-      openLifecycle(correlationId);
-    }
-  }, [location.search, openLifecycle, selectedCorrelation]);
-
   const fetchIncidents = useCallback(async (correlationId) => {
     if (!correlationId) {
       setIncidents([]);
@@ -179,6 +171,14 @@ export const AuditLogsPage = () => {
       setDetailLoading(false);
     }
   }, [fetchExplainForCorrelation, fetchIncidents]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const correlationId = params.get("correlation_id");
+    if (correlationId && correlationId !== selectedCorrelation) {
+      openLifecycle(correlationId);
+    }
+  }, [location.search, openLifecycle, selectedCorrelation]);
 
   const explainFailure = useCallback(() => {
     if (!selectedCorrelation) return;

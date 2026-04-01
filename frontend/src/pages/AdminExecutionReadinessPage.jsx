@@ -465,6 +465,20 @@ export const AdminExecutionReadinessPage = () => {
     [selectedAnomalyIntentIds]
   );
 
+  const anomaliesList = useMemo(() => anomalies?.items || [], [anomalies?.items]);
+  const anomalyTypeOptions = useMemo(
+    () => ["ALL", "FALSE_READY", "FALSE_ALLOW", "CORRELATION_BREACH"],
+    []
+  );
+  const selectableAnomalyIntentIds = useMemo(
+    () => anomaliesList.map((item) => item.intent_id).filter(Boolean),
+    [anomaliesList]
+  );
+  const allVisibleAnomaliesSelected = useMemo(() => {
+    if (!selectableAnomalyIntentIds.length) return false;
+    return selectableAnomalyIntentIds.every((intentId) => selectedAnomalyIntentIds.includes(intentId));
+  }, [selectableAnomalyIntentIds, selectedAnomalyIntentIds]);
+
   const executeAnomalyQuickAction = useCallback(
     async (actionKey, rawIntentIds = []) => {
       const endpointMap = {
@@ -609,19 +623,6 @@ export const AdminExecutionReadinessPage = () => {
     [intentLifecycle?.items]
   );
   const topQuarantineItems = useMemo(() => (runtimeQuarantine?.items || []).slice(0, 6), [runtimeQuarantine?.items]);
-  const anomaliesList = useMemo(() => anomalies?.items || [], [anomalies?.items]);
-  const anomalyTypeOptions = useMemo(
-    () => ["ALL", "FALSE_READY", "FALSE_ALLOW", "CORRELATION_BREACH"],
-    []
-  );
-  const selectableAnomalyIntentIds = useMemo(
-    () => anomaliesList.map((item) => item.intent_id).filter(Boolean),
-    [anomaliesList]
-  );
-  const allVisibleAnomaliesSelected = useMemo(() => {
-    if (!selectableAnomalyIntentIds.length) return false;
-    return selectableAnomalyIntentIds.every((intentId) => selectedAnomalyIntentIds.includes(intentId));
-  }, [selectableAnomalyIntentIds, selectedAnomalyIntentIds]);
 
   const reasonPieStyle = useMemo(() => {
     const entries = Object.entries(reasonDistribution);
