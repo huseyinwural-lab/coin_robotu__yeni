@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
@@ -20,7 +21,7 @@ def dashboard_summary(current_user: User = Depends(get_current_user), db: Sessio
             "active_bots": db.query(BotProfile).filter(BotProfile.is_deleted.is_(False), BotProfile.is_enabled.is_(True)).count(),
             "running_bots": db.query(BotProfile).filter(BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True)).count(),
             "risk_policies": db.query(RiskPolicy).count(),
-            "strategy_templates": db.query(StrategyTemplate).count(),
+            "strategy_templates": int(db.query(func.count(StrategyTemplate.id)).scalar() or 0),
             "critical_audits": db.query(AuditLog).filter(AuditLog.severity == "critical").count(),
             "open_positions": monitoring["open_positions"],
             "signals_5m": monitoring["signal_rate_last_5m"],
@@ -57,7 +58,9 @@ def dashboard_summary(current_user: User = Depends(get_current_user), db: Sessio
             .filter(BotProfile.user_id == current_user.id, BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True))
             .count(),
             "risk_policies": db.query(RiskPolicy).filter(RiskPolicy.user_id == current_user.id).count(),
-            "strategy_templates": db.query(StrategyTemplate).filter(StrategyTemplate.is_active.is_(True)).count(),
+            "strategy_templates": int(
+                db.query(func.count(StrategyTemplate.id)).filter(StrategyTemplate.is_active.is_(True)).scalar() or 0
+            ),
             "open_positions": db.query(PaperPosition)
             .filter(PaperPosition.user_id == current_user.id, PaperPosition.status == "open")
             .count(),
