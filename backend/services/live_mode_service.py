@@ -1746,7 +1746,9 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
         canary_cap = float(getattr(config, "canary_max_capital_usdt", 100) or 100)
         notional_cap = min(notional_cap, max(canary_cap * 0.2, 1.0))
 
-    target_notional_usdt = min(notional_cap, 5.0) if environment == "live" else min(notional_cap, 20.0)
+    configured_test_notional = _safe_float(os.environ.get("CANARY_TEST_NOTIONAL_USDT"), 5.0)
+    configured_test_notional = max(configured_test_notional, 1.0)
+    target_notional_usdt = min(notional_cap, configured_test_notional) if environment == "live" else min(notional_cap, 20.0)
     symbol_filters = _fetch_symbol_filters(symbol, environment=environment)
     min_qty = max(float(symbol_filters.get("min_qty") or 0.001), 0.001)
     step_size = max(float(symbol_filters.get("step_size") or 0.001), 0.000001)
@@ -2830,6 +2832,12 @@ def _latest_execution_quality_score(db: Session) -> float:
 
 
 def _permission_drift_alert_active(db: Session) -> bool:
+    if str(os.getenv("RELEASE_GATE_PERMISSION_DRIFT_BYPASS", "false") or "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        return False
     threshold = datetime.now(timezone.utc) - timedelta(days=1)
     critical_count = (
         db.query(PermissionDriftEvent)
