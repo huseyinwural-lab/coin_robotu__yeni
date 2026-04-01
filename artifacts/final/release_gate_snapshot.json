@@ -1,0 +1,43 @@
+{
+  "status": "BLOCKED",
+  "reasons": [
+    "execution_quality_score",
+    "permission_check_bypassed",
+    "kill_switch_not_tested",
+    "chain_integrity_bypassed",
+    "live_mode_disabled"
+  ],
+  "fail_reasons": [
+    "execution_quality_score"
+  ],
+  "warning_reasons": [
+    "permission_check_bypassed",
+    "kill_switch_not_tested",
+    "chain_integrity_bypassed",
+    "live_mode_disabled"
+  ],
+  "reason_codes": [
+    "execution_quality_score"
+  ],
+  "blocking_metrics": {
+    "exchange_health": true,
+    "execution_quality_score": 51.12,
+    "permission_drift_alert": false,
+    "active_override": false,
+    "live_mode_enabled": false,
+    "clock_drift_seconds": 0.073652,
+    "worker_lag_seconds": 0.0,
+    "rate_limit_health": "ok",
+    "risk_orchestrator_enabled": true,
+    "kill_switch_tested": false,
+    "chain_integrity_broken": true,
+    "failed_event_backlog": 0
+  },
+  "live_activation": "disabled",
+  "environment": "prod",
+  "reason_code": "execution_quality_score",
+  "deploy_enable_flag": false,
+  "override_active": false,
+  "override_expires_at": null,
+  "override_id": null
+}

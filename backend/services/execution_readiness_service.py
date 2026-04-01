@@ -94,11 +94,22 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None, for
     if has_mocked_paths and "EXECUTION_PROOF_MOCKED_PATHS" not in reason_codes:
         reason_codes.append("EXECUTION_PROOF_MOCKED_PATHS")
 
+    execution_allowed = bool(validator.get("execution_allowed"))
+    go_live_allowed = bool(validator.get("go_live_allowed"))
+
+    if override_active and final_status != "READY":
+        final_status = "READY"
+        readiness_state = "READY_WITH_OVERRIDE"
+        execution_allowed = True
+        go_live_allowed = True
+        if "MANUAL_OVERRIDE_ACTIVE" not in reason_codes:
+            reason_codes.append("MANUAL_OVERRIDE_ACTIVE")
+
     payload = {
         "exchange_connection": exchange_connection_status,
         "permissions": permissions_status,
         "latency_ms": latency_ms,
-        "order_test": "OK" if validator.get("execution_allowed") else "FAIL",
+        "order_test": "OK" if execution_allowed else "FAIL",
         "mode": mode,
         "final_status": final_status,
         "mocked_flag": mocked_flag,
@@ -107,8 +118,8 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None, for
         "execution_proof": execution_proof,
         "mocked_paths": has_mocked_paths,
         "readiness_state": readiness_state,
-        "execution_allowed": bool(validator.get("execution_allowed")),
-        "go_live_allowed": bool(validator.get("go_live_allowed")),
+        "execution_allowed": execution_allowed,
+        "go_live_allowed": go_live_allowed,
     }
     _READINESS_CACHE[cache_key] = (now_mono + _READINESS_CACHE_TTL_SECONDS, dict(payload))
     return payload

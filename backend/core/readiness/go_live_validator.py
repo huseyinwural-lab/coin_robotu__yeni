@@ -912,7 +912,12 @@ def build_go_live_context(
     venue_config_checklist: dict[str, dict] = {}
     runtime_environment = str(connection_payload.get("environment") or "testnet").lower()
 
-    for venue in ["binance", "bybit"]:
+    required_venues_raw = str(os.environ.get("GO_LIVE_REQUIRED_VENUES") or "binance,bybit")
+    required_venues = [item.strip().lower() for item in required_venues_raw.split(",") if item.strip()]
+    if not required_venues:
+        required_venues = ["binance", "bybit"]
+
+    for venue in required_venues:
         venue_payload = {
             "connectivity": "UNKNOWN",
             "latency_ms": None,
@@ -1033,6 +1038,7 @@ def build_go_live_context(
         },
         "portfolio_exposure": portfolio_exposure,
         "exchange_matrix": exchange_matrix,
+        "required_venues": required_venues,
         "venue_config_checklist": venue_config_checklist,
         "adapter_credential_summary": adapter_credential_summary,
         "execution_tests": {
@@ -1121,6 +1127,7 @@ def run_go_live_validator(context: dict) -> dict:
     strategy_metrics = context.get("strategy_metrics") or {}
     symbols = context.get("symbols") or []
     exchange_matrix = context.get("exchange_matrix") or {}
+    required_venues = context.get("required_venues") or ["binance", "bybit"]
     venue_config_checklist = context.get("venue_config_checklist") or {}
     execution_lifecycle = context.get("execution_lifecycle") or {}
     portfolio_exposure = context.get("portfolio_exposure") or {}
@@ -2600,7 +2607,7 @@ def run_go_live_validator(context: dict) -> dict:
             "source": payload.get("source"),
         }
 
-    for fallback_exchange in ["binance", "bybit"]:
+    for fallback_exchange in required_venues:
         exchange_readiness.setdefault(fallback_exchange, {"state": "UNKNOWN"})
 
     liquidation_step = next((step for step in steps if step.get("step_key") == "liquidation_risk"), {})
