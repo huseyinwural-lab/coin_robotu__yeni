@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_10",
-  "generated_at": "2026-04-01T15:23:01.761728+00:00",
-  "final_decision": "GO",
+  "generated_at": "2026-04-01T21:16:59.465734+00:00",
+  "final_decision": "NO_GO",
   "artifact_status": {
     "prod_env_preflight": {
       "path": "/app/artifacts/prod_preflight_check.json",
@@ -17,28 +17,45 @@
     },
     "prod_like_smoke": {
       "path": "/app/artifacts/prod_like_smoke_summary.json",
-      "exists": true,
-      "status": "PASS",
-      "raw_status": "PASS"
+      "exists": false,
+      "status": "MISSING",
+      "raw_status": null
     },
     "kill_switch_dry_run": {
       "path": "/app/artifacts/prod_kill_switch_dry_run.json",
-      "exists": true,
-      "status": "PASS",
-      "raw_status": "PASS"
+      "exists": false,
+      "status": "MISSING",
+      "raw_status": null
     },
     "rollback_drill": {
       "path": "/app/artifacts/prod_rollback_drill.json",
-      "exists": true,
-      "status": "PASS",
-      "raw_status": "PASS"
+      "exists": false,
+      "status": "MISSING",
+      "raw_status": null
     },
     "migration_integrity": {
       "path": "/app/artifacts/final_migration_integrity_report.json",
-      "exists": true,
-      "status": "PASS",
-      "raw_status": "PASS"
+      "exists": false,
+      "status": "MISSING",
+      "raw_status": null
     }
   },
-  "blocking_items": []
+  "blocking_items": [
+    {
+      "artifact": "prod_like_smoke",
+      "reason": "missing_artifact"
+    },
+    {
+      "artifact": "kill_switch_dry_run",
+      "reason": "missing_artifact"
+    },
+    {
+      "artifact": "rollback_drill",
+      "reason": "missing_artifact"
+    },
+    {
+      "artifact": "migration_integrity",
+      "reason": "missing_artifact"
+    }
+  ]
 }

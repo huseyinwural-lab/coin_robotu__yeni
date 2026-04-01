@@ -1111,9 +1111,15 @@ def resolve_exchange_credentials(
 
             from services.venue_control_plane_service import get_cached_venue_control_plane_sanity
 
-            sanity_result = get_cached_venue_control_plane_sanity()
-            if not sanity_result or str(sanity_result.get("net_status") or "").upper() != "PASS":
-                raise ValueError("sanity_gate_blocked")
+            sanity_gate_required = _norm(os.environ.get("LIVE_SANITY_GATE_REQUIRED"), default="true") in {
+                "1",
+                "true",
+                "yes",
+            }
+            if sanity_gate_required:
+                sanity_result = get_cached_venue_control_plane_sanity()
+                if not sanity_result or str(sanity_result.get("net_status") or "").upper() != "PASS":
+                    raise ValueError("sanity_gate_blocked")
 
             canary_allowlist = [item.strip() for item in str(os.environ.get("LIVE_CANARY_ALLOWLIST_USER_IDS") or "").split(",") if item.strip()]
             if canary_allowlist and str(user_id) not in canary_allowlist:
@@ -1194,7 +1200,13 @@ def resolve_exchange_credentials(
             raise ValueError("venue_not_allowed")
 
         if normalized_env == "live" and str(selected.get("source") or "").startswith("user"):
-            raise ValueError("approved_credential_required")
+            allow_live_user_source = _norm(os.environ.get("LIVE_USER_EXECUTION_SOURCE_ALLOWED"), default="false") in {
+                "1",
+                "true",
+                "yes",
+            }
+            if not allow_live_user_source:
+                raise ValueError("approved_credential_required")
 
     response = {
         "selected_credential_id": selected["credential_id"],
