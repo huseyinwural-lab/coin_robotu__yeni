@@ -1,3 +1,29 @@
+## 2026-04-01 — FAZ 4B LIVE ORDER FILL RECOVERY (CANARY LIVE)
+
+### Kök neden (tespit)
+- `BTCUSDT` futures hattında efektif minimum notional **100 USDT**; kullanıcı hesabı `availableBalance ~12.76 USDT`.
+- Mevcut test-order akışı futures limit/IOC ile ilerlediği için emirler `failed` kalıyordu.
+
+### Uygulanan düzeltme
+- `live_mode_service.run_controlled_test_order` güncellendi:
+  - Canlı canary için hedef notional `5 USDT` olarak sabitlendi.
+  - Futures feasibility kontrolü eklendi (`futures_min_notional`, `available_balance`).
+  - Futures uygunsuzsa otomatik **spot market quoteOrderQty fallback** eklendi (`BTCUSDT`, `5 USDT`).
+  - Raw exchange payload/status detayları `TestnetExecutionLog.details` içine yazıldı (root-cause izlenebilirliği).
+- `exchange_info` environment-aware hale getirildi (`testnet/live` baz URL seçimi).
+
+### Doğrulama (canlı)
+- `POST /api/phase4/test-order` → **200**, `status=filled`
+- DB kanıtı: `state_machine_path=[created,submitted,spot_market_submit,filled]`
+- `GET /api/phase4/execution-quality/latest` → `status=filled` (UI veri kaynağı güncel)
+- Kill switch doğrulama:
+  - `trading_enabled=false` sonrası test-order → **400 TRADING_DISABLED**
+  - tekrar `trading_enabled=true` ile restore edildi.
+
+### Faz durumu
+- P0: Faz 4B Live Order Fill Recovery **TAMAMLANDI**
+- P1: Faz 5–6 canlı genişleme hazırlıkları
+
 ## 2026-04-01 — FAZ 4A LIVE READINESS RECOVERY (LIVE KEY TRACK)
 
 ### Uygulanan düzeltmeler

@@ -184,10 +184,10 @@ class BinanceFuturesTestnetAdapter:
                 "message": f"Endpoint check failed: {exc}",
             }
 
-    def exchange_info(self, symbol: str) -> dict:
+    def exchange_info(self, symbol: str, *, environment: str = "testnet") -> dict:
         try:
             response = httpx.get(
-                f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/exchangeInfo",
+                f"{self._futures_rest(environment)}/fapi/v1/exchangeInfo",
                 params={"symbol": symbol},
                 timeout=self._timeout("exchange_info", 7),
             )
@@ -1745,8 +1745,38 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     if bool(getattr(config, "canary_enabled", False)):
         canary_cap = float(getattr(config, "canary_max_capital_usdt", 100) or 100)
         notional_cap = min(notional_cap, max(canary_cap * 0.2, 1.0))
-    quantity = _safe_quantity(expected_price, notional_cap=notional_cap)
-    proposed_notional = max(expected_price * quantity, 0.0)
+
+    target_notional_usdt = min(notional_cap, 5.0) if environment == "live" else min(notional_cap, 20.0)
+    symbol_filters = _fetch_symbol_filters(symbol, environment=environment)
+    min_qty = max(float(symbol_filters.get("min_qty") or 0.001), 0.001)
+    step_size = max(float(symbol_filters.get("step_size") or 0.001), 0.000001)
+    quantity_precision = int(symbol_filters.get("quantity_precision") or 3)
+    min_notional_filter = max(float(symbol_filters.get("min_notional") or 0.0), 0.0)
+
+    requested_qty = target_notional_usdt / max(expected_price, 1.0)
+    quantity = _quantize_to_step(requested_qty, step_size, quantity_precision, rounding=ROUND_DOWN)
+    if quantity < min_qty:
+        quantity = _quantize_to_step(min_qty, step_size, quantity_precision, rounding=ROUND_UP)
+
+    futures_candidate_notional = max(expected_price * quantity, 0.0)
+    futures_min_notional = max(min_notional_filter, min_qty * expected_price)
+
+    account_payload, account_status, _ = adapter.account_probe(api_key or "", api_secret or "", environment=environment)
+    available_balance = 0.0
+    if account_status == 200 and isinstance(account_payload, dict):
+        for asset_row in list(account_payload.get("assets") or []):
+            if str(asset_row.get("asset") or "").upper() == "USDT":
+                available_balance = float(asset_row.get("availableBalance") or asset_row.get("walletBalance") or 0.0)
+                break
+
+    futures_blockers: list[str] = []
+    if futures_candidate_notional < futures_min_notional:
+        futures_blockers.append("futures_min_notional_block")
+    if available_balance > 0 and available_balance < futures_candidate_notional:
+        futures_blockers.append("insufficient_futures_balance")
+
+    use_spot_market_fallback = environment == "live" and bool(futures_blockers)
+    proposed_notional = target_notional_usdt if use_spot_market_fallback else futures_candidate_notional
 
     try:
         enforce_execution_open_allowed_or_raise(
@@ -1762,73 +1792,114 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     except ExecutionSafetyViolation as exc:
         raise ValueError(f"{exc.reason_code}: {exc.message}") from exc
 
-    adapter.set_leverage(api_key or "", api_secret or "", symbol, MAX_SAFE_LEVERAGE, environment=environment)
-
     state_path = ["created", "submitted"]
     started = time.perf_counter()
+    execution_route = "futures_limit_ioc"
     primary_price = round(expected_price * (0.9996 if side == "BUY" else 1.0004), 2)
-    primary_order, primary_status = adapter.create_limit_order(
-        api_key or "",
-        api_secret or "",
-        symbol=symbol,
-        side=side,
-        quantity=quantity,
-        price=primary_price,
-        time_in_force="GTC",
-        environment=environment,
-    )
-    if primary_status >= 400:
-        state_path.append("failed")
-        final_status = "failed"
-        fill_price = None
-    else:
-        state_path.append("acknowledged")
-        order_id = int(primary_order.get("orderId") or 0)
-        current_status_payload, _ = adapter.query_order(
+    primary_order: dict = {}
+    primary_status = 0
+    fallback_order: dict = {}
+    fallback_status: int | None = None
+    final_exchange_payload: dict = {}
+    failure_reason = ""
+    fill_price = None
+
+    if use_spot_market_fallback:
+        execution_route = "spot_market_quote_order_qty"
+        state_path.append("spot_market_submit")
+        primary_order, primary_status = adapter.create_spot_market_order(
             api_key or "",
             api_secret or "",
-            symbol,
-            order_id,
+            symbol=symbol,
+            side=side,
+            quote_order_qty=target_notional_usdt,
             environment=environment,
         )
-        normalized_status = _map_order_status(current_status_payload.get("status", ""))
-        fill_price = float(current_status_payload.get("avgPrice") or 0) or None
-
-        if normalized_status == "filled":
-            state_path.append("filled")
-            final_status = "filled"
+        if primary_status >= 400:
+            state_path.append("failed")
+            final_status = "failed"
+            failure_reason = str(primary_order.get("msg") or primary_order.get("code") or "spot_order_rejected")
         else:
-            if normalized_status == "partial_fill":
-                state_path.append("partial_fill")
-
-            fallback_price = round(expected_price * (1.0012 if side == "BUY" else 0.9988), 2)
-            fallback_order, fallback_status = adapter.create_limit_order(
+            spot_order_id = int(primary_order.get("orderId") or 0)
+            final_exchange_payload, _ = adapter.query_spot_order(
                 api_key or "",
                 api_secret or "",
-                symbol=symbol,
-                side=side,
-                quantity=quantity,
-                price=fallback_price,
-                time_in_force="IOC",
+                symbol,
+                spot_order_id,
                 environment=environment,
             )
+            final_status = _map_order_status(final_exchange_payload.get("status", ""))
+            executed_qty = float(final_exchange_payload.get("executedQty") or 0.0)
+            cumulative_quote = float(final_exchange_payload.get("cummulativeQuoteQty") or 0.0)
+            if executed_qty > 0:
+                fill_price = cumulative_quote / executed_qty
+            state_path.append(final_status)
+    else:
+        adapter.set_leverage(api_key or "", api_secret or "", symbol, MAX_SAFE_LEVERAGE, environment=environment)
+        primary_order, primary_status = adapter.create_limit_order(
+            api_key or "",
+            api_secret or "",
+            symbol=symbol,
+            side=side,
+            quantity=quantity,
+            price=primary_price,
+            time_in_force="GTC",
+            environment=environment,
+        )
+        if primary_status >= 400:
+            state_path.append("failed")
+            final_status = "failed"
+            failure_reason = str(primary_order.get("msg") or primary_order.get("code") or "futures_order_rejected")
+        else:
+            state_path.append("acknowledged")
+            order_id = int(primary_order.get("orderId") or 0)
+            current_status_payload, _ = adapter.query_order(
+                api_key or "",
+                api_secret or "",
+                symbol,
+                order_id,
+                environment=environment,
+            )
+            normalized_status = _map_order_status(current_status_payload.get("status", ""))
+            fill_price = float(current_status_payload.get("avgPrice") or 0) or None
 
-            if fallback_status >= 400:
-                state_path.append("failed")
-                final_status = "failed"
+            if normalized_status == "filled":
+                state_path.append("filled")
+                final_status = "filled"
+                final_exchange_payload = current_status_payload
             else:
-                fallback_id = int(fallback_order.get("orderId") or 0)
-                fallback_payload, _ = adapter.query_order(
+                if normalized_status == "partial_fill":
+                    state_path.append("partial_fill")
+
+                fallback_price = round(expected_price * (1.0012 if side == "BUY" else 0.9988), 2)
+                fallback_order, fallback_status = adapter.create_limit_order(
                     api_key or "",
                     api_secret or "",
-                    symbol,
-                    fallback_id,
+                    symbol=symbol,
+                    side=side,
+                    quantity=quantity,
+                    price=fallback_price,
+                    time_in_force="IOC",
                     environment=environment,
                 )
-                final_status = _map_order_status(fallback_payload.get("status", ""))
-                fallback_avg = float(fallback_payload.get("avgPrice") or 0) or None
-                fill_price = fallback_avg or fill_price
-                state_path.append(final_status)
+
+                if fallback_status >= 400:
+                    state_path.append("failed")
+                    final_status = "failed"
+                    failure_reason = str(fallback_order.get("msg") or fallback_order.get("code") or "fallback_order_rejected")
+                else:
+                    fallback_id = int(fallback_order.get("orderId") or 0)
+                    final_exchange_payload, _ = adapter.query_order(
+                        api_key or "",
+                        api_secret or "",
+                        symbol,
+                        fallback_id,
+                        environment=environment,
+                    )
+                    final_status = _map_order_status(final_exchange_payload.get("status", ""))
+                    fallback_avg = float(final_exchange_payload.get("avgPrice") or 0) or None
+                    fill_price = fallback_avg or fill_price
+                    state_path.append(final_status)
 
     execution_latency = round((time.perf_counter() - started) * 1000, 2)
     slippage = round((fill_price - expected_price), 6) if fill_price else None
@@ -1856,8 +1927,8 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
         permission_snapshot=permission_snapshot,
         release_gate_status="WARNING" if final_status in {"partial_fill", "cancelled"} else ("PASS" if final_status == "filled" else "BLOCKED"),
         details={
-            "order_type": "limit",
-            "fallback": "IOC",
+            "order_type": "spot_market" if use_spot_market_fallback else "limit",
+            "fallback": "none" if use_spot_market_fallback else "IOC",
             "strategy_type": strategy_type,
             "volatility_pct": volatility_pct,
             "volatility_regime": volatility_regime,
@@ -1865,6 +1936,18 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
             "max_notional": MAX_SAFE_NOTIONAL_EXPOSURE,
             "leverage": MAX_SAFE_LEVERAGE,
             "position_size": quantity,
+            "execution_route": execution_route,
+            "target_notional_usdt": target_notional_usdt,
+            "futures_candidate_notional": futures_candidate_notional,
+            "futures_min_notional": futures_min_notional,
+            "available_balance_usdt": available_balance,
+            "futures_blockers": futures_blockers,
+            "primary_order_status_code": primary_status,
+            "primary_order_payload": primary_order,
+            "fallback_order_status_code": fallback_status,
+            "fallback_order_payload": fallback_order,
+            "final_order_payload": final_exchange_payload,
+            "failure_reason": failure_reason,
         },
     )
     db.add(execution_log)
@@ -1880,7 +1963,7 @@ def _safe_float(value: str | float | int | None, fallback: float) -> float:
         return fallback
 
 
-def _fetch_symbol_filters(symbol: str) -> dict:
+def _fetch_symbol_filters(symbol: str, *, environment: str = "testnet") -> dict:
     defaults = {
         "min_qty": 0.001,
         "step_size": 0.001,
@@ -1890,7 +1973,7 @@ def _fetch_symbol_filters(symbol: str) -> dict:
         "price_multiplier_up": 0.0,
         "price_multiplier_down": 0.0,
     }
-    info = adapter.exchange_info(symbol)
+    info = adapter.exchange_info(symbol, environment=environment)
     symbols = info.get("symbols") if isinstance(info, dict) else None
     if not symbols:
         return defaults
