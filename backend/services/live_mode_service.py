@@ -681,6 +681,12 @@ def _enforce_controlled_limits(config: LiveActivationConfig):
 
 
 def _resolve_test_symbol(config: LiveActivationConfig | None) -> str:
+    canary_symbols = list((config.canary_symbols or []) if config else [])
+    for symbol in canary_symbols:
+        normalized = str(symbol or "").strip().upper()
+        if normalized:
+            return normalized
+
     whitelist = list((config.symbol_whitelist or []) if config else [])
     for symbol in whitelist:
         normalized = str(symbol or "").strip().upper()
