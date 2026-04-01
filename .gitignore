@@ -1,5 +1,8 @@
 # --- Environment ---
 memory/test_credentials.md
+*.env
+*.env.*
+!frontend/.env
 
 # --- Python ---
 __pycache__/
@@ -13,9 +16,11 @@ node_modules/
 dist/
 build/
 
-# --- Logs ---
+# --- Logs / dumps ---
 *.log
 logs/
+*.trace
+*.dump
 
 # --- Backup / DB ---
 backups/*.sql
@@ -23,97 +28,24 @@ backups/*.bak
 *.db
 admin_token.txt
 
-# --- Evidence (tracked in repo) ---
+# --- Large binaries ---
+*.deb
+google-chrome-stable_current_amd64.deb
+
+# --- Evidence (tracked) ---
 !artifacts/
 !artifacts/**
 !test_reports/
 !test_reports/**
 
-# --- Large binaries ---
-*.deb
-google-chrome-stable_current_amd64.deb
--e 
-# Environment files
-*.env
-*.env.*
-
-# keep frontend backend URL in repo for CI
-!frontend/.env
-
-# CI needs tracked frontend backend URL
-!frontend/.env
-
-# CI needs tracked frontend backend URL
-!frontend/.env
-!frontend/.env
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
-
-# keep frontend backend URL in repo for CI
-!frontend/.env
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
+# --- Local temporary outputs (future pollution guard) ---
+artifacts/tmp/
+artifacts/local/
+test_reports/tmp/
+tmp_*.py
+*_debug.py
+investigate_*.py
+release_*test.py
+phase*_*.py
+faz*_*.py
+backend_*test.py

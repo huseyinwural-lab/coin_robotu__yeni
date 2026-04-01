@@ -139,3 +139,20 @@ Production hedefi:
 - Fallback aktifleştiğinde top volume moda geçiş normal davranıştır.
 - Bootstrap admin bilgileri runtime secret olarak verilmeli, repoda tutulmamalıdır.
 - Prod/stage için ilk girişten sonra admin profil ve şifre güncellenmelidir.
+
+## 12) Release karar ve proof standardı (tek kaynak)
+
+- **Resmi karar dosyası (tek kaynak):** `artifacts/final_release_gate_report.json`
+- **Resmi proof bundle (tek kaynak):** `artifacts/final/final_closure_proof_bundle.zip`
+
+Artifact klasör standardı:
+
+- `artifacts/final/` → resmi kapanış ve son onay kanıtları
+- `artifacts/latest/` → son çalışan snapshotlar
+- `artifacts/archive/obsolete/` → artık referans alınmayacak superseded raporlar
+- `artifacts/archive/history/` → geçmiş kayıtlar
+
+Notlar:
+
+- Çelişkili eski gate/no-go özetleri aktif alanda tutulmaz.
+- Tekrarlı smoke/canary çıktıları aktif alanda birikmez; latest/final dışında arşive alınır.
