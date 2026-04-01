@@ -1,3 +1,21 @@
+## 2026-04-01 — FAZ 4A STABİLİTE KAPANIŞI (Frontend + Latency)
+
+### Bu turda tamamlananlar
+- Frontend CI build artık `CI=true` ile PASS.
+- `REACT_APP_BACKEND_URL` için build-time fail-fast kontrolü eklendi (`frontend/craco.config.js`).
+- `react-hooks/exhaustive-deps` kaynaklı kırıklar ilgili sayfalarda kalıcı düzeltildi.
+- `/api/admin/execution-readiness` için 30s TTL readiness cache eklendi (tekrarlı çağrılarda ciddi hızlanma).
+
+### Backend/Frontend doğrulama
+- `CI=true yarn build`: PASS.
+- Faz 4A testing agent raporu: `/app/test_reports/iteration_194.json` → PASS.
+- Test notu: Preview dalgalanmasında local doğrulama kullanıldı.
+
+### Durum / Öncelik
+- P0: Faz 4A (tamamlandı)
+- P1: Faz 4B Canary Live (tek düşük notional canlı emir + kill switch doğrulama)
+- P2: Faz 5–6 genişleme + Visual Policy Builder + compounding + explainability drill-down
+
 ## 2026-03-31 — STRATEGY TEMPLATE P2 COMPLETION (Trace Spine + Promotion + Outcome Analytics)
 
 ### Kapsam

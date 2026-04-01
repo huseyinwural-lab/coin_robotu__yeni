@@ -1,0 +1,39 @@
+{
+  "test_1_frontend_build": {
+    "status": "PASS",
+    "details": [
+      "\ud83e\uddea TEST 1: Frontend Build with CI=true",
+      "\ud83c\udfd7\ufe0f Running frontend build with CI=true...",
+      "\u2705 Frontend build successful with CI=true",
+      "\u2705 No react-hooks/exhaustive-deps warnings found"
+    ]
+  },
+  "test_2_build_guard": {
+    "status": "FAIL",
+    "details": [
+      "\ud83e\uddea TEST 2: Build-time guard for REACT_APP_BACKEND_URL",
+      "\ud83d\udd0d Testing build with missing REACT_APP_BACKEND_URL...",
+      "\u274c Build should have failed with missing REACT_APP_BACKEND_URL"
+    ]
+  },
+  "test_3_execution_readiness": {
+    "status": "FAIL",
+    "details": [
+      "\ud83e\uddea TEST 3: Execution Readiness Endpoint with Auth and Cache",
+      "\ud83d\udd10 Authenticating admin user...",
+      "\u2705 Admin authentication successful (token length: 601)",
+      "\ud83d\udce1 Making first call to execution-readiness endpoint...",
+      "\u274c First call failed: 401 - {\"detail\":\"session_device_mismatch\"}"
+    ]
+  },
+  "test_4_canary_live_trade": {
+    "status": "FAIL",
+    "details": [
+      "\ud83e\uddea TEST 4: Canary LIVE Trade Execution (Phase 4A Only)",
+      "\ud83d\udd0d Checking canary mode status...",
+      "\u274c Failed to check execution readiness: 401"
+    ]
+  },
+  "overall_status": "FAIL",
+  "timestamp": "2026-04-01T13:06:26.968814"
+}
