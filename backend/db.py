@@ -203,8 +203,15 @@ def _resolve_database_url() -> str:
     if not parsed.database:
         raise RuntimeError("database_url_dbname_missing")
 
-    _mark_db_state(url_valid=True, database_url=database_url, last_error=None)
-    return database_url
+    normalized_url = database_url
+    if host_is_local:
+        try:
+            normalized_url = parsed.update_query_dict({"sslmode": "disable"}).render_as_string(hide_password=False)
+        except Exception:  # noqa: BLE001
+            normalized_url = database_url
+
+    _mark_db_state(url_valid=True, database_url=normalized_url, last_error=None)
+    return normalized_url
 
 
 def _create_and_verify_engine(database_url: str) -> Engine:
@@ -212,7 +219,7 @@ def _create_and_verify_engine(database_url: str) -> Engine:
     parsed = make_url(database_url)
     host = str(parsed.host or "").strip().lower()
     use_null_pool = "pooler.supabase.com" in host
-    if database_url.startswith("postgresql"):
+    if database_url.startswith("postgresql") and host not in LOCALHOST_DATABASE_HOSTS:
         connect_args["sslmode"] = "require"
 
     engine_kwargs: dict = {

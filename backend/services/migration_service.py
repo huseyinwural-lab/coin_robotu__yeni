@@ -26,15 +26,31 @@ def _resolve_migration_url() -> str:
     normalized_env_url = enforce_postgresql_only(env_url, "alembic_database_url")
     parsed_env_url = make_url(normalized_env_url)
     parsed_host = str(parsed_env_url.host or "").strip().lower()
-    if parsed_host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+    allow_localhost = (
+        str(os.getenv("ALLOW_LOCALHOST_DATABASE_URL", "") or "").strip().lower() in {"1", "true", "yes"}
+        or str(os.getenv("CI", "") or "").strip().lower() in {"1", "true", "yes"}
+        or bool(os.getenv("PYTEST_CURRENT_TEST"))
+    )
+    if parsed_host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"} and not allow_localhost:
         raise RuntimeError("DATABASE_URL localhost host is not allowed")
     if not parsed_env_url.database:
         raise RuntimeError("DATABASE_URL database name is missing")
 
+    if parsed_host in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+        try:
+            normalized_env_url = parsed_env_url.update_query_dict({"sslmode": "disable"}).render_as_string(
+                hide_password=False
+            )
+            parsed_env_url = make_url(normalized_env_url)
+        except Exception:  # noqa: BLE001
+            pass
+
     try:
         connect_args = {}
         if str(normalized_env_url).startswith("postgresql"):
-            connect_args = {"connect_timeout": 3, "sslmode": "require"}
+            connect_args = {"connect_timeout": 3}
+            if parsed_host not in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+                connect_args["sslmode"] = "require"
         engine = create_engine(normalized_env_url, pool_pre_ping=True, connect_args=connect_args, future=True)
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
