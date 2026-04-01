@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createChart, CrosshairMode, CandlestickSeries, LineSeries } from "lightweight-charts";
+import { createChart, CrosshairMode, CandlestickSeries, LineSeries, createSeriesMarkers } from "lightweight-charts";
 import { toast } from "sonner";
 
 import { apiClient } from "@/lib/api";
@@ -51,6 +51,7 @@ export const UserMarketChartPanel = ({ symbol = "BTCUSDT", initialTimeframe = "1
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef({ candle: null, maFast: null, maSlow: null });
+  const markerApiRef = useRef(null);
   const [timeframe, setTimeframe] = useState(initialTimeframe);
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -97,6 +98,7 @@ export const UserMarketChartPanel = ({ symbol = "BTCUSDT", initialTimeframe = "1
     const maSlow = chart.addSeries(LineSeries, { color: "#f59e0b", lineWidth: 2, title: "MA50" });
     chartRef.current = chart;
     seriesRef.current = { candle: candleSeries, maFast, maSlow };
+    markerApiRef.current = createSeriesMarkers(candleSeries, []);
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
@@ -106,6 +108,7 @@ export const UserMarketChartPanel = ({ symbol = "BTCUSDT", initialTimeframe = "1
     chart.applyOptions({ width: containerRef.current.clientWidth, height: 420 });
     return () => {
       observer.disconnect();
+      markerApiRef.current = null;
       chart.remove();
     };
   }, []);
@@ -125,7 +128,11 @@ export const UserMarketChartPanel = ({ symbol = "BTCUSDT", initialTimeframe = "1
       close: Number(item.close),
     }));
     seriesRef.current.candle.setData(candles);
-    seriesRef.current.candle.setMarkers(chartMarkers);
+    if (markerApiRef.current?.setMarkers) {
+      markerApiRef.current.setMarkers(chartMarkers);
+    } else if (typeof seriesRef.current.candle.setMarkers === "function") {
+      seriesRef.current.candle.setMarkers(chartMarkers);
+    }
     seriesRef.current.maFast.setData(buildMovingAverage(payload.candles, 20));
     seriesRef.current.maSlow.setData(buildMovingAverage(payload.candles, 50));
     chartRef.current?.timeScale().fitContent();

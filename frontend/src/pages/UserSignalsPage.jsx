@@ -32,18 +32,32 @@ export const UserSignalsPage = () => {
       setIsLoading(true);
     }
     try {
-      const [signalsRes, portfolioRes, tradesRes, modeRes, botsRes] = await Promise.all([
+      const [signalsRes, portfolioRes, tradesRes, modeRes, botsRes] = await Promise.allSettled([
         apiClient.get("/user/signals", { params: { limit: 120 } }),
         apiClient.get("/user/portfolio"),
         apiClient.get("/user/trades", { params: { limit: 120 } }),
         apiClient.get("/user/signal-mode"),
         apiClient.get("/bot-profiles"),
       ]);
-      setSignals(signalsRes.data || []);
-      setPortfolio(portfolioRes.data);
-      setTrades(tradesRes.data || []);
-      setSignalMode(modeRes.data || null);
-      setBotProfiles(botsRes.data || []);
+
+      const extractData = (result, fallbackValue) => {
+        if (result?.status === "fulfilled") {
+          return result.value?.data ?? fallbackValue;
+        }
+        return fallbackValue;
+      };
+
+      setSignals(extractData(signalsRes, []));
+      setPortfolio(extractData(portfolioRes, null));
+      setTrades(extractData(tradesRes, []));
+      setSignalMode(extractData(modeRes, null));
+      setBotProfiles(extractData(botsRes, []));
+
+      const firstRejected = [signalsRes, portfolioRes, tradesRes, modeRes, botsRes].find((item) => item?.status === "rejected");
+      if (firstRejected && !silent) {
+        const detail = firstRejected.reason?.response?.data?.detail || firstRejected.reason?.message || "Signals verisi kısmi yüklendi";
+        toast.error(typeof detail === "string" ? detail : "Signals verisi kısmi yüklendi");
+      }
     } finally {
       if (!silent) {
         setIsLoading(false);
