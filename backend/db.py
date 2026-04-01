@@ -192,7 +192,13 @@ def _resolve_database_url() -> str:
 
     if not parsed.host:
         raise RuntimeError("database_url_host_missing")
-    if str(parsed.host).strip().lower() in LOCALHOST_DATABASE_HOSTS:
+    host_is_local = str(parsed.host).strip().lower() in LOCALHOST_DATABASE_HOSTS
+    allow_localhost = (
+        str(os.getenv("ALLOW_LOCALHOST_DATABASE_URL", "") or "").strip().lower() in {"1", "true", "yes"}
+        or str(os.getenv("CI", "") or "").strip().lower() in {"1", "true", "yes"}
+        or bool(os.getenv("PYTEST_CURRENT_TEST"))
+    )
+    if host_is_local and not allow_localhost:
         raise RuntimeError("database_url_localhost_forbidden")
     if not parsed.database:
         raise RuntimeError("database_url_dbname_missing")

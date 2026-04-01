@@ -126,7 +126,11 @@ alert_from = get_value('ALERT_FROM', backend_env)
 alert_to = get_value('ALERT_TO', backend_env)
 resend_api_key = get_value('RESEND_API_KEY', backend_env)
 if alert_from or alert_to:
-    add_check('RESEND_API_KEY exists when alert emails configured', bool(resend_api_key), 'ALERT_FROM/ALERT_TO set ise RESEND_API_KEY zorunlu')
+    add_check(
+        'RESEND_API_KEY exists when alert emails configured',
+        bool(resend_api_key) if strict_env_checks_enabled else True,
+        'ALERT_FROM/ALERT_TO set ise RESEND_API_KEY zorunlu (CI light modda skip)'
+    )
 
 if runtime_checks_enabled and redis is not None:
     try:

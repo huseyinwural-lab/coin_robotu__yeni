@@ -7,14 +7,16 @@ REPORT_JSON="${ARTIFACT_DIR}/prod_secret_readiness_report.json"
 
 mkdir -p "${ARTIFACT_DIR}"
 
-python - <<'PY'
+ROOT_DIR="${ROOT_DIR}" ARTIFACT_DIR="${ARTIFACT_DIR}" python - <<'PY'
 import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-root = Path('/app')
-report_path = root / 'artifacts' / 'prod_secret_readiness_report.json'
+root = Path(os.environ.get('ROOT_DIR') or '/app')
+artifact_dir = Path(os.environ.get('ARTIFACT_DIR') or (root / 'artifacts'))
+artifact_dir.mkdir(parents=True, exist_ok=True)
+report_path = artifact_dir / 'prod_secret_readiness_report.json'
 
 required_keys = [
     'DATABASE_URL',
