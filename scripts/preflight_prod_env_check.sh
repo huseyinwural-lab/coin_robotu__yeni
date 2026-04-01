@@ -214,7 +214,12 @@ if health_url:
         health_probe = {'source': 'http_probe', 'error': str(exc)[:300]}
 
 backend_python = proc_env.get('BACKEND_PYTHON') or '/root/.venv/bin/python'
-python_cmd = backend_python if Path(backend_python).exists() else sys.executable
+try:
+    backend_python_exists = Path(backend_python).exists()
+except PermissionError:
+    backend_python_exists = False
+
+python_cmd = backend_python if backend_python_exists else sys.executable
 
 if runtime_health_checks and not health_probe.get('redis'):
     health_script = (
