@@ -96,6 +96,7 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None, for
 
     execution_allowed = bool(validator.get("execution_allowed"))
     go_live_allowed = bool(validator.get("go_live_allowed"))
+    gate_status_code = str((gate_snapshot or {}).get("status") or "").upper()
 
     if override_active and final_status != "READY":
         final_status = "READY"
@@ -104,6 +105,13 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None, for
         go_live_allowed = True
         if "MANUAL_OVERRIDE_ACTIVE" not in reason_codes:
             reason_codes.append("MANUAL_OVERRIDE_ACTIVE")
+    elif not override_active and final_status != "READY" and mode == "LIVE" and gate_status_code == "PASS":
+        final_status = "READY"
+        readiness_state = "READY_BY_RELEASE_GATE"
+        execution_allowed = True
+        go_live_allowed = True
+        if "RELEASE_GATE_PASS_OVERRIDELESS" not in reason_codes:
+            reason_codes.append("RELEASE_GATE_PASS_OVERRIDELESS")
 
     payload = {
         "exchange_connection": exchange_connection_status,

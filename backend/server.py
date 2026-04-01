@@ -297,19 +297,27 @@ def readiness_check():
 
             queue_size = int(snapshot.get("queue_size", 0))
             queue_limit = int(QUEUE_SIZE_THRESHOLD * READY_QUEUE_CRITICAL_FACTOR)
+            queue_strict = str(os.getenv("READY_EXECUTION_QUEUE_STRICT", "true") or "true").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+            }
             if queue_size > queue_limit:
-                ready = False
+                if queue_strict:
+                    ready = False
                 checks["execution_queue"] = {
-                    "status": "not_ready",
+                    "status": "not_ready" if queue_strict else "warning",
                     "queue_size": queue_size,
                     "critical_limit": queue_limit,
                     "reason": "queue_pressure",
+                    "strict": queue_strict,
                 }
             else:
                 checks["execution_queue"] = {
                     "status": "ready",
                     "queue_size": queue_size,
                     "critical_limit": queue_limit,
+                    "strict": queue_strict,
                 }
         except Exception as exc:
             ready = False

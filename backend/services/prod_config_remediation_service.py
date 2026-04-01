@@ -362,7 +362,9 @@ def _build_reason_codes(preflight_payload: dict, secret_payload: dict, final_pay
         else:
             reason_codes.append(f"{key.lower()}_missing")
 
-    reason_codes.extend(list(gate_payload.get("reason_codes") or []))
+    gate_status = str(gate_payload.get("status") or "").upper()
+    if gate_status == "BLOCKED":
+        reason_codes.extend(list(gate_payload.get("reason_codes") or []))
     return list(dict.fromkeys([code for code in reason_codes if str(code).strip()]))
 
 
