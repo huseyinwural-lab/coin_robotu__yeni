@@ -55,6 +55,13 @@ from services.venue_service import check_user_venue_access, ensure_user_venue_as
 BINANCE_FUTURES_TESTNET_REST = "https://testnet.binancefuture.com"
 BINANCE_FUTURES_TESTNET_WS = "wss://stream.binancefuture.com/ws"
 BINANCE_SPOT_TESTNET_REST = "https://testnet.binance.vision"
+BINANCE_FUTURES_LIVE_REST = "https://fapi.binance.com"
+BINANCE_SPOT_LIVE_REST = "https://api.binance.com"
+
+BINANCE_SPOT_TESTNET_BASE_URL = os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL")
+BINANCE_FUTURES_TESTNET_BASE_URL = os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL")
+BINANCE_SPOT_LIVE_BASE_URL = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
+BINANCE_FUTURES_LIVE_BASE_URL = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
 DEFAULT_TEST_SYMBOL = "BTCUSDT"
 MAX_SAFE_POSITION_PCT = 0.1
 MAX_SAFE_LEVERAGE = 1
@@ -106,10 +113,57 @@ class BinanceFuturesTestnetAdapter:
         except (TypeError, ValueError):
             return fallback
 
+    @staticmethod
+    def _futures_rest(environment: str = "testnet") -> str:
+        normalized = str(environment or "testnet").strip().lower()
+        if normalized == "testnet":
+            return str(BINANCE_FUTURES_TESTNET_BASE_URL or BINANCE_FUTURES_TESTNET_REST)
+        return str(BINANCE_FUTURES_LIVE_BASE_URL or BINANCE_FUTURES_LIVE_REST)
+
+    @staticmethod
+    def _spot_rest(environment: str = "testnet") -> str:
+        normalized = str(environment or "testnet").strip().lower()
+        if normalized == "testnet":
+            return str(BINANCE_SPOT_TESTNET_BASE_URL or BINANCE_SPOT_TESTNET_REST)
+        return str(BINANCE_SPOT_LIVE_BASE_URL or BINANCE_SPOT_LIVE_REST)
+
+    @staticmethod
+    def _proxy_token(environment: str, market: str) -> str:
+        env = str(environment or "testnet").strip().lower()
+        mkt = str(market or "futures").strip().lower()
+        if mkt == "spot":
+            token = (
+                os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN")
+                if env == "testnet"
+                else os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
+            )
+            token = token or os.environ.get("BINANCE_SPOT_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
+            return str(token or "").strip()
+
+        token = (
+            os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN")
+            if env == "testnet"
+            else os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
+        )
+        token = token or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
+        return str(token or "").strip()
+
+    @classmethod
+    def _signed_headers(cls, api_key: str, *, environment: str, market: str) -> dict:
+        headers = {"X-MBX-APIKEY": api_key}
+        token = cls._proxy_token(environment, market)
+        if token:
+            headers["X-Proxy-Token"] = token
+        return headers
+
     def ping(self) -> dict:
+        return self.ping_with_environment("testnet")
+
+    def ping_with_environment(self, environment: str = "testnet") -> dict:
+        rest_url = self._futures_rest(environment)
         try:
             response = httpx.get(
-                f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/time",
+                f"{rest_url}/fapi/v1/time",
                 timeout=self._timeout("ping", 6),
             )
             response.raise_for_status()
@@ -117,7 +171,7 @@ class BinanceFuturesTestnetAdapter:
             return {
                 "status": "reachable",
                 "server_time": payload.get("serverTime"),
-                "rest_url": BINANCE_FUTURES_TESTNET_REST,
+                "rest_url": rest_url,
                 "ws_url": BINANCE_FUTURES_TESTNET_WS,
                 "message": "Binance Futures Testnet endpoint reachable.",
             }
@@ -125,7 +179,7 @@ class BinanceFuturesTestnetAdapter:
             return {
                 "status": "unreachable",
                 "server_time": None,
-                "rest_url": BINANCE_FUTURES_TESTNET_REST,
+                "rest_url": rest_url,
                 "ws_url": BINANCE_FUTURES_TESTNET_WS,
                 "message": f"Endpoint check failed: {exc}",
             }
@@ -142,60 +196,135 @@ class BinanceFuturesTestnetAdapter:
         except Exception:
             return {}
 
-    def _signed_get(self, api_key: str, api_secret: str, endpoint: str, params: dict) -> tuple[dict, int, dict]:
+    def _signed_get(
+        self,
+        api_key: str,
+        api_secret: str,
+        endpoint: str,
+        params: dict,
+        *,
+        environment: str = "testnet",
+    ) -> tuple[dict, int, dict]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
         signature = self._signature(api_secret, query)
-        url = f"{BINANCE_FUTURES_TESTNET_REST}{endpoint}?{query}&signature={signature}"
-        response = httpx.get(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_get", 8))
+        url = f"{self._futures_rest(environment)}{endpoint}?{query}&signature={signature}"
+        response = httpx.get(
+            url,
+            headers=self._signed_headers(api_key, environment=environment, market="futures"),
+            timeout=self._timeout("signed_get", 8),
+        )
         payload = response.json() if response.content else {}
         return payload, response.status_code, dict(response.headers)
 
-    def _signed_get_spot(self, api_key: str, api_secret: str, endpoint: str, params: dict) -> tuple[dict, int, dict]:
+    def _signed_get_spot(
+        self,
+        api_key: str,
+        api_secret: str,
+        endpoint: str,
+        params: dict,
+        *,
+        environment: str = "testnet",
+    ) -> tuple[dict, int, dict]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
         signature = self._signature(api_secret, query)
-        url = f"{BINANCE_SPOT_TESTNET_REST}{endpoint}?{query}&signature={signature}"
-        response = httpx.get(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_get", 8))
+        url = f"{self._spot_rest(environment)}{endpoint}?{query}&signature={signature}"
+        response = httpx.get(
+            url,
+            headers=self._signed_headers(api_key, environment=environment, market="spot"),
+            timeout=self._timeout("signed_get", 8),
+        )
         payload = response.json() if response.content else {}
         return payload, response.status_code, dict(response.headers)
 
-    def _signed_post(self, api_key: str, api_secret: str, endpoint: str, params: dict) -> tuple[dict, int]:
+    def _signed_post(
+        self,
+        api_key: str,
+        api_secret: str,
+        endpoint: str,
+        params: dict,
+        *,
+        environment: str = "testnet",
+    ) -> tuple[dict, int]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
         signature = self._signature(api_secret, query)
-        url = f"{BINANCE_FUTURES_TESTNET_REST}{endpoint}?{query}&signature={signature}"
-        response = httpx.post(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_post", 10))
+        url = f"{self._futures_rest(environment)}{endpoint}?{query}&signature={signature}"
+        response = httpx.post(
+            url,
+            headers=self._signed_headers(api_key, environment=environment, market="futures"),
+            timeout=self._timeout("signed_post", 10),
+        )
         payload = response.json() if response.content else {}
         return payload, response.status_code
 
-    def _signed_post_spot(self, api_key: str, api_secret: str, endpoint: str, params: dict) -> tuple[dict, int]:
+    def _signed_post_spot(
+        self,
+        api_key: str,
+        api_secret: str,
+        endpoint: str,
+        params: dict,
+        *,
+        environment: str = "testnet",
+    ) -> tuple[dict, int]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
         signature = self._signature(api_secret, query)
-        url = f"{BINANCE_SPOT_TESTNET_REST}{endpoint}?{query}&signature={signature}"
-        response = httpx.post(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_post", 10))
+        url = f"{self._spot_rest(environment)}{endpoint}?{query}&signature={signature}"
+        response = httpx.post(
+            url,
+            headers=self._signed_headers(api_key, environment=environment, market="spot"),
+            timeout=self._timeout("signed_post", 10),
+        )
         payload = response.json() if response.content else {}
         return payload, response.status_code
 
-    def _signed_delete(self, api_key: str, api_secret: str, endpoint: str, params: dict, *, spot: bool = False) -> tuple[dict, int]:
+    def _signed_delete(
+        self,
+        api_key: str,
+        api_secret: str,
+        endpoint: str,
+        params: dict,
+        *,
+        spot: bool = False,
+        environment: str = "testnet",
+    ) -> tuple[dict, int]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
         signature = self._signature(api_secret, query)
-        base_url = BINANCE_SPOT_TESTNET_REST if spot else BINANCE_FUTURES_TESTNET_REST
+        base_url = self._spot_rest(environment) if spot else self._futures_rest(environment)
         url = f"{base_url}{endpoint}?{query}&signature={signature}"
-        response = httpx.delete(url, headers={"X-MBX-APIKEY": api_key}, timeout=self._timeout("signed_delete", 8))
+        response = httpx.delete(
+            url,
+            headers=self._signed_headers(api_key, environment=environment, market="spot" if spot else "futures"),
+            timeout=self._timeout("signed_delete", 8),
+        )
         payload = response.json() if response.content else {}
         return payload, response.status_code
 
-    def account_probe(self, api_key: str, api_secret: str) -> tuple[dict, int, dict]:
-        return self._signed_get(api_key, api_secret, "/fapi/v2/account", {})
+    def account_probe(self, api_key: str, api_secret: str, environment: str = "testnet") -> tuple[dict, int, dict]:
+        return self._signed_get(api_key, api_secret, "/fapi/v2/account", {}, environment=environment)
 
-    def position_risk(self, api_key: str, api_secret: str, symbol: str | None = None) -> tuple[dict, int, dict]:
+    def position_risk(
+        self,
+        api_key: str,
+        api_secret: str,
+        symbol: str | None = None,
+        *,
+        environment: str = "testnet",
+    ) -> tuple[dict, int, dict]:
         params = {"symbol": symbol} if symbol else {}
-        return self._signed_get(api_key, api_secret, "/fapi/v2/positionRisk", params)
+        return self._signed_get(api_key, api_secret, "/fapi/v2/positionRisk", params, environment=environment)
 
-    def reduce_only_test(self, api_key: str, api_secret: str, symbol: str = "BTCUSDT") -> tuple[dict, int, dict]:
+    def reduce_only_test(
+        self,
+        api_key: str,
+        api_secret: str,
+        symbol: str = "BTCUSDT",
+        *,
+        environment: str = "testnet",
+    ) -> tuple[dict, int, dict]:
         params = {
             "symbol": symbol,
             "side": "BUY",
@@ -203,10 +332,11 @@ class BinanceFuturesTestnetAdapter:
             "quantity": 0.001,
             "reduceOnly": "true",
         }
-        return self._signed_post(api_key, api_secret, "/fapi/v1/order", params)
+        payload, status = self._signed_post(api_key, api_secret, "/fapi/v1/order", params, environment=environment)
+        return payload, status, {}
 
-    def account_probe_spot(self, api_key: str, api_secret: str) -> tuple[dict, int, dict]:
-        return self._signed_get_spot(api_key, api_secret, "/api/v3/account", {})
+    def account_probe_spot(self, api_key: str, api_secret: str, environment: str = "testnet") -> tuple[dict, int, dict]:
+        return self._signed_get_spot(api_key, api_secret, "/api/v3/account", {}, environment=environment)
 
     def mark_price(self, symbol: str) -> float:
         response = httpx.get(
@@ -237,12 +367,21 @@ class BinanceFuturesTestnetAdapter:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-    def set_leverage(self, api_key: str, api_secret: str, symbol: str, leverage: int) -> tuple[dict, int]:
+    def set_leverage(
+        self,
+        api_key: str,
+        api_secret: str,
+        symbol: str,
+        leverage: int,
+        *,
+        environment: str = "testnet",
+    ) -> tuple[dict, int]:
         return self._signed_post(
             api_key,
             api_secret,
             "/fapi/v1/leverage",
             {"symbol": symbol, "leverage": leverage},
+            environment=environment,
         )
 
     def create_limit_order(
@@ -255,6 +394,7 @@ class BinanceFuturesTestnetAdapter:
         quantity: float,
         price: float,
         time_in_force: str,
+        environment: str = "testnet",
     ) -> tuple[dict, int]:
         return self._signed_post(
             api_key,
@@ -268,6 +408,7 @@ class BinanceFuturesTestnetAdapter:
                 "price": price,
                 "timeInForce": time_in_force,
             },
+            environment=environment,
         )
 
     def create_market_order(
@@ -278,6 +419,7 @@ class BinanceFuturesTestnetAdapter:
         symbol: str,
         side: str,
         quantity: float,
+        environment: str = "testnet",
     ) -> tuple[dict, int]:
         return self._signed_post(
             api_key,
@@ -289,6 +431,7 @@ class BinanceFuturesTestnetAdapter:
                 "type": "MARKET",
                 "quantity": quantity,
             },
+            environment=environment,
         )
 
     def create_spot_market_order(
@@ -299,6 +442,7 @@ class BinanceFuturesTestnetAdapter:
         symbol: str,
         side: str,
         quote_order_qty: float,
+        environment: str = "testnet",
     ) -> tuple[dict, int]:
         return self._signed_post_spot(
             api_key,
@@ -310,36 +454,78 @@ class BinanceFuturesTestnetAdapter:
                 "type": "MARKET",
                 "quoteOrderQty": round(float(quote_order_qty), 2),
             },
+            environment=environment,
         )
 
-    def query_order(self, api_key: str, api_secret: str, symbol: str, order_id: int) -> tuple[dict, int]:
+    def query_order(
+        self,
+        api_key: str,
+        api_secret: str,
+        symbol: str,
+        order_id: int,
+        *,
+        environment: str = "testnet",
+    ) -> tuple[dict, int]:
         payload, status_code, _ = self._signed_get(
             api_key,
             api_secret,
             "/fapi/v1/order",
             {"symbol": symbol, "orderId": order_id},
+            environment=environment,
         )
         return payload, status_code
 
-    def query_spot_order(self, api_key: str, api_secret: str, symbol: str, order_id: int) -> tuple[dict, int]:
+    def query_spot_order(
+        self,
+        api_key: str,
+        api_secret: str,
+        symbol: str,
+        order_id: int,
+        *,
+        environment: str = "testnet",
+    ) -> tuple[dict, int]:
         payload, status_code, _ = self._signed_get_spot(
             api_key,
             api_secret,
             "/api/v3/order",
             {"symbol": symbol, "orderId": order_id},
+            environment=environment,
         )
         return payload, status_code
 
-    def cancel_order(self, api_key: str, api_secret: str, symbol: str, order_id: int, *, market_type: str) -> tuple[dict, int]:
+    def cancel_order(
+        self,
+        api_key: str,
+        api_secret: str,
+        symbol: str,
+        order_id: int,
+        *,
+        market_type: str,
+        environment: str = "testnet",
+    ) -> tuple[dict, int]:
         if market_type == "spot":
-            return self._signed_delete(api_key, api_secret, "/api/v3/order", {"symbol": symbol, "orderId": order_id}, spot=True)
-        return self._signed_delete(api_key, api_secret, "/fapi/v1/order", {"symbol": symbol, "orderId": order_id}, spot=False)
+            return self._signed_delete(
+                api_key,
+                api_secret,
+                "/api/v3/order",
+                {"symbol": symbol, "orderId": order_id},
+                spot=True,
+                environment=environment,
+            )
+        return self._signed_delete(
+            api_key,
+            api_secret,
+            "/fapi/v1/order",
+            {"symbol": symbol, "orderId": order_id},
+            spot=False,
+            environment=environment,
+        )
 
-    def evaluate_permission_controls(self, api_key: str | None, api_secret: str | None) -> dict:
+    def evaluate_permission_controls(self, api_key: str | None, api_secret: str | None, *, environment: str = "testnet") -> dict:
         now_iso = datetime.now(timezone.utc).isoformat()
         key = (api_key or "").strip()
         secret = (api_secret or "").strip()
-        endpoint_probe = self.ping()
+        endpoint_probe = self.ping_with_environment(environment)
 
         controls = [
             {"key": "can_trade", "status": "fail", "reason": "missing_credentials", "timestamp": now_iso},
@@ -361,7 +547,7 @@ class BinanceFuturesTestnetAdapter:
             return {"overall_status": "fail", "controls": controls, "invalid_credentials": False}
 
         try:
-            payload, status_code, headers = self.account_probe(key, secret)
+            payload, status_code, headers = self.account_probe(key, secret, environment=environment)
         except httpx.HTTPError as exc:
             fail_reason = f"exchange_unreachable:{exc}"
             return {
@@ -416,12 +602,12 @@ class BinanceFuturesTestnetAdapter:
         overall = "pass" if all(item["status"] == "pass" for item in controls) else "fail"
         return {"overall_status": overall, "controls": controls, "invalid_credentials": False}
 
-    def permission_check(self, api_key: str | None, api_secret: str | None) -> dict:
+    def permission_check(self, api_key: str | None, api_secret: str | None, *, environment: str = "testnet") -> dict:
         has_key = bool(api_key and api_key.strip())
         has_secret = bool(api_secret and api_secret.strip())
         key = api_key.strip() if api_key else None
         secret = api_secret.strip() if api_secret else None
-        controls_payload = self.evaluate_permission_controls(key, secret)
+        controls_payload = self.evaluate_permission_controls(key, secret, environment=environment)
 
         if not has_key or not has_secret:
             return {
@@ -545,7 +731,7 @@ def permission_status_for_user(db: Session, user_id: str) -> dict:
     settings_row = get_or_create_exchange_settings(db, user_id)
     api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else None
     api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else None
-    check = adapter.permission_check(api_key, api_secret)
+    check = adapter.permission_check(api_key, api_secret, environment=str(settings_row.mode or "testnet"))
     status = "ready" if check["status"] == "ready" else "blocked"
     return {
         "overall_status": "pass" if status == "ready" else "fail",
@@ -988,9 +1174,9 @@ def validate_exchange_credentials_for_user(
     probe_started = time.perf_counter()
     try:
         if requested_market_type == "spot":
-            payload, status_code, _ = adapter.account_probe_spot(api_key, api_secret)
+            payload, status_code, _ = adapter.account_probe_spot(api_key, api_secret, environment=requested_environment)
         else:
-            payload, status_code, _ = adapter.account_probe(api_key, api_secret)
+            payload, status_code, _ = adapter.account_probe(api_key, api_secret, environment=requested_environment)
     except httpx.HTTPError:
         elapsed_ms = round((time.perf_counter() - probe_started) * 1000, 2)
         return _validation_failure(["exchange_unreachable"], 503, latency_ms=elapsed_ms)
@@ -1980,6 +2166,7 @@ def run_exchange_test_order_market(
                 api_secret,
                 symbol,
                 int(leverage_plan["applied_leverage"] or 1),
+                environment=normalized_environment,
             )
             if leverage_status >= 400:
                 raise ValueError(f"{normalize_failure_code(leverage_payload, leverage_status)}: leverage_context_invalid")
@@ -1989,6 +2176,7 @@ def run_exchange_test_order_market(
                 symbol=symbol,
                 side=side,
                 quantity=quantity,
+                environment=normalized_environment,
             )
         else:
             order_payload, order_status = adapter.create_spot_market_order(
@@ -1997,6 +2185,7 @@ def run_exchange_test_order_market(
                 symbol=symbol,
                 side=side,
                 quote_order_qty=quote_qty,
+                environment=normalized_environment,
             )
     except httpx.HTTPError:
         order_payload = {"msg": "testnet_unreachable"}
@@ -2023,9 +2212,21 @@ def run_exchange_test_order_market(
             for _ in range(6):
                 time.sleep(0.2)
                 if normalized_market_type == "spot":
-                    queried, _ = adapter.query_spot_order(api_key, api_secret, symbol, int(exchange_order_id))
+                    queried, _ = adapter.query_spot_order(
+                        api_key,
+                        api_secret,
+                        symbol,
+                        int(exchange_order_id),
+                        environment=normalized_environment,
+                    )
                 else:
-                    queried, _ = adapter.query_order(api_key, api_secret, symbol, int(exchange_order_id))
+                    queried, _ = adapter.query_order(
+                        api_key,
+                        api_secret,
+                        symbol,
+                        int(exchange_order_id),
+                        environment=normalized_environment,
+                    )
 
                 queried_status = str(queried.get("status") or first_status).upper()
                 final_payload = queried
@@ -2045,6 +2246,7 @@ def run_exchange_test_order_market(
                 symbol,
                 int(exchange_order_id),
                 market_type=normalized_market_type,
+                environment=normalized_environment,
             )
             if cancel_status < 400:
                 final_payload = cancel_payload

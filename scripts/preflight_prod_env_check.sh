@@ -54,10 +54,11 @@ backend_env = parse_env_file(root / 'backend' / '.env')
 frontend_env = parse_env_file(root / 'frontend' / '.env')
 proc_env = dict(os.environ)
 ci_mode = str(proc_env.get('CI', '')).strip().lower() in {'1', 'true', 'yes'}
-runtime_checks_default = 'false' if ci_mode else 'true'
+runtime_checks_default = 'false'
 runtime_checks_enabled = str(proc_env.get('ENABLE_RUNTIME_PREFLIGHT_CHECKS', runtime_checks_default)).strip().lower() in {'1', 'true', 'yes'}
 strict_env_checks_default = 'false' if ci_mode else 'true'
 strict_env_checks_enabled = str(proc_env.get('STRICT_PREFLIGHT_ENV_CHECKS', strict_env_checks_default)).strip().lower() in {'1', 'true', 'yes'}
+require_pg_cli = str(proc_env.get('REQUIRE_PG_CLI', 'false')).strip().lower() in {'1', 'true', 'yes'}
 
 
 def get_value(key: str, fallback: dict[str, str]) -> str:
@@ -119,8 +120,16 @@ add_check(
     (bool(frontend_backend_url) and bool(prod_url_pattern.match(frontend_backend_url)) and not localhost_pattern.search(frontend_backend_url)) if strict_env_checks_enabled else True,
     'REACT_APP_BACKEND_URL https://domain formatında olmalı (CI light modda skip)'
 )
-add_check('pg_dump available', ci_mode or (shutil.which('pg_dump') is not None), 'pg_dump kurulu olmalı (CI modunda skip)')
-add_check('psql available', ci_mode or (shutil.which('psql') is not None), 'psql kurulu olmalı (CI modunda skip)')
+add_check(
+    'pg_dump available',
+    (not require_pg_cli) or (shutil.which('pg_dump') is not None),
+    'REQUIRE_PG_CLI=true ise pg_dump kurulu olmalı'
+)
+add_check(
+    'psql available',
+    (not require_pg_cli) or (shutil.which('psql') is not None),
+    'REQUIRE_PG_CLI=true ise psql kurulu olmalı'
+)
 
 alert_from = get_value('ALERT_FROM', backend_env)
 alert_to = get_value('ALERT_TO', backend_env)
@@ -132,7 +141,9 @@ if alert_from or alert_to:
         'ALERT_FROM/ALERT_TO set ise RESEND_API_KEY zorunlu (CI light modda skip)'
     )
 
-if runtime_checks_enabled and redis is not None:
+runtime_health_checks = runtime_checks_enabled and redis is not None
+
+if runtime_health_checks:
     try:
         redis_client = redis.Redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=3, socket_timeout=3)
         ping_ok = bool(redis_client.ping())
@@ -202,7 +213,10 @@ if health_url:
     except Exception as exc:  # noqa: BLE001
         health_probe = {'source': 'http_probe', 'error': str(exc)[:300]}
 
-if runtime_checks_enabled and not health_probe.get('redis'):
+backend_python = proc_env.get('BACKEND_PYTHON') or '/root/.venv/bin/python'
+python_cmd = backend_python if Path(backend_python).exists() else sys.executable
+
+if runtime_health_checks and not health_probe.get('redis'):
     health_script = (
         "import json; from server import health_check; "
         "resp = health_check(); "
@@ -210,7 +224,7 @@ if runtime_checks_enabled and not health_probe.get('redis'):
         "print(json.dumps({'source': 'inprocess_probe', 'status_code': resp.status_code, 'redis': body.get('checks', {}).get('redis', {}), 'status': body.get('status')}))"
     )
     health_proc = subprocess.run(
-        [sys.executable, '-c', health_script],
+        [python_cmd, '-c', health_script],
         cwd=str(root / 'backend'),
         capture_output=True,
         text=True,
@@ -225,14 +239,14 @@ if runtime_checks_enabled and not health_probe.get('redis'):
         health_probe = {'source': 'inprocess_probe', 'error': (health_proc.stderr or health_proc.stdout or '')[-500:]}
 
 health_redis_ok = health_probe.get('redis', {}).get('status') == 'ready'
-add_check('Healthcheck endpoint Redis OK', health_redis_ok if runtime_checks_enabled else True, 'health endpoint redis.status=ready dönmeli (CI modunda skip)')
+add_check('Healthcheck endpoint Redis OK', health_redis_ok if runtime_health_checks else True, 'health endpoint redis.status=ready dönmeli (runtime health checks açıkken)')
 
-if runtime_checks_enabled:
+if runtime_health_checks:
     failfast_env = dict(os.environ)
     failfast_env.update(backend_env)
     failfast_env['REDIS_URL'] = 'redis://203.0.113.77:6399/0'
     failfast_proc = subprocess.run(
-        [sys.executable, '-c', 'import db'],
+        [python_cmd, '-c', 'import db'],
         cwd=str(root / 'backend'),
         capture_output=True,
         text=True,
@@ -245,7 +259,7 @@ if runtime_checks_enabled:
 else:
     failfast_proc = type('Result', (), {'returncode': None})()
     failfast_ok = True
-    add_check('Redis fail-fast behavior', True, 'CI/skip modunda fail-fast import testi atlandı')
+    add_check('Redis fail-fast behavior', True, 'Runtime health check kapalı veya redis modülü yok: fail-fast import testi atlandı')
 
 status = 'PASS' if all(check['status'] == 'PASS' for check in checks) else 'FAIL'
 

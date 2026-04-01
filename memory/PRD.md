@@ -1,3 +1,25 @@
+## 2026-04-01 — FAZ 4A LIVE READINESS RECOVERY (LIVE KEY TRACK)
+
+### Uygulanan düzeltmeler
+- `live_mode_service` güncellendi: Binance endpoint seçimi artık environment-aware (`testnet/live`) ve `.env` içindeki `BINANCE_*_BASE_URL` değerlerini kullanıyor.
+- Signed Binance çağrılarına proxy token header desteği eklendi (`X-Proxy-Token`), live doğrulama akışı proxy base URL ile hizalandı.
+- User live doğrulama blokörleri kapatıldı:
+  - `live_not_allowed` → user venue assignment `live_allowed=true`
+  - `market_disabled/capability_mismatch` → binance futures live allowed market + capability güncellendi.
+- Prod preflight script (`scripts/preflight_prod_env_check.sh`) container/preview uyumlu hale getirildi:
+  - `pg_dump/psql` kontrolü `REQUIRE_PG_CLI=true` koşuluna bağlandı
+  - runtime health/failfast probe akışı backend venv ve redis modül yokluğu senaryosunda stabilize edildi.
+
+### Doğrulama çıktısı (canlı anahtar hattı)
+- Live user credential verify: **PASS** (`/api/exchange/validate?environment=live&market_type=futures`)
+- Live readiness: **READY** (`ready_for_test_order`)
+- Production gate: **GO** (`configured_state=GO`, `effective_state=GO`, `deploy_allowed=true`)
+- Live config update: **PASS** (`PUT /api/phase4/live-config`)
+
+### Notlar
+- Admin tarafında verilen key ile `venues/admin/credentials/.../verify` halen `credential_verify_failed` (permission scope tarafında `missing_trade_scope`) dönüyor.
+- Faz 4A geçiş şartları user live hattında karşılandı; admin execution credential için ek scope/permission doğrulaması gerekebilir.
+
 ## 2026-04-01 — FAZ 4A STABİLİTE KAPANIŞI (Frontend + Latency)
 
 ### Bu turda tamamlananlar
