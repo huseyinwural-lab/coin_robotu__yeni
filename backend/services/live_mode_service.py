@@ -338,9 +338,9 @@ class BinanceFuturesTestnetAdapter:
     def account_probe_spot(self, api_key: str, api_secret: str, environment: str = "testnet") -> tuple[dict, int, dict]:
         return self._signed_get_spot(api_key, api_secret, "/api/v3/account", {}, environment=environment)
 
-    def mark_price(self, symbol: str) -> float:
+    def mark_price(self, symbol: str, *, environment: str = "testnet") -> float:
         response = httpx.get(
-            f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/ticker/price",
+            f"{self._futures_rest(environment)}/fapi/v1/ticker/price",
             params={"symbol": symbol},
             timeout=self._timeout("market_data", 8),
         )
@@ -1727,8 +1727,9 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     settings_row = get_or_create_exchange_settings(db, user.id)
     api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else None
     api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else None
+    environment = str(settings_row.mode or "testnet").strip().lower()
 
-    permission = adapter.permission_check(api_key, api_secret)
+    permission = adapter.permission_check(api_key, api_secret, environment=environment)
     permission_snapshot = permission.get("controls", [])
     if permission["status"] != "ready":
         raise ValueError("Permission check başarısız. Önce API key doğrulamasını geçmelisiniz.")
@@ -1739,7 +1740,7 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     side = "BUY" if direction == "long" else "SELL"
     volatility_pct = _market_volatility_pct()
     volatility_regime = "high" if volatility_pct >= 0.03 else ("medium" if volatility_pct >= 0.018 else "low")
-    expected_price = adapter.mark_price(symbol)
+    expected_price = adapter.mark_price(symbol, environment=environment)
     notional_cap = 100.0
     if bool(getattr(config, "canary_enabled", False)):
         canary_cap = float(getattr(config, "canary_max_capital_usdt", 100) or 100)
@@ -1761,7 +1762,7 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     except ExecutionSafetyViolation as exc:
         raise ValueError(f"{exc.reason_code}: {exc.message}") from exc
 
-    adapter.set_leverage(api_key or "", api_secret or "", symbol, MAX_SAFE_LEVERAGE)
+    adapter.set_leverage(api_key or "", api_secret or "", symbol, MAX_SAFE_LEVERAGE, environment=environment)
 
     state_path = ["created", "submitted"]
     started = time.perf_counter()
@@ -1774,6 +1775,7 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
         quantity=quantity,
         price=primary_price,
         time_in_force="GTC",
+        environment=environment,
     )
     if primary_status >= 400:
         state_path.append("failed")
@@ -1782,7 +1784,13 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
     else:
         state_path.append("acknowledged")
         order_id = int(primary_order.get("orderId") or 0)
-        current_status_payload, _ = adapter.query_order(api_key or "", api_secret or "", symbol, order_id)
+        current_status_payload, _ = adapter.query_order(
+            api_key or "",
+            api_secret or "",
+            symbol,
+            order_id,
+            environment=environment,
+        )
         normalized_status = _map_order_status(current_status_payload.get("status", ""))
         fill_price = float(current_status_payload.get("avgPrice") or 0) or None
 
@@ -1802,6 +1810,7 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
                 quantity=quantity,
                 price=fallback_price,
                 time_in_force="IOC",
+                environment=environment,
             )
 
             if fallback_status >= 400:
@@ -1809,7 +1818,13 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
                 final_status = "failed"
             else:
                 fallback_id = int(fallback_order.get("orderId") or 0)
-                fallback_payload, _ = adapter.query_order(api_key or "", api_secret or "", symbol, fallback_id)
+                fallback_payload, _ = adapter.query_order(
+                    api_key or "",
+                    api_secret or "",
+                    symbol,
+                    fallback_id,
+                    environment=environment,
+                )
                 final_status = _map_order_status(fallback_payload.get("status", ""))
                 fallback_avg = float(fallback_payload.get("avgPrice") or 0) or None
                 fill_price = fallback_avg or fill_price
