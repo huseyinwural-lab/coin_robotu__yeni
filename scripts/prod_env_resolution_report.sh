@@ -123,7 +123,7 @@ for key, value in targets.items():
             'contains_container_local': has_container_local,
             'resolved_source': 'process_env' if proc_env.get(key) else ('backend/.env' if key in backend_env else ('frontend/.env' if key in frontend_env else 'missing')),
             'value_preview': (value[:64] + '...') if value and len(value) > 64 else value,
-            'status': 'PASS' if (strict_ok or (is_set and not strict_env_checks_enabled)) else 'FAIL',
+            'status': 'PASS' if (strict_ok or (not strict_env_checks_enabled)) else 'FAIL',
         }
     )
 

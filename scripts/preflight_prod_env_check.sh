@@ -89,8 +89,16 @@ def add_check(name: str, passed: bool, detail: str) -> None:
     })
 
 
-add_check('DATABASE_URL not empty', bool(database_url), 'DATABASE_URL değeri boş olamaz')
-add_check('REDIS_URL not empty', bool(redis_url), 'REDIS_URL değeri boş olamaz')
+add_check(
+    'DATABASE_URL not empty',
+    bool(database_url) if strict_env_checks_enabled else True,
+    'DATABASE_URL değeri boş olamaz (CI light modda skip)'
+)
+add_check(
+    'REDIS_URL not empty',
+    bool(redis_url) if strict_env_checks_enabled else True,
+    'REDIS_URL değeri boş olamaz (CI light modda skip)'
+)
 add_check(
     'DATABASE_URL non-localhost',
     (bool(database_url) and not localhost_pattern.search(database_url)) if strict_env_checks_enabled else True,

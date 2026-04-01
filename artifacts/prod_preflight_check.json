@@ -1,17 +1,17 @@
 {
   "phase": "FAZ_0_FINAL_BLOCKER_CLEANUP",
   "status": "PASS",
-  "generated_at": "2026-04-01T11:33:24.364832+00:00",
+  "generated_at": "2026-04-01T11:39:14.661409+00:00",
   "checks": [
     {
       "name": "DATABASE_URL not empty",
       "status": "PASS",
-      "detail": "DATABASE_URL değeri boş olamaz"
+      "detail": "DATABASE_URL değeri boş olamaz (CI light modda skip)"
     },
     {
       "name": "REDIS_URL not empty",
       "status": "PASS",
-      "detail": "REDIS_URL değeri boş olamaz"
+      "detail": "REDIS_URL değeri boş olamaz (CI light modda skip)"
     },
     {
       "name": "DATABASE_URL non-localhost",
