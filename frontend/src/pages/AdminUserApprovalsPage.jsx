@@ -31,6 +31,17 @@ const REJECT_TEMPLATES = [
   "api_validity_failed",
   "insufficient_balance",
 ];
+const FOUNDATION_DRIVEN_FIELDS = new Set([
+  "api_key_validity",
+  "balance_usd",
+  "risk_score",
+  "aml_flag",
+  "aml_reason",
+  "country_code",
+  "leverage_permission",
+  "futures_capability",
+  "spot_capability",
+]);
 
 const buildWorkflowMap = (items) => {
   const next = {};
@@ -302,16 +313,8 @@ export const AdminUserApprovalsPage = () => {
 
   const handleSingleApprove = async (userId) => {
     if (!requireApproveReason()) return;
-    const context = contexts[userId] || (await loadContext(userId));
+    let context = contexts[userId] || (await loadContext(userId));
     if (!context) return;
-    if (context.approval_disabled) {
-      const missing = (context.missing_data_fields || []).join(", ");
-      toast.error(`Approval blocked. Missing: ${missing || "-"}`);
-      return;
-    }
-
-    const confirmed = window.confirm("Auto-approve kararı uygulansın mı? (double confirm)");
-    if (!confirmed) return;
 
     const foundationPayload = {
       risk_score: Number(quickRiskScore),
@@ -326,7 +329,22 @@ export const AdminUserApprovalsPage = () => {
     };
 
     try {
-      await apiClient.post(`/admin/onboarding/${userId}/risk-foundation`, foundationPayload);
+      const missingBefore = context.missing_data_fields || [];
+      const hasFoundationGaps = missingBefore.some((field) => FOUNDATION_DRIVEN_FIELDS.has(String(field || "").trim()));
+      if (hasFoundationGaps) {
+        await apiClient.post(`/admin/onboarding/${userId}/risk-foundation`, foundationPayload);
+        context = (await loadContext(userId)) || context;
+      }
+
+      if (context.approval_disabled) {
+        const missing = (context.missing_data_fields || []).join(", ");
+        toast.error(`Approval blocked. Missing: ${missing || "-"}`);
+        return;
+      }
+
+      const confirmed = window.confirm("Auto-approve kararı uygulansın mı? (double confirm)");
+      if (!confirmed) return;
+
       await apiClient.post(`/admin/onboarding/${userId}/decision/auto-approve`, {
         decision: "approve",
         reason: approveReason.trim(),
