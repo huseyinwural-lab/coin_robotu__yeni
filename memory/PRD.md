@@ -27,6 +27,12 @@
   - Step 4 (Kill Switch):
     - `Blokaj Koy` (kill_switch_enabled=true, trading_enabled=false)
     - `Blokaj Kaldır` (kill_switch_enabled=false, trading_enabled=true)
+- Politika güncellemesi:
+  - `KILL_SWITCH_ONLY_BLOCKING=true` ile production gate tarafında kill-switch dışı NO-GO blokları bypass edilir.
+  - Blokaj yetkisi operasyonel olarak Kill Switch adımında bırakıldı.
+- Testnet temizliği (aktif akış):
+  - `verify_phase8_canary.sh` live-only moda alındı (testnet fallback kaldırıldı).
+  - `production_gate_service` aktif kontrol varsayımları live’a çekildi.
 - Yeni test-id’ler eklendi:
   - `admin-live-gate-auto-unblock-button`
   - `admin-live-gate-progress-text`
