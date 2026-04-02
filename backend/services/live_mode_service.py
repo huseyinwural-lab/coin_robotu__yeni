@@ -117,15 +117,35 @@ class BinanceFuturesTestnetAdapter:
     def _futures_rest(environment: str = "testnet") -> str:
         normalized = str(environment or "testnet").strip().lower()
         if normalized == "testnet":
-            return str(BINANCE_FUTURES_TESTNET_BASE_URL or BINANCE_FUTURES_TESTNET_REST)
-        return str(BINANCE_FUTURES_LIVE_BASE_URL or BINANCE_FUTURES_LIVE_REST)
+            return str(
+                os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL")
+                or os.environ.get("BINANCE_FUTURES_BASE_URL")
+                or BINANCE_FUTURES_TESTNET_BASE_URL
+                or BINANCE_FUTURES_TESTNET_REST
+            )
+        return str(
+            os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
+            or os.environ.get("BINANCE_FUTURES_BASE_URL")
+            or BINANCE_FUTURES_LIVE_BASE_URL
+            or BINANCE_FUTURES_LIVE_REST
+        )
 
     @staticmethod
     def _spot_rest(environment: str = "testnet") -> str:
         normalized = str(environment or "testnet").strip().lower()
         if normalized == "testnet":
-            return str(BINANCE_SPOT_TESTNET_BASE_URL or BINANCE_SPOT_TESTNET_REST)
-        return str(BINANCE_SPOT_LIVE_BASE_URL or BINANCE_SPOT_LIVE_REST)
+            return str(
+                os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL")
+                or os.environ.get("BINANCE_SPOT_BASE_URL")
+                or BINANCE_SPOT_TESTNET_BASE_URL
+                or BINANCE_SPOT_TESTNET_REST
+            )
+        return str(
+            os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
+            or os.environ.get("BINANCE_SPOT_BASE_URL")
+            or BINANCE_SPOT_LIVE_BASE_URL
+            or BINANCE_SPOT_LIVE_REST
+        )
 
     @staticmethod
     def _proxy_token(environment: str, market: str) -> str:

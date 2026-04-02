@@ -86,9 +86,17 @@ def _collect_env_values(key: str) -> list[str]:
 def _hydrate_binance_env_from_file() -> None:
     for key in [
         "BINANCE_SPOT_TESTNET_BASE_URL",
+        "BINANCE_SPOT_LIVE_BASE_URL",
         "BINANCE_SPOT_BASE_URL",
+        "BINANCE_FUTURES_TESTNET_BASE_URL",
+        "BINANCE_FUTURES_LIVE_BASE_URL",
+        "BINANCE_FUTURES_BASE_URL",
         "BINANCE_SPOT_TESTNET_PROXY_TOKEN",
+        "BINANCE_SPOT_LIVE_PROXY_TOKEN",
         "BINANCE_SPOT_PROXY_TOKEN",
+        "BINANCE_FUTURES_TESTNET_PROXY_TOKEN",
+        "BINANCE_FUTURES_LIVE_PROXY_TOKEN",
+        "BINANCE_FUTURES_PROXY_TOKEN",
         "BINANCE_PROXY_TOKEN",
         "BINANCE_TESTNET_API_KEY",
         "BINANCE_TESTNET_API_SECRET",
@@ -932,17 +940,29 @@ def wizard_rollback_live() -> dict:
 
 def get_proxy_exchange_health_snapshot(db: Session) -> dict:
     _hydrate_binance_env_from_file()
-    spot_base_url = str(os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL") or "").strip()
-    futures_base_url = str(os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL") or os.environ.get("BINANCE_FUTURES_BASE_URL") or "").strip()
+    spot_base_url = str(
+        os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
+        or os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL")
+        or os.environ.get("BINANCE_SPOT_BASE_URL")
+        or ""
+    ).strip()
+    futures_base_url = str(
+        os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
+        or os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL")
+        or os.environ.get("BINANCE_FUTURES_BASE_URL")
+        or ""
+    ).strip()
 
     spot_token = str(
-        os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN")
+        os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
+        or os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN")
         or os.environ.get("BINANCE_SPOT_PROXY_TOKEN")
         or os.environ.get("BINANCE_PROXY_TOKEN")
         or ""
     ).strip()
     futures_token = str(
-        os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN")
+        os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
+        or os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN")
         or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN")
         or os.environ.get("BINANCE_PROXY_TOKEN")
         or ""
