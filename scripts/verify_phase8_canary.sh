@@ -54,11 +54,28 @@ USER_EMAIL="${CANARY_TEST_USER_EMAIL:-canary_$(date +%s)@example.com}"
 USER_PASSWORD="${CANARY_TEST_USER_PASSWORD:-CanaryPass123!}"
 TESTNET_API_KEY="${BINANCE_TESTNET_API_KEY:-}"
 TESTNET_API_SECRET="${BINANCE_TESTNET_API_SECRET:-}"
+LIVE_API_KEY="${BINANCE_LIVE_API_KEY:-${BINANCE_API_KEY:-}}"
+LIVE_API_SECRET="${BINANCE_LIVE_API_SECRET:-${BINANCE_API_SECRET:-}}"
 EXCHANGE_MODE="${CANARY_EXCHANGE_MODE:-testnet}"
 EXCHANGE_MARKET_TYPE="${CANARY_EXCHANGE_MARKET_TYPE:-futures}"
 EXCHANGE_ENVIRONMENT="${CANARY_EXCHANGE_ENVIRONMENT:-testnet}"
+CANARY_AUTO_FALLBACK_LIVE="${CANARY_AUTO_FALLBACK_LIVE:-true}"
 
-[[ -n "${TESTNET_API_KEY}" && -n "${TESTNET_API_SECRET}" ]] || fail "Gerçek execution için BINANCE_TESTNET_API_KEY/SECRET zorunlu"
+resolve_exchange_credentials() {
+  case "${EXCHANGE_MODE}" in
+    live)
+      ACTIVE_API_KEY="${LIVE_API_KEY}"
+      ACTIVE_API_SECRET="${LIVE_API_SECRET}"
+      ;;
+    *)
+      ACTIVE_API_KEY="${TESTNET_API_KEY}"
+      ACTIVE_API_SECRET="${TESTNET_API_SECRET}"
+      ;;
+  esac
+}
+
+resolve_exchange_credentials
+[[ -n "${ACTIVE_API_KEY}" && -n "${ACTIVE_API_SECRET}" ]] || fail "Exchange key/secret eksik. mode=${EXCHANGE_MODE} için gerekli anahtarlar bulunamadı"
 
 RUN_SECONDS="${CANARY_RUN_SECONDS:-$((60 * 60))}"
 if [[ "${RUN_SECONDS}" -lt 60 ]]; then
@@ -140,17 +157,54 @@ PY
 }
 
 set_exchange_keys() {
+  resolve_exchange_credentials
+  [[ -n "${ACTIVE_API_KEY}" && -n "${ACTIVE_API_SECRET}" ]] || fail "Exchange key/secret eksik. mode=${EXCHANGE_MODE}"
   local payload
-  payload="{\"exchange\":\"binance\",\"mode\":\"${EXCHANGE_MODE}\",\"api_key\":\"${TESTNET_API_KEY}\",\"api_secret\":\"${TESTNET_API_SECRET}\"}"
+  payload="{\"exchange\":\"binance\",\"mode\":\"${EXCHANGE_MODE}\",\"api_key\":\"${ACTIVE_API_KEY}\",\"api_secret\":\"${ACTIVE_API_SECRET}\"}"
   local code
   code="$(request_json PUT "${BASE_URL}/api/phase4/exchange-settings" "${payload}" "${USER_TOKEN}" "/tmp/faz8_exchange_settings.json")"
   [[ "${code}" == "200" ]] || fail "Exchange settings update başarısız http=${code}"
   log "PASS: exchange settings güncellendi mode=${EXCHANGE_MODE}"
 }
 
+has_reason_code() {
+  local file="$1"
+  local reason="$2"
+  python - <<PY
+import json
+from pathlib import Path
+p=Path('${file}')
+try:
+    data=json.loads(p.read_text(encoding='utf-8'))
+except Exception:
+    print('false')
+    raise SystemExit
+detail=data.get('detail') if isinstance(data,dict) else None
+codes=[]
+if isinstance(detail,dict):
+    codes=list(detail.get('reason_codes') or [])
+print('true' if '${reason}' in [str(c) for c in codes] else 'false')
+PY
+}
+
 validate_exchange_ready() {
   local code
   code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
+
+  if [[ "${code}" != "200" ]]; then
+    local invalid_key
+    invalid_key="$(has_reason_code "/tmp/faz8_exchange_validate.json" "invalid_key")"
+    if [[ "${invalid_key}" == "true" && "${EXCHANGE_MODE}" == "testnet" && "${CANARY_AUTO_FALLBACK_LIVE}" == "true" ]]; then
+      if [[ -n "${LIVE_API_KEY}" && -n "${LIVE_API_SECRET}" ]]; then
+        log "WARN: testnet invalid_key alındı, live mode fallback deneniyor"
+        EXCHANGE_MODE="live"
+        EXCHANGE_ENVIRONMENT="live"
+        set_exchange_keys
+        code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
+      fi
+    fi
+  fi
+
   [[ "${code}" == "200" ]] || fail_with_body "Exchange validate başarısız http=${code}" "/tmp/faz8_exchange_validate.json"
   log "PASS: exchange validate market=${EXCHANGE_MARKET_TYPE} env=${EXCHANGE_ENVIRONMENT}"
 }
