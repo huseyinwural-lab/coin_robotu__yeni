@@ -1,0 +1,269 @@
+{
+  "schema_version": "1.0",
+  "proof_type": "execution_safety_gate_snapshot",
+  "created_at": "2026-04-02T12:57:06.847738+00:00",
+  "gate": {
+    "gate_state": "BLOCKED",
+    "execution_allowed": false,
+    "hard_blockers": [
+      "BALANCE_DATA_MISSING",
+      "BALANCE_DATA_STALE",
+      "BINANCE_PROBE_FAIL",
+      "CANCEL_PATH_INVALID",
+      "CREDENTIAL_ENV_MISMATCH",
+      "DRAW_DOWN_DATA_MISSING",
+      "DRY_RUN_REQUIRED",
+      "EXCHANGE_API_UNAVAILABLE",
+      "EXCHANGE_CONNECTION_UNHEALTHY",
+      "EXECUTION_LIFECYCLE_SYNC_FAIL",
+      "EXECUTION_PROOF_MOCKED_PATHS",
+      "EXECUTION_PROOF_ONLY_MOCKED",
+      "EXECUTION_PROOF_REAL_METRIC_MISSING",
+      "EXPOSURE_NO_EQUITY",
+      "FILL_PATH_INVALID",
+      "MARGIN_DATA_MISSING",
+      "MARKET_DATA_MISSING",
+      "OPEN_ORDERS_DATA_MISSING",
+      "OPEN_ORDERS_MISMATCH",
+      "PARTIAL_FILL_INVALID",
+      "POSITION_DATA_MISSING",
+      "REJECT_PATH_INVALID",
+      "STRATEGY_ENGINE_UNKNOWN",
+      "TESTNET_TRADING_DISABLED",
+      "TICK_TO_TRADE_BLOCK",
+      "TICK_TO_TRADE_P99_BLOCK",
+      "WEBSOCKET_MISSING",
+      "WORKER_STATE_UNKNOWN"
+    ],
+    "soft_warnings": [
+      "{'STEP_KEY': 'CANCEL_TEST', 'LAYER': 'EXECUTION', 'REASON_CODE': 'EXECUTION_CANCEL_MOCKED'}",
+      "{'STEP_KEY': 'DRY_RUN_ORDER', 'LAYER': 'EXECUTION', 'REASON_CODE': 'EXECUTION_TEST_MOCKED'}"
+    ],
+    "hard_blockers_detail": [
+      {
+        "step_key": "EXCHANGE_CONNECTION_READY",
+        "reason_code": "EXCHANGE_CONNECTION_UNHEALTHY",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "CREDENTIALS_ENV_MATCH",
+        "reason_code": "CREDENTIAL_ENV_MISMATCH",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "BALANCES_PRESENT",
+        "reason_code": "BALANCE_DATA_MISSING",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "POSITIONS_PRESENT",
+        "reason_code": "POSITION_DATA_MISSING",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "OPEN_ORDERS_PRESENT",
+        "reason_code": "OPEN_ORDERS_DATA_MISSING",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "MARKET_DATA_PRESENT",
+        "reason_code": "MARKET_DATA_MISSING",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "BALANCE_CHECK",
+        "reason_code": "BALANCE_DATA_STALE",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "OPEN_ORDERS_SYNC",
+        "reason_code": "OPEN_ORDERS_MISMATCH",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "MARGIN_AVAILABILITY",
+        "reason_code": "MARGIN_DATA_MISSING",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "API_CONNECTIVITY",
+        "reason_code": "EXCHANGE_API_UNAVAILABLE",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "WEBSOCKET_HEALTH",
+        "reason_code": "WEBSOCKET_MISSING",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "VENUE_CONNECTIVITY_BINANCE",
+        "reason_code": "BINANCE_PROBE_FAIL",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "PARTIAL_FILL_HANDLING",
+        "reason_code": "PARTIAL_FILL_INVALID",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "FILL_PATH",
+        "reason_code": "FILL_PATH_INVALID",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "CANCEL_PATH",
+        "reason_code": "CANCEL_PATH_INVALID",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "REJECT_PATH",
+        "reason_code": "REJECT_PATH_INVALID",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "LIFECYCLE_DB_EVENT_SYNC",
+        "reason_code": "EXECUTION_LIFECYCLE_SYNC_FAIL",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "EXECUTION_PROOF_QUALITY",
+        "reason_code": "EXECUTION_PROOF_ONLY_MOCKED",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "POSITION_SIZE_LIMIT",
+        "reason_code": "EXPOSURE_NO_EQUITY",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "WORKER_STATE",
+        "reason_code": "WORKER_STATE_UNKNOWN",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "STRATEGY_ENGINE",
+        "reason_code": "STRATEGY_ENGINE_UNKNOWN",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "TICK_TO_TRADE_LATENCY",
+        "reason_code": "TICK_TO_TRADE_BLOCK",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "TICK_TO_TRADE_PERCENTILES",
+        "reason_code": "TICK_TO_TRADE_P99_BLOCK",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "DRY_RUN_REQUIRED",
+        "reason_code": "DRY_RUN_REQUIRED",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "CAPITAL_GUARD",
+        "reason_code": "DRAW_DOWN_DATA_MISSING",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "EXPOSURE_LIMIT",
+        "reason_code": "EXPOSURE_NO_EQUITY",
+        "message": "blocking_failure"
+      },
+      {
+        "step_key": "READINESS",
+        "reason_code": "EXCHANGE_CONNECTION_UNHEALTHY",
+        "message": "validator_reason_code"
+      },
+      {
+        "step_key": "READINESS",
+        "reason_code": "MARKET_DATA_MISSING",
+        "message": "validator_reason_code"
+      },
+      {
+        "step_key": "BYBIT_ORDER_SMOKE",
+        "reason_code": "TESTNET_TRADING_DISABLED",
+        "message": "TESTNET_TRADING_ENABLED=false"
+      },
+      {
+        "step_key": "EXCHANGE_CONNECTION_READY",
+        "reason_code": "EXCHANGE_CONNECTION_UNHEALTHY",
+        "message": "hard_block_step_failure"
+      },
+      {
+        "step_key": "MARKET_DATA_PRESENT",
+        "reason_code": "MARKET_DATA_MISSING",
+        "message": "hard_block_step_failure"
+      },
+      {
+        "step_key": "PROOF_QUALITY",
+        "reason_code": "EXECUTION_PROOF_MOCKED_PATHS",
+        "message": "execution_proof_has_mocked_paths"
+      },
+      {
+        "step_key": "PROOF_QUALITY",
+        "reason_code": "EXECUTION_PROOF_REAL_METRIC_MISSING",
+        "message": "real_metric_count<=0"
+      },
+      {
+        "step_key": "EXECUTION_MODE",
+        "reason_code": "TESTNET_TRADING_DISABLED",
+        "message": "TESTNET_TRADING_ENABLED=false"
+      }
+    ],
+    "readiness_state": "BLOCKED",
+    "readiness_score": 100.0,
+    "go_live_allowed": false,
+    "validator_reason_codes": [
+      "BALANCE_DATA_MISSING",
+      "BALANCE_DATA_STALE",
+      "BINANCE_PROBE_FAIL",
+      "CANCEL_PATH_INVALID",
+      "CREDENTIAL_ENV_MISMATCH",
+      "DRAW_DOWN_DATA_MISSING",
+      "DRY_RUN_REQUIRED",
+      "EXCHANGE_API_UNAVAILABLE",
+      "EXCHANGE_CONNECTION_UNHEALTHY",
+      "EXECUTION_CANCEL_MOCKED",
+      "EXECUTION_LIFECYCLE_SYNC_FAIL",
+      "EXECUTION_PROOF_ONLY_MOCKED",
+      "EXECUTION_TEST_MOCKED",
+      "EXPOSURE_NO_EQUITY",
+      "FILL_PATH_INVALID",
+      "MARGIN_DATA_MISSING",
+      "MARKET_DATA_MISSING",
+      "OPEN_ORDERS_DATA_MISSING",
+      "OPEN_ORDERS_MISMATCH",
+      "PARTIAL_FILL_INVALID",
+      "POSITION_DATA_MISSING",
+      "REJECT_PATH_INVALID",
+      "STRATEGY_ENGINE_UNKNOWN",
+      "TICK_TO_TRADE_BLOCK",
+      "TICK_TO_TRADE_P99_BLOCK",
+      "WEBSOCKET_MISSING",
+      "WORKER_STATE_UNKNOWN"
+    ],
+    "bybit_order_smoke": {
+      "status": "FAIL",
+      "reason_code": "TESTNET_TRADING_DISABLED",
+      "detail": "TESTNET_TRADING_ENABLED=false",
+      "checked_at": "2026-04-02T12:57:06.847665+00:00"
+    },
+    "checked_at": "2026-04-02T12:57:06.847738+00:00"
+  },
+  "validator": {
+    "execution_mode": "LIVE",
+    "execution_allowed": false,
+    "readiness_state": "BLOCKED",
+    "score": 100.0
+  },
+  "metadata": {
+    "schema_version": "1.0",
+    "artifact_type": "execution_safety_gate",
+    "created_at": "2026-04-02T12:57:06.847763+00:00",
+    "artifact_id": "bc065516-d331-4ddf-b264-3bf6d00c512e",
+    "sha256": "32509b0fcfb5cc257ae79bfc07f3902c450b85fac00e1559dc6ba163882072f5"
+  },
+  "artifact_type": "execution_safety_gate",
+  "sha256": "32509b0fcfb5cc257ae79bfc07f3902c450b85fac00e1559dc6ba163882072f5"
+}

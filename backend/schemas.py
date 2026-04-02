@@ -5373,6 +5373,8 @@ class ProductionGateStatusResponse(BaseModel):
     risk_explanation: list[str] = Field(default_factory=list)
     risk_model_version: str = "v2-explainable"
     flapping_checks: list[str] = Field(default_factory=list)
+    policy_bypass_applied: bool = False
+    policy_blocking_mode: str = "FULL"
     updated_at: datetime
     updated_by_user_id: str | None = None
     audit_history: list[ProductionGateAuditItemResponse] = Field(default_factory=list)

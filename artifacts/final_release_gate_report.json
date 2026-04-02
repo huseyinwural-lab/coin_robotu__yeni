@@ -1,6 +1,6 @@
 {
   "phase": "FAZ_D0_TASK_10",
-  "generated_at": "2026-04-02T12:49:41.454770+00:00",
+  "generated_at": "2026-04-02T13:14:30.321258+00:00",
   "final_decision": "GO",
   "artifact_status": {
     "prod_env_preflight": {
@@ -38,7 +38,20 @@
       "exists": true,
       "status": "PASS",
       "raw_status": "PASS"
+    },
+    "production_gate_snapshot": {
+      "path": "/app/artifacts/final/production_gate_snapshot.json",
+      "exists": true,
+      "status": "PASS",
+      "raw_status": {
+        "deploy_allowed": true,
+        "effective_state": "GO",
+        "updated_at": "2026-04-02T13:13:46.819340Z",
+        "fresh": true,
+        "source": "live_api"
+      }
     }
   },
-  "blocking_items": []
+  "blocking_items": [],
+  "warnings": []
 }

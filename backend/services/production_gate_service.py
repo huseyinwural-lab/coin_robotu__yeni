@@ -34,6 +34,16 @@ KILL_SWITCH_ONLY_BLOCKING = str(os.getenv("KILL_SWITCH_ONLY_BLOCKING", "true") o
     "true",
     "yes",
 }
+AUTO_RERUN_STALE_ON_READ = str(os.getenv("PRODUCTION_GATE_AUTO_RERUN_STALE_ON_READ", "true") or "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
+AUTO_RECONCILE_AFTER_OVERRIDE_EXPIRE = str(os.getenv("PRODUCTION_GATE_AUTO_RECONCILE_AFTER_OVERRIDE_EXPIRE", "true") or "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 DEFAULT_CHECKLIST = [
     {"item_key": "change_window_confirmed", "title": "Change window confirmed", "required": True},
@@ -748,6 +758,23 @@ def _resolve_status(store: dict) -> dict:
             f"reason_codes={','.join(unique_codes) if unique_codes else 'unknown'}"
         )
 
+    policy_bypass_applied = False
+    if KILL_SWITCH_ONLY_BLOCKING:
+        kill_switch_codes = [code for code in unique_codes if _is_kill_switch_reason(code)]
+        if len(kill_switch_codes) == 0 and not deploy_allowed and configured_state in {"GO", "GO_WITH_OVERRIDE"}:
+            policy_bypass_applied = True
+            unique_codes = []
+            blocked_reason_text = None
+            effective_state = "GO_WITH_OVERRIDE" if configured_state == "GO_WITH_OVERRIDE" and active_override is not None else "GO"
+            deploy_allowed = True
+        elif len(kill_switch_codes) > 0:
+            unique_codes = list(dict.fromkeys(kill_switch_codes))
+            deploy_allowed = False
+            blocked_reason_text = (
+                "Deploy/LIVE aktivasyonu Kill Switch nedeniyle engellendi. "
+                f"reason_codes={','.join(unique_codes)}"
+            )
+
     release_gate_contract = "UNKNOWN"
     for check in checks:
         if str(check.get("check_key") or "") == "release_gate_contract":
@@ -789,6 +816,8 @@ def _resolve_status(store: dict) -> dict:
         "risk_explanation": risk_payload["explanation"],
         "risk_model_version": "v2-explainable",
         "flapping_checks": flapping_checks,
+        "policy_bypass_applied": policy_bypass_applied,
+        "policy_blocking_mode": "KILL_SWITCH_ONLY" if KILL_SWITCH_ONLY_BLOCKING else "FULL",
         "updated_at": _parse_dt(store.get("updated_at")) or now,
         "updated_by_user_id": store.get("updated_by_user_id"),
     }
@@ -1597,10 +1626,10 @@ def get_production_gate_status(db: Session, *, refresh_checks: bool = False, aud
     run_history_cleanup_job(db, force=False)
     store = _load_store(db)
     changed = False
+    auto_reconciled = False
+    auto_reconcile_previous_state = None
 
     if refresh_checks or len(list(store.get("checks") or [])) == 0:
-        # Uzun süren remediation scriptleri sonrası stale DB connection riskini azalt.
-        db.close()
         remediation_state = build_prod_config_remediation_state(db)
         store["checks"] = _build_checks_from_remediation(remediation_state)
         store["updated_at"] = _iso(_utcnow())
@@ -1609,8 +1638,58 @@ def get_production_gate_status(db: Session, *, refresh_checks: bool = False, aud
     if _sync_override_expiry(db, store=store):
         changed = True
 
+    preview_status = _resolve_status(store)
+    if AUTO_RERUN_STALE_ON_READ and bool(preview_status.get("has_stale_or_running")):
+        remediation_state = build_prod_config_remediation_state(db)
+        store["checks"] = _build_checks_from_remediation(remediation_state)
+        store["updated_at"] = _iso(_utcnow())
+        changed = True
+        preview_status = _resolve_status(store)
+
+    if AUTO_RECONCILE_AFTER_OVERRIDE_EXPIRE:
+        transition_reason = str((store.get("last_transition") or {}).get("reason_code") or "").strip().upper()
+        can_auto_reconcile = (
+            str(preview_status.get("configured_state") or "NO_GO") == "NO_GO"
+            and bool(preview_status.get("checklist_complete"))
+            and bool(preview_status.get("checks_all_pass"))
+            and not bool(preview_status.get("has_stale_or_running"))
+            and transition_reason == "OVERRIDE_EXPIRED"
+        )
+        if can_auto_reconcile:
+            auto_reconcile_previous_state = str(store.get("state") or "NO_GO")
+            store["state"] = "GO"
+            store["updated_at"] = _iso(_utcnow())
+            store["last_transition"] = {
+                "previous_state": auto_reconcile_previous_state,
+                "next_state": "GO",
+                "reason_code": "AUTO_RECONCILE_AFTER_OVERRIDE_EXPIRE",
+                "reason_text": "Override süresi dolduktan sonra tüm kontroller PASS olduğu için GO durumuna otomatik geçildi.",
+                "expiry": _iso(_parse_dt((store.get("override") or {}).get("expires_at"))) if store.get("override") else None,
+                "changed_at": _iso(_utcnow()),
+            }
+            changed = True
+            auto_reconciled = True
+
     if changed:
         store = _persist_store(db, store=store, actor_user_id=store.get("updated_by_user_id"))
+
+    if auto_reconciled:
+        create_audit_log(
+            db,
+            action="PRODUCTION_GATE_STATE_AUTO_RECONCILED",
+            entity_type=PRODUCTION_GATE_ENTITY_TYPE,
+            entity_id="global",
+            actor_user_id=None,
+            actor_role="system",
+            severity="info",
+            details={
+                "previous_state": auto_reconcile_previous_state,
+                "next_state": "GO",
+                "reason_code": "AUTO_RECONCILE_AFTER_OVERRIDE_EXPIRE",
+                "reason_text": "override_expired_checks_passed",
+                "expiry": _iso(_parse_dt((store.get("override") or {}).get("expires_at"))) if store.get("override") else None,
+            },
+        )
 
     status_payload = _resolve_status(store)
     status_payload["audit_history"] = _list_audit_history(db, limit=audit_limit) if audit_limit > 0 else []
