@@ -175,6 +175,19 @@ READY_QUEUE_PRESSURE_STATE = {
 # Contract-test compatibility: some tests monkeypatch `server.engine` directly.
 ENGINE_COMPAT = engine
 
+
+def _runtime_env() -> str:
+    return str(
+        os.getenv("APP_ENV")
+        or os.getenv("ENVIRONMENT")
+        or os.getenv("RUNTIME_ENV")
+        or ""
+    ).strip().lower()
+
+
+def _is_production_runtime() -> bool:
+    return _runtime_env() in {"prod", "production"}
+
 fastapi_app = FastAPI(title="Algorithmic Trading Platform API", version="0.2.0")
 api_router = APIRouter(prefix="/api")
 
@@ -248,7 +261,10 @@ def _ready_dependency_checks() -> tuple[bool, dict[str, dict]]:
         ready = False
         checks["redis"] = {"status": "not_ready", "reason": str(exc)[:200]}
 
-    preview_gate_required = str(os.getenv("PREVIEW_SMOKE_GATE_REQUIRED", "true") or "true").strip().lower() in {
+    preview_gate_default = "true" if _is_production_runtime() else "false"
+    preview_gate_required = str(
+        os.getenv("PREVIEW_SMOKE_GATE_REQUIRED", preview_gate_default) or preview_gate_default
+    ).strip().lower() in {
         "1",
         "true",
         "yes",
@@ -301,7 +317,10 @@ def readiness_check():
 
             queue_size = int(snapshot.get("queue_size", 0))
             queue_limit = int(QUEUE_SIZE_THRESHOLD * READY_QUEUE_CRITICAL_FACTOR)
-            queue_strict = str(os.getenv("READY_EXECUTION_QUEUE_STRICT", "true") or "true").strip().lower() in {
+            queue_strict_default = "true" if _is_production_runtime() else "false"
+            queue_strict = str(
+                os.getenv("READY_EXECUTION_QUEUE_STRICT", queue_strict_default) or queue_strict_default
+            ).strip().lower() in {
                 "1",
                 "true",
                 "yes",

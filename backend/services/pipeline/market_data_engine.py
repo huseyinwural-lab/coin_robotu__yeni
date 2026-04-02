@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import random
 from datetime import datetime, timezone
 
@@ -119,7 +120,21 @@ class MarketDataEngine:
         for symbol in symbols:
             lower = symbol.lower()
             streams.extend([f"{lower}@ticker", f"{lower}@kline_15m", f"{lower}@kline_1h", f"{lower}@depth5@100ms"])
-        return f"wss://stream.binance.com:9443/stream?streams={'/'.join(streams)}"
+
+        stream_payload = "/".join(streams)
+        base_url = str(os.getenv("BINANCE_WS_STREAM_BASE_URL") or "wss://stream.binance.com:9443/stream").strip()
+        if not base_url:
+            base_url = "wss://stream.binance.com:9443/stream"
+
+        if "{streams}" in base_url:
+            return base_url.replace("{streams}", stream_payload)
+
+        normalized = base_url.rstrip("/")
+        if "streams=" in normalized:
+            return f"{normalized}{stream_payload}"
+        if normalized.endswith("/stream"):
+            return f"{normalized}?streams={stream_payload}"
+        return f"{normalized}/stream?streams={stream_payload}"
 
     async def _process_message(self, raw_message: str):
         payload = json.loads(raw_message)
