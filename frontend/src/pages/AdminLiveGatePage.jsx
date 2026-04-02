@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, CircleAlert, CircleDashed, RefreshCw } from "lucide-react";
+import { CheckCircle2, CircleAlert, CircleDashed, Lock, RefreshCw, Wrench } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
@@ -16,14 +16,28 @@ const hasAnyReason = (readiness, list) => {
   return list.some((item) => codes.has(item));
 };
 
+const COMPLETION_STORAGE_KEY = "live_gate_wizard_completions_v1";
+
 export const AdminLiveGatePage = () => {
   const [loading, setLoading] = useState(true);
   const [rerunLoading, setRerunLoading] = useState(false);
+  const [unblockLoading, setUnblockLoading] = useState(false);
   const [gate, setGate] = useState(null);
   const [readiness, setReadiness] = useState(null);
   const [liveConfig, setLiveConfig] = useState(null);
   const [proxyHealth, setProxyHealth] = useState(null);
+  const [manualComplete, setManualComplete] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(COMPLETION_STORAGE_KEY) || "{}");
+    } catch {
+      return {};
+    }
+  });
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem(COMPLETION_STORAGE_KEY, JSON.stringify(manualComplete));
+  }, [manualComplete]);
 
   const load = async () => {
     setLoading(true);
@@ -61,6 +75,65 @@ export const AdminLiveGatePage = () => {
       await load();
     } finally {
       setRerunLoading(false);
+    }
+  };
+
+  const ensureAllowedMarketEnabled = async (exchange, market, environment) => {
+    const listResp = await apiClient.get("/venues/admin/allowed-markets");
+    const rows = listResp.data || [];
+    const found = rows.find(
+      (row) =>
+        String(row.exchange_code || "").toLowerCase() === exchange &&
+        String(row.market_type || "").toLowerCase() === market &&
+        String(row.environment || "").toLowerCase() === environment,
+    );
+    if (!found) {
+      await apiClient.post("/venues/admin/allowed-markets", {
+        exchange_code: exchange,
+        market_type: market,
+        environment,
+        enabled: true,
+      });
+      return;
+    }
+    if (!found.enabled) {
+      await apiClient.put(`/venues/admin/allowed-markets/${found.id}`, { enabled: true });
+    }
+  };
+
+  const autoUnblock = async () => {
+    setUnblockLoading(true);
+    setError("");
+    try {
+      await apiClient.post("/phase4/admin/production-gate/checks/rerun", {});
+
+      const gateResp = await apiClient.get("/phase4/admin/production-gate?refresh_checks=false");
+      const currentGate = gateResp.data || {};
+      if (currentGate.effective_state !== "GO") {
+        await apiClient.post("/phase4/admin/production-gate/state", {
+          target_state: "GO",
+          reason_code: "LIVE_GATE_AUTO_UNBLOCK",
+          reason_text: "live gate auto unblock",
+        });
+      }
+
+      const configResp = await apiClient.get("/phase4/live-config");
+      const config = configResp.data || {};
+      await apiClient.put("/phase4/live-config", {
+        ...config,
+        kill_switch_enabled: false,
+        trading_enabled: true,
+      });
+
+      await ensureAllowedMarketEnabled("binance", "futures", "live");
+      await ensureAllowedMarketEnabled("binance", "spot", "live");
+
+      await load();
+    } catch (unblockError) {
+      const message = unblockError?.response?.data?.detail || "Otomatik blokaj kaldırma sırasında hata oluştu.";
+      setError(String(message));
+    } finally {
+      setUnblockLoading(false);
     }
   };
 
@@ -148,6 +221,30 @@ export const AdminLiveGatePage = () => {
     ];
   }, [gate, readiness, liveConfig, proxyHealth]);
 
+  const wizardSteps = useMemo(() => {
+    return steps.map((step, index) => {
+      const previous = steps.slice(0, index);
+      const previousDone = previous.every((item) => item.state === "PASS" || manualComplete[item.id]);
+      const unlocked = index === 0 || previousDone;
+      const done = step.state === "PASS" || !!manualComplete[step.id];
+      return { ...step, unlocked, done };
+    });
+  }, [steps, manualComplete]);
+
+  const doneCount = wizardSteps.filter((item) => item.done).length;
+
+  const markStepDone = (id) => {
+    setManualComplete((prev) => ({ ...prev, [id]: true }));
+  };
+
+  const resetStepDone = (id) => {
+    setManualComplete((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
   return (
     <section className="space-y-5" data-testid="admin-live-gate-page">
       <div className="rounded border border-slate-700 bg-slate-900/60 p-4" data-testid="admin-live-gate-header-card">
@@ -174,13 +271,25 @@ export const AdminLiveGatePage = () => {
             >
               {rerunLoading ? "Rerun..." : "Gate Checks Rerun"}
             </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={autoUnblock}
+              disabled={unblockLoading}
+              data-testid="admin-live-gate-auto-unblock-button"
+            >
+              <Wrench className="mr-2 h-4 w-4" /> {unblockLoading ? "Blokaj kaldırılıyor..." : "Blokajları Otomatik Kaldır"}
+            </Button>
           </div>
         </div>
+        <p className="mt-3 text-sm text-slate-300" data-testid="admin-live-gate-progress-text">
+          Wizard İlerlemesi: <strong>{doneCount}/10</strong>
+        </p>
         {error ? <p className="mt-3 text-sm text-amber-300" data-testid="admin-live-gate-error-text">{error}</p> : null}
       </div>
 
       <div className="grid gap-3 md:grid-cols-2" data-testid="admin-live-gate-steps-grid">
-        {steps.map((step) => {
+        {wizardSteps.map((step) => {
           const meta = stateMeta[step.state] || stateMeta.WAIT;
           const Icon = meta.icon;
           return (
@@ -190,15 +299,47 @@ export const AdminLiveGatePage = () => {
                   <p className="text-xs uppercase text-slate-400" data-testid={`admin-live-gate-step-index-${step.id}`}>Adım {step.id}</p>
                   <h2 className="text-base font-semibold text-slate-100" data-testid={`admin-live-gate-step-title-${step.id}`}>{step.title}</h2>
                   <p className="mt-1 text-sm text-slate-300" data-testid={`admin-live-gate-step-desc-${step.id}`}>{step.desc}</p>
+                  {!step.unlocked ? (
+                    <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-300" data-testid={`admin-live-gate-step-locked-${step.id}`}>
+                      <Lock className="h-3 w-3" /> Önce önceki adımları tamamla
+                    </p>
+                  ) : null}
                 </div>
                 <span className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-xs ${meta.className}`} data-testid={`admin-live-gate-step-badge-${step.id}`}>
                   <Icon className="h-3.5 w-3.5" /> {meta.label}
                 </span>
               </div>
-              <div className="mt-3">
-                <Link to={step.to} data-testid={`admin-live-gate-step-link-${step.id}`} className="text-sm font-medium text-cyan-300 hover:text-cyan-200">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Link
+                  to={step.unlocked ? step.to : "#"}
+                  onClick={(event) => {
+                    if (!step.unlocked) event.preventDefault();
+                  }}
+                  data-testid={`admin-live-gate-step-link-${step.id}`}
+                  className={`text-sm font-medium ${step.unlocked ? "text-cyan-300 hover:text-cyan-200" : "cursor-not-allowed text-slate-500"}`}
+                >
                   İlgili ekrana git →
                 </Link>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!step.unlocked || step.done}
+                  onClick={() => markStepDone(step.id)}
+                  data-testid={`admin-live-gate-step-complete-button-${step.id}`}
+                >
+                  Tamamlandı İşaretle
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={!manualComplete[step.id]}
+                  onClick={() => resetStepDone(step.id)}
+                  data-testid={`admin-live-gate-step-reset-button-${step.id}`}
+                >
+                  İşareti Kaldır
+                </Button>
               </div>
             </article>
           );
