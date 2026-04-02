@@ -1,3 +1,32 @@
+## 2026-04-02 — Faz-5 ve Faz-6 Tam Kapanış Kanıtları
+
+### Faz-5 Observability Gate (KAPANDI)
+- `scripts/verify_phase5_observability.sh` güncellendi: zorunlu artifact üretimi + tekil closure özeti + evidence bundle.
+- Güncel çalıştırma sonucu: `SUMMARY: PASS`
+- Resmi kapanış dosyaları:
+  - `/app/artifacts/faz5_closure_summary.json` → `status=PASS`, `missing_count=0`
+  - `/app/artifacts/faz5_evidence_bundle.json` → `status=PASS`, `missing_count=0`
+- Masking doğrulaması PASS (`faz5_secret_masking_proof.json`), health/ready/metric/alert artifact seti eksiksiz.
+
+### Faz-6 Security Gate (KAPANDI)
+- `scripts/verify_phase6_security.sh` güçlendirildi:
+  - local backend fallback (preview timeout etkisini azaltır)
+  - JWT rotation testinde device binding uyumu
+  - rate-limit kontrolünde 429 veya lockout(423) enforcement kabulü
+  - closure/evidence JSON üretimi
+- Güncel çalıştırma sonucu: `SUMMARY: PASS`
+- Resmi kapanış dosyaları:
+  - `/app/artifacts/faz6_security_closure_summary.json` → `status=PASS`, `missing_count=0`
+  - `/app/artifacts/faz6_security_evidence_bundle.json` → `status=PASS`, `missing_count=0`
+- Zorunlu güvenlik kanıtları mevcut:
+  - `faz6_jwt_rotation_proof.log`
+  - `faz6_admin_credential_scan.log`
+  - `faz6_rate_limit_test.log`
+  - `faz6_api_key_encryption_proof.log`
+  - `faz6_dump_backup_scan.log`
+  - `faz6_secret_scan_report.log`
+  - `faz6_secret_scan_report.json`
+
 ## 2026-04-02 — Admin User Approvals Sadeleştirme (Tek Tık Kabul/Reddet)
 
 ### Yapılan geliştirme

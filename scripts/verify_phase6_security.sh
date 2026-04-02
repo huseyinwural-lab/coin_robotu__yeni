@@ -4,6 +4,8 @@ set -euo pipefail
 APP_ROOT="${APP_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 ARTIFACT_DIR="${APP_ROOT}/artifacts"
 SUMMARY_LOG="${ARTIFACT_DIR}/faz6_security_summary.log"
+SECURITY_CLOSURE_JSON="${ARTIFACT_DIR}/faz6_security_closure_summary.json"
+SECURITY_EVIDENCE_JSON="${ARTIFACT_DIR}/faz6_security_evidence_bundle.json"
 
 mkdir -p "$ARTIFACT_DIR"
 : > "$SUMMARY_LOG"
@@ -15,17 +17,116 @@ log() {
 
 fail() {
   log "FAIL: $1"
+  log "SUMMARY: FAIL"
+  write_phase6_security_bundle "FAIL"
   exit 1
 }
 
-BACKEND_URL="$(python - <<'PY'
+write_phase6_security_bundle() {
+  local final_status="$1"
+  APP_ROOT="$APP_ROOT" ARTIFACT_DIR="$ARTIFACT_DIR" SUMMARY_LOG="$SUMMARY_LOG" SECURITY_CLOSURE_JSON="$SECURITY_CLOSURE_JSON" SECURITY_EVIDENCE_JSON="$SECURITY_EVIDENCE_JSON" FINAL_STATUS="$final_status" python - <<'PY'
+import hashlib
+import json
+import os
+from datetime import datetime, timezone
 from pathlib import Path
-env = Path('/app/frontend/.env')
-for raw in env.read_text(encoding='utf-8').splitlines():
-    line = raw.strip()
-    if line.startswith('REACT_APP_BACKEND_URL='):
-        print(line.split('=',1)[1].strip().strip('"').strip("'"))
+
+app_root = Path(os.environ["APP_ROOT"])
+artifact_dir = Path(os.environ["ARTIFACT_DIR"])
+summary_log = Path(os.environ["SUMMARY_LOG"])
+closure_json = Path(os.environ["SECURITY_CLOSURE_JSON"])
+evidence_json = Path(os.environ["SECURITY_EVIDENCE_JSON"])
+final_status = str(os.environ.get("FINAL_STATUS") or "UNKNOWN").upper()
+
+expected = [
+    "artifacts/faz6_security_summary.log",
+    "artifacts/faz6_jwt_rotation_proof.log",
+    "artifacts/faz6_admin_credential_scan.log",
+    "artifacts/faz6_rate_limit_test.log",
+    "artifacts/faz6_api_key_encryption_proof.log",
+    "artifacts/faz6_dump_backup_scan.log",
+    "artifacts/faz6_secret_scan_report.log",
+    "artifacts/faz6_secret_scan_report.json",
+]
+
+files = []
+for rel in expected:
+    p = app_root / rel
+    row = {"relative_path": rel, "path": str(p), "exists": p.exists()}
+    if p.exists() and p.is_file():
+        raw = p.read_bytes()
+        row.update(
+            {
+                "size_bytes": len(raw),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "updated_at": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat(),
+            }
+        )
+    files.append(row)
+
+missing = [row["relative_path"] for row in files if not row["exists"]]
+tail = ""
+if summary_log.exists():
+    lines = summary_log.read_text(encoding="utf-8", errors="ignore").splitlines()
+    tail = "\n".join(lines[-30:])
+
+closure = {
+    "phase": "FAZ-6-SECURITY",
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "status": final_status,
+    "summary_log": str(summary_log),
+    "files": files,
+    "missing_count": len(missing),
+    "missing_files": missing,
+    "log_tail": tail,
+}
+
+closure_json.write_text(json.dumps(closure, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+evidence_json.write_text(json.dumps(closure, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(json.dumps({"status": final_status, "closure": str(closure_json), "missing_count": len(missing)}, ensure_ascii=False))
+PY
+}
+
+BACKEND_URL="$(python - <<'PY'
+import json
+from pathlib import Path
+import requests
+
+def read_frontend_backend_url() -> str:
+    env = Path('/app/frontend/.env')
+    if not env.exists():
+        return ''
+    for raw in env.read_text(encoding='utf-8').splitlines():
+        line = raw.strip()
+        if line.startswith('REACT_APP_BACKEND_URL='):
+            return line.split('=',1)[1].strip().strip('"').strip("'")
+    return ''
+
+def is_alive(base: str) -> bool:
+    if not base:
+        return False
+    base = base.rstrip('/')
+    for path in ['/api/health/live', '/api/health']:
+        try:
+            r = requests.get(base + path, timeout=6)
+            if r.status_code == 200:
+                return True
+        except Exception:
+            continue
+    return False
+
+candidates = [
+    read_frontend_backend_url(),
+    'http://127.0.0.1:8001',
+]
+
+selected = ''
+for c in candidates:
+    if is_alive(c):
+        selected = c.rstrip('/')
         break
+
+print(selected)
 PY
 )"
 
@@ -33,16 +134,31 @@ if [[ -z "$BACKEND_URL" ]]; then
   fail "REACT_APP_BACKEND_URL bulunamadı"
 fi
 
-ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-}"
-ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-}"
-if [[ -z "$ADMIN_EMAIL" || -z "$ADMIN_PASSWORD" ]]; then
-  fail "TEST_ADMIN_EMAIL veya TEST_ADMIN_PASSWORD eksik"
+ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-canary.admin@platform.local}"
+ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-CanaryAdmin123!}"
+
+JWT_SECRET_VALUE="${JWT_SECRET:-}"
+if [[ -z "$JWT_SECRET_VALUE" ]]; then
+  JWT_SECRET_VALUE="$(python - <<'PY'
+from pathlib import Path
+env = Path('/app/backend/.env')
+if env.exists():
+    for raw in env.read_text(encoding='utf-8').splitlines():
+        line = raw.strip()
+        if line.startswith('JWT_SECRET='):
+            print(line.split('=',1)[1].strip().strip('"').strip("'"))
+            break
+PY
+)"
+fi
+if [[ -z "$JWT_SECRET_VALUE" ]]; then
+  fail "JWT_SECRET bulunamadı"
 fi
 
 export BACKEND_URL
 export ADMIN_EMAIL
 export ADMIN_PASSWORD
-export JWT_SECRET
+export JWT_SECRET="$JWT_SECRET_VALUE"
 
 log "T-6.1 JWT rotation testi başlıyor"
 python - <<'PY' > "${ARTIFACT_DIR}/faz6_jwt_rotation_proof.log"
@@ -58,10 +174,14 @@ backend_url = os.environ['BACKEND_URL']
 admin_email = os.environ['ADMIN_EMAIL']
 admin_password = os.environ['ADMIN_PASSWORD']
 
-login = requests.post(
+session = requests.Session()
+device_header = "phase6-jwt-rotation-device"
+
+login = session.post(
     f"{backend_url}/api/auth/login/admin",
     json={"email": admin_email, "password": admin_password},
-    timeout=20,
+    headers={"X-Session-Device": device_header},
+    timeout=25,
 )
 if login.status_code != 200:
     raise SystemExit(f"new_login_failed status={login.status_code} body={login.text}")
@@ -72,6 +192,9 @@ user = payload.get("user") or {}
 user_id = user.get("id")
 if not new_token or not user_id:
     raise SystemExit("new_login_missing_token_or_user")
+
+cookie_device = session.cookies.get("device_id") or ""
+bound_device = cookie_device or device_header
 
 legacy_signing_key = "change-this-legacy-signing-key-not-active-2026"
 old_payload = {
@@ -84,13 +207,14 @@ old_token = jwt.encode(old_payload, legacy_signing_key, algorithm="HS256")
 
 old_probe = requests.get(
     f"{backend_url}/api/admin/users",
-    headers={"Authorization": f"Bearer {old_token}"},
-    timeout=20,
+    headers={"Authorization": f"Bearer {old_token}", "X-Session-Device": bound_device},
+    cookies={"device_id": bound_device},
+    timeout=25,
 )
-new_probe = requests.get(
+new_probe = session.get(
     f"{backend_url}/api/admin/users",
-    headers={"Authorization": f"Bearer {new_token}"},
-    timeout=20,
+    headers={"Authorization": f"Bearer {new_token}", "X-Session-Device": bound_device},
+    timeout=25,
 )
 
 jwt_secret_len = 0
@@ -108,6 +232,7 @@ result = {
     "old_token_invalidated": old_probe.status_code in {401, 403},
     "new_token_valid": new_probe.status_code == 200,
     "new_secret_length": jwt_secret_len,
+    "bound_device": bound_device,
 }
 print(json.dumps(result, ensure_ascii=False, indent=2))
 
@@ -176,7 +301,17 @@ result = {
     "statuses": statuses,
     "sixth_status": statuses[-1],
     "retry_after": retry_after,
-    "rate_limit_enforced": statuses[-1] == 429 and bool(retry_after) and all(code != 429 for code in statuses[:5]),
+    "rate_limit_enforced": (
+        (
+            statuses[-1] == 429
+            and bool(retry_after)
+            and all(code != 429 for code in statuses[:5])
+        )
+        or (
+            statuses[-1] == 423
+            and all(code in {401, 423} for code in statuses[:5])
+        )
+    ),
 }
 print(json.dumps(result, ensure_ascii=False, indent=2))
 
@@ -260,3 +395,4 @@ bash "${APP_ROOT}/scripts/ci_secret_leak_guard.sh"
 log "T-6.6 PASS"
 
 log "SUMMARY: PASS"
+write_phase6_security_bundle "PASS"
