@@ -19,6 +19,29 @@ fail() {
   exit 1
 }
 
+fail_with_body() {
+  local message="$1"
+  local body_file="$2"
+  if [[ -f "${body_file}" ]]; then
+    local preview
+    preview="$(python - <<PY
+import json
+from pathlib import Path
+p=Path('${body_file}')
+text=p.read_text(encoding='utf-8', errors='ignore')[:1000]
+try:
+    obj=json.loads(text)
+    print(json.dumps(obj, ensure_ascii=False)[:1000])
+except Exception:
+    print(text.replace('\n',' '))
+PY
+)"
+    fail "${message} body=${preview}"
+  else
+    fail "${message} (body yok)"
+  fi
+}
+
 BASE_URL="${REACT_APP_BACKEND_URL:-}"
 if [[ -z "${BASE_URL}" && -f "${ROOT_DIR}/frontend/.env" ]]; then
   BASE_URL="$(grep -E '^REACT_APP_BACKEND_URL=' "${ROOT_DIR}/frontend/.env" | head -n1 | cut -d'=' -f2- || true)"
@@ -147,8 +170,36 @@ open('/tmp/faz8_live_config_put.json','w',encoding='utf-8').write(json.dumps(cfg
 PY
   local payload code
   payload="$(cat /tmp/faz8_live_config_put.json)"
-  code="$(request_json PUT "${BASE_URL}/api/phase4/live-config" "${payload}" "${ADMIN_TOKEN}" "/tmp/faz8_live_config_updated.json")"
-  [[ "${code}" == "200" ]] || fail "live-config update başarısız http=${code}"
+  local attempt max_attempts sleep_seconds
+  attempt=1
+  max_attempts=4
+  sleep_seconds=2
+  while true; do
+    code="$(request_json PUT "${BASE_URL}/api/phase4/live-config" "${payload}" "${ADMIN_TOKEN}" "/tmp/faz8_live_config_updated.json")"
+    if [[ "${code}" == "200" ]]; then
+      break
+    fi
+
+    # token süresi/oturum hatası durumunda admin token yenile
+    if [[ "${code}" == "401" ]]; then
+      log "WARN: live-config PUT 401, admin token yenileniyor (attempt=${attempt})"
+      login_admin
+    fi
+
+    # geçici backend dalgalanmaları için retry (CI flakey 5xx)
+    if [[ "${code}" == "500" || "${code}" == "502" || "${code}" == "503" || "${code}" == "504" ]]; then
+      if [[ "${attempt}" -lt "${max_attempts}" ]]; then
+        log "WARN: live-config PUT transient http=${code}, retry ${attempt}/${max_attempts}"
+        sleep "${sleep_seconds}"
+        attempt="$((attempt + 1))"
+        continue
+      fi
+      fail_with_body "live-config update başarısız http=${code}" "/tmp/faz8_live_config_updated.json"
+    fi
+
+    # 403/422 gibi deterministic hatalarda direkt gövdeyi göster
+    fail_with_body "live-config update başarısız http=${code}" "/tmp/faz8_live_config_updated.json"
+  done
   log "PASS: canary config güncellendi symbols=${symbols_json} cap=${max_capital} max_pos=${max_positions}"
 }
 
