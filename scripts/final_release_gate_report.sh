@@ -194,27 +194,32 @@ pg_entry = {
 
 if live_snapshot_payload is not None:
     payload = dict(live_snapshot_payload)
+    snapshot_write_ok = True
+    snapshot_write_error = None
     try:
         production_gate_snapshot_path.parent.mkdir(parents=True, exist_ok=True)
         production_gate_snapshot_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        snapshot_write_ok = False
+        snapshot_write_error = str(exc)
 
     deploy_allowed = bool(payload.get('deploy_allowed'))
     effective_state = str(payload.get('effective_state') or '').upper()
     updated_at_raw = str(payload.get('updated_at') or '').strip()
     is_fresh = True
-    pass_state = deploy_allowed and effective_state in {'GO', 'GO_WITH_OVERRIDE'}
+    pass_state = deploy_allowed and effective_state in {'GO', 'GO_WITH_OVERRIDE'} and snapshot_write_ok
     pg_entry['raw_status'] = {
         'deploy_allowed': deploy_allowed,
         'effective_state': effective_state,
         'updated_at': updated_at_raw,
         'fresh': is_fresh,
         'source': 'live_api',
+        'snapshot_write_ok': snapshot_write_ok,
+        'snapshot_write_error': snapshot_write_error,
     }
     pg_entry['status'] = 'PASS' if pass_state else 'FAIL'
     if not pass_state:
-        blocking_items.append({'artifact': 'production_gate_snapshot', 'reason': f'deploy_allowed={deploy_allowed},effective_state={effective_state},source=live_api'})
+        blocking_items.append({'artifact': 'production_gate_snapshot', 'reason': f'deploy_allowed={deploy_allowed},effective_state={effective_state},source=live_api,snapshot_write_ok={snapshot_write_ok}'})
 elif production_gate_snapshot_path.exists():
     try:
         payload = json.loads(production_gate_snapshot_path.read_text(encoding='utf-8'))
@@ -253,6 +258,44 @@ if live_snapshot_error:
     warnings.append({'artifact': 'production_gate_snapshot_live_fetch', 'reason': live_snapshot_error[:200]})
 
 results['production_gate_snapshot'] = pg_entry
+
+# Hard consistency lock:
+# final_decision GO üretilecekse snapshot dosyası ile aynı gate durumunu taşımalı.
+consistency_entry = {
+    'path': str(production_gate_snapshot_path),
+    'exists': production_gate_snapshot_path.exists(),
+    'status': 'SKIPPED',
+    'raw_status': None,
+}
+try:
+    if production_gate_snapshot_path.exists() and isinstance((results.get('production_gate_snapshot') or {}).get('raw_status'), dict):
+        disk_payload = json.loads(production_gate_snapshot_path.read_text(encoding='utf-8'))
+        memory_payload = (results.get('production_gate_snapshot') or {}).get('raw_status') or {}
+        disk_effective_state = str(disk_payload.get('effective_state') or '').upper()
+        disk_deploy_allowed = bool(disk_payload.get('deploy_allowed'))
+        mem_effective_state = str(memory_payload.get('effective_state') or '').upper()
+        mem_deploy_allowed = bool(memory_payload.get('deploy_allowed'))
+        matched = (disk_effective_state == mem_effective_state) and (disk_deploy_allowed == mem_deploy_allowed)
+        consistency_entry['status'] = 'PASS' if matched else 'FAIL'
+        consistency_entry['raw_status'] = {
+            'matched': matched,
+            'disk_effective_state': disk_effective_state,
+            'disk_deploy_allowed': disk_deploy_allowed,
+            'memory_effective_state': mem_effective_state,
+            'memory_deploy_allowed': mem_deploy_allowed,
+        }
+        if not matched:
+            blocking_items.append({'artifact': 'production_gate_snapshot_consistency', 'reason': 'disk_vs_report_payload_mismatch'})
+    else:
+        consistency_entry['status'] = 'FAIL'
+        consistency_entry['raw_status'] = {'reason': 'snapshot_missing_or_invalid'}
+        blocking_items.append({'artifact': 'production_gate_snapshot_consistency', 'reason': 'snapshot_missing_or_invalid'})
+except Exception as exc:
+    consistency_entry['status'] = 'FAIL'
+    consistency_entry['raw_status'] = {'reason': f'consistency_check_error:{exc}'}
+    blocking_items.append({'artifact': 'production_gate_snapshot_consistency', 'reason': 'consistency_check_error'})
+
+results['production_gate_snapshot_consistency'] = consistency_entry
 
 final_decision = 'GO' if not blocking_items else 'NO_GO'
 

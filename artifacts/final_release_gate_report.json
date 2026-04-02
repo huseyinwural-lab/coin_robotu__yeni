@@ -1,6 +1,6 @@
 {
   "phase": "FAZ_D0_TASK_10",
-  "generated_at": "2026-04-02T13:14:30.321258+00:00",
+  "generated_at": "2026-04-02T13:26:51.023655+00:00",
   "final_decision": "GO",
   "artifact_status": {
     "prod_env_preflight": {
@@ -48,7 +48,21 @@
         "effective_state": "GO",
         "updated_at": "2026-04-02T13:13:46.819340Z",
         "fresh": true,
-        "source": "live_api"
+        "source": "live_api",
+        "snapshot_write_ok": true,
+        "snapshot_write_error": null
+      }
+    },
+    "production_gate_snapshot_consistency": {
+      "path": "/app/artifacts/final/production_gate_snapshot.json",
+      "exists": true,
+      "status": "PASS",
+      "raw_status": {
+        "matched": true,
+        "disk_effective_state": "GO",
+        "disk_deploy_allowed": true,
+        "memory_effective_state": "GO",
+        "memory_deploy_allowed": true
       }
     }
   },
