@@ -5402,6 +5402,16 @@ class ProductionGateModeTransitionRequest(BaseModel):
     confirmation_phrase: str = Field(min_length=5, max_length=80)
 
 
+class LiveGateWizardProgressUpdateRequest(BaseModel):
+    completed_step_ids: list[int] = Field(default_factory=list)
+
+
+class LiveGateWizardProgressResponse(BaseModel):
+    user_id: str
+    completed_step_ids: list[int] = Field(default_factory=list)
+    updated_at: datetime
+
+
 class ProductionGateExportResponse(BaseModel):
     exported_at: datetime
     gate: ProductionGateStatusResponse

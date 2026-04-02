@@ -45,6 +45,8 @@ from schemas import (
     ProductionGateStateUpdateRequest,
     ProductionGateStatusResponse,
     ProductionGateTimelineResponse,
+    LiveGateWizardProgressResponse,
+    LiveGateWizardProgressUpdateRequest,
 )
 from services.audit_service import create_audit_log
 from services.execution_mode_control_service import get_execution_mode, normalize_execution_mode, switch_execution_mode
@@ -107,6 +109,7 @@ from services.faz56_live_expansion_service import (
     get_or_create_expansion_state,
     latest_daily_live_report,
 )
+from services.identity_control_service import get_or_create_identity_profile
 
 router = APIRouter(prefix="/phase4", tags=["phase4_live"])
 logger = logging.getLogger(__name__)
@@ -117,6 +120,47 @@ MODE_TRANSITION_PHRASES = {
     "PAPER": "SWITCH TO PAPER",
     "MOCK": "SWITCH TO MOCK",
 }
+
+LIVE_GATE_WIZARD_SNAPSHOT_KEY = "live_gate_wizard"
+
+
+def _read_live_gate_progress(db: Session, user_id: str) -> tuple[list[int], datetime]:
+    profile = get_or_create_identity_profile(db, user_id, commit=True)
+    snapshot = dict(profile.compliance_snapshot or {})
+    wizard = snapshot.get(LIVE_GATE_WIZARD_SNAPSHOT_KEY) if isinstance(snapshot, dict) else {}
+    if not isinstance(wizard, dict):
+        wizard = {}
+
+    raw_steps = wizard.get("completed_step_ids") or []
+    step_ids = sorted({int(item) for item in raw_steps if isinstance(item, int) or str(item).isdigit()})
+
+    updated_at_raw = wizard.get("updated_at")
+    updated_at = datetime.now(timezone.utc)
+    if isinstance(updated_at_raw, str):
+        try:
+            updated_at = datetime.fromisoformat(updated_at_raw.replace("Z", "+00:00"))
+        except Exception:
+            updated_at = datetime.now(timezone.utc)
+    elif profile.updated_at:
+        updated_at = profile.updated_at
+
+    return step_ids, updated_at
+
+
+def _write_live_gate_progress(db: Session, user_id: str, completed_step_ids: list[int]) -> tuple[list[int], datetime]:
+    profile = get_or_create_identity_profile(db, user_id, commit=True)
+    snapshot = dict(profile.compliance_snapshot or {})
+    now = datetime.now(timezone.utc)
+    normalized = sorted({int(item) for item in completed_step_ids if isinstance(item, int) or str(item).isdigit()})
+    snapshot[LIVE_GATE_WIZARD_SNAPSHOT_KEY] = {
+        "completed_step_ids": normalized,
+        "updated_at": now.isoformat(),
+    }
+    profile.compliance_snapshot = snapshot
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return normalized, now
 
 
 class Faz56ActionRequest(BaseModel):
@@ -233,6 +277,39 @@ def get_live_readiness(_: User = Depends(require_admin), db: Session = Depends(g
         checks=report["checks"],
         safe_limits=report["safe_limits"],
         docs_references=report["docs_references"],
+    )
+
+
+@router.get("/admin/live-gate/wizard-progress", response_model=LiveGateWizardProgressResponse)
+def get_live_gate_wizard_progress(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    completed_step_ids, updated_at = _read_live_gate_progress(db, current_admin.id)
+    return LiveGateWizardProgressResponse(
+        user_id=current_admin.id,
+        completed_step_ids=completed_step_ids,
+        updated_at=updated_at,
+    )
+
+
+@router.put("/admin/live-gate/wizard-progress", response_model=LiveGateWizardProgressResponse)
+def update_live_gate_wizard_progress(
+    payload: LiveGateWizardProgressUpdateRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    completed_step_ids, updated_at = _write_live_gate_progress(db, current_admin.id, payload.completed_step_ids)
+    create_audit_log(
+        db,
+        action="phase4_live_gate_progress_updated",
+        entity_type="live_gate_wizard",
+        entity_id=current_admin.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={"completed_step_ids": completed_step_ids},
+    )
+    return LiveGateWizardProgressResponse(
+        user_id=current_admin.id,
+        completed_step_ids=completed_step_ids,
+        updated_at=updated_at,
     )
 
 

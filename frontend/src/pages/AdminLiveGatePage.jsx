@@ -16,44 +16,40 @@ const hasAnyReason = (readiness, list) => {
   return list.some((item) => codes.has(item));
 };
 
-const COMPLETION_STORAGE_KEY = "live_gate_wizard_completions_v1";
-
 export const AdminLiveGatePage = () => {
   const [loading, setLoading] = useState(true);
   const [rerunLoading, setRerunLoading] = useState(false);
   const [unblockLoading, setUnblockLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState({});
   const [gate, setGate] = useState(null);
   const [readiness, setReadiness] = useState(null);
   const [liveConfig, setLiveConfig] = useState(null);
   const [proxyHealth, setProxyHealth] = useState(null);
-  const [manualComplete, setManualComplete] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(COMPLETION_STORAGE_KEY) || "{}");
-    } catch {
-      return {};
-    }
-  });
+  const [manualComplete, setManualComplete] = useState({});
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    localStorage.setItem(COMPLETION_STORAGE_KEY, JSON.stringify(manualComplete));
-  }, [manualComplete]);
 
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const [gateResp, readinessResp, configResp, proxyResp] = await Promise.allSettled([
+      const [gateResp, readinessResp, configResp, proxyResp, progressResp] = await Promise.allSettled([
         apiClient.get("/phase4/admin/production-gate?refresh_checks=false"),
         apiClient.get("/admin/execution-readiness"),
         apiClient.get("/phase4/live-config"),
         apiClient.get("/runtime/exchange/proxy-health"),
+        apiClient.get("/phase4/admin/live-gate/wizard-progress"),
       ]);
 
       setGate(gateResp.status === "fulfilled" ? gateResp.value.data : null);
       setReadiness(readinessResp.status === "fulfilled" ? readinessResp.value.data : null);
       setLiveConfig(configResp.status === "fulfilled" ? configResp.value.data : null);
       setProxyHealth(proxyResp.status === "fulfilled" ? proxyResp.value.data : null);
+
+      if (progressResp.status === "fulfilled") {
+        const ids = progressResp.value.data?.completed_step_ids || [];
+        const mapped = ids.reduce((acc, id) => ({ ...acc, [id]: true }), {});
+        setManualComplete(mapped);
+      }
 
       const hasHardFail = [gateResp, readinessResp].some((item) => item.status === "rejected");
       if (hasHardFail) {
@@ -67,6 +63,14 @@ export const AdminLiveGatePage = () => {
   useEffect(() => {
     load();
   }, []);
+
+  const saveProgress = async (nextMap) => {
+    const completedIds = Object.keys(nextMap)
+      .filter((key) => nextMap[key])
+      .map((key) => Number(key))
+      .sort((a, b) => a - b);
+    await apiClient.put("/phase4/admin/live-gate/wizard-progress", { completed_step_ids: completedIds });
+  };
 
   const rerunGate = async () => {
     setRerunLoading(true);
@@ -101,6 +105,16 @@ export const AdminLiveGatePage = () => {
     }
   };
 
+  const applyKillSwitch = async (enabled) => {
+    const configResp = await apiClient.get("/phase4/live-config");
+    const config = configResp.data || {};
+    await apiClient.put("/phase4/live-config", {
+      ...config,
+      kill_switch_enabled: enabled,
+      trading_enabled: !enabled,
+    });
+  };
+
   const autoUnblock = async () => {
     setUnblockLoading(true);
     setError("");
@@ -117,14 +131,7 @@ export const AdminLiveGatePage = () => {
         });
       }
 
-      const configResp = await apiClient.get("/phase4/live-config");
-      const config = configResp.data || {};
-      await apiClient.put("/phase4/live-config", {
-        ...config,
-        kill_switch_enabled: false,
-        trading_enabled: true,
-      });
-
+      await applyKillSwitch(false);
       await ensureAllowedMarketEnabled("binance", "futures", "live");
       await ensureAllowedMarketEnabled("binance", "spot", "live");
 
@@ -137,85 +144,51 @@ export const AdminLiveGatePage = () => {
     }
   };
 
+  const runStepFix = async (stepId) => {
+    setActionLoading((prev) => ({ ...prev, [stepId]: true }));
+    try {
+      if (stepId === 3) {
+        await ensureAllowedMarketEnabled("binance", "futures", "live");
+        await ensureAllowedMarketEnabled("binance", "spot", "live");
+      }
+      if (stepId === 8) {
+        await apiClient.post("/phase4/admin/production-gate/checks/rerun", {});
+      }
+      if (stepId === 9) {
+        await apiClient.post("/phase4/admin/production-gate/mode-transition", {
+          target_mode: "LIVE",
+          reason_text: "live gate step fix",
+          confirmation_phrase: "SWITCH TO LIVE",
+        });
+      }
+      await load();
+    } catch (stepError) {
+      const message = stepError?.response?.data?.detail || "Adım düzeltme işlemi başarısız oldu.";
+      setError(String(message));
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [stepId]: false }));
+    }
+  };
+
   const steps = useMemo(() => {
     const proxySpot = proxyHealth?.result?.spot || {};
     const proxyFutures = proxyHealth?.result?.futures || {};
 
     return [
-      {
-        id: 1,
-        title: "Key Girişi",
-        desc: "Kullanıcının Binance live API key/secret bağlantısı girilmiş olmalı.",
-        state: readiness?.exchange_connection === "OK" ? "PASS" : "FAIL",
-        to: "/user/exchange-settings",
-      },
-      {
-        id: 2,
-        title: "Key Doğrulama & Permission",
-        desc: "Permission ve can_trade doğrulaması geçmeli.",
-        state: readiness?.permissions === "OK" ? "PASS" : "FAIL",
-        to: "/admin/execution-readiness",
-      },
-      {
-        id: 3,
-        title: "Venue & Allowed Market",
-        desc: "Live spot/futures market açık olmalı, market_disabled olmamalı.",
-        state: hasAnyReason(readiness, ["market_disabled", "live_not_allowed", "assignment_required", "testnet_not_allowed"]) ? "FAIL" : "PASS",
-        to: "/admin/credential-orchestration",
-      },
-      {
-        id: 4,
-        title: "Kill Switch",
-        desc: "Canlıya çıkmadan önce kill switch kapalı, trading aktif olmalı.",
-        state: liveConfig?.kill_switch_enabled ? "FAIL" : "PASS",
-        to: "/admin/live-trading-dashboard",
-      },
-      {
-        id: 5,
-        title: "Risk Policy",
-        desc: "Risk Engine aktif ve readiness reason_code içinde risk bloklayıcı olmamalı.",
-        state: hasAnyReason(readiness, ["RISK_POLICY_MISSING", "EXPOSURE_NO_EQUITY", "MARGIN_DATA_MISSING"]) ? "FAIL" : "PASS",
-        to: "/admin/risk-orchestrator",
-      },
-      {
-        id: 6,
-        title: "Strategy Template",
-        desc: "Strateji motoru biliniyor olmalı (STRATEGY_ENGINE_UNKNOWN olmamalı).",
-        state: hasAnyReason(readiness, ["STRATEGY_ENGINE_UNKNOWN"]) ? "FAIL" : "PASS",
-        to: "/admin/strategies",
-      },
-      {
-        id: 7,
-        title: "Bot Oluştur & Başlat",
-        desc: "Bot profili oluşturup RUNNING durumuna alınmalı.",
-        state: hasAnyReason(readiness, ["ORDER_EXECUTION_MISSING", "WORKER_STATE_UNKNOWN"]) ? "WAIT" : "PASS",
-        to: "/user/bot-profiles",
-      },
-      {
-        id: 8,
-        title: "Production Gate Rerun",
-        desc: "Stale check kalmamalı. GO ve deploy_allowed=true olmalı.",
-        state: gate?.effective_state === "GO" && gate?.deploy_allowed ? "PASS" : "FAIL",
-        to: "/admin/live-trading-dashboard",
-      },
-      {
-        id: 9,
-        title: "Mode Transition LIVE",
-        desc: "Execution mode LIVE ve final_status READY olmalı.",
-        state: readiness?.mode === "LIVE" && readiness?.final_status === "READY" ? "PASS" : "FAIL",
-        to: "/admin/live-trading-dashboard",
-      },
+      { id: 1, title: "Key Girişi", desc: "Kullanıcının Binance live API key/secret bağlantısı girilmiş olmalı.", state: readiness?.exchange_connection === "OK" ? "PASS" : "FAIL", to: "/user/exchange-settings" },
+      { id: 2, title: "Key Doğrulama & Permission", desc: "Permission ve can_trade doğrulaması geçmeli.", state: readiness?.permissions === "OK" ? "PASS" : "FAIL", to: "/admin/execution-readiness" },
+      { id: 3, title: "Venue & Allowed Market", desc: "Live spot/futures market açık olmalı, market_disabled olmamalı.", state: hasAnyReason(readiness, ["market_disabled", "live_not_allowed", "assignment_required", "testnet_not_allowed"]) ? "FAIL" : "PASS", to: "/admin/credential-orchestration" },
+      { id: 4, title: "Kill Switch", desc: "Bu adımda blokaj koyma/kaldırma işlemi yapılır.", state: liveConfig?.kill_switch_enabled ? "FAIL" : "PASS", to: "/admin/live-trading-dashboard" },
+      { id: 5, title: "Risk Policy", desc: "Risk Engine aktif ve readiness reason_code içinde risk bloklayıcı olmamalı.", state: hasAnyReason(readiness, ["RISK_POLICY_MISSING", "EXPOSURE_NO_EQUITY", "MARGIN_DATA_MISSING"]) ? "FAIL" : "PASS", to: "/admin/risk-orchestrator" },
+      { id: 6, title: "Strategy Template", desc: "Strateji motoru biliniyor olmalı (STRATEGY_ENGINE_UNKNOWN olmamalı).", state: hasAnyReason(readiness, ["STRATEGY_ENGINE_UNKNOWN"]) ? "FAIL" : "PASS", to: "/admin/strategies" },
+      { id: 7, title: "Bot Oluştur & Başlat", desc: "Bot profili oluşturup RUNNING durumuna alınmalı.", state: hasAnyReason(readiness, ["ORDER_EXECUTION_MISSING", "WORKER_STATE_UNKNOWN"]) ? "WAIT" : "PASS", to: "/user/bot-profiles" },
+      { id: 8, title: "Production Gate Rerun", desc: "Stale check kalmamalı. GO ve deploy_allowed=true olmalı.", state: gate?.effective_state === "GO" && gate?.deploy_allowed ? "PASS" : "FAIL", to: "/admin/live-trading-dashboard" },
+      { id: 9, title: "Mode Transition LIVE", desc: "Execution mode LIVE ve final_status READY olmalı.", state: readiness?.mode === "LIVE" && readiness?.final_status === "READY" ? "PASS" : "FAIL", to: "/admin/live-trading-dashboard" },
       {
         id: 10,
         title: "Canlı Akış İzleme",
         desc: "Proxy health, execution readiness ve gate sürekli izlenmeli.",
-        state:
-          proxySpot?.proxy_token_set &&
-          proxySpot?.base_url_set &&
-          proxyFutures?.proxy_token_set &&
-          proxyFutures?.base_url_set
-            ? "PASS"
-            : "FAIL",
+        state: proxySpot?.proxy_token_set && proxySpot?.base_url_set && proxyFutures?.proxy_token_set && proxyFutures?.base_url_set ? "PASS" : "FAIL",
         to: "/admin/execution-readiness",
       },
     ];
@@ -233,16 +206,25 @@ export const AdminLiveGatePage = () => {
 
   const doneCount = wizardSteps.filter((item) => item.done).length;
 
-  const markStepDone = (id) => {
-    setManualComplete((prev) => ({ ...prev, [id]: true }));
+  const markStepDone = async (id) => {
+    const next = { ...manualComplete, [id]: true };
+    setManualComplete(next);
+    try {
+      await saveProgress(next);
+    } catch {
+      setError("Adım tamamlanma bilgisi backend'e kaydedilemedi.");
+    }
   };
 
-  const resetStepDone = (id) => {
-    setManualComplete((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
+  const resetStepDone = async (id) => {
+    const next = { ...manualComplete };
+    delete next[id];
+    setManualComplete(next);
+    try {
+      await saveProgress(next);
+    } catch {
+      setError("Adım sıfırlama bilgisi backend'e kaydedilemedi.");
+    }
   };
 
   return (
@@ -251,40 +233,21 @@ export const AdminLiveGatePage = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-slate-100" data-testid="admin-live-gate-title">Live Gate</h1>
-            <p className="text-sm text-slate-300" data-testid="admin-live-gate-subtitle">Canlıya alma prosedürü tek alanda, sıralı ve takip edilebilir.</p>
+            <p className="text-sm text-slate-300" data-testid="admin-live-gate-subtitle">Canlıya alma prosedürü tek alanda, sıralı ve kilitli wizard olarak yönetilir.</p>
           </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={load}
-              disabled={loading}
-              data-testid="admin-live-gate-refresh-button"
-            >
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={load} disabled={loading} data-testid="admin-live-gate-refresh-button">
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Yenile
             </Button>
-            <Button
-              type="button"
-              onClick={rerunGate}
-              disabled={rerunLoading}
-              data-testid="admin-live-gate-rerun-button"
-            >
+            <Button type="button" onClick={rerunGate} disabled={rerunLoading} data-testid="admin-live-gate-rerun-button">
               {rerunLoading ? "Rerun..." : "Gate Checks Rerun"}
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={autoUnblock}
-              disabled={unblockLoading}
-              data-testid="admin-live-gate-auto-unblock-button"
-            >
-              <Wrench className="mr-2 h-4 w-4" /> {unblockLoading ? "Blokaj kaldırılıyor..." : "Blokajları Otomatik Kaldır"}
+            <Button type="button" variant="secondary" onClick={autoUnblock} disabled={unblockLoading} data-testid="admin-live-gate-auto-unblock-button">
+              <Wrench className="mr-2 h-4 w-4" /> {unblockLoading ? "Blokaj kaldırılıyor..." : "Diğer Blokajları Kaldır"}
             </Button>
           </div>
         </div>
-        <p className="mt-3 text-sm text-slate-300" data-testid="admin-live-gate-progress-text">
-          Wizard İlerlemesi: <strong>{doneCount}/10</strong>
-        </p>
+        <p className="mt-3 text-sm text-slate-300" data-testid="admin-live-gate-progress-text">Wizard İlerlemesi: <strong>{doneCount}/10</strong></p>
         {error ? <p className="mt-3 text-sm text-amber-300" data-testid="admin-live-gate-error-text">{error}</p> : null}
       </div>
 
@@ -292,6 +255,9 @@ export const AdminLiveGatePage = () => {
         {wizardSteps.map((step) => {
           const meta = stateMeta[step.state] || stateMeta.WAIT;
           const Icon = meta.icon;
+          const isKillStep = step.id === 4;
+          const showFixButton = [3, 8, 9].includes(step.id);
+
           return (
             <article key={step.id} className="rounded border border-slate-700 bg-slate-900/60 p-4" data-testid={`admin-live-gate-step-card-${step.id}`}>
               <div className="flex items-start justify-between gap-3">
@@ -309,6 +275,7 @@ export const AdminLiveGatePage = () => {
                   <Icon className="h-3.5 w-3.5" /> {meta.label}
                 </span>
               </div>
+
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Link
                   to={step.unlocked ? step.to : "#"}
@@ -320,24 +287,65 @@ export const AdminLiveGatePage = () => {
                 >
                   İlgili ekrana git →
                 </Link>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={!step.unlocked || step.done}
-                  onClick={() => markStepDone(step.id)}
-                  data-testid={`admin-live-gate-step-complete-button-${step.id}`}
-                >
+
+                {showFixButton ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={!step.unlocked || !!actionLoading[step.id]}
+                    onClick={() => runStepFix(step.id)}
+                    data-testid={`admin-live-gate-step-fix-button-${step.id}`}
+                  >
+                    {actionLoading[step.id] ? "Çalışıyor..." : "Tek Tık Fix"}
+                  </Button>
+                ) : null}
+
+                {isKillStep ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      disabled={!step.unlocked || !!actionLoading[41]}
+                      onClick={async () => {
+                        setActionLoading((prev) => ({ ...prev, 41: true }));
+                        try {
+                          await applyKillSwitch(true);
+                          await load();
+                        } finally {
+                          setActionLoading((prev) => ({ ...prev, 41: false }));
+                        }
+                      }}
+                      data-testid="admin-live-gate-kill-switch-block-button"
+                    >
+                      {actionLoading[41] ? "Uygulanıyor..." : "Blokaj Koy"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={!step.unlocked || !!actionLoading[42]}
+                      onClick={async () => {
+                        setActionLoading((prev) => ({ ...prev, 42: true }));
+                        try {
+                          await applyKillSwitch(false);
+                          await load();
+                        } finally {
+                          setActionLoading((prev) => ({ ...prev, 42: false }));
+                        }
+                      }}
+                      data-testid="admin-live-gate-kill-switch-unblock-button"
+                    >
+                      {actionLoading[42] ? "Uygulanıyor..." : "Blokaj Kaldır"}
+                    </Button>
+                  </>
+                ) : null}
+
+                <Button type="button" size="sm" variant="outline" disabled={!step.unlocked || step.done} onClick={() => markStepDone(step.id)} data-testid={`admin-live-gate-step-complete-button-${step.id}`}>
                   Tamamlandı İşaretle
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={!manualComplete[step.id]}
-                  onClick={() => resetStepDone(step.id)}
-                  data-testid={`admin-live-gate-step-reset-button-${step.id}`}
-                >
+                <Button type="button" size="sm" variant="ghost" disabled={!manualComplete[step.id]} onClick={() => resetStepDone(step.id)} data-testid={`admin-live-gate-step-reset-button-${step.id}`}>
                   İşareti Kaldır
                 </Button>
               </div>
