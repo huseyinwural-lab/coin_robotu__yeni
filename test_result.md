@@ -4895,3 +4895,94 @@ All critical admin UI flows are working correctly on LOCAL environment:
 - `kill_switch_unblocked.png` - Kill Switch in unblocked state
 - `user_approvals_final.png` - User Approvals page with 7 pending requests
 
+
+
+## LOCAL ADMIN UI TEST - 2026-04-02
+
+### Test Request
+User requested LOCAL environment admin UI end-to-end test with same scope as previous tests:
+- Frontend URL: http://127.0.0.1:3000
+- Backend URL: http://127.0.0.1:8001
+- Credentials: canary.admin@platform.local / CanaryAdmin123!
+
+### Test Scope
+1. Admin login (/admin/login)
+2. Admin Live Gate (/admin/live-gate) - step cards, buttons, progress updates
+3. Kill Switch flow - block/unblock buttons, UI state reflection
+4. Admin User Approvals (/admin/user-approvals) - list rendering, approve/reject buttons, state updates
+5. Critical test-id checks
+
+### CRITICAL BLOCKER DETECTED
+
+**BLOCKER TYPE:** ORTAM YAPILANDIRMA HATASI (Environment Configuration Error)
+
+**ROOT CAUSE:** Frontend .env configured to call PREVIEW backend instead of LOCAL backend
+- Frontend .env: `REACT_APP_BACKEND_URL=https://trade-trace-engine.preview.emergentagent.com`
+- Expected for local testing: `REACT_APP_BACKEND_URL=http://127.0.0.1:8001`
+
+**EVIDENCE:**
+- Console errors show CORS blocking: "Access to XMLHttpRequest at 'https://trade-trace-engine.preview.emergentagent.com/api/auth/login/admin' from origin 'http://127.0.0.1:3000' has been blocked by CORS policy"
+- Backend logs show NO login attempts received on local backend (http://127.0.0.1:8001)
+- Frontend at http://127.0.0.1:3000 is calling preview backend, not local backend
+
+### Test Results Summary
+
+#### 1) Admin Login - FAIL ❌
+- ✅ Page loads at /admin/login
+- ✅ Form elements render correctly (email input, password input, submit button)
+- ✅ Form submit button clickable
+- ❌ Does NOT redirect to admin route after login
+- **Reason:** Login API call blocked by CORS (calling preview backend from local frontend)
+
+#### 2) Admin Live Gate - FAIL ❌
+- ❌ Page does NOT load at /admin/live-gate
+- **Reason:** User not authenticated (login failed due to CORS)
+
+#### 3) Kill Switch Flow - FAIL ❌
+- ❌ Block button NOT found
+- ❌ Unblock button NOT found
+- **Reason:** Live Gate page didn't load (authentication failed)
+
+#### 4) Admin User Approvals - FAIL ❌
+- ❌ Page does NOT load at /admin/user-approvals
+- **Reason:** User not authenticated (login failed due to CORS)
+
+#### 5) Critical Test-ID Checks - PARTIAL FAIL ⚠️
+**PASS (Admin Login Page):**
+- ✅ admin-login-page
+- ✅ admin-login-form
+- ✅ admin-login-email-input
+- ✅ admin-login-password-input
+- ✅ admin-login-submit-button
+
+**FAIL (Other Pages - Not Loaded):**
+- ❌ admin-live-gate-page
+- ❌ admin-live-gate-steps-grid
+- ❌ admin-user-approvals-page
+- ❌ admin-user-approvals-table
+
+### Network Analysis
+- Total requests: 112
+- Failed requests: 4 (all login API calls to preview backend)
+- Console errors: 21 (CORS errors, WebSocket connection errors)
+- Backend logs: NO login attempts received on local backend
+
+### Recommendation
+**CANNOT PROCEED WITHOUT ENVIRONMENT RECONFIGURATION**
+
+User explicitly requested NO code changes: "Bu sadece tekrar testidir, kod değişikliği yapma" (This is just a repeat test, do not make code changes).
+
+To enable local testing:
+1. Update frontend/.env: `REACT_APP_BACKEND_URL=http://127.0.0.1:8001`
+2. Restart frontend service: `sudo supervisorctl restart frontend`
+3. Rerun test
+
+### Screenshots
+- `admin_login_page.png` - Admin login page loaded successfully
+- `after_admin_login.png` - Still on login page after submit (no redirect due to CORS)
+- `admin_live_gate_error.png` - Live Gate page not loaded (authentication failed)
+- `admin_user_approvals_error.png` - User Approvals page not loaded (authentication failed)
+
+### Agent Communication
+- **Agent:** testing
+- **Message:** LOCAL ADMIN UI END-TO-END TEST BLOCKED BY ENVIRONMENT CONFIGURATION ERROR. Frontend .env configured to call PREVIEW backend (https://trade-trace-engine.preview.emergentagent.com) instead of LOCAL backend (http://127.0.0.1:8001). This causes CORS errors blocking all API calls. Admin login page loads correctly with all test-ids present, but login fails due to CORS. All subsequent tests blocked by authentication failure. User requested NO code changes, so test cannot proceed without environment reconfiguration. RECOMMENDATION: Update frontend/.env REACT_APP_BACKEND_URL to http://127.0.0.1:8001 for local testing.
