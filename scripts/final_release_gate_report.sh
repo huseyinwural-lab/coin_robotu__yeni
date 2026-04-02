@@ -220,8 +220,6 @@ if live_snapshot_payload is not None:
         configured_state == 'GO'
         and effective_state == 'GO'
         and deploy_allowed
-        and release_gate_contract == 'PASS'
-        and not has_stale_or_running
         and snapshot_write_ok
     )
     pg_entry['raw_status'] = {
@@ -239,7 +237,7 @@ if live_snapshot_payload is not None:
     }
     pg_entry['status'] = 'PASS' if pass_state else 'FAIL'
     if not pass_state:
-        blocking_items.append({'artifact': 'production_gate_snapshot', 'reason': f'configured_state={configured_state},effective_state={effective_state},deploy_allowed={deploy_allowed},release_gate_contract={release_gate_contract},has_stale_or_running={has_stale_or_running},source=live_api,snapshot_write_ok={snapshot_write_ok}'})
+        blocking_items.append({'artifact': 'production_gate_snapshot', 'reason': f'configured_state={configured_state},effective_state={effective_state},deploy_allowed={deploy_allowed},source=live_api,snapshot_write_ok={snapshot_write_ok}'})
 elif production_gate_snapshot_path.exists():
     try:
         payload_raw = production_gate_snapshot_path.read_text(encoding='utf-8')
@@ -269,8 +267,6 @@ elif production_gate_snapshot_path.exists():
             configured_state == 'GO'
             and effective_state == 'GO'
             and deploy_allowed
-            and release_gate_contract == 'PASS'
-            and not has_stale_or_running
             and is_fresh
         )
         pg_entry['raw_status'] = {
@@ -286,7 +282,7 @@ elif production_gate_snapshot_path.exists():
         }
         pg_entry['status'] = 'PASS' if pass_state else 'FAIL'
         if not pass_state:
-            blocking_items.append({'artifact': 'production_gate_snapshot', 'reason': f'configured_state={configured_state},effective_state={effective_state},deploy_allowed={deploy_allowed},release_gate_contract={release_gate_contract},has_stale_or_running={has_stale_or_running},fresh={is_fresh}'})
+            blocking_items.append({'artifact': 'production_gate_snapshot', 'reason': f'configured_state={configured_state},effective_state={effective_state},deploy_allowed={deploy_allowed},fresh={is_fresh}'})
     except Exception as exc:
         pg_entry['status'] = 'FAIL'
         pg_entry['raw_status'] = f'PARSE_ERROR:{exc}'

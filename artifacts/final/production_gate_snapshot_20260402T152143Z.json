@@ -1,13 +1,17 @@
 {
   "configured_state": "GO",
-  "effective_state": "GO",
-  "deploy_allowed": true,
+  "effective_state": "NO_GO",
+  "deploy_allowed": false,
   "checklist_complete": true,
-  "checks_all_pass": true,
+  "checks_all_pass": false,
   "has_stale_or_running": false,
-  "blocked_reason_codes": [],
-  "blocked_reason_text": null,
-  "release_gate_contract": "PASS",
+  "blocked_reason_codes": [
+    "failing_checks_present",
+    "release_gate_contract_fail",
+    "final_release_gate_fail"
+  ],
+  "blocked_reason_text": "Deploy/LIVE aktivasyonu release gate kontratı FAIL olduğu için engellendi. reason_codes=failing_checks_present,release_gate_contract_fail,final_release_gate_fail",
+  "release_gate_contract": "FAIL",
   "validation_block_http_status": 400,
   "deploy_block_http_status": 403,
   "checklist": [
@@ -57,7 +61,7 @@
         "suggested_action": null,
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-02T15:23:28.011462Z",
+      "last_run_at": "2026-04-02T13:13:46.819302Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -78,7 +82,7 @@
         "suggested_action": null,
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-02T15:23:28.011462Z",
+      "last_run_at": "2026-04-02T13:13:46.819302Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -99,7 +103,7 @@
         "suggested_action": null,
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-02T15:23:28.011462Z",
+      "last_run_at": "2026-04-02T13:13:46.819302Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -111,18 +115,16 @@
     {
       "check_key": "final_release_gate",
       "title": "Final Release Gate",
-      "status": "PASS",
-      "blocking": false,
-      "fail_reason": null,
-      "remediation": null,
+      "status": "FAIL",
+      "blocking": true,
+      "fail_reason": "raw_status=NO_GO",
+      "remediation": "Final release gate NO_GO nedenlerini giderin ve tekrar çalıştırın.",
       "remediation_payload": {
-        "severity": "info",
-        "suggested_action": null,
-        "runbook_ref": "RBK-GENERIC-001",
-        "policy_bypass_applied": true,
-        "policy_mode": "KILL_SWITCH_ONLY"
+        "severity": "critical",
+        "suggested_action": "Final release gate NO_GO nedenlerini giderin ve tekrar çalıştırın.",
+        "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-02T15:23:28.011462Z",
+      "last_run_at": "2026-04-02T13:13:46.819302Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -134,21 +136,19 @@
     {
       "check_key": "release_gate_contract",
       "title": "Release Gate Contract",
-      "status": "PASS",
-      "blocking": false,
-      "fail_reason": null,
-      "remediation": null,
+      "status": "FAIL",
+      "blocking": true,
+      "fail_reason": "final_release_gate_no_go",
+      "remediation": "Release gate BLOCKED reason_code listesindeki blokajları kapatın.",
       "remediation_payload": {
-        "severity": "info",
-        "suggested_action": null,
+        "severity": "critical",
+        "suggested_action": "Release gate BLOCKED reason_code listesindeki blokajları kapatın.",
         "reason_codes": [
           "final_release_gate_no_go"
         ],
-        "runbook_ref": "RBK-GATE-002",
-        "policy_bypass_applied": true,
-        "policy_mode": "KILL_SWITCH_ONLY"
+        "runbook_ref": "RBK-GATE-002"
       },
-      "last_run_at": "2026-04-02T15:23:28.011462Z",
+      "last_run_at": "2026-04-02T13:13:46.819302Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -159,22 +159,23 @@
     }
   ],
   "active_override": null,
-  "risk_score": 30,
-  "risk_level": "LOW",
+  "risk_score": 46,
+  "risk_level": "MEDIUM",
   "risk_factors": {
-    "fail_rate": 0.0,
+    "fail_rate": 0.4,
     "flapping": 0.0,
     "override_usage": 1.0,
     "stale_checks": 0.0
   },
   "risk_explanation": [
+    "High fail frequency detected",
     "Frequent override usage"
   ],
   "risk_model_version": "v2-explainable",
   "flapping_checks": [],
-  "policy_bypass_applied": true,
+  "policy_bypass_applied": false,
   "policy_blocking_mode": "KILL_SWITCH_ONLY",
-  "updated_at": "2026-04-02T15:23:28.011490Z",
+  "updated_at": "2026-04-02T13:32:02.277500Z",
   "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
   "audit_history": [
     {

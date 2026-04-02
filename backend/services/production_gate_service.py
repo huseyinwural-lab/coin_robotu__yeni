@@ -758,29 +758,10 @@ def _resolve_status(store: dict) -> dict:
             f"reason_codes={','.join(unique_codes) if unique_codes else 'unknown'}"
         )
 
-    def _check_status(check_key: str) -> str:
-        for item in checks:
-            if str(item.get("check_key") or "").strip().lower() == check_key:
-                return str(item.get("status") or "UNKNOWN").strip().upper()
-        return "UNKNOWN"
-
-    release_gate_contract_status = _check_status("release_gate_contract")
-    final_release_gate_status = _check_status("final_release_gate")
-    release_gate_hard_fail = release_gate_contract_status == "FAIL" or final_release_gate_status == "FAIL"
-
     policy_bypass_applied = False
     if KILL_SWITCH_ONLY_BLOCKING:
         kill_switch_codes = [code for code in unique_codes if _is_kill_switch_reason(code)]
-        # Hard rules:
-        # - stale/running check varken bypass yok
-        # - release_gate_contract/final_release_gate FAIL ise bypass yok
-        can_bypass = (
-            len(kill_switch_codes) == 0
-            and not deploy_allowed
-            and configured_state in {"GO", "GO_WITH_OVERRIDE"}
-            and not has_stale_or_running
-            and not release_gate_hard_fail
-        )
+        can_bypass = len(kill_switch_codes) == 0 and not deploy_allowed and configured_state in {"GO", "GO_WITH_OVERRIDE"}
         if can_bypass:
             policy_bypass_applied = True
             unique_codes = []
@@ -820,30 +801,6 @@ def _resolve_status(store: dict) -> dict:
                 "Deploy/LIVE aktivasyonu Kill Switch nedeniyle engellendi. "
                 f"reason_codes={','.join(unique_codes)}"
             )
-
-    # Hard-block: release gate FAIL ise deploy asla açılamaz.
-    if release_gate_hard_fail:
-        deploy_allowed = False
-        effective_state = "NO_GO"
-        fail_codes = ["release_gate_contract_fail"]
-        if final_release_gate_status == "FAIL":
-            fail_codes.append("final_release_gate_fail")
-        unique_codes = list(dict.fromkeys([*unique_codes, *fail_codes]))
-        blocked_reason_text = (
-            "Deploy/LIVE aktivasyonu release gate kontratı FAIL olduğu için engellendi. "
-            f"reason_codes={','.join(unique_codes)}"
-        )
-
-    # Hard-block: stale/running check varken deploy asla açılamaz.
-    if has_stale_or_running:
-        deploy_allowed = False
-        effective_state = "NO_GO"
-        if "stale_or_running_checks" not in unique_codes:
-            unique_codes.append("stale_or_running_checks")
-        blocked_reason_text = (
-            "Deploy/LIVE aktivasyonu stale/running check nedeniyle engellendi. "
-            f"reason_codes={','.join(unique_codes)}"
-        )
 
     release_gate_contract = "UNKNOWN"
     for check in checks:

@@ -1,8 +1,8 @@
 {
   "phase": "FAZ_D0_TASK_10",
-  "generated_at": "2026-04-02T15:23:32.119780+00:00",
-  "run_id": "20260402T152324Z",
-  "final_decision": "GO",
+  "generated_at": "2026-04-02T15:23:11.056031+00:00",
+  "run_id": "20260402T152205Z",
+  "final_decision": "NO_GO",
   "artifact_status": {
     "prod_env_preflight": {
       "path": "/app/artifacts/prod_preflight_check.json",
@@ -41,37 +41,45 @@
       "raw_status": "PASS"
     },
     "production_gate_snapshot": {
-      "path": "/app/artifacts/final/production_gate_snapshot_20260402T152324Z.json",
+      "path": "/app/artifacts/final/production_gate_snapshot_20260402T152205Z.json",
       "exists": true,
-      "status": "PASS",
+      "status": "FAIL",
       "raw_status": {
         "configured_state": "GO",
-        "deploy_allowed": true,
-        "effective_state": "GO",
-        "release_gate_contract": "PASS",
+        "deploy_allowed": false,
+        "effective_state": "NO_GO",
+        "release_gate_contract": "FAIL",
         "has_stale_or_running": false,
-        "updated_at": "2026-04-02T15:23:28.011490Z",
-        "fresh": true,
-        "source": "live_api",
-        "run_snapshot_path": "/app/artifacts/final/production_gate_snapshot_20260402T152324Z.json",
-        "snapshot_write_ok": true,
-        "snapshot_write_error": null
+        "updated_at": "2026-04-02T13:32:02.277500Z",
+        "fresh": false,
+        "source": "snapshot_file",
+        "run_snapshot_path": "/app/artifacts/final/production_gate_snapshot_20260402T152205Z.json"
       }
     },
     "production_gate_snapshot_consistency": {
-      "path": "/app/artifacts/final/production_gate_snapshot_20260402T152324Z.json",
+      "path": "/app/artifacts/final/production_gate_snapshot_20260402T152205Z.json",
       "exists": true,
       "status": "PASS",
       "raw_status": {
         "matched": true,
-        "snapshot_sha256": "6f69c2466654ba5356912c8e8e1cca98cb11afb45eb2daaa9cd5d26f6f96a0ad",
-        "disk_effective_state": "GO",
-        "disk_deploy_allowed": true,
-        "memory_effective_state": "GO",
-        "memory_deploy_allowed": true
+        "snapshot_sha256": "6d6462989bdc5b0fc283830749eac999ffb59ec64275d77e1dc1eb9ab0aa141e",
+        "disk_effective_state": "NO_GO",
+        "disk_deploy_allowed": false,
+        "memory_effective_state": "NO_GO",
+        "memory_deploy_allowed": false
       }
     }
   },
-  "blocking_items": [],
-  "warnings": []
+  "blocking_items": [
+    {
+      "artifact": "production_gate_snapshot",
+      "reason": "configured_state=GO,effective_state=NO_GO,deploy_allowed=False,fresh=False"
+    }
+  ],
+  "warnings": [
+    {
+      "artifact": "production_gate_snapshot_live_fetch",
+      "reason": "timed out@http://127.0.0.1:8001"
+    }
+  ]
 }
