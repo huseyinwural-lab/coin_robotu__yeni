@@ -54,6 +54,9 @@ USER_EMAIL="${CANARY_TEST_USER_EMAIL:-canary_$(date +%s)@example.com}"
 USER_PASSWORD="${CANARY_TEST_USER_PASSWORD:-CanaryPass123!}"
 TESTNET_API_KEY="${BINANCE_TESTNET_API_KEY:-}"
 TESTNET_API_SECRET="${BINANCE_TESTNET_API_SECRET:-}"
+EXCHANGE_MODE="${CANARY_EXCHANGE_MODE:-testnet}"
+EXCHANGE_MARKET_TYPE="${CANARY_EXCHANGE_MARKET_TYPE:-futures}"
+EXCHANGE_ENVIRONMENT="${CANARY_EXCHANGE_ENVIRONMENT:-testnet}"
 
 [[ -n "${TESTNET_API_KEY}" && -n "${TESTNET_API_SECRET}" ]] || fail "Gerçek execution için BINANCE_TESTNET_API_KEY/SECRET zorunlu"
 
@@ -138,18 +141,18 @@ PY
 
 set_exchange_keys() {
   local payload
-  payload="{\"exchange\":\"binance\",\"mode\":\"futures_testnet\",\"api_key\":\"${TESTNET_API_KEY}\",\"api_secret\":\"${TESTNET_API_SECRET}\"}"
+  payload="{\"exchange\":\"binance\",\"mode\":\"${EXCHANGE_MODE}\",\"api_key\":\"${TESTNET_API_KEY}\",\"api_secret\":\"${TESTNET_API_SECRET}\"}"
   local code
   code="$(request_json PUT "${BASE_URL}/api/phase4/exchange-settings" "${payload}" "${USER_TOKEN}" "/tmp/faz8_exchange_settings.json")"
   [[ "${code}" == "200" ]] || fail "Exchange settings update başarısız http=${code}"
-  log "PASS: exchange settings güncellendi"
+  log "PASS: exchange settings güncellendi mode=${EXCHANGE_MODE}"
 }
 
 validate_exchange_ready() {
   local code
-  code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=live" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
+  code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
   [[ "${code}" == "200" ]] || fail_with_body "Exchange validate başarısız http=${code}" "/tmp/faz8_exchange_validate.json"
-  log "PASS: exchange validate"
+  log "PASS: exchange validate market=${EXCHANGE_MARKET_TYPE} env=${EXCHANGE_ENVIRONMENT}"
 }
 
 load_live_config() {
