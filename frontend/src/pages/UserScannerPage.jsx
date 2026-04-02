@@ -222,6 +222,7 @@ export const UserScannerPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [mode, setMode] = useState("ASSISTED");
+  const [marketType, setMarketType] = useState("spot");
   const [overview, setOverview] = useState(null);
   const [scannerResults, setScannerResults] = useState([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -947,6 +948,7 @@ export const UserScannerPage = () => {
         mode,
         max_results: 25,
         symbol_source: symbolSource,
+        market_type: marketType,
         symbol_selection_mode: effectiveMode,
         selected_symbols: selectedSymbols,
         strategy_template_id: selectedTemplateId || null,
@@ -992,6 +994,7 @@ export const UserScannerPage = () => {
         mode: preset.mode,
         max_results: preset.maxResults,
         symbol_source: symbolSource,
+        market_type: marketType,
         symbol_selection_mode: effectiveMode,
         selected_symbols: selectedSymbols,
         strategy_template_id: selectedTemplateId || null,
@@ -1311,6 +1314,7 @@ export const UserScannerPage = () => {
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-path">Execution Path: {executionPathLabel}</p>
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-source">Source: {symbolSource.toUpperCase()}</p>
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-symbol-mode">Symbol Mode: {symbolMode}</p>
+          <p className="text-sm" data-testid="user-scanner-active-mode-indicator-market-type">Market: {marketType.toUpperCase()}</p>
         </div>
         <p className="mt-2 text-xs text-cyan-100" data-testid="user-scanner-active-mode-indicator-run-type-detail">{scannerRunTypeDetail}</p>
       </section>
@@ -1490,6 +1494,21 @@ export const UserScannerPage = () => {
               <option value="ASSISTED">ASSISTED</option>
               <option value="AUTO">AUTO</option>
               <option value="MANUAL">MANUAL</option>
+            </select>
+          </label>
+
+          <label className="space-y-1" htmlFor="user-scanner-market-type-select" data-testid="user-scanner-market-type-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-market-type-label">Market Type</span>
+            <select
+              id="user-scanner-market-type-select"
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              value={marketType}
+              onChange={(event) => setMarketType(event.target.value)}
+              data-testid="user-scanner-market-type-select"
+              aria-label="Market tipi"
+            >
+              <option value="spot">SPOT</option>
+              <option value="futures">FUTURES</option>
             </select>
           </label>
 

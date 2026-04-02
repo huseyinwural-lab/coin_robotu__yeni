@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -23,7 +25,7 @@ from core.users.user_scanner_signal_service import (
 )
 from db import get_db
 from deps import require_user
-from models import PendingSignal, User, UserScannerResult
+from models import PendingSignal, User, UserExecutionIntent, UserScannerResult
 from schemas import (
     UserScannerOverviewResponse,
     UserScannerAutomationConfigResponse,
@@ -279,7 +281,8 @@ def scanner_run(
             requested_mode=payload.mode,
             max_results=payload.max_results,
             symbol_source=payload.symbol_source,
-                selected_symbols=valid_symbols,
+            market_type=payload.market_type,
+            selected_symbols=valid_symbols,
             symbol_selection_mode=payload.symbol_selection_mode,
         )
     except ValueError as exc:
@@ -397,6 +400,7 @@ def signals(
             confidence=_safe_float(row.confidence),
             mode=row.mode,
             status=row.status,
+            market_type=getattr(row, "market_type", "spot"),
             order_position_id=row.order_position_id,
             created_at=row.created_at,
             decided_at=row.decided_at,
@@ -561,3 +565,88 @@ def fix_all_blocked_signals(
         },
     )
     return UserSignalsBulkFixResponse(**payload)
+
+
+@router.post("/signals/cleanup-stale-intents")
+def cleanup_stale_intents_and_signals(
+    stale_minutes: int = Query(default=25, ge=5, le=1440),
+    signal_stale_minutes: int = Query(default=180, ge=30, le=10080),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    now = datetime.now(timezone.utc)
+    intent_cutoff = now - timedelta(minutes=stale_minutes)
+    signal_cutoff = now - timedelta(minutes=signal_stale_minutes)
+
+    stale_intents = (
+        db.query(UserExecutionIntent)
+        .filter(
+            UserExecutionIntent.user_id == current_user.id,
+            UserExecutionIntent.status.in_(["PREVIEWED", "SUBMITTED", "QUEUED", "APPROVED"]),
+            UserExecutionIntent.created_at <= intent_cutoff,
+        )
+        .order_by(UserExecutionIntent.created_at.asc())
+        .limit(500)
+        .all()
+    )
+
+    cancelled_intent_ids: list[str] = []
+    for intent in stale_intents:
+        intent.status = "CANCELLED"
+        intent.cancelled_at = now
+        note = str(intent.admin_note or "").strip()
+        cleanup_note = "stale_cleanup_user_signals"
+        intent.admin_note = f"{note} | {cleanup_note}".strip(" |") if note else cleanup_note
+        cancelled_intent_ids.append(str(intent.id))
+
+    stale_signals = (
+        db.query(PendingSignal)
+        .filter(
+            PendingSignal.user_id == current_user.id,
+            PendingSignal.status.in_(["pending", "blocked", "approved", "ready"]),
+            PendingSignal.created_at <= signal_cutoff,
+            PendingSignal.order_position_id.is_(None),
+        )
+        .order_by(PendingSignal.created_at.asc())
+        .limit(500)
+        .all()
+    )
+
+    expired_signal_ids: list[str] = []
+    for row in stale_signals:
+        row.status = "expired"
+        row.current_state = "EXPIRED"
+        row.previous_state = row.previous_state or "DETECTED"
+        row.blocked_reason_code = "SIGNAL_EXPIRED"
+        row.blocked_reason_message = "Sinyal süresi doldu (stale cleanup)."
+        row.blocked_solution_hint = "Scanner'ı yeniden çalıştırarak güncel sinyal üretin."
+        row.execution_eligible = False
+        row.last_eligibility_check_at = now
+        expired_signal_ids.append(str(row.id))
+
+    db.commit()
+
+    create_audit_log(
+        db,
+        action="user_signals_cleanup_stale",
+        entity_type="pending_signal",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "stale_minutes": stale_minutes,
+            "signal_stale_minutes": signal_stale_minutes,
+            "cancelled_intent_count": len(cancelled_intent_ids),
+            "expired_signal_count": len(expired_signal_ids),
+        },
+    )
+
+    return {
+        "status": "ok",
+        "stale_minutes": stale_minutes,
+        "signal_stale_minutes": signal_stale_minutes,
+        "cancelled_intent_count": len(cancelled_intent_ids),
+        "expired_signal_count": len(expired_signal_ids),
+        "cancelled_intent_ids": cancelled_intent_ids,
+        "expired_signal_ids": expired_signal_ids,
+    }

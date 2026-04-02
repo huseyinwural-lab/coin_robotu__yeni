@@ -22,11 +22,12 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
+import { localizeAdminDomToTurkish } from "@/lib/adminTurkishLocale";
 
 const userMenuGroups = [
   {
@@ -200,6 +201,7 @@ const adminOnlyItems = [
 export const PanelLayout = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const adminRoles = new Set(["super_admin", "admin", "ops"]);
   const [gateBadge, setGateBadge] = useState(null);
   const [sanityBadge, setSanityBadge] = useState(null);
@@ -262,6 +264,23 @@ export const PanelLayout = () => {
     const timer = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const applyLocalization = () => {
+      localizeAdminDomToTurkish(document.body);
+    };
+
+    applyLocalization();
+    const observer = new MutationObserver(() => {
+      window.requestAnimationFrame(applyLocalization);
+    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [isAdmin, location.pathname]);
 
   const countdownLabel = useMemo(() => {
     if (!gateBadge?.override_active || !gateBadge?.override_expires_at) {

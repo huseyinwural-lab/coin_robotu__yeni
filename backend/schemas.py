@@ -2230,6 +2230,7 @@ class UserTradeResponse(BaseModel):
     source: str
     trade_id: str
     symbol: str
+    market_type: str | None = None
     side: str
     status: str
     quantity: float
@@ -2268,6 +2269,7 @@ class UserScannerRunRequest(BaseModel):
     mode: str | None = None
     max_results: int = Field(default=20, ge=5, le=100)
     symbol_source: str = "crypto"
+    market_type: str = "all"
     symbol_selection_mode: str = "all_market_symbols"
     selected_symbols: list[str] = Field(default_factory=list)
 
@@ -2275,6 +2277,7 @@ class UserScannerRunRequest(BaseModel):
 class UserScannerRunResponse(BaseModel):
     run_id: str
     mode: str
+    market_type: str
     result_count: int
     actionable_count: int
     queued_count: int
@@ -2470,6 +2473,7 @@ class UserSignalResponse(BaseModel):
     signal_id: str
     user_id: str
     symbol: str
+    market_type: str | None = None
     quote_asset: str | None = None
     strategy_code: str
     confidence: float

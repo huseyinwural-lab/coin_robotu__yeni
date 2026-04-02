@@ -471,6 +471,7 @@ def sync_user_trade_projection(db: Session, *, user_id: str) -> dict:
             "meta_json": {
                 "trade_source": "position_projection",
                 "allocation_source": strategy_map.get(row.id),
+                "market_type": str(row.market_type or "spot").lower(),
                 "execution_metric_id": metric.id if metric else None,
             },
         }
@@ -505,6 +506,7 @@ def sync_user_trade_projection(db: Session, *, user_id: str) -> dict:
             "meta_json": {
                 "trade_source": "intent_projection",
                 "intent_token": row.intent_token,
+                "market_type": str(row.market_type or "spot").lower(),
                 "meta_engine_decision": row.meta_engine_decision,
                 "allocation_source": (row.normalized_order_payload or {}).get("strategy_type"),
             },
@@ -523,6 +525,7 @@ def build_user_trade_projection_list(db: Session, user_id: str, *, limit: int = 
             "source": (row.meta_json or {}).get("trade_source", "projection"),
             "trade_id": row.trade_id,
             "symbol": row.symbol,
+            "market_type": (row.meta_json or {}).get("market_type") or "spot",
             "side": row.side,
             "status": row.status,
             "quantity": row.quantity,
@@ -557,6 +560,7 @@ def build_user_trade_open_orders(db: Session, user_id: str, *, limit: int = 80) 
         {
             "symbol": str(row.symbol or "").upper(),
             "side": row.side,
+            "market_type": str(row.market_type or "spot").lower(),
             "size": row.size,
             "status": row.status,
             "submitted_at": row.created_at,
@@ -597,6 +601,7 @@ def build_user_trade_detail(db: Session, user_id: str, trade_id: str) -> dict:
         "trade": {
             "trade_id": row.trade_id,
             "symbol": row.symbol,
+            "market_type": (row.meta_json or {}).get("market_type") or "spot",
             "side": row.side,
             "status": row.status,
             "quantity": row.quantity,

@@ -10,7 +10,7 @@ export const UserTradesPage = () => {
   const [trades, setTrades] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
-  const [filters, setFilters] = useState({ symbol: "", status: "all", strategy: "", side: "all", date_range: "7d" });
+  const [filters, setFilters] = useState({ symbol: "", status: "all", strategy: "", side: "all", market_type: "all", date_range: "7d" });
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [openOrders, setOpenOrders] = useState([]);
@@ -63,7 +63,8 @@ export const UserTradesPage = () => {
         const statusOk = filters.status === "all" || String(row.status || "").toUpperCase() === filters.status.toUpperCase();
         const strategyOk = !filters.strategy || String(row.strategy || "").toLowerCase().includes(filters.strategy.toLowerCase());
         const sideOk = filters.side === "all" || String(row.side || "").toLowerCase() === filters.side;
-        return symbolOk && statusOk && strategyOk && sideOk;
+        const marketTypeOk = filters.market_type === "all" || String(row.market_type || "spot").toLowerCase() === filters.market_type;
+        return symbolOk && statusOk && strategyOk && sideOk && marketTypeOk;
       }),
     [filters, trades],
   );
@@ -104,11 +105,12 @@ export const UserTradesPage = () => {
         </div>
       </header>
 
-      <div className="col-span-12 grid gap-3 md:grid-cols-5" data-testid="user-trades-filter-grid">
+      <div className="col-span-12 grid gap-3 md:grid-cols-6" data-testid="user-trades-filter-grid">
         <input value={filters.symbol} onChange={(event) => setFilters((prev) => ({ ...prev, symbol: event.target.value }))} placeholder="symbol" className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-trades-filter-symbol-input" />
         <input value={filters.strategy} onChange={(event) => setFilters((prev) => ({ ...prev, strategy: event.target.value }))} placeholder="strategy" className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-trades-filter-strategy-input" />
         <select value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-trades-filter-status-select"><option value="all">all status</option><option value="OPEN">OPEN</option><option value="CLOSED">CLOSED</option><option value="PENDING">PENDING</option><option value="CANCELLED">CANCELLED</option><option value="REJECTED">REJECTED</option></select>
         <select value={filters.side} onChange={(event) => setFilters((prev) => ({ ...prev, side: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-trades-filter-side-select"><option value="all">all side</option><option value="buy">buy</option><option value="sell">sell</option></select>
+        <select value={filters.market_type} onChange={(event) => setFilters((prev) => ({ ...prev, market_type: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-trades-filter-market-type-select"><option value="all">all market</option><option value="spot">spot</option><option value="futures">futures</option></select>
         <select value={filters.date_range} onChange={(event) => setFilters((prev) => ({ ...prev, date_range: event.target.value }))} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-trades-filter-date-select"><option value="24h">24h</option><option value="7d">7d</option><option value="30d">30d</option></select>
       </div>
 
@@ -148,6 +150,7 @@ export const UserTradesPage = () => {
           <article key={`${row.source}-${row.trade_id}`} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid={`user-trades-mobile-card-${row.trade_id}`}>
             <p className="text-xs text-slate-500" data-testid={`user-trades-mobile-symbol-${row.trade_id}`}>{row.symbol}</p>
             <p className="text-sm" data-testid={`user-trades-mobile-side-${row.trade_id}`}>{row.side} · {row.status}</p>
+            <p className="text-xs text-cyan-300" data-testid={`user-trades-mobile-market-type-${row.trade_id}`}>Market: {String(row.market_type || "spot").toUpperCase()}</p>
             <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-qty-${row.trade_id}`}>Qty: {row.quantity}</p>
             <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-entry-${row.trade_id}`}>Entry: {row.entry_price}</p>
             <p className="text-xs text-slate-400" data-testid={`user-trades-mobile-weight-${row.trade_id}`}>weight: {row.strategy_weight ?? "-"}</p>
@@ -169,6 +172,7 @@ export const UserTradesPage = () => {
             <tr>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-source">Source</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-symbol">Symbol</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-market-type">Market</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-side">Side</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-status">Status</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="user-trades-head-qty">Qty</th>
@@ -187,6 +191,7 @@ export const UserTradesPage = () => {
               <tr key={`${row.source}-${row.trade_id}`} className="border-t border-slate-800" data-testid={`user-trades-table-row-${row.trade_id}`}>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-source-${row.trade_id}`}>{row.source}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-symbol-${row.trade_id}`}>{row.symbol}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-market-type-${row.trade_id}`}>{String(row.market_type || "spot").toUpperCase()}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-side-${row.trade_id}`}>{row.side}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-status-${row.trade_id}`}>{row.status}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-trades-row-quantity-${row.trade_id}`}>{row.quantity}</td>

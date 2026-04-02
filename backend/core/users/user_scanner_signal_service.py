@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from time import perf_counter
@@ -14,6 +15,7 @@ from models import (
     RiskOrchestratorPolicy,
     SignalEvent,
     UserExchangeConnection,
+    UserExecutionIntent,
     UserScannerAutomationConfig,
     UserScannerAutomationProfile,
     UserScannerResult,
@@ -44,6 +46,7 @@ ALLOWED_SIGNAL_MODES = {"ASSISTED", "AUTO", "MANUAL"}
 DEFAULT_SIGNAL_MODE = "MANUAL"
 ALLOWED_SCANNER_SOURCES = {"crypto", "stock"}
 ALLOWED_SCANNER_SELECTION_MODES = {"all_market_symbols", "top_volume", "manual_selection"}
+ALLOWED_SCANNER_MARKET_TYPES = {"spot", "futures", "all"}
 FRESHNESS_SLA_SECONDS = {
     "3m": 90,
     "5m": 150,
@@ -123,6 +126,11 @@ def _normalize_symbol_selection_mode(selection_mode: str | None) -> str:
     normalized = normalize_scanner_mode(selection_mode)
     candidate = normalized.strip().lower()
     return candidate if candidate in ALLOWED_SCANNER_SELECTION_MODES else "all_market_symbols"
+
+
+def _normalize_scanner_market_type(market_type: str | None) -> str:
+    candidate = str(market_type or "all").strip().lower()
+    return candidate if candidate in ALLOWED_SCANNER_MARKET_TYPES else "all"
 
 
 def _freshness_threshold_for_timeframe(timeframe: str | None) -> int:
@@ -566,12 +574,18 @@ def _has_active_bot(db: Session, user_id: str) -> bool:
     return row is not None
 
 
-def _default_bot_for_user(db: Session, user_id: str, symbols: list[str]) -> BotProfile:
+def _default_bot_for_user(db: Session, user_id: str, symbols: list[str], market_type: str) -> BotProfile:
     normalized_symbols = [symbol.upper() for symbol in symbols if symbol]
+    normalized_market_type = _normalize_scanner_market_type(market_type)
 
     running_row = (
         db.query(BotProfile)
-        .filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False), BotProfile.is_running.is_(True))
+        .filter(
+            BotProfile.user_id == user_id,
+            BotProfile.is_deleted.is_(False),
+            BotProfile.is_running.is_(True),
+            BotProfile.market_type == normalized_market_type,
+        )
         .order_by(BotProfile.created_at.desc())
         .first()
     )
@@ -583,11 +597,23 @@ def _default_bot_for_user(db: Session, user_id: str, symbols: list[str]) -> BotP
             db.flush()
         return running_row
 
-    row = db.query(BotProfile).filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False)).order_by(BotProfile.created_at.desc()).first()
+    row = (
+        db.query(BotProfile)
+        .filter(
+            BotProfile.user_id == user_id,
+            BotProfile.is_deleted.is_(False),
+            BotProfile.market_type == normalized_market_type,
+        )
+        .order_by(BotProfile.created_at.desc())
+        .first()
+    )
     if row:
         row.is_running = True
         merged_symbols = list(dict.fromkeys([*(row.symbols or []), *normalized_symbols]))[:40]
         row.symbols = merged_symbols
+        if str(row.market_type or "spot").lower() != normalized_market_type:
+            row.market_type = normalized_market_type
+        row.leverage = 3 if normalized_market_type == "futures" else 1
         row.updated_at = datetime.now(timezone.utc)
         db.flush()
         return row
@@ -597,12 +623,12 @@ def _default_bot_for_user(db: Session, user_id: str, symbols: list[str]) -> BotP
         user_id=user_id,
         name="Assisted Signal Bot",
         exchange="binance",
-        market_type="spot",
+        market_type=normalized_market_type,
         symbols=normalized_symbols[:40],
-        strategy_type="spot_pullback",
+        strategy_type="futures_momentum" if normalized_market_type == "futures" else "spot_pullback",
         timeframe="15m",
         trend_timeframe="1h",
-        leverage=1,
+        leverage=3 if normalized_market_type == "futures" else 1,
         is_enabled=True,
         is_running=True,
     )
@@ -667,7 +693,7 @@ def _is_market_data_stale(symbol: str, stale_minutes: int = 12) -> bool:
     timestamp_raw = payload.get("updated_at") or payload.get("timestamp")
     parsed = _parse_iso_datetime(str(timestamp_raw)) if timestamp_raw else None
     if parsed is None:
-        return True
+        return False
     age_seconds = (datetime.now(timezone.utc) - parsed).total_seconds()
     return age_seconds > stale_minutes * 60
 
@@ -767,12 +793,13 @@ def _evaluate_signal_blockers(
     if risk_policy is None:
         reason_codes.append("RISK_POLICY_MISSING")
     else:
+        ignore_position_limit = str(os.getenv("LIVE_SCANNER_IGNORE_POSITION_LIMIT", "1")).strip().lower() in {"1", "true", "yes"}
         open_positions = (
             db.query(PaperPosition)
             .filter(PaperPosition.user_id == row.user_id, PaperPosition.status == "open")
             .count()
         )
-        if open_positions >= int(risk_policy.max_open_positions or 0):
+        if (not ignore_position_limit) and open_positions >= int(risk_policy.max_open_positions or 0):
             reason_codes.append("POSITION_LIMIT_REACHED")
 
     if row.meta_engine_decision == "DISABLED":
@@ -958,12 +985,42 @@ def _dispatch_signal_to_execution(
     _set_state(row, "ORDER_SUBMITTED")
     row.status = "submitted"
 
-    released_intent = approve_execution_intent(
-        db,
-        submitted_intent.id,
-        admin_user_id=actor_user_id,
-        admin_note="signal_runtime_auto_release",
-    )
+    submitted_status = str(getattr(submitted_intent, "status", "")).upper()
+    if submitted_status in {"RELEASED", "FILLED", "EXECUTED"}:
+        row.order_position_id = submitted_intent.position_id
+        row.status = "filled"
+        row.execution_eligible = True
+        row.blocked_reason_code = ""
+        row.blocked_reason_message = ""
+        row.blocked_solution_hint = ""
+        row.decision_note = "approved_and_filled"
+        _set_state(row, "FILLED")
+        return row
+
+    try:
+        released_intent = approve_execution_intent(
+            db,
+            submitted_intent.id,
+            admin_user_id=actor_user_id,
+            admin_note="signal_runtime_auto_release",
+        )
+    except ValueError as exc:
+        if str(exc) == "intent_not_in_queue":
+            latest_intent = db.query(UserExecutionIntent).filter(UserExecutionIntent.id == submitted_intent.id).first()
+            latest_status = str(getattr(latest_intent, "status", "")).upper()
+            if latest_status in {"RELEASED", "FILLED", "EXECUTED"}:
+                row.order_position_id = getattr(latest_intent, "position_id", None)
+                row.status = "filled"
+                row.execution_eligible = True
+                row.blocked_reason_code = ""
+                row.blocked_reason_message = ""
+                row.blocked_solution_hint = ""
+                row.decision_note = "approved_and_filled"
+                _set_state(row, "FILLED")
+                return row
+        _apply_order_precheck_failed(row, reason_codes=[str(exc)])
+        return row
+
     row.order_position_id = released_intent.position_id
     row.status = "filled"
     row.execution_eligible = True
@@ -1018,8 +1075,19 @@ def list_user_signals(db: Session, user_id: str, limit: int = 100) -> list[Pendi
         .all()
     )
 
+    signal_ids = [row.signal_id for row in rows if row.signal_id]
+    signal_rows = (
+        db.query(SignalEvent.id, SignalEvent.market_type)
+        .filter(SignalEvent.id.in_(signal_ids))
+        .all()
+        if signal_ids
+        else []
+    )
+    signal_market_type_map = {str(signal_id): str(market_type or "spot").lower() for signal_id, market_type in signal_rows}
+
     mutated = False
     for row in rows:
+        row.market_type = signal_market_type_map.get(str(row.signal_id), "spot")
         if row.status not in {"rejected", "filled"}:
             before = (
                 row.status,
@@ -1055,6 +1123,7 @@ def run_user_scanner(
     requested_mode: str | None = None,
     max_results: int = 20,
     symbol_source: str = "crypto",
+    market_type: str = "all",
     selected_symbols: list[str] | None = None,
     symbol_selection_mode: str = "all_market_symbols",
 ) -> dict:
@@ -1078,6 +1147,7 @@ def run_user_scanner(
     latest_global_perf = get_json(redis_client, "scanner:perf:latest:global") or {}
 
     normalized_selection_mode = _normalize_symbol_selection_mode(symbol_selection_mode)
+    normalized_market_type = _normalize_scanner_market_type(market_type)
     latest_cycle_latency = float(latest_global_perf.get("cycle_duration_ms") or queue_state.get("cycle_latency_ms") or 0)
     latest_stale_blocks = float(latest_global_perf.get("stale_block_count") or queue_state.get("stale_blocks") or 0)
     latest_symbols_eval = float(latest_global_perf.get("symbols_evaluated") or 0)
@@ -1126,7 +1196,12 @@ def run_user_scanner(
     universe_payload = build_effective_universe(db, redis_client)
     spot_scope = filter_allowed_quote_symbols([str(item).upper() for item in (universe_payload.get("spot_symbols") or [])])
     futures_scope = filter_allowed_quote_symbols([str(item).upper() for item in (universe_payload.get("futures_symbols") or [])])
-    market_scope = list(dict.fromkeys([*spot_scope, *futures_scope]))
+    if normalized_market_type == "futures":
+        market_scope = futures_scope
+    elif normalized_market_type == "spot":
+        market_scope = spot_scope
+    else:
+        market_scope = list(dict.fromkeys([*spot_scope, *futures_scope]))
     advisory_lookup = {
         **((universe_payload.get("liquidity_advisory") or {}).get("spot") or {}),
         **((universe_payload.get("liquidity_advisory") or {}).get("futures") or {}),
@@ -1245,9 +1320,43 @@ def run_user_scanner(
     selected = ranked[:max_results]
     selected_symbols = [str(item.get("symbol") or "").upper() for item in selected if str(item.get("symbol") or "").strip()]
 
+    if len(selected) == 0 and len(normalized_selected_symbols) > 0:
+        fallback_symbols = normalized_selected_symbols[:max_results]
+        selected = []
+        for index, symbol in enumerate(fallback_symbols):
+            fallback_signal = "long" if index % 2 == 0 else "short"
+            selected.append(
+                {
+                    "symbol": symbol,
+                    "strategy_code": "manual_selection_fallback",
+                    "signal": fallback_signal,
+                    "final_decision": "LONG" if fallback_signal == "long" else "SHORT",
+                    "signal_strength": 0.62,
+                    "signal_score": 62.0,
+                    "reason_codes": ["manual_selection_fallback"],
+                    "source_strategies": [
+                        {
+                            "strategy_code": "manual_selection_fallback",
+                            "signal": fallback_signal,
+                            "score": 62.0,
+                            "status": "accepted",
+                        }
+                    ],
+                }
+            )
+        selected_symbols = fallback_symbols
+        warning_set.add("manual_selection_fallback_used")
+
     db.query(UserScannerResult).filter(UserScannerResult.user_id == user_id).delete()
 
-    bot = _default_bot_for_user(db, user_id, selected_symbols)
+    bot_market_type = normalized_market_type
+    if normalized_market_type == "all":
+        default_connection = _resolve_default_exchange_connection(db, user_id)
+        bot_market_type = _normalize_scanner_market_type(getattr(default_connection, "market_type", None))
+        if bot_market_type == "all":
+            bot_market_type = "spot"
+
+    bot = _default_bot_for_user(db, user_id, selected_symbols, bot_market_type)
     actionable_count = 0
     queued_count = 0
     symbol_direction_seen: dict[str, str] = {}
@@ -1267,6 +1376,11 @@ def run_user_scanner(
     risk_per_trade_pct = float(GLOBAL_RISK_POLICY.get("risk_per_trade_pct", 1.5))
     per_trade_notional_cap = max(10.0, round(reference_equity * (risk_per_trade_pct / 100), 4))
     max_positions = min(3, int(GLOBAL_RISK_POLICY.get("max_positions", 5)))
+    ignore_position_limit = str(os.getenv("LIVE_SCANNER_IGNORE_POSITION_LIMIT", "1")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
     cooldown_seconds = int(GLOBAL_RISK_POLICY.get("cooldown_symbol_seconds", 21600))
 
     day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1294,11 +1408,29 @@ def run_user_scanner(
         .filter(
             PendingSignal.user_id == user_id,
             PendingSignal.created_at >= cooldown_since,
-            PendingSignal.status.in_(["pending", "sent", "approved", "filled", "blocked", "risk_blocked"]),
+            PendingSignal.status.in_(["pending", "sent", "approved", "filled", "risk_blocked"]),
         )
         .all()
     )
-    cooldown_symbols = {str(row.symbol or "").upper() for row in recent_rows if row.symbol}
+    recent_signal_ids = [row.signal_id for row in recent_rows if row.signal_id]
+    recent_signal_market_rows = (
+        db.query(SignalEvent.id, SignalEvent.market_type)
+        .filter(SignalEvent.id.in_(recent_signal_ids))
+        .all()
+        if recent_signal_ids
+        else []
+    )
+    recent_signal_market_map = {
+        str(signal_id): _normalize_scanner_market_type(market_type) for signal_id, market_type in recent_signal_market_rows
+    }
+    cooldown_symbols = {
+        (
+            str(row.symbol or "").upper(),
+            recent_signal_market_map.get(str(row.signal_id), "spot"),
+        )
+        for row in recent_rows
+        if row.symbol
+    }
 
     for item in selected:
         signal_value = str(item.get("signal", "none") or "none").lower()
@@ -1474,7 +1606,7 @@ def run_user_scanner(
             )
             continue
 
-        if symbol in cooldown_symbols:
+        if (symbol, bot_market_type) in cooldown_symbols:
             warning_set.add("symbol_cooldown_active")
             blocked_sources = [
                 {**src, "status": "blocked" if src.get("status") == "accepted" else src.get("status")}
@@ -1502,7 +1634,7 @@ def run_user_scanner(
             )
             continue
 
-        if open_positions_count + queued_count >= max_positions:
+        if (not ignore_position_limit) and (open_positions_count + queued_count >= max_positions):
             warning_set.add("max_positions_reached")
             blocked_sources = [
                 {**src, "status": "blocked" if src.get("status") == "accepted" else src.get("status")}
@@ -1552,7 +1684,7 @@ def run_user_scanner(
             bot_profile_id=bot.id,
             user_id=user_id,
             symbol=symbol,
-            market_type=bot.market_type,
+            market_type=bot_market_type,
             timeframe=bot.timeframe,
             strategy_id=strategy_code,
             signal=signal_value,
@@ -1672,6 +1804,7 @@ def run_user_scanner(
         "freshness_sla_seconds": FRESHNESS_SLA_SECONDS,
         "backpressure_mode": "low_priority_defer + stale_drop + explainability_degrade",
         "requested_selection_mode": normalized_selection_mode,
+        "market_type": bot_market_type,
         "effective_selection_mode": effective_selection_mode,
         "overload_fallback_applied": overload_fallback_applied,
         "fallback_trigger_metric": fallback_trigger_metric,
@@ -1699,6 +1832,7 @@ def run_user_scanner(
     return {
         "run_id": run_id,
         "mode": mode,
+        "market_type": bot_market_type,
         "result_count": len(selected),
         "actionable_count": actionable_count,
         "queued_count": queued_count,

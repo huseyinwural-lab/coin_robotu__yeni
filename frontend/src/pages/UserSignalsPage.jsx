@@ -24,6 +24,7 @@ export const UserSignalsPage = () => {
   const [blockedAlertEnabled, setBlockedAlertEnabled] = useState(() => localStorage.getItem("signals-blocked-alerts") !== "off");
   const [diagnoseBusyId, setDiagnoseBusyId] = useState("");
   const [isBulkFixRunning, setIsBulkFixRunning] = useState(false);
+  const [isStaleCleanupRunning, setIsStaleCleanupRunning] = useState(false);
   const [animatedSignalIds, setAnimatedSignalIds] = useState([]);
   const alertedSignalIdsRef = useRef(new Set());
 
@@ -253,6 +254,21 @@ export const UserSignalsPage = () => {
     }
   };
 
+  const runStaleCleanup = async () => {
+    setIsStaleCleanupRunning(true);
+    try {
+      const { data } = await apiClient.post("/user/signals/cleanup-stale-intents", null, {
+        params: { stale_minutes: 25, signal_stale_minutes: 180 },
+      });
+      await load();
+      toast.success(`Stale cleanup: intent=${data?.cancelled_intent_count || 0}, signal=${data?.expired_signal_count || 0}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Stale cleanup başarısız");
+    } finally {
+      setIsStaleCleanupRunning(false);
+    }
+  };
+
   const setSignalModeAuto = async () => {
     try {
       await apiClient.put("/user/signal-mode", { mode: "AUTO" });
@@ -375,6 +391,9 @@ export const UserSignalsPage = () => {
             blocked sinyal uyarıları aktif
           </label>
           <Button variant="outline" onClick={load} data-testid="user-signals-refresh-button">Yenile</Button>
+          <Button variant="outline" disabled={isStaleCleanupRunning} onClick={runStaleCleanup} data-testid="user-signals-stale-cleanup-button">
+            {isStaleCleanupRunning ? "Temizleniyor..." : "Stale Temizliği"}
+          </Button>
           <Button className="bg-cyan-500 text-black hover:bg-cyan-400" disabled={isBulkFixRunning} onClick={runFixAllBlockers} data-testid="user-signals-fix-all-blockers-button">
             {isBulkFixRunning ? "Fixing..." : "Fix All Blockers"}
           </Button>
@@ -461,6 +480,7 @@ export const UserSignalsPage = () => {
         {signals.map((signal) => (
           <article key={signal.id} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid={`user-signals-mobile-card-${signal.id}`}>
             <p className="text-sm font-semibold" data-testid={`user-signals-mobile-symbol-${signal.id}`}>{signal.symbol}</p>
+            <p className="text-xs text-cyan-300" data-testid={`user-signals-mobile-market-type-${signal.id}`}>market: {String(signal.market_type || "spot").toUpperCase()}</p>
             <p className="text-xs" data-testid={`user-signals-mobile-status-${signal.id}`}>
               <span className={`rounded px-2 py-1 font-semibold ${statusBadgeClass(signal.status, animatedSignalIds.includes(signal.id))}`} data-testid={`user-signals-mobile-status-badge-${signal.id}`}>
                 {normalizedStatusText(signal)}
@@ -509,6 +529,7 @@ export const UserSignalsPage = () => {
           <thead className="bg-slate-800 text-left" data-testid="user-signals-table-head">
             <tr>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Symbol</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Market</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Strategy</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Confidence</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Weight</th>
@@ -528,6 +549,7 @@ export const UserSignalsPage = () => {
             {signals.map((signal) => (
               <tr key={signal.id} className="border-t border-slate-800" data-testid={`user-signals-table-row-${signal.id}`}>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-symbol-${signal.id}`}>{signal.symbol}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-market-type-${signal.id}`}>{String(signal.market_type || "spot").toUpperCase()}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-strategy-${signal.id}`}>{signal.strategy_code}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-confidence-${signal.id}`}>{signal.confidence}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-weight-${signal.id}`}>{signal.strategy_weight ?? "-"}</td>
