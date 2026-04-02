@@ -16,6 +16,17 @@
 
 ### Teknik
 - Manual completion state localStorage ile saklanıyor: `live_gate_wizard_completions_v1`.
+- Wizard completion artık backend’e kalıcı yazılıyor (kullanıcı bazlı):
+  - `GET /api/phase4/admin/live-gate/wizard-progress`
+  - `PUT /api/phase4/admin/live-gate/wizard-progress`
+  - Veri saklama: `UserIdentityProfile.compliance_snapshot.live_gate_wizard`
+- Mikro aksiyonlar eklendi:
+  - Step 3: `Tek Tık Fix` (allowed market enable)
+  - Step 8: `Tek Tık Fix` (gate rerun)
+  - Step 9: `Tek Tık Fix` (mode transition LIVE)
+  - Step 4 (Kill Switch):
+    - `Blokaj Koy` (kill_switch_enabled=true, trading_enabled=false)
+    - `Blokaj Kaldır` (kill_switch_enabled=false, trading_enabled=true)
 - Yeni test-id’ler eklendi:
   - `admin-live-gate-auto-unblock-button`
   - `admin-live-gate-progress-text`
@@ -25,6 +36,7 @@
 
 ### Test
 - Frontend lint: PASS
+- Backend doğrulama: wizard progress GET/PUT endpointleri 200 PASS
 - Frontend testing agent code-review doğrulaması: wizard davranışı implementasyon seviyesinde PASS, ancak browser automation bu turda auth-flow kaynaklı blok raporladı.
 
 ## 2026-04-02 — Live Gate (Tek Ekran Sıralı Canlıya Alma Akışı)
