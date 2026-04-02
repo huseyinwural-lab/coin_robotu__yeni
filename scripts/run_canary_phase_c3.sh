@@ -136,7 +136,7 @@ PY
     [[ -n "${USER_ID}" ]] || fail "kullanıcı pending listede yok"
 
     local approve_code
-    approve_code="$(request_json POST "${BASE_URL}/api/auth/admin/user-approval-requests/${USER_ID}/approve" "{}" "${ADMIN_TOKEN}" "/tmp/c3_user_approve.json")"
+    approve_code="$(request_json POST "${BASE_URL}/api/auth/admin/user-approval-requests/${USER_ID}/approve" "null" "${ADMIN_TOKEN}" "/tmp/c3_user_approve.json")"
     [[ "${approve_code}" == "200" ]] || fail "user approval başarısız http=${approve_code}"
 
     login_code="$(request_json POST "${BASE_URL}/api/auth/login/user" "{\"email\":\"${USER_EMAIL}\",\"password\":\"${USER_PASSWORD}\"}" "" "/tmp/c3_user_login.json")"

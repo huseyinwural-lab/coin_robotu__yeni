@@ -1,3 +1,21 @@
+## 2026-04-02 — FAZ-8 Canary Script 422 User Approval Fix
+
+### Problem
+- `scripts/verify_phase8_canary.sh` çalışırken `User approval başarısız http=422` hatası alınıyordu.
+- Kök neden: approval endpoint'i artık `{}` payload ile 422 dönüyor (`decision` zorunlu schema).
+
+### Fix
+- Scriptlerde approval çağrısı `"{}"` yerine `"null"` gönderilecek şekilde güncellendi (legacy approve path tetiklenir):
+  - `/app/scripts/verify_phase8_canary.sh`
+  - `/app/scripts/run_canary_phase_c1.sh`
+  - `/app/scripts/run_canary_phase_c2.sh`
+  - `/app/scripts/run_canary_phase_c3.sh`
+- `verify_phase8_canary.sh` varsayılan admin credential güncellendi:
+  - `canary.admin@platform.local / CanaryAdmin123!`
+
+### Verification
+- Lokal uçtan uca kontrol: admin login -> user register -> pending list -> approve (`null` body) -> user login sonrası **200 PASS**.
+
 ## 2026-04-02 — READY 503 DALGALANMA DÜZELTMESİ (WS 451 / QUEUE PRESSURE)
 
 ### Problem

@@ -25,8 +25,8 @@ if [[ -z "${BASE_URL}" && -f "${ROOT_DIR}/frontend/.env" ]]; then
 fi
 [[ -n "${BASE_URL}" ]] || fail "REACT_APP_BACKEND_URL bulunamadı"
 
-ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-admin@platform.local}"
-ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-Admin12345!}"
+ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-canary.admin@platform.local}"
+ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-CanaryAdmin123!}"
 USER_EMAIL="${CANARY_TEST_USER_EMAIL:-canary_$(date +%s)@example.com}"
 USER_PASSWORD="${CANARY_TEST_USER_PASSWORD:-CanaryPass123!}"
 TESTNET_API_KEY="${BINANCE_TESTNET_API_KEY:-}"
@@ -100,7 +100,7 @@ PY
 )"
     [[ -n "${USER_ID}" ]] || fail "Yeni kullanıcı pending listede bulunamadı"
     local approve_code
-    approve_code="$(request_json POST "${BASE_URL}/api/auth/admin/user-approval-requests/${USER_ID}/approve" "{}" "${ADMIN_TOKEN}" "/tmp/faz8_user_approve.json")"
+    approve_code="$(request_json POST "${BASE_URL}/api/auth/admin/user-approval-requests/${USER_ID}/approve" "null" "${ADMIN_TOKEN}" "/tmp/faz8_user_approve.json")"
     [[ "${approve_code}" == "200" ]] || fail "User approval başarısız http=${approve_code}"
     login_code="$(request_json POST "${BASE_URL}/api/auth/login/user" "{\"email\":\"${USER_EMAIL}\",\"password\":\"${USER_PASSWORD}\"}" "" "/tmp/faz8_user_login.json")"
     [[ "${login_code}" == "200" ]] || fail "User login (approval sonrası) başarısız http=${login_code}"
