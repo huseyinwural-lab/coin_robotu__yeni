@@ -1,3 +1,32 @@
+## 2026-04-02 — Testnet Tam Temizlik (Kod + Script + Workflow + Docs + Artifacts)
+
+### Yapılan temizlik
+- Tüm repo genelinde `testnet` referansları kaldırıldı veya LIVE karşılığına çevrildi.
+- Runtime dosya adları LIVE standardına geçirildi:
+  - `backend/core/execution/futures_live_adapter.py`
+  - `backend/core/execution/futures_live_release_gate.py`
+  - `backend/services/futures_live_control_service.py`
+  - `backend/routers/admin_futures_live_control.py`
+  - `frontend/src/pages/AdminFuturesLiveControlPage.jsx`
+  - `deploy/live.env.example`
+- Eski artefact/test çıktıları temizlendi; `/app/artifacts` sıfırlandı ve güncel smoke doğrulamaları yeniden alındı.
+
+### Stabilizasyon düzeltmeleri
+- Toplu dönüşüm sonrası oluşan duplicate/çakışma hataları temizlendi (venue, readiness, execution servisleri).
+- Backend lint (tests/migrations hariç): PASS.
+- Frontend lint (kritik dosyalar): PASS.
+
+### Doğrulama
+- Repo genel tarama: `testnet` kalıntısı yok (kod/script/workflow/docs/artifacts içinde eşleşme 0).
+- Temel API smoke (local backend):
+  - `/api/health/live` -> 200
+  - `/api/health/ready` -> 200
+  - `/api/phase4/admin/production-gate` -> 200
+  - `/api/admin/execution-readiness` -> 200
+  - `/api/admin/futures/live-readiness` -> 200
+- UI smoke (local): PASS
+  - Admin login, `/admin/live-gate`, `/admin/user-approvals` sayfaları yüklendi.
+
 ## 2026-04-02 — Faz-5 ve Faz-6 Tam Kapanış Kanıtları
 
 ### Faz-5 Observability Gate (KAPANDI)
