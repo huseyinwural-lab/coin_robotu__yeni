@@ -44,11 +44,11 @@ def _validate_policy(policy: dict) -> dict:
     _ensure_positive_number(float(retry.get("backoff_multiplier") or 0), "retry.backoff_multiplier")
 
     liveness = health.get("liveness_interval_seconds") or {}
-    _ensure_positive_int(int(liveness.get("testnet") or 0), "health.liveness_interval_seconds.testnet")
+    _ensure_positive_int(int(liveness.get("live") or 0), "health.liveness_interval_seconds.live")
     _ensure_positive_int(int(liveness.get("live") or 0), "health.liveness_interval_seconds.live")
 
     signed = health.get("signed_interval_seconds") or {}
-    for env_name in ["testnet", "live"]:
+    for env_name in ["live", "live"]:
         env_entry = signed.get(env_name) or {}
         _ensure_positive_int(int(env_entry.get("open_position") or 0), f"health.signed_interval_seconds.{env_name}.open_position")
         _ensure_positive_int(int(env_entry.get("idle") or 0), f"health.signed_interval_seconds.{env_name}.idle")

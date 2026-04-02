@@ -656,7 +656,7 @@ export const AdminExecutionReadinessPage = () => {
             <Button variant="outline" onClick={() => setNewFailPulse(false)} data-testid="admin-production-gate-clear-fail-pulse-button">Yeni FAIL işaretini temizle</Button>
             <Button variant="outline" onClick={handleExportJson} data-testid="admin-production-gate-export-json-button">JSON Export</Button>
             <Button variant="outline" onClick={handleIncidentPackageExport} data-testid="admin-production-gate-export-incident-package-button">Incident Paketi Export</Button>
-            <Button variant="outline" onClick={handleRunAcceptance} data-testid="admin-production-gate-run-testnet-acceptance-button">Acceptance Run (Disabled)</Button>
+            <Button variant="outline" onClick={handleRunAcceptance} data-testid="admin-production-gate-run-live-acceptance-button">Acceptance Run (Disabled)</Button>
             <Button onClick={() => handleRerun()} disabled={actionLoading} data-testid="admin-production-gate-rerun-all-button">Tüm Checkleri Rerun</Button>
           </div>
         </div>

@@ -142,7 +142,7 @@ class CommercialOverviewValidator:
             {"time_window": "all_time", "expected_time_window": "all_time"},
             
             # environment parameter
-            {"environment": "testnet", "expected_environment": "testnet"},
+            {"environment": "live", "expected_environment": "live"},
             
             # time_window aliases
             {"time_window": "7d", "expected_time_window": "last_7_days"},

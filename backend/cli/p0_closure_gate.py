@@ -131,7 +131,7 @@ def _run_user_contract_checks(base_url: str, admin_token: str) -> list[dict]:
             "account_label": "p0-contract-check",
             "exchange": "binance",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "is_default": True,
         },
         headers=headers_user,

@@ -16,8 +16,6 @@ class ExchangeExecutionAdapter:
             "bybit": {
                 "api_key": os.environ.get("BYBIT_API_KEY", "").strip(),
                 "api_secret": os.environ.get("BYBIT_API_SECRET", "").strip(),
-                "testnet_api_key": os.environ.get("BYBIT_TESTNET_API_KEY", "").strip(),
-                "testnet_api_secret": os.environ.get("BYBIT_TESTNET_API_SECRET", "").strip(),
                 "live_api_key": os.environ.get("BYBIT_LIVE_API_KEY", "").strip(),
                 "live_api_secret": os.environ.get("BYBIT_LIVE_API_SECRET", "").strip(),
             },
@@ -42,7 +40,7 @@ class ExchangeExecutionAdapter:
 
     def _resolve_bybit_credentials(self, environment: str | None) -> tuple[str, str, str]:
         creds = self.credentials.get("bybit") or {}
-        env = str(environment or "testnet").strip().lower()
+        env = str(environment or "live").strip().lower()
         if env == "live":
             api_key = (creds.get("live_api_key") or "").strip()
             api_secret = (creds.get("live_api_secret") or "").strip()
@@ -52,9 +50,9 @@ class ExchangeExecutionAdapter:
                 api_secret = (creds.get("api_secret") or "").strip()
             return api_key, api_secret, base_url
 
-        api_key = (creds.get("testnet_api_key") or creds.get("api_key") or "").strip()
-        api_secret = (creds.get("testnet_api_secret") or creds.get("api_secret") or "").strip()
-        return api_key, api_secret, "https://api-testnet.bybit.com"
+        api_key = (creds.get("live_api_key") or creds.get("api_key") or "").strip()
+        api_secret = (creds.get("live_api_secret") or creds.get("api_secret") or "").strip()
+        return api_key, api_secret, "https://api-live.bybit.com"
 
     def _bybit_auth_probe(self, *, environment: str | None) -> tuple[bool, dict, str]:
         api_key, api_secret, base_url = self._resolve_bybit_credentials(environment)
@@ -108,7 +106,7 @@ class ExchangeExecutionAdapter:
                     "normalized": normalized,
                     "reason": probe.get("reason") or "bybit_auth_probe_failed",
                     "provider": probe,
-                    "environment": str(environment or "testnet").lower(),
+                    "environment": str(environment or "live").lower(),
                     "submitted_at": datetime.now(timezone.utc).isoformat(),
                 }
 
@@ -119,7 +117,7 @@ class ExchangeExecutionAdapter:
                 "mocked": False,
                 "side": str(side or "buy").lower(),
                 "normalized": normalized,
-                "environment": str(environment or "testnet").lower(),
+                "environment": str(environment or "live").lower(),
                 "mode": "api_validated",
                 "provider": probe,
                 "api_base_url": base_url,
@@ -165,7 +163,7 @@ class ExchangeExecutionAdapter:
                     "mocked": True,
                     "reason": probe.get("reason") or "bybit_auth_probe_failed",
                     "provider": probe,
-                    "environment": str(environment or "testnet").lower(),
+                    "environment": str(environment or "live").lower(),
                     "cancelled_at": datetime.now(timezone.utc).isoformat(),
                 }
             return {
@@ -176,7 +174,7 @@ class ExchangeExecutionAdapter:
                 "mocked": False,
                 "mode": "api_validated",
                 "provider": probe,
-                "environment": str(environment or "testnet").lower(),
+                "environment": str(environment or "live").lower(),
                 "api_base_url": base_url,
                 "cancelled_at": datetime.now(timezone.utc).isoformat(),
             }

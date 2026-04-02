@@ -1,2 +1,0 @@
-postgresql
-postgresql+psycopg2://trader:***@localhost:5432/trading_platform

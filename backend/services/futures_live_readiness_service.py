@@ -190,6 +190,10 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
             return cached
 
     validator = evaluate_go_live_readiness(db, cache, user_id=user_id, refresh=refresh)
+    try:
+        db.rollback()
+    except Exception:
+        pass
 
     engine_positions = _engine_positions(db, user_id)
     exchange_positions = _safe_json(cache.get("exchange:futures:positions"), []) if cache else []

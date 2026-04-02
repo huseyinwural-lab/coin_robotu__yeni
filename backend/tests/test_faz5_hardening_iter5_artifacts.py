@@ -384,7 +384,7 @@ class TestRiskPolicyAuditEventsSingleWrite:
         replay_request = {
             "exchange": "binance",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "symbol": "BTCUSDT",
             "timeframe": "15m",
             "strategy_type": "trend_following",
@@ -459,7 +459,7 @@ class TestRiskSummaryRegression:
         replay_request = {
             "exchange": "binance",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "symbol": "BTCUSDT",
             "timeframe": "15m",
             "strategy_type": "trend_following",
@@ -528,7 +528,7 @@ class TestSHA256ArtifactIntegrity:
         replay_request = {
             "exchange": "binance",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "symbol": "BTCUSDT",
             "timeframe": "15m",
             "strategy_type": "trend_following",

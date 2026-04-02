@@ -167,16 +167,16 @@
   6. WebSocket bootstrap endpointi (listenKey/ws URL)
 - 🔴 P0 Kalan:
   1. WebSocket consumer worker ile gerçek zamanlı trade ingestion
-  2. `huseyinwural@gmail.com` üzerinde testnet tam E2E doğrulama
+  2. `huseyinwural@gmail.com` üzerinde live tam E2E doğrulama
   3. Drift tolerans kalibrasyonu ve reconciliation doğruluk tuning
-  4. Testnet 3/3 kontrol sonrası controlled live geçişi
+  4. Live 3/3 kontrol sonrası controlled live geçişi
 - Bloker:
   - Preview backend 502 (runtime `postgres.internal` çözümleme sorunu), canlı endpoint testleri beklemede.
 
 ## 2026-03-24 Commercial Ops P0 Closure Durumu (Güncel)
 - ✅ Tamamlandı:
   1. Runtime blocker fix (health 200, DB reachable)
-  2. Futures-only gerçek testnet E2E (ingest→pnl→reconciliation→gate)
+  2. Futures-only gerçek live E2E (ingest→pnl→reconciliation→gate)
   3. Drift kalibrasyonu `%0.3` ile reconciliation pass
   4. WS worker lifecycle (start/status/stop, reconnect+dedup)
   5. Export schema + PnL consistency doğrulaması

@@ -18,8 +18,6 @@ EXECUTION_CREDENTIALS_PROVIDER = "exchange_execution_credentials_v1"
 DEFAULT_PAYLOAD = {
     "bybit_api_key": "",
     "bybit_secret": "",
-    "bybit_testnet_api_key": "",
-    "bybit_testnet_secret": "",
     "bybit_live_api_key": "",
     "bybit_live_secret": "",
     "okx_api_key": "",
@@ -52,8 +50,6 @@ def _masked_view(payload: dict) -> dict:
     return {
         "bybit_api_key": mask_secret(payload.get("bybit_api_key")),
         "bybit_secret": mask_secret(payload.get("bybit_secret")),
-        "bybit_testnet_api_key": mask_secret(payload.get("bybit_testnet_api_key")),
-        "bybit_testnet_secret": mask_secret(payload.get("bybit_testnet_secret")),
         "bybit_live_api_key": mask_secret(payload.get("bybit_live_api_key")),
         "bybit_live_secret": mask_secret(payload.get("bybit_live_secret")),
         "okx_api_key": mask_secret(payload.get("okx_api_key")),
@@ -69,14 +65,12 @@ def get_execution_credentials(db) -> dict:
         .first()
     )
     payload = _read_row_payload(row)
-    has_bybit_testnet = bool(payload.get("bybit_testnet_api_key") and payload.get("bybit_testnet_secret"))
     has_bybit_live = bool(payload.get("bybit_live_api_key") and payload.get("bybit_live_secret"))
     has_bybit_legacy = bool(payload.get("bybit_api_key") and payload.get("bybit_secret"))
     return {
         "provider": EXECUTION_CREDENTIALS_PROVIDER,
         "secret_provider": secret_provider_name(),
-        "has_bybit_credentials": bool(has_bybit_testnet or has_bybit_live or has_bybit_legacy),
-        "has_bybit_testnet_credentials": has_bybit_testnet,
+        "has_bybit_credentials": bool(has_bybit_live or has_bybit_legacy),
         "has_bybit_live_credentials": has_bybit_live,
         "has_okx_credentials": bool(payload.get("okx_api_key") and payload.get("okx_secret") and payload.get("okx_passphrase")),
         "masked": _masked_view(payload),
@@ -131,10 +125,8 @@ def execution_credentials_for_adapter(db) -> dict:
         "bybit": {
             "api_key": bybit_legacy_key,
             "api_secret": bybit_legacy_secret,
-            "testnet_api_key": payload.get("bybit_testnet_api_key") or bybit_legacy_key,
-            "testnet_api_secret": payload.get("bybit_testnet_secret") or bybit_legacy_secret,
-            "live_api_key": payload.get("bybit_live_api_key") or "",
-            "live_api_secret": payload.get("bybit_live_secret") or "",
+            "live_api_key": payload.get("bybit_live_api_key") or bybit_legacy_key,
+            "live_api_secret": payload.get("bybit_live_secret") or bybit_legacy_secret,
         },
         "okx": {
             "api_key": payload.get("okx_api_key") or "",

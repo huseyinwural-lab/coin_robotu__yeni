@@ -62,7 +62,7 @@ def _set_governance_debug(db, enabled: bool) -> None:
         "severity_overrides": {},
         "debug": {
             "enabled": enabled,
-            "environments": ["testnet"],
+            "environments": ["live"],
             "strategies": ["p1_strategy"],
             "request_ids": [],
         },
@@ -111,7 +111,7 @@ def _submit_context(user_id: str, strategy: str = "p1_strategy", mode: str = "SI
         "strategy_binding": strategy,
         "symbol": "BTCUSDT",
         "side": "buy",
-        "environment": "testnet" if mode == "SIMULATION" else "live",
+        "environment": "live" if mode == "SIMULATION" else "live",
         "market_type": "spot",
         "margin_mode": "",
         "proposed_notional": 120.0,
@@ -274,13 +274,13 @@ def test_canary_routing_and_ab_compare():
             state="CANARY",
         )
         v2.state = "CANARY"
-        v2.rollout_strategy = {"environments": ["testnet"], "strategy_ids": ["p1_strategy"], "traffic_percentage": 100}
+        v2.rollout_strategy = {"environments": ["live"], "strategy_ids": ["p1_strategy"], "traffic_percentage": 100}
         db.commit()
 
         override = resolve_policy_version_override(
             db,
             policy_code="p1:canary_strategy",
-            context={"environment": "testnet", "strategy_binding": "p1_strategy", "symbol": "BTCUSDT", "user_id": user.id},
+            context={"environment": "live", "strategy_binding": "p1_strategy", "symbol": "BTCUSDT", "user_id": user.id},
         )
         assert override is not None
         assert override["mode"] == "CANARY"

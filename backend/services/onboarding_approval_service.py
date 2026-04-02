@@ -280,7 +280,7 @@ def run_post_approval_activation(db: Session, *, user: User, actor: User | None,
         user_id=user.id,
         exchange_code="binance",
         market_type="futures",
-        environment="testnet",
+        environment="live",
         commit=False,
     )
     _append_activation_event(

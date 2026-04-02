@@ -123,7 +123,7 @@ class TestExchangeReadinessChecklist:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
         )
         assert response.status_code == 200
@@ -302,7 +302,7 @@ class TestExchangeValidateEndpoint:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
         )
         # May return 400 if no credentials, but structure should be correct

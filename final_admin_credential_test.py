@@ -53,7 +53,7 @@ def test_admin_credential_orchestration():
     # POST /api/venues/admin/credentials (creates pending)
     test_cred = {
         "venue": "binance",
-        "environment": "testnet", 
+        "environment": "live", 
         "market_type": "futures",
         "api_key": "test_key_123",
         "api_secret": "test_secret_456"
@@ -129,7 +129,7 @@ def test_admin_credential_orchestration():
         "user_id": "test-user-123",
         "exchange": "binance",
         "market_type": "spot",
-        "environment": "testnet"
+        "environment": "live"
     }
     response = requests.get(f'{BASE_URL}/api/venues/admin/credential-resolution-preview', 
                           headers=admin_headers, params=params)
@@ -174,7 +174,7 @@ def test_admin_credential_orchestration():
     print("5) Regression for commercial ops using new resolution layer:")
     payload = {
         "market_types": ["futures"],
-        "environment": "testnet",
+        "environment": "live",
         "target_user_email": USER_EMAIL
     }
     response = requests.post(f'{BASE_URL}/api/admin/commercial/p0/ingest/binance', 
@@ -189,12 +189,12 @@ def test_admin_credential_orchestration():
     print("6) Verify no spot/futures env mixing at resolver behavior level:")
     
     # Test spot
-    spot_params = {"user_id": "test-user", "exchange": "binance", "market_type": "spot", "environment": "testnet"}
+    spot_params = {"user_id": "test-user", "exchange": "binance", "market_type": "spot", "environment": "live"}
     spot_response = requests.get(f'{BASE_URL}/api/venues/admin/credential-resolution-preview', 
                                headers=admin_headers, params=spot_params)
     
     # Test futures  
-    futures_params = {"user_id": "test-user", "exchange": "binance", "market_type": "futures", "environment": "testnet"}
+    futures_params = {"user_id": "test-user", "exchange": "binance", "market_type": "futures", "environment": "live"}
     futures_response = requests.get(f'{BASE_URL}/api/venues/admin/credential-resolution-preview', 
                                   headers=admin_headers, params=futures_params)
     

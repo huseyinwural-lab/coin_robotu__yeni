@@ -2,10 +2,10 @@
 Phase 5.5A Execution Quality Analytics - Test Suite
 
 Tests for:
-1. GET /api/admin/futures/testnet/execution-quality - contract fields
-2. GET /api/admin/futures/testnet/execution-quality/rolling-7d - 7 points + latest_score
-3. GET /api/admin/futures/testnet/status - execution_quality and architecture_checklist_15
-4. GET /api/admin/futures/testnet/release-gate - regression PASS
+1. GET /api/admin/futures/live/execution-quality - contract fields
+2. GET /api/admin/futures/live/execution-quality/rolling-7d - 7 points + latest_score
+3. GET /api/admin/futures/live/status - execution_quality and architecture_checklist_15
+4. GET /api/admin/futures/live/release-gate - regression PASS
 5. Regression endpoints: strategy/status, decision-diagnostics, leverage/status
 """
 
@@ -40,12 +40,12 @@ def admin_headers(admin_token):
 
 
 class TestExecutionQualityEndpoint:
-    """Tests for GET /api/admin/futures/testnet/execution-quality"""
+    """Tests for GET /api/admin/futures/live/execution-quality"""
 
     def test_execution_quality_returns_200(self, admin_headers):
         """Verify endpoint returns 200"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality",
             headers=admin_headers,
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
@@ -53,7 +53,7 @@ class TestExecutionQualityEndpoint:
     def test_execution_quality_has_required_fields(self, admin_headers):
         """Verify all required contract fields are present"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality",
             headers=admin_headers,
         )
         data = response.json()
@@ -81,7 +81,7 @@ class TestExecutionQualityEndpoint:
     def test_execution_quality_rolling_tuning_score_structure(self, admin_headers):
         """Verify rolling_7d_tuning_score has correct structure"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality",
             headers=admin_headers,
         )
         data = response.json()
@@ -100,7 +100,7 @@ class TestExecutionQualityEndpoint:
     def test_execution_quality_gate_reason_trend_is_list(self, admin_headers):
         """Verify gate_reason_trend_7d is a list"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality",
             headers=admin_headers,
         )
         data = response.json()
@@ -111,7 +111,7 @@ class TestExecutionQualityEndpoint:
     def test_execution_quality_symbol_drift_alerts_is_list(self, admin_headers):
         """Verify symbol_drift_alerts is a list"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality",
             headers=admin_headers,
         )
         data = response.json()
@@ -122,7 +122,7 @@ class TestExecutionQualityEndpoint:
     def test_execution_quality_false_compare_present(self, admin_headers):
         """Verify false_allow_reject_comparison_by_layer is present"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality",
             headers=admin_headers,
         )
         data = response.json()
@@ -132,12 +132,12 @@ class TestExecutionQualityEndpoint:
 
 
 class TestRolling7dEndpoint:
-    """Tests for GET /api/admin/futures/testnet/execution-quality/rolling-7d"""
+    """Tests for GET /api/admin/futures/live/execution-quality/rolling-7d"""
 
     def test_rolling_7d_returns_200(self, admin_headers):
         """Verify endpoint returns 200"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality/rolling-7d",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality/rolling-7d",
             headers=admin_headers,
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -145,7 +145,7 @@ class TestRolling7dEndpoint:
     def test_rolling_7d_has_7_points(self, admin_headers):
         """Verify points array has 7 items"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality/rolling-7d",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality/rolling-7d",
             headers=admin_headers,
         )
         data = response.json()
@@ -156,7 +156,7 @@ class TestRolling7dEndpoint:
     def test_rolling_7d_has_latest_score(self, admin_headers):
         """Verify latest_score field is present"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality/rolling-7d",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality/rolling-7d",
             headers=admin_headers,
         )
         data = response.json()
@@ -167,7 +167,7 @@ class TestRolling7dEndpoint:
     def test_rolling_7d_points_structure(self, admin_headers):
         """Verify each point has required fields"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality/rolling-7d",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality/rolling-7d",
             headers=admin_headers,
         )
         data = response.json()
@@ -180,7 +180,7 @@ class TestRolling7dEndpoint:
     def test_rolling_7d_has_days_field(self, admin_headers):
         """Verify days field equals 7"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality/rolling-7d",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality/rolling-7d",
             headers=admin_headers,
         )
         data = response.json()
@@ -189,12 +189,12 @@ class TestRolling7dEndpoint:
 
 
 class TestStatusEndpoint:
-    """Tests for GET /api/admin/futures/testnet/status"""
+    """Tests for GET /api/admin/futures/live/status"""
 
     def test_status_returns_200(self, admin_headers):
         """Verify endpoint returns 200"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/status",
+            f"{BASE_URL}/api/admin/futures/live/status",
             headers=admin_headers,
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -202,7 +202,7 @@ class TestStatusEndpoint:
     def test_status_has_execution_quality(self, admin_headers):
         """Verify execution_quality field is present"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/status",
+            f"{BASE_URL}/api/admin/futures/live/status",
             headers=admin_headers,
         )
         data = response.json()
@@ -214,7 +214,7 @@ class TestStatusEndpoint:
     def test_status_execution_quality_has_new_fields(self, admin_headers):
         """Verify execution_quality contains Phase 5.5A fields"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/status",
+            f"{BASE_URL}/api/admin/futures/live/status",
             headers=admin_headers,
         )
         data = response.json()
@@ -233,7 +233,7 @@ class TestStatusEndpoint:
     def test_status_has_architecture_checklist_15(self, admin_headers):
         """Verify architecture_checklist_15 has 15 items"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/status",
+            f"{BASE_URL}/api/admin/futures/live/status",
             headers=admin_headers,
         )
         data = response.json()
@@ -244,7 +244,7 @@ class TestStatusEndpoint:
     def test_status_checklist_item_structure(self, admin_headers):
         """Verify checklist items have required fields"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/status",
+            f"{BASE_URL}/api/admin/futures/live/status",
             headers=admin_headers,
         )
         data = response.json()
@@ -258,12 +258,12 @@ class TestStatusEndpoint:
 
 
 class TestReleaseGateEndpoint:
-    """Tests for GET /api/admin/futures/testnet/release-gate"""
+    """Tests for GET /api/admin/futures/live/release-gate"""
 
     def test_release_gate_returns_200(self, admin_headers):
         """Verify endpoint returns 200"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/release-gate",
+            f"{BASE_URL}/api/admin/futures/live/release-gate",
             headers=admin_headers,
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -271,7 +271,7 @@ class TestReleaseGateEndpoint:
     def test_release_gate_has_required_fields(self, admin_headers):
         """Verify required fields are present"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/release-gate",
+            f"{BASE_URL}/api/admin/futures/live/release-gate",
             headers=admin_headers,
         )
         data = response.json()
@@ -282,21 +282,21 @@ class TestReleaseGateEndpoint:
             "reasons",
             "base_release_gate",
             "secret_isolation",
-            "testnet_enabled",
+            "live_enabled",
         ]
         
         for field in required_fields:
             assert field in data, f"Missing required field: {field}"
 
     def test_release_gate_default_blocked(self, admin_headers):
-        """Verify default status is BLOCKED (testnet disabled)"""
+        """Verify default status is BLOCKED (live disabled)"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/release-gate",
+            f"{BASE_URL}/api/admin/futures/live/release-gate",
             headers=admin_headers,
         )
         data = response.json()
         
-        # Default should be BLOCKED since testnet is disabled
+        # Default should be BLOCKED since live is disabled
         assert data.get("status") == "BLOCKED", f"Expected BLOCKED, got {data.get('status')}"
         assert data.get("order_path_open") is False, "order_path_open should be False"
 
@@ -343,7 +343,7 @@ class TestExecutionQualityServiceLogic:
     def test_tuning_score_default_is_50(self, admin_headers):
         """Verify default tuning score is 50 (baseline)"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality",
             headers=admin_headers,
         )
         data = response.json()
@@ -355,7 +355,7 @@ class TestExecutionQualityServiceLogic:
     def test_slippage_summary_structure(self, admin_headers):
         """Verify slippage_summary has required fields"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality",
             headers=admin_headers,
         )
         data = response.json()
@@ -368,7 +368,7 @@ class TestExecutionQualityServiceLogic:
     def test_partial_fill_quality_structure(self, admin_headers):
         """Verify partial_fill_quality has required fields"""
         response = requests.get(
-            f"{BASE_URL}/api/admin/futures/testnet/execution-quality",
+            f"{BASE_URL}/api/admin/futures/live/execution-quality",
             headers=admin_headers,
         )
         data = response.json()

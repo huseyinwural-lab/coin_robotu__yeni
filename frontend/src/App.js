@@ -16,7 +16,7 @@ import { AdminFuturesTailRiskPage } from "@/pages/AdminFuturesTailRiskPage";
 import { AdminFuturesLiveReadinessPage } from "@/pages/AdminFuturesLiveReadinessPage";
 import { AdminFuturesScalingValidationPage } from "@/pages/AdminFuturesScalingValidationPage";
 import { AdminFuturesMicrostructureGuardPage } from "@/pages/AdminFuturesMicrostructureGuardPage";
-import { AdminFuturesTestnetControlPage } from "@/pages/AdminFuturesTestnetControlPage";
+import { AdminFuturesLiveControlPage } from "@/pages/AdminFuturesLiveControlPage";
 import { AdminProofsPage } from "@/pages/AdminProofsPage";
 import { AdminReportsArchivePage } from "@/pages/AdminReportsArchivePage";
 import { AdminRiskOrchestratorPage } from "@/pages/AdminRiskOrchestratorPage";
@@ -181,7 +181,7 @@ function App() {
             <Route path="system-readiness" element={<AdminFuturesLiveReadinessPage />} />
             <Route path="futures/scaling-validation" element={<AdminFuturesScalingValidationPage />} />
             <Route path="futures/microstructure-guard" element={<AdminFuturesMicrostructureGuardPage />} />
-            <Route path="futures/testnet-control" element={<AdminFuturesTestnetControlPage />} />
+            <Route path="futures/live-control" element={<AdminFuturesLiveControlPage />} />
             <Route path="exchanges" element={<AdminExchangesPage />} />
             <Route path="proofs" element={<AdminProofsPage />} />
             <Route path="reports/archive" element={<AdminReportsArchivePage />} />

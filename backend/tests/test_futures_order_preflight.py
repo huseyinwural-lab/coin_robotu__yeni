@@ -33,9 +33,9 @@ def test_preflight_blocks_when_release_gate_blocked():
             "max_trade_leverage": 5,
             "margin_available": 1000,
             "margin_required": 10,
-            "testnet_mode_enabled": True,
+            "live_mode_enabled": True,
             "release_gate_status": "BLOCKED",
-            "environment": "testnet",
+            "environment": "live",
         },
     )
     assert result["preflight_pass"] is False
@@ -52,9 +52,9 @@ def test_preflight_blocks_reduce_only_inconsistency():
             "current_position_side": "NONE",
             "margin_available": 1000,
             "margin_required": 10,
-            "testnet_mode_enabled": True,
+            "live_mode_enabled": True,
             "release_gate_status": "PASS",
-            "environment": "testnet",
+            "environment": "live",
         },
     )
     assert result["preflight_pass"] is False

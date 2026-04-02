@@ -61,7 +61,7 @@ class BinanceMarketDataProvider:
         ]
         self._futures_base_urls = [
             "https://fapi.binance.com",
-            "https://testnet.binancefuture.com",
+            "https://fapi.binance.com",
         ]
 
     def _resolve_endpoint_candidates(self, market_type: str, endpoint_type: str) -> list[str]:

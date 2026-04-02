@@ -66,7 +66,7 @@ class TestLifecycleProofPipeline:
             params={
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "leverage": 3,
             },
             timeout=40,
@@ -77,7 +77,7 @@ class TestLifecycleProofPipeline:
             assert "failure_code" in detail
             assert detail.get("exchange") == "binance"
             assert detail.get("market_type") == "futures"
-            assert detail.get("environment") == "testnet"
+            assert detail.get("environment") == "live"
 
 
 class TestExecutionImmutability:
@@ -92,7 +92,7 @@ class TestExecutionImmutability:
             order_type="MARKET",
             exchange="binance",
             market_type="futures",
-            environment="testnet",
+            environment="live",
             side="BUY",
             quote_qty=10,
             mid_price=50000,
@@ -135,7 +135,7 @@ class TestExecutionImmutability:
             order_type="MARKET",
             exchange="binance",
             market_type="futures",
-            environment="testnet",
+            environment="live",
             side="BUY",
             quote_qty=10,
             mid_price=50000,
@@ -197,7 +197,7 @@ class TestReplayRiskSummary:
                 "timeframe": "15m",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_type": "trend_following",
                 "limit": 180,
             },

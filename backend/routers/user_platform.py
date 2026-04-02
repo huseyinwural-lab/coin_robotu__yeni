@@ -82,7 +82,7 @@ def _with_routing_metadata(*, row: dict, user_id: str, db: Session) -> dict:
         user_id=user_id,
         exchange=row.get("exchange", "binance"),
         market_type=row.get("market_type", "spot"),
-        environment=row.get("environment", "testnet"),
+        environment=row.get("environment", "live"),
         purpose="execution_fallback",
     )
     return {

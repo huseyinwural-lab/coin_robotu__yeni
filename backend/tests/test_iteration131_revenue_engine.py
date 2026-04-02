@@ -50,7 +50,7 @@ class TestRevenueLedgerMigration:
         """GET /api/admin/revenue/summary should not crash (500)"""
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet"},
+            params={"environment": "live"},
             headers=admin_headers,
             timeout=15,
         )
@@ -76,7 +76,7 @@ class TestRevenueSummaryDeterminism:
 
     def test_consecutive_calls_return_consistent_totals(self, admin_headers):
         """Two consecutive calls should return same total/today values"""
-        params = {"environment": "testnet", "top_limit": 10}
+        params = {"environment": "live", "top_limit": 10}
         
         response1 = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
@@ -110,7 +110,7 @@ class TestRevenueSummaryResponseStructure:
         """Response should have all required fields"""
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet"},
+            params={"environment": "live"},
             headers=admin_headers,
             timeout=15,
         )
@@ -132,7 +132,7 @@ class TestRevenueSummaryResponseStructure:
         """Top users should have correct structure"""
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet", "top_limit": 5},
+            params={"environment": "live", "top_limit": 5},
             headers=admin_headers,
             timeout=15,
         )
@@ -152,7 +152,7 @@ class TestRevenueSummaryResponseStructure:
         """Top symbols should have correct structure"""
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet", "top_limit": 5},
+            params={"environment": "live", "top_limit": 5},
             headers=admin_headers,
             timeout=15,
         )
@@ -170,7 +170,7 @@ class TestRevenueSummaryResponseStructure:
         """Daily revenue should have correct structure"""
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet"},
+            params={"environment": "live"},
             headers=admin_headers,
             timeout=15,
         )
@@ -194,7 +194,7 @@ class TestRevenueSummaryFilters:
         """Filter by user_email should work"""
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet", "user_email": ADMIN_EMAIL},
+            params={"environment": "live", "user_email": ADMIN_EMAIL},
             headers=admin_headers,
             timeout=15,
         )
@@ -205,7 +205,7 @@ class TestRevenueSummaryFilters:
         """Filter by symbol should work"""
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet", "symbol": "BTCUSDT"},
+            params={"environment": "live", "symbol": "BTCUSDT"},
             headers=admin_headers,
             timeout=15,
         )
@@ -216,7 +216,7 @@ class TestRevenueSummaryFilters:
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
             params={
-                "environment": "testnet",
+                "environment": "live",
                 "start_date": "2026-01-01T00:00:00Z",
                 "end_date": "2026-12-31T23:59:59Z",
             },
@@ -229,7 +229,7 @@ class TestRevenueSummaryFilters:
         """top_limit parameter should limit results"""
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet", "top_limit": 3},
+            params={"environment": "live", "top_limit": 3},
             headers=admin_headers,
             timeout=15,
         )
@@ -251,7 +251,7 @@ class TestRegressionExistingFlows:
             f"{BASE_URL}/api/admin/commercial/p0/ingestion/rest-run",
             json={
                 "target_user_email": ADMIN_EMAIL,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["futures"],
                 "symbols": [],
                 "limit_per_symbol": 10,
@@ -266,7 +266,7 @@ class TestRegressionExistingFlows:
         """GET /api/admin/commercial/p0/pnl/latest should be available"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/pnl/latest",
-            params={"target_user_email": ADMIN_EMAIL, "environment": "testnet"},
+            params={"target_user_email": ADMIN_EMAIL, "environment": "live"},
             headers=admin_headers,
             timeout=15,
         )
@@ -277,7 +277,7 @@ class TestRegressionExistingFlows:
         """GET /api/admin/commercial/p0/data-quality should be available"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/data-quality",
-            params={"target_user_email": ADMIN_EMAIL, "environment": "testnet"},
+            params={"target_user_email": ADMIN_EMAIL, "environment": "live"},
             headers=admin_headers,
             timeout=15,
         )
@@ -287,7 +287,7 @@ class TestRegressionExistingFlows:
         """GET /api/admin/commercial/p0/live-gate should be available"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/live-gate",
-            params={"target_user_email": ADMIN_EMAIL, "environment": "testnet"},
+            params={"target_user_email": ADMIN_EMAIL, "environment": "live"},
             headers=admin_headers,
             timeout=15,
         )
@@ -299,7 +299,7 @@ class TestRegressionExistingFlows:
             f"{BASE_URL}/api/admin/commercial/p0/reconciliation/run",
             json={
                 "target_user_email": ADMIN_EMAIL,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["futures"],
                 "symbols": [],
                 "limit_per_symbol": 10,
@@ -320,7 +320,7 @@ class TestRevenueWritePath:
             f"{BASE_URL}/api/admin/commercial/p0/ingestion/rest-run",
             json={
                 "target_user_email": ADMIN_EMAIL,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["futures"],
                 "symbols": [],
                 "limit_per_symbol": 10,
@@ -357,7 +357,7 @@ class TestAdminRevenueAuthorization:
         """Revenue summary should require authentication"""
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet"},
+            params={"environment": "live"},
             timeout=15,
         )
         # Should be 401 or 403 without auth
@@ -368,7 +368,7 @@ class TestAdminRevenueAuthorization:
         # Admin user should have access
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
-            params={"environment": "testnet"},
+            params={"environment": "live"},
             headers=admin_headers,
             timeout=15,
         )

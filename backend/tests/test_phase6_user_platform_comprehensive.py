@@ -95,7 +95,7 @@ class TestUserExchangeConnect:
             headers=headers,
             json={
                 "exchange": "binance",
-                "mode": "testnet",
+                "mode": "live",
                 "api_key": raw_api_key,
                 "api_secret": raw_api_secret,
             },
@@ -128,7 +128,7 @@ class TestUserExchangeConnect:
             headers=headers,
             json={
                 "exchange": "binance",
-                "mode": "testnet",
+                "mode": "live",
                 "api_key": "ADMIN_KEY",
                 "api_secret": "ADMIN_SECRET",
             },

@@ -186,13 +186,13 @@ class TestExchangeAdapterGuard:
         # Save original values
         orig_mode = os.environ.get("EXECUTION_MODE")
         orig_live = os.environ.get("LIVE_TRADING_ENABLED")
-        orig_testnet = os.environ.get("TESTNET_TRADING_ENABLED")
+        orig_live = os.environ.get("LIVE_TRADING_ENABLED")
         
         try:
             # Set defaults
             os.environ["EXECUTION_MODE"] = "sim"
             os.environ["LIVE_TRADING_ENABLED"] = "false"
-            os.environ["TESTNET_TRADING_ENABLED"] = "false"
+            os.environ["LIVE_TRADING_ENABLED"] = "false"
             
             adapter = get_execution_adapter()
             assert isinstance(adapter, SimExecutionAdapter)
@@ -203,8 +203,8 @@ class TestExchangeAdapterGuard:
                 os.environ["EXECUTION_MODE"] = orig_mode
             if orig_live:
                 os.environ["LIVE_TRADING_ENABLED"] = orig_live
-            if orig_testnet:
-                os.environ["TESTNET_TRADING_ENABLED"] = orig_testnet
+            if orig_live:
+                os.environ["LIVE_TRADING_ENABLED"] = orig_live
 
     def test_live_mode_requires_double_guard(self):
         """Live mode requires both EXECUTION_MODE=live AND LIVE_TRADING_ENABLED=true"""
@@ -237,25 +237,25 @@ class TestExchangeAdapterGuard:
             else:
                 os.environ.pop("LIVE_TRADING_ENABLED", None)
 
-    def test_testnet_mode_requires_double_guard(self):
-        """Testnet mode requires both EXECUTION_MODE=testnet AND TESTNET_TRADING_ENABLED=true"""
+    def test_live_mode_requires_double_guard(self):
+        """Live mode requires both EXECUTION_MODE=live AND LIVE_TRADING_ENABLED=true"""
         from core.exchanges import get_execution_adapter
         from core.exchanges.sim_adapter import SimExecutionAdapter
         from core.exchanges.binance_adapter import BinanceExecutionAdapter
         
         orig_mode = os.environ.get("EXECUTION_MODE")
-        orig_testnet = os.environ.get("TESTNET_TRADING_ENABLED")
+        orig_live = os.environ.get("LIVE_TRADING_ENABLED")
         
         try:
-            # Only EXECUTION_MODE=testnet, but TESTNET_TRADING_ENABLED=false -> should return SIM
-            os.environ["EXECUTION_MODE"] = "testnet"
-            os.environ["TESTNET_TRADING_ENABLED"] = "false"
+            # Only EXECUTION_MODE=live, but LIVE_TRADING_ENABLED=false -> should return SIM
+            os.environ["EXECUTION_MODE"] = "live"
+            os.environ["LIVE_TRADING_ENABLED"] = "false"
             
             adapter = get_execution_adapter()
-            assert isinstance(adapter, SimExecutionAdapter), "Should fallback to SIM when TESTNET_TRADING_ENABLED=false"
+            assert isinstance(adapter, SimExecutionAdapter), "Should fallback to SIM when LIVE_TRADING_ENABLED=false"
             
             # Both guards enabled -> should return Binance
-            os.environ["TESTNET_TRADING_ENABLED"] = "true"
+            os.environ["LIVE_TRADING_ENABLED"] = "true"
             adapter = get_execution_adapter()
             assert isinstance(adapter, BinanceExecutionAdapter), "Should return Binance when both guards enabled"
         finally:
@@ -263,10 +263,10 @@ class TestExchangeAdapterGuard:
                 os.environ["EXECUTION_MODE"] = orig_mode
             else:
                 os.environ.pop("EXECUTION_MODE", None)
-            if orig_testnet:
-                os.environ["TESTNET_TRADING_ENABLED"] = orig_testnet
+            if orig_live:
+                os.environ["LIVE_TRADING_ENABLED"] = orig_live
             else:
-                os.environ.pop("TESTNET_TRADING_ENABLED", None)
+                os.environ.pop("LIVE_TRADING_ENABLED", None)
 
 
 class TestBinanceAdapterGuardBlocking:
@@ -294,27 +294,27 @@ class TestBinanceAdapterGuardBlocking:
             if orig_live:
                 os.environ["LIVE_TRADING_ENABLED"] = orig_live
 
-    def test_binance_adapter_blocks_testnet_without_guard(self):
-        """Binance adapter should raise RuntimeError when testnet guard not enabled"""
+    def test_binance_adapter_blocks_live_without_guard(self):
+        """Binance adapter should raise RuntimeError when live guard not enabled"""
         from core.exchanges.binance_adapter import BinanceExecutionAdapter
         
         orig_mode = os.environ.get("EXECUTION_MODE")
-        orig_testnet = os.environ.get("TESTNET_TRADING_ENABLED")
+        orig_live = os.environ.get("LIVE_TRADING_ENABLED")
         
         try:
-            os.environ["EXECUTION_MODE"] = "testnet"
-            os.environ["TESTNET_TRADING_ENABLED"] = "false"
+            os.environ["EXECUTION_MODE"] = "live"
+            os.environ["LIVE_TRADING_ENABLED"] = "false"
             
             adapter = BinanceExecutionAdapter()
             with pytest.raises(RuntimeError) as exc_info:
                 adapter.submit_order({"execution_job_id": "test", "size": 1.0})
             
-            assert "testnet_guard_blocked" in str(exc_info.value)
+            assert "live_guard_blocked" in str(exc_info.value)
         finally:
             if orig_mode:
                 os.environ["EXECUTION_MODE"] = orig_mode
-            if orig_testnet:
-                os.environ["TESTNET_TRADING_ENABLED"] = orig_testnet
+            if orig_live:
+                os.environ["LIVE_TRADING_ENABLED"] = orig_live
 
 
 class TestAlertPayloadContract:

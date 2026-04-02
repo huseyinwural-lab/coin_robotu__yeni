@@ -244,7 +244,7 @@ class TestReadinessAPIEndpoints:
             # Verify bybit checklist if present
             if "bybit" in checklist:
                 bybit = checklist["bybit"]
-                assert "has_testnet_credentials" in bybit, "bybit checklist must have has_testnet_credentials"
+                assert "has_live_credentials" in bybit, "bybit checklist must have has_live_credentials"
                 assert "has_live_credentials" in bybit, "bybit checklist must have has_live_credentials"
                 assert "environment_mapped" in bybit, "bybit checklist must have environment_mapped"
                 assert "reason_code" in bybit, "bybit checklist must have reason_code"

@@ -31,7 +31,7 @@ def test_order_validation_rejects_invalid_leverage_and_min_order_size():
             account_label="default",
             exchange="bybit",
             market_type="futures",
-            environment="testnet",
+            environment="live",
             is_default=True,
             readiness_snapshot={"connection_health": "online", "can_trade": True, "validation_latency_ms": 10},
             permission_snapshot=["trade"],

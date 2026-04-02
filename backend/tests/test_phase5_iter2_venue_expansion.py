@@ -80,7 +80,7 @@ class TestAdminExchangesRegistry:
             "exchange_name": "Test Kraken Exchange",
             "status": "active",
             "supported_market_types": ["spot", "futures"],
-            "supports_testnet": True,
+            "supports_live": True,
             "supports_live": False,
             "health_status": "healthy",
             "rate_limit_status": "ok",
@@ -105,7 +105,7 @@ class TestAdminExchangesRegistry:
             "exchange_name": "Duplicate Binance",
             "status": "active",
             "supported_market_types": ["spot"],
-            "supports_testnet": True,
+            "supports_live": True,
             "supports_live": False,
             "health_status": "healthy",
             "rate_limit_status": "ok",
@@ -187,7 +187,7 @@ class TestAdminCapabilities:
                 "exchange_name": "Test Cap Exchange",
                 "status": "active",
                 "supported_market_types": ["spot"],
-                "supports_testnet": True,
+                "supports_live": True,
                 "supports_live": False,
                 "health_status": "healthy",
                 "rate_limit_status": "ok",
@@ -303,7 +303,7 @@ class TestAdminAllowedMarkets:
                 "exchange_name": "Test Market Exchange",
                 "status": "active",
                 "supported_market_types": ["spot"],
-                "supports_testnet": True,
+                "supports_live": True,
                 "supports_live": False,
                 "health_status": "healthy",
                 "rate_limit_status": "ok",
@@ -314,7 +314,7 @@ class TestAdminAllowedMarkets:
         payload = {
             "exchange_code": "test_market_exchange",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "enabled": True,
         }
         response = requests.post(
@@ -326,7 +326,7 @@ class TestAdminAllowedMarkets:
         data = response.json()
         assert data["exchange_code"] == "test_market_exchange"
         assert data["market_type"] == "spot"
-        assert data["environment"] == "testnet"
+        assert data["environment"] == "live"
         assert data["enabled"] is True
         return data["id"]
 
@@ -417,7 +417,7 @@ class TestAdminUserAssignments:
             "exchange_code": "binance",
             "spot_allowed": True,
             "futures_allowed": True,
-            "testnet_allowed": True,
+            "live_allowed": True,
             "live_allowed": False,
         }
         response = requests.put(
@@ -431,7 +431,7 @@ class TestAdminUserAssignments:
         assert data["exchange_code"] == "binance"
         assert data["spot_allowed"] is True
         assert data["futures_allowed"] is True
-        assert data["testnet_allowed"] is True
+        assert data["live_allowed"] is True
         assert data["live_allowed"] is False
 
     def test_admin_list_user_assignments_by_user_id(self, admin_token):
@@ -465,7 +465,7 @@ class TestExchangeValidateEndpoint:
         response = requests.get(
             f"{BASE_URL}/api/exchange/validate",
             headers={"Authorization": f"Bearer {user_token}"},
-            params={"market_type": "futures", "environment": "testnet"},
+            params={"market_type": "futures", "environment": "live"},
         )
         # Should return 422 when exchange is missing
         assert response.status_code == 422
@@ -475,7 +475,7 @@ class TestExchangeValidateEndpoint:
         response = requests.get(
             f"{BASE_URL}/api/exchange/validate",
             headers={"Authorization": f"Bearer {user_token}"},
-            params={"exchange": "binance", "environment": "testnet"},
+            params={"exchange": "binance", "environment": "live"},
         )
         # Should return 422 when market_type is missing
         assert response.status_code == 422
@@ -498,7 +498,7 @@ class TestExchangeValidateEndpoint:
             params={
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
             },
         )
         # May return 400/403 if no credentials or no assignment, but detail should have expected shape
@@ -523,7 +523,7 @@ class TestExchangeValidateEndpoint:
             params={
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
             },
         )
         # Should not be 422 (validation error)
@@ -562,7 +562,7 @@ class TestUserVenueOptions:
             params={
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
             },
         )
         assert response.status_code == 200
@@ -599,7 +599,7 @@ class TestExistingKeyAndReadinessRegression:
         """Test PUT /api/phase4/exchange-settings still works"""
         payload = {
             "exchange": "binance",
-            "mode": "testnet",
+            "mode": "live",
             "api_key": "test_key_placeholder",
             "api_secret": "test_secret_placeholder",
         }
@@ -611,7 +611,7 @@ class TestExistingKeyAndReadinessRegression:
         assert response.status_code == 200
         data = response.json()
         assert data["exchange"] == "binance"
-        assert data["mode"] == "testnet"
+        assert data["mode"] == "live"
         assert data["has_api_key"] is True
         assert data["has_api_secret"] is True
 
@@ -628,7 +628,7 @@ class TestExistingKeyAndReadinessRegression:
         assert "has_api_secret" in data
         assert "validation_success" in data
         assert "can_trade" in data
-        assert "is_testnet_environment" in data
+        assert "is_live_environment" in data
         assert "is_validation_stale" in data
 
     def test_test_order_blocked_when_key_invalid(self, user_token):

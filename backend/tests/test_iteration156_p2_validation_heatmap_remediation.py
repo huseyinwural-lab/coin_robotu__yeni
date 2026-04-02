@@ -108,7 +108,7 @@ class TestValidationCenterRerunP2403:
         """Test validation center rerun for global scope"""
         response = api_client.post(
             f"{BASE_URL}/api/venues/admin/validation-center/rerun",
-            json={"user_id": None, "strategy_id": None, "market_type": "spot", "environment": "testnet"},
+            json={"user_id": None, "strategy_id": None, "market_type": "spot", "environment": "live"},
         )
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         
@@ -124,7 +124,7 @@ class TestValidationCenterRerunP2403:
         """Test validation center rerun returns validation_report with checks"""
         response = api_client.post(
             f"{BASE_URL}/api/venues/admin/validation-center/rerun",
-            json={"user_id": None, "strategy_id": None, "market_type": "futures", "environment": "testnet"},
+            json={"user_id": None, "strategy_id": None, "market_type": "futures", "environment": "live"},
         )
         assert response.status_code == 200
         
@@ -155,7 +155,7 @@ class TestValidationCenterRerunP2403:
         """Test validation center rerun returns updated validation_center"""
         response = api_client.post(
             f"{BASE_URL}/api/venues/admin/validation-center/rerun",
-            json={"user_id": None, "strategy_id": None, "market_type": "spot", "environment": "testnet"},
+            json={"user_id": None, "strategy_id": None, "market_type": "spot", "environment": "live"},
         )
         assert response.status_code == 200
         
@@ -382,7 +382,7 @@ class TestDriftAlertRule24h:
         for i in range(3):
             response = api_client.post(
                 f"{BASE_URL}/api/venues/admin/validation-center/rerun",
-                json={"user_id": None, "strategy_id": None, "market_type": "spot", "environment": "testnet"},
+                json={"user_id": None, "strategy_id": None, "market_type": "spot", "environment": "live"},
             )
             assert response.status_code == 200
         

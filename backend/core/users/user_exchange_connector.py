@@ -123,7 +123,7 @@ def get_or_create_user_exchange_setting(db: Session, user_id: str) -> UserExchan
         id=str(uuid.uuid4()),
         user_id=user_id,
         exchange="binance",
-        mode="testnet",
+        mode="live",
         api_key_encrypted="",
         api_secret_encrypted="",
         permissions_snapshot=[],

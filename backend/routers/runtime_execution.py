@@ -12,7 +12,7 @@ from core.go_live_checklist import (
     run_canary_end_to_end_validation,
     run_final_regression_validation,
     run_single_flow_dry_run,
-    run_testnet_lifecycle_validation,
+    run_live_lifecycle_validation,
     verify_kill_switch_rollback,
     wizard_arm_live,
     wizard_confirm_live,
@@ -79,7 +79,7 @@ class CanaryRunRequest(BaseModel):
     strategy_name: str = Field(default="ema_rsi", min_length=1, max_length=80)
 
 
-class TestnetLifecycleRequest(BaseModel):
+class LiveLifecycleRequest(BaseModel):
     symbol: str = Field(default="BTCUSDT", min_length=3, max_length=24)
     size: float = Field(default=0.0001, gt=0)
 
@@ -431,14 +431,14 @@ def cancel_exchange_order(
     }
 
 
-@router.post("/exchange/testnet-lifecycle/run")
-def run_testnet_lifecycle_endpoint(
-    payload: TestnetLifecycleRequest,
+@router.post("/exchange/live-lifecycle/run")
+def run_live_lifecycle_endpoint(
+    payload: LiveLifecycleRequest,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     try:
-        result = run_testnet_lifecycle_validation(
+        result = run_live_lifecycle_validation(
             db,
             user_id=current_user.id,
             symbol=payload.symbol,
@@ -622,14 +622,12 @@ def verify_kill_switch_rollback_endpoint(
 def get_execution_mode(current_user: User = Depends(require_admin)):
     alias_to_mode = {
         "mock": "sim",
-        "paper": "testnet",
+        "paper": "live",
         "live": "live",
         "sim": "sim",
-        "testnet": "testnet",
     }
     compatibility_alias = {
         "sim": "MOCK",
-        "testnet": "PAPER",
         "live": "LIVE",
     }
     raw_mode = str(os.environ.get("EXECUTION_MODE") or "sim").strip().lower()
@@ -642,7 +640,6 @@ def get_execution_mode(current_user: User = Depends(require_admin)):
         "compatibility_notice": "legacy PAPER/MOCK aliases will be removed after one sprint",
         "flags": {
             "LIVE_TRADING_ENABLED": str(os.environ.get("LIVE_TRADING_ENABLED") or "false"),
-            "TESTNET_TRADING_ENABLED": str(os.environ.get("TESTNET_TRADING_ENABLED") or "false"),
             "LIVE_ROUTE_APPROVED": str(os.environ.get("LIVE_ROUTE_APPROVED") or "false"),
             "CANARY_MODE": str(os.environ.get("CANARY_MODE") or "false"),
             "CANARY_MAX_NOTIONAL": str(os.environ.get("CANARY_MAX_NOTIONAL") or "100"),

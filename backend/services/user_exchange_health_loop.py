@@ -76,7 +76,7 @@ def _signed_check_interval_seconds(*, environment: str, has_open_position: bool,
     signed_policy = health_policy.get("signed_interval_seconds") or {}
 
     env = (environment or "").strip().lower()
-    env_key = "testnet" if env == "testnet" else "live"
+    env_key = "live" if env == "live" else "live"
     env_policy = signed_policy.get(env_key) or {}
     base_interval = int(env_policy.get("open_position") or 8) if has_open_position else int(env_policy.get("idle") or 28)
     jitter_max = int(health_policy.get("signed_interval_jitter_seconds") or 0)
@@ -104,8 +104,8 @@ def _run_fast_liveness_probe(row: UserExchangeConnection, snapshot: dict) -> tup
 
     probe_snapshot = dict(snapshot)
     probe_snapshot["liveness_checked_at"] = now.isoformat()
-    env_key = "testnet" if str(row.environment or "").lower() == "testnet" else "live"
-    probe_snapshot["liveness_interval_seconds"] = int(liveness_policy.get(env_key) or (4 if env_key == "testnet" else 8))
+    env_key = "live" if str(row.environment or "").lower() == "live" else "live"
+    probe_snapshot["liveness_interval_seconds"] = int(liveness_policy.get(env_key) or (4 if env_key == "live" else 8))
 
     if str(row.exchange or "").strip().lower() != "binance":
         probe_snapshot["liveness_status"] = "unsupported_exchange"
@@ -311,9 +311,9 @@ def _sync_connection(db: Session, row: UserExchangeConnection, open_positions_in
             row.updated_at = now
         return
 
-    env_key = "testnet" if str(row.environment or "").lower() == "testnet" else "live"
+    env_key = "live" if str(row.environment or "").lower() == "live" else "live"
     liveness_policy = health_policy.get("liveness_interval_seconds") or {}
-    liveness_interval = int(liveness_policy.get(env_key) or (4 if env_key == "testnet" else 8))
+    liveness_interval = int(liveness_policy.get(env_key) or (4 if env_key == "live" else 8))
     liveness_due = _seconds_since(snapshot.get("liveness_checked_at"), now=now) >= liveness_interval
 
     if liveness_due:

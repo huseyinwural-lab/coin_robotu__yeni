@@ -143,7 +143,7 @@ export const AdminSnapshotsPage = () => {
           data-testid="admin-snapshots-filter-environment-select"
         >
           <option value="live">live</option>
-          <option value="testnet">testnet</option>
+          <option value="live">live</option>
         </select>
         <select
           className="h-10 rounded border px-2"

@@ -16,7 +16,7 @@ from models import (
     RiskOrchestratorPolicy,
     ScannerPerformanceSnapshot,
     StrategyOutcomeMemory,
-    TestnetExecutionLog,
+    LiveExecutionLog,
 )
 from services.risk_engine_service import build_admin_risk_status
 from services.scanner_observability_service import FALLBACK_TRIGGER_THRESHOLDS
@@ -199,9 +199,9 @@ def build_execution_quality_summary(db: Session, *, window: str = "1h") -> dict:
 
     if not metrics:
         fallback_rows = (
-            db.query(TestnetExecutionLog)
-            .filter(TestnetExecutionLog.created_at >= since)
-            .order_by(TestnetExecutionLog.created_at.desc())
+            db.query(LiveExecutionLog)
+            .filter(LiveExecutionLog.created_at >= since)
+            .order_by(LiveExecutionLog.created_at.desc())
             .limit(1200)
             .all()
         )
@@ -742,10 +742,10 @@ def build_live_trading_summary(db: Session, cache, *, window: str = "1h") -> dic
     execution_mode = "SIM"
     if config_obj:
         market_type = str(config_obj.market_type or "").lower()
-        if bool(config_obj.live_mode_enabled) and "testnet" not in market_type and not bool(config_obj.safe_mode_enabled):
+        if bool(config_obj.live_mode_enabled) and "live" not in market_type and not bool(config_obj.safe_mode_enabled):
             execution_mode = "LIVE"
-        elif bool(config_obj.live_mode_enabled) or "testnet" in market_type or bool(config_obj.safe_mode_enabled):
-            execution_mode = "TESTNET"
+        elif bool(config_obj.live_mode_enabled) or "live" in market_type or bool(config_obj.safe_mode_enabled):
+            execution_mode = "LIVE"
 
     system_health = {
         "execution_mode": execution_mode,

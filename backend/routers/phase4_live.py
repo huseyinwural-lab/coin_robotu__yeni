@@ -31,7 +31,7 @@ from schemas import (
     AlertPolicyUpdate,
     ActiveAlertResponse,
     TestOrderResponse,
-    TestnetConnectivityResponse,
+    LiveConnectivityResponse,
     ProductionGateChecklistUpdateRequest,
     ProductionGateCheckCompareResponse,
     ProductionGateCheckHistoryResponse,
@@ -115,7 +115,7 @@ router = APIRouter(prefix="/phase4", tags=["phase4_live"])
 logger = logging.getLogger(__name__)
 MODE_TRANSITION_PHRASES = {
     "LIVE": "SWITCH TO LIVE",
-    "TESTNET": "SWITCH TO TESTNET",
+    "LIVE": "SWITCH TO LIVE",
     "SIM": "SWITCH TO SIM",
     "PAPER": "SWITCH TO PAPER",
     "MOCK": "SWITCH TO MOCK",
@@ -389,7 +389,7 @@ def send_first_test_order(current_user: User = Depends(get_current_user), db: Se
     create_audit_log(
         db,
         action="phase4_test_order_sent",
-        entity_type="testnet_execution",
+        entity_type="live_execution",
         entity_id=log.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
@@ -1107,9 +1107,9 @@ def gate_active_alerts(_: User = Depends(require_admin), db: Session = Depends(g
     return [ActiveAlertResponse(**item) for item in active_alerts(db)]
 
 
-@router.get("/testnet-connectivity", response_model=TestnetConnectivityResponse)
-def testnet_connectivity(_: User = Depends(require_admin)):
-    return TestnetConnectivityResponse(**adapter.ping())
+@router.get("/live-connectivity", response_model=LiveConnectivityResponse)
+def live_connectivity(_: User = Depends(require_admin)):
+    return LiveConnectivityResponse(**adapter.ping())
 
 
 @router.post("/kill-switch/stop-all-bots")

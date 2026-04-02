@@ -316,7 +316,7 @@ class ExecutionPolicyDecisionLog(Base):
     simulation_mode: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     symbol: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
     strategy_binding: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
-    environment: Mapped[str] = mapped_column(String(30), default="testnet", index=True)
+    environment: Mapped[str] = mapped_column(String(30), default="live", index=True)
     rollout_mode: Mapped[str] = mapped_column(String(20), default="shadow")
     recommended_action: Mapped[str] = mapped_column(String(20), default="ALLOW")
     enforced_action: Mapped[str] = mapped_column(String(20), default="ALLOW")
@@ -369,7 +369,7 @@ class LiveActivationConfig(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
     exchange: Mapped[str] = mapped_column(String(30), default="binance")
-    market_type: Mapped[str] = mapped_column(String(20), default="futures_testnet")
+    market_type: Mapped[str] = mapped_column(String(20), default="futures_live")
     safe_mode_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     live_mode_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     symbol_whitelist: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -391,8 +391,8 @@ class LiveActivationConfig(Base):
     environment_policy: Mapped[dict] = mapped_column(JSON, default=dict)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-class TestnetExecutionLog(Base):
-    __tablename__ = "testnet_execution_logs"
+class LiveExecutionLog(Base):
+    __tablename__ = "live_execution_logs"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
@@ -423,7 +423,7 @@ class ExecutionMetric(Base):
     order_type: Mapped[str] = mapped_column(String(20), default="MARKET")
     exchange: Mapped[str] = mapped_column(String(30), default="binance")
     market_type: Mapped[str] = mapped_column(String(20), default="futures")
-    environment: Mapped[str] = mapped_column(String(20), default="testnet")
+    environment: Mapped[str] = mapped_column(String(20), default="live")
     side: Mapped[str] = mapped_column(String(10), default="BUY")
     quote_qty: Mapped[float] = mapped_column(Float, default=10)
     mid_price: Mapped[float] = mapped_column(Float)

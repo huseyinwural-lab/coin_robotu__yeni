@@ -29,10 +29,10 @@ ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-canary.admin@platform.local}"
 ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-CanaryAdmin123!}"
 USER_EMAIL="${CANARY_TEST_USER_EMAIL:-canary_c1_$(date +%s)@example.com}"
 USER_PASSWORD="${CANARY_TEST_USER_PASSWORD:-CanaryPass123!}"
-TESTNET_API_KEY="${BINANCE_TESTNET_API_KEY:-}"
-TESTNET_API_SECRET="${BINANCE_TESTNET_API_SECRET:-}"
+LIVE_API_KEY="${BINANCE_LIVE_API_KEY:-}"
+LIVE_API_SECRET="${BINANCE_LIVE_API_SECRET:-}"
 
-[[ -n "${TESTNET_API_KEY}" && -n "${TESTNET_API_SECRET}" ]] || fail "BINANCE_TESTNET_API_KEY/SECRET zorunlu"
+[[ -n "${LIVE_API_KEY}" && -n "${LIVE_API_SECRET}" ]] || fail "BINANCE_LIVE_API_KEY/SECRET zorunlu"
 
 CANARY_SYMBOLS_JSON='["BTCUSDT","ETHUSDT","BNBUSDT"]'
 CANARY_SYMBOLS=("BTCUSDT" "ETHUSDT" "BNBUSDT")
@@ -115,7 +115,7 @@ PY
 
 set_exchange_keys() {
   local payload code
-  payload="{\"exchange\":\"binance\",\"mode\":\"futures_testnet\",\"api_key\":\"${TESTNET_API_KEY}\",\"api_secret\":\"${TESTNET_API_SECRET}\"}"
+  payload="{\"exchange\":\"binance\",\"mode\":\"futures_live\",\"api_key\":\"${LIVE_API_KEY}\",\"api_secret\":\"${LIVE_API_SECRET}\"}"
   code="$(request_json PUT "${BASE_URL}/api/phase4/exchange-settings" "${payload}" "${USER_TOKEN}" "/tmp/c1_exchange_settings.json")"
   [[ "${code}" == "200" ]] || fail "exchange settings update başarısız http=${code}"
   log "PASS: exchange settings güncellendi"

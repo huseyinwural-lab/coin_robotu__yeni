@@ -11,10 +11,10 @@ def _now_iso() -> str:
 
 def _binance_base(market_type: str, environment: str) -> str:
     market = str(market_type or "spot").lower()
-    env = str(environment or "testnet").lower()
+    env = str(environment or "live").lower()
     if market == "futures":
-        return "https://testnet.binancefuture.com" if env == "testnet" else "https://fapi.binance.com"
-    return "https://testnet.binance.vision" if env == "testnet" else "https://api.binance.com"
+        return "https://fapi.binance.com" if env == "live" else "https://fapi.binance.com"
+    return "https://api.binance.com" if env == "live" else "https://api.binance.com"
 
 
 def _build_symbol_capability(symbol: str, market_type: str, base_support: dict) -> dict:
@@ -45,7 +45,7 @@ def discover_exchange_capabilities(
 ) -> dict:
     exchange = str(exchange_code or "").lower()
     market = str(market_type or "spot").lower()
-    env = str(environment or "testnet").lower()
+    env = str(environment or "live").lower()
 
     base_support = {
         "supports_spot": market == "spot",

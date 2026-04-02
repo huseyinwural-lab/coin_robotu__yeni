@@ -1608,7 +1608,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
           <p data-testid="user-readiness-has-api-secret">Secret mevcut: {String(readiness?.has_api_secret ?? false)}</p>
           <p data-testid="user-readiness-validation-success">Validation başarılı: {String(readiness?.validation_success ?? false)}</p>
           <p data-testid="user-readiness-can-trade">can_trade=true: {String(readiness?.can_trade ?? false)}</p>
-          <p data-testid="user-readiness-testnet-env">live environment: {String(!(readiness?.is_testnet_environment ?? false))}</p>
+          <p data-testid="user-readiness-live-env">live environment: {String(!(readiness?.is_live_environment ?? false))}</p>
           <p data-testid="user-readiness-validation-stale">snapshot stale: {String(readiness?.is_validation_stale ?? true)}</p>
         </div>
       </div>

@@ -12,7 +12,6 @@ from services.execution_governance_service import build_release_gate_status
 ENVIRONMENT_MAP = {
     "dev": "DEV",
     "development": "DEV",
-    "testnet": "DEV",
     "staging": "STAGING",
     "stage": "STAGING",
     "prod": "PROD",

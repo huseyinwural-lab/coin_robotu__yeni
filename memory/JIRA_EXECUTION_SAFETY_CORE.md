@@ -19,15 +19,15 @@ Futures execution hattında sistem hazır değilse **asla READY/ALLOW** dönmeme
 
 ---
 
-## STORY-2: Unified Environment Policy (testnet/staging/live)
+## STORY-2: Unified Environment Policy (live/staging/live)
 **Kapsam**
 - `/api/execution-safety/recovery/policy`
 - `/api/execution-safety/recovery/policy/{environment}`
 - Policy alanları: `enable_flag, validation_status, last_verified_at, verification_evidence, path_open`
 
 **Acceptance Criteria**
-1. Live path açılmadan testnet validation zorunlu.
-2. Testnet disabled + live unvalidated kombinasyonu `BLOCKED` üretir.
+1. Live path açılmadan live validation zorunlu.
+2. Live disabled + live unvalidated kombinasyonu `BLOCKED` üretir.
 3. Path açık/kapalı kararı tek merkez policy’den gelir.
 
 ---
@@ -123,10 +123,10 @@ Futures execution hattında sistem hazır değilse **asla READY/ALLOW** dönmeme
 
 ---
 
-## STORY-10: Testnet Acceptance Flow (En Son)
+## STORY-10: Live Acceptance Flow (En Son)
 **Kapsam**
-- Gerçek testnet zinciri doğrulaması (submit → ack/fill → reconcile → artefact)
+- Gerçek live zinciri doğrulaması (submit → ack/fill → reconcile → artefact)
 
 **Acceptance Criteria**
-1. En az 1 gerçek testnet order zinciri uçtan uca tamamlanır.
+1. En az 1 gerçek live order zinciri uçtan uca tamamlanır.
 2. Zincir API/audit/artefact üzerinden doğrulanabilir.

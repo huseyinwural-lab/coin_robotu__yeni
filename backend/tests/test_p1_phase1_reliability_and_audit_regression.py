@@ -22,7 +22,7 @@ def test_reliability_policy_loads_with_valid_runtime_env(monkeypatch):
     assert policy["runtime_env"] == "staging"
     assert policy["policy_version"].startswith("connection_reliability_policy")
     assert int(policy["retry"]["max_retry_attempts"]) >= 1
-    assert int(policy["health"]["signed_interval_seconds"]["testnet"]["idle"]) >= 1
+    assert int(policy["health"]["signed_interval_seconds"]["live"]["idle"]) >= 1
 
 
 def test_deterministic_jitter_is_stable_for_same_seed():
@@ -56,7 +56,7 @@ def test_signed_interval_uses_policy_and_jitter(monkeypatch):
         lambda: {
             "health": {
                 "signed_interval_seconds": {
-                    "testnet": {"open_position": 10, "idle": 30},
+                    "live": {"open_position": 10, "idle": 30},
                     "live": {"open_position": 20, "idle": 40},
                 },
                 "signed_interval_jitter_seconds": 2,
@@ -64,7 +64,7 @@ def test_signed_interval_uses_policy_and_jitter(monkeypatch):
         },
     )
     value = health_loop._signed_check_interval_seconds(
-        environment="testnet",
+        environment="live",
         has_open_position=False,
         connection_id="conn-a",
     )

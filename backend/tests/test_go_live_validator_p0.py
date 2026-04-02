@@ -108,7 +108,7 @@ def test_go_live_validator_blocks_when_data_missing():
 
 def test_go_live_validator_blocks_when_mode_mismatch():
     context = _base_context()
-    context["execution_mode"] = "TESTNET"
+    context["execution_mode"] = "LIVE"
     result = run_go_live_validator(context)
     assert result["readiness_state"] in {"BLOCKED", "UNKNOWN"}
     assert result["execution_allowed"] is False

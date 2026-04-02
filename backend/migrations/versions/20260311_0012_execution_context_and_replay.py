@@ -40,11 +40,11 @@ def upgrade() -> None:
 
         op.execute(sa.text("UPDATE execution_metrics SET exchange = 'binance' WHERE exchange IS NULL"))
         op.execute(sa.text("UPDATE execution_metrics SET market_type = 'futures' WHERE market_type IS NULL"))
-        op.execute(sa.text("UPDATE execution_metrics SET environment = 'testnet' WHERE environment IS NULL"))
+        op.execute(sa.text("UPDATE execution_metrics SET environment = 'live' WHERE environment IS NULL"))
 
         op.alter_column("execution_metrics", "exchange", existing_type=sa.String(length=30), nullable=False, server_default="binance")
         op.alter_column("execution_metrics", "market_type", existing_type=sa.String(length=20), nullable=False, server_default="futures")
-        op.alter_column("execution_metrics", "environment", existing_type=sa.String(length=20), nullable=False, server_default="testnet")
+        op.alter_column("execution_metrics", "environment", existing_type=sa.String(length=20), nullable=False, server_default="live")
 
     if not _table_exists(bind, "replay_runs"):
         op.create_table(

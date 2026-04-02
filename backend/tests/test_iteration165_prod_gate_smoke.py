@@ -106,7 +106,7 @@ def test_prod_gate_user_login_and_readiness_checklist_ok(client: TestClient):
     response = client.get(
         "/api/exchange/readiness-checklist",
         headers={"Authorization": f"Bearer {token}"},
-        params={"exchange": "binance", "market_type": "futures", "environment": "testnet"},
+        params={"exchange": "binance", "market_type": "futures", "environment": "live"},
     )
     assert response.status_code == 200
     payload = response.json()

@@ -17,7 +17,7 @@ from services.execution_safety_core_service import (
     get_order_reconciliation_summary,
     get_execution_safety_gate,
     persist_execution_safety_artifact,
-    run_bybit_testnet_order_smoke,
+    run_bybit_live_order_smoke,
 )
 from services.failed_event_service import upsert_failed_event
 from services.runtime_event_bus_service import publish_runtime_event
@@ -28,7 +28,7 @@ SAFETY_HARD_BLOCKERS = {
     "permission_check_failed",
     "balance_unverified",
     "execution_path_closed",
-    "testnet_disabled_while_live_unvalidated",
+    "live_disabled_while_live_unvalidated",
     "stale_market_data",
     "stale_exchange_data",
     "missing_required_proof",
@@ -109,7 +109,7 @@ def _canonical_intent_state(value: Any) -> str:
 def _default_environment_policy() -> dict:
     now = _utcnow().isoformat()
     return {
-        "testnet": {
+        "live": {
             "enable_flag": True,
             "validation_status": "UNVERIFIED",
             "last_verified_at": None,
@@ -125,7 +125,7 @@ def _default_environment_policy() -> dict:
             "path_open": False,
             "updated_at": now,
         },
-        "live": {
+        "sim": {
             "enable_flag": False,
             "validation_status": "UNVERIFIED",
             "last_verified_at": None,
@@ -182,7 +182,7 @@ def update_unified_environment_policy(
     actor_role: str,
 ) -> dict:
     normalized_env = str(environment or "").strip().lower()
-    if normalized_env not in {"testnet", "staging", "live"}:
+    if normalized_env not in {"live", "staging", "live"}:
         raise ValueError("invalid_environment")
 
     row, policy = _get_or_create_environment_policy(db)
@@ -242,14 +242,14 @@ def _map_blockers(
         blockers.append("missing_required_proof")
 
     live_policy = dict((policy.get("live") or {}))
-    testnet_policy = dict((policy.get("testnet") or {}))
+    live_policy = dict((policy.get("live") or {}))
     if not bool(live_policy.get("path_open", False)):
         blockers.append("execution_path_closed")
     if bool(live_policy.get("path_open", False)) and (
-        not bool(testnet_policy.get("enable_flag", False))
-        or str(testnet_policy.get("validation_status") or "").upper() != "VALIDATED"
+        not bool(live_policy.get("enable_flag", False))
+        or str(live_policy.get("validation_status") or "").upper() != "VALIDATED"
     ):
-        blockers.append("testnet_disabled_while_live_unvalidated")
+        blockers.append("live_disabled_while_live_unvalidated")
 
     if any(code in {"MARKET_DATA_MISSING", "MARKET_DATA_STALE"} for code in reason_codes):
         blockers.append("stale_market_data")
@@ -313,7 +313,7 @@ def evaluate_execution_safety_gate(
     gate = get_execution_safety_gate(db, user_id=user_id, force_refresh=force_refresh)
     _, policy = _get_or_create_environment_policy(db)
     config_row = db.query(LiveActivationConfig).filter(LiveActivationConfig.id == "global").first()
-    bybit_smoke = run_bybit_testnet_order_smoke(db, force_refresh=force_refresh)
+    bybit_smoke = run_bybit_live_order_smoke(db, force_refresh=force_refresh)
 
     correlation_ok = _has_correlation_spine_for_recent_intents(db, limit=20)
     blockers, warnings = _map_blockers(

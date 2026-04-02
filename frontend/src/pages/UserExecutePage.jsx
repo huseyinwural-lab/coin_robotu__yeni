@@ -327,7 +327,7 @@ export const UserExecutePage = () => {
         exchange_connection_id: selectedConnection?.id || form.exchange_connection_id || null,
         account_label: selectedConnection?.account_label || form.account_label || "default",
         exchange: selectedConnection?.exchange || form.exchange || "binance",
-        environment: selectedConnection?.environment || form.environment || "testnet",
+        environment: selectedConnection?.environment || form.environment || "live",
         signal: flowContext?.signal || flowContext?.intent_payload?.signal || null,
         score: flowContext?.score || flowContext?.intent_payload?.score || null,
         strategy: flowContext?.strategy_code || flowContext?.intent_payload?.strategy || form.strategy_binding || null,

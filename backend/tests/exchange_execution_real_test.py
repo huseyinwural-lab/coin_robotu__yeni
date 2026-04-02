@@ -5,8 +5,8 @@ Bu test dosyası canlı rollout öncesi gerçek exchange akışını izole etmek
 Varsayılan olarak kapalıdır; yalnızca aşağıdaki env açıldığında çalışır:
 
 RUN_REAL_EXCHANGE_TESTS=1
-BINANCE_TESTNET_API_KEY=...
-BINANCE_TESTNET_API_SECRET=...
+BINANCE_LIVE_API_KEY=...
+BINANCE_LIVE_API_SECRET=...
 """
 
 import os
@@ -32,12 +32,12 @@ def test_exchange_execution_real_flow_skeleton():
     """
 
     required_envs = [
-        "BINANCE_TESTNET_API_KEY",
-        "BINANCE_TESTNET_API_SECRET",
+        "BINANCE_LIVE_API_KEY",
+        "BINANCE_LIVE_API_SECRET",
     ]
     missing = [key for key in required_envs if not os.environ.get(key)]
     if missing:
-        pytest.skip(f"Missing required testnet credentials: {', '.join(missing)}")
+        pytest.skip(f"Missing required live credentials: {', '.join(missing)}")
 
     # Bu turda tam entegrasyon değil; sadece akış iskeleti ve koşul doğrulama.
     assert True

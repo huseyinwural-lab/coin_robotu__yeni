@@ -79,7 +79,7 @@ class TestCredentialResolutionPreviewTraceability:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution",
             },
             headers=admin_headers,
@@ -103,7 +103,7 @@ class TestCredentialResolutionPreviewTraceability:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution",
             },
             headers=admin_headers,
@@ -127,7 +127,7 @@ class TestCredentialResolutionPreviewTraceability:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution",
             },
             headers=admin_headers,
@@ -143,7 +143,7 @@ class TestCredentialResolutionPreviewTraceability:
         assert data["market_type"] == "spot", f"market_type mismatch: {data['market_type']}"
 
         assert "environment" in data, "environment field missing"
-        assert data["environment"] == "testnet", f"environment mismatch: {data['environment']}"
+        assert data["environment"] == "live", f"environment mismatch: {data['environment']}"
 
         assert "purpose" in data, "purpose field missing"
         assert data["purpose"] == "execution", f"purpose mismatch: {data['purpose']}"
@@ -159,7 +159,7 @@ class TestCredentialResolutionPreviewTraceability:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution",
             },
             headers=admin_headers,
@@ -183,7 +183,7 @@ class TestCredentialResolutionPreviewTraceability:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution",
             },
             headers=admin_headers,
@@ -211,7 +211,7 @@ class TestCredentialResolutionPreviewTraceability:
             "user_id": user_id,
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "purpose": "execution",
         }
 
@@ -252,7 +252,7 @@ class TestCredentialResolutionPreviewTraceability:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution",
             },
             headers=admin_headers,
@@ -300,7 +300,7 @@ class TestCredentialResolutionPreviewTraceability:
                     "user_id": user_id,
                     "exchange": "binance",
                     "market_type": "spot",
-                    "environment": "testnet",
+                    "environment": "live",
                     "purpose": purpose,
                 },
                 headers=admin_headers,
@@ -318,7 +318,7 @@ class TestCredentialResolutionPreviewTraceability:
         users_response = requests.get(f"{BASE_URL}/api/admin/users", headers=admin_headers)
         user_id = users_response.json()[0]["id"]
 
-        environments = ["testnet", "live"]
+        environments = ["live", "live"]
         request_ids = []
 
         for env in environments:
@@ -357,7 +357,7 @@ class TestAuditLogCreation:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution",
             },
             headers=admin_headers,

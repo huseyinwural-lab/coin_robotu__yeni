@@ -131,7 +131,7 @@ class TestUserExchangeSettings:
         """PUT exchange-settings should save credentials (encrypted)"""
         payload = {
             "exchange": "binance",
-            "mode": "testnet",
+            "mode": "live",
             "api_key": "fake_test_api_key_12345",
             "api_secret": "fake_test_api_secret_67890",
         }
@@ -147,13 +147,13 @@ class TestUserExchangeSettings:
         assert data["has_api_key"] is True, "has_api_key should be True after save"
         assert data["has_api_secret"] is True, "has_api_secret should be True after save"
         assert data["exchange"] == "binance"
-        assert data["mode"] == "testnet"
+        assert data["mode"] == "live"
 
     def test_put_exchange_settings_requires_auth(self):
         """PUT exchange-settings should require authentication"""
         payload = {
             "exchange": "binance",
-            "mode": "testnet",
+            "mode": "live",
             "api_key": "test",
             "api_secret": "test",
         }

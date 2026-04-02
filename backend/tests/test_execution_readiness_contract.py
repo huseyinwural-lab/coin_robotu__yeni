@@ -53,7 +53,7 @@ def test_execution_readiness_mocked_blocked_when_connection_exists():
             account_label="default",
             exchange="bybit",
             market_type="futures",
-            environment="testnet",
+            environment="live",
             is_default=True,
             readiness_snapshot={
                 "connection_health": "offline",
@@ -103,7 +103,7 @@ def test_validate_order_precheck_returns_violations_for_limit_breach():
             account_label="default",
             exchange="bybit",
             market_type="futures",
-            environment="testnet",
+            environment="live",
             is_default=True,
             readiness_snapshot={"connection_health": "online", "can_trade": True},
             permission_snapshot=["trade"],

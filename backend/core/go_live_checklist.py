@@ -23,7 +23,7 @@ from services.runtime_alert_triage_service import list_runtime_alerts
 
 
 ARTIFACT_DIR = Path("/app/test_reports")
-TESTNET_LIFECYCLE_ARTIFACT = "binance_testnet_lifecycle_latest.json"
+LIVE_LIFECYCLE_ARTIFACT = "binance_live_lifecycle_latest.json"
 CANARY_RUN_ARTIFACT = "canary_run_latest.json"
 KILL_SWITCH_VERIFICATION_ARTIFACT = "kill_switch_verification_latest.json"
 FINAL_REGRESSION_ARTIFACT = "runtime_final_regression_latest.json"
@@ -85,21 +85,21 @@ def _collect_env_values(key: str) -> list[str]:
 
 def _hydrate_binance_env_from_file() -> None:
     for key in [
-        "BINANCE_SPOT_TESTNET_BASE_URL",
+        "BINANCE_SPOT_LIVE_BASE_URL",
         "BINANCE_SPOT_LIVE_BASE_URL",
         "BINANCE_SPOT_BASE_URL",
-        "BINANCE_FUTURES_TESTNET_BASE_URL",
+        "BINANCE_FUTURES_LIVE_BASE_URL",
         "BINANCE_FUTURES_LIVE_BASE_URL",
         "BINANCE_FUTURES_BASE_URL",
-        "BINANCE_SPOT_TESTNET_PROXY_TOKEN",
+        "BINANCE_SPOT_LIVE_PROXY_TOKEN",
         "BINANCE_SPOT_LIVE_PROXY_TOKEN",
         "BINANCE_SPOT_PROXY_TOKEN",
-        "BINANCE_FUTURES_TESTNET_PROXY_TOKEN",
+        "BINANCE_FUTURES_LIVE_PROXY_TOKEN",
         "BINANCE_FUTURES_LIVE_PROXY_TOKEN",
         "BINANCE_FUTURES_PROXY_TOKEN",
         "BINANCE_PROXY_TOKEN",
-        "BINANCE_TESTNET_API_KEY",
-        "BINANCE_TESTNET_API_SECRET",
+        "BINANCE_LIVE_API_KEY",
+        "BINANCE_LIVE_API_SECRET",
     ]:
         if os.environ.get(key):
             continue
@@ -108,17 +108,17 @@ def _hydrate_binance_env_from_file() -> None:
             os.environ[key] = values[-1]
 
 
-def _candidate_testnet_credentials() -> list[tuple[str, str]]:
+def _candidate_live_credentials() -> list[tuple[str, str]]:
     candidates: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
 
-    env_pair = (str(os.environ.get("BINANCE_TESTNET_API_KEY") or "").strip(), str(os.environ.get("BINANCE_TESTNET_API_SECRET") or "").strip())
+    env_pair = (str(os.environ.get("BINANCE_LIVE_API_KEY") or "").strip(), str(os.environ.get("BINANCE_LIVE_API_SECRET") or "").strip())
     if all(env_pair) and env_pair not in seen:
         candidates.append(env_pair)
         seen.add(env_pair)
 
-    env_keys = _collect_env_values("BINANCE_TESTNET_API_KEY")
-    env_secrets = _collect_env_values("BINANCE_TESTNET_API_SECRET")
+    env_keys = _collect_env_values("BINANCE_LIVE_API_KEY")
+    env_secrets = _collect_env_values("BINANCE_LIVE_API_SECRET")
     for key, secret in zip(env_keys, env_secrets):
         pair = (str(key).strip(), str(secret).strip())
         if all(pair) and pair not in seen:
@@ -134,7 +134,7 @@ def _sync_runtime_binance_credentials_from_resolver(db: Session, *, user_id: str
             user_id=user_id,
             exchange="binance",
             market_type="spot",
-            environment="testnet",
+            environment="live",
             purpose="execution",
             include_secrets=True,
         )
@@ -145,11 +145,11 @@ def _sync_runtime_binance_credentials_from_resolver(db: Session, *, user_id: str
     api_secret = str(resolved.get("api_secret") or "").strip()
     effective_base_url = str(resolved.get("effective_base_url") or "").strip()
     if api_key:
-        os.environ["BINANCE_TESTNET_API_KEY"] = api_key
+        os.environ["BINANCE_LIVE_API_KEY"] = api_key
     if api_secret:
-        os.environ["BINANCE_TESTNET_API_SECRET"] = api_secret
+        os.environ["BINANCE_LIVE_API_SECRET"] = api_secret
     if effective_base_url:
-        os.environ["BINANCE_SPOT_TESTNET_BASE_URL"] = effective_base_url
+        os.environ["BINANCE_SPOT_LIVE_BASE_URL"] = effective_base_url
     return {
         "source": resolved.get("source"),
         "selected_credential_id": resolved.get("selected_credential_id"),
@@ -243,18 +243,18 @@ def _is_smoke_acceptable(smoke: dict) -> bool:
     return False
 
 
-def _ensure_valid_testnet_credentials(adapter) -> tuple[dict, str]:
+def _ensure_valid_live_credentials(adapter) -> tuple[dict, str]:
     account_endpoint = adapter._account_endpoint()
     active_base_url = adapter._active_base_url()
     last_auth_error = ""
 
-    for api_key, api_secret in _candidate_testnet_credentials():
+    for api_key, api_secret in _candidate_live_credentials():
         adapter.api_key = api_key
         adapter.api_secret = api_secret
         try:
             account_payload = adapter._signed_request("GET", account_endpoint, {}, base_url=active_base_url)
-            os.environ["BINANCE_TESTNET_API_KEY"] = api_key
-            os.environ["BINANCE_TESTNET_API_SECRET"] = api_secret
+            os.environ["BINANCE_LIVE_API_KEY"] = api_key
+            os.environ["BINANCE_LIVE_API_SECRET"] = api_secret
             return account_payload, f"{api_key[:4]}...{api_key[-4:]}"
         except RuntimeError as exc:
             last_auth_error = str(exc)
@@ -262,10 +262,10 @@ def _ensure_valid_testnet_credentials(adapter) -> tuple[dict, str]:
                 continue
             raise
 
-    raise RuntimeError(f"testnet_credentials_invalid_all_candidates:{last_auth_error or 'unknown'}")
+    raise RuntimeError(f"live_credentials_invalid_all_candidates:{last_auth_error or 'unknown'}")
 
 
-def run_testnet_lifecycle_validation(db: Session, *, user_id: str, symbol: str = "BTCUSDT", size: float = 0.0001) -> dict:
+def run_live_lifecycle_validation(db: Session, *, user_id: str, symbol: str = "BTCUSDT", size: float = 0.0001) -> dict:
     started_at = _utcnow()
     _hydrate_binance_env_from_file()
     resolution_meta = _sync_runtime_binance_credentials_from_resolver(db, user_id=user_id)
@@ -299,7 +299,7 @@ def run_testnet_lifecycle_validation(db: Session, *, user_id: str, symbol: str =
     response_log["requested_size"] = requested_size
     response_log["normalized_size"] = normalized_size
     response_log["market_price"] = market_price
-    balance_payload, selected_key_mask = _ensure_valid_testnet_credentials(adapter)
+    balance_payload, selected_key_mask = _ensure_valid_live_credentials(adapter)
 
     response_log["steps"]["account_check"] = {"status": "PASS", "selected_key": selected_key_mask, "raw": balance_payload}
 
@@ -549,7 +549,7 @@ def run_testnet_lifecycle_validation(db: Session, *, user_id: str, symbol: str =
         "timeline_event_count": len(timeline_events),
         "db_state": db_state,
     }
-    payload["artifact_path"] = persist_artifact(TESTNET_LIFECYCLE_ARTIFACT, payload)
+    payload["artifact_path"] = persist_artifact(LIVE_LIFECYCLE_ARTIFACT, payload)
     return payload
 
 
@@ -566,7 +566,7 @@ def run_canary_end_to_end_validation(
     _sync_runtime_binance_credentials_from_resolver(db, user_id=current_user.id)
 
     adapter = get_execution_adapter()
-    _ensure_valid_testnet_credentials(adapter)
+    _ensure_valid_live_credentials(adapter)
 
     kill_switch_state = get_kill_switch_state()
     if bool(kill_switch_state.get("active")):
@@ -682,12 +682,12 @@ def verify_kill_switch_rollback(db: Session, *, user_id: str, symbol: str = "BTC
 
 def build_canary_readiness_score(db: Session) -> dict:
     canary_run = _load_artifact(CANARY_RUN_ARTIFACT)
-    testnet_lifecycle = _load_artifact(TESTNET_LIFECYCLE_ARTIFACT)
+    live_lifecycle = _load_artifact(LIVE_LIFECYCLE_ARTIFACT)
     smoke = _latest_smoke_status(db)
     critical_open_alerts = _recent_open_critical_alert_count(db, window_minutes=60)
 
     execution_ok = str(canary_run.get("status") or "").upper() == "PASS"
-    exchange_ok = str(testnet_lifecycle.get("status") or "").upper() == "PASS"
+    exchange_ok = str(live_lifecycle.get("status") or "").upper() == "PASS"
     canary_pnl = canary_run.get("pnl_summary", {}) if isinstance(canary_run, dict) else {}
     pnl_ok = bool(canary_pnl.get("status") == "ok" or canary_pnl.get("net_pnl") is not None)
     alerts_ok = critical_open_alerts < 3
@@ -730,7 +730,7 @@ def build_canary_readiness_score(db: Session) -> dict:
         },
         "evidence": {
             "canary_run_artifact": canary_run.get("artifact_path"),
-            "testnet_lifecycle_artifact": testnet_lifecycle.get("artifact_path"),
+            "live_lifecycle_artifact": live_lifecycle.get("artifact_path"),
             "critical_open_alerts_60m": critical_open_alerts,
             "smoke": smoke,
         },
@@ -740,7 +740,7 @@ def build_canary_readiness_score(db: Session) -> dict:
 def evaluate_go_live_checklist(db: Session) -> dict:
     readiness = build_canary_readiness_score(db)
     canary_run = _load_artifact(CANARY_RUN_ARTIFACT)
-    testnet_lifecycle = _load_artifact(TESTNET_LIFECYCLE_ARTIFACT)
+    live_lifecycle = _load_artifact(LIVE_LIFECYCLE_ARTIFACT)
     kill_switch_verification = _load_artifact(KILL_SWITCH_VERIFICATION_ARTIFACT)
     smoke = _latest_smoke_status(db)
 
@@ -748,7 +748,7 @@ def evaluate_go_live_checklist(db: Session) -> dict:
     critical_spike = _recent_open_critical_alert_count(db, window_minutes=30)
 
     checks = {
-        "testnet_lifecycle_pass": str(testnet_lifecycle.get("status") or "").upper() == "PASS",
+        "live_lifecycle_pass": str(live_lifecycle.get("status") or "").upper() == "PASS",
         "canary_run_pass": str(canary_run.get("status") or "").upper() == "PASS",
         "smoke_ok": _is_smoke_acceptable(smoke),
         "alert_spike_absent": critical_spike < 3,
@@ -757,8 +757,8 @@ def evaluate_go_live_checklist(db: Session) -> dict:
     }
 
     reasons: list[str] = []
-    if not checks["testnet_lifecycle_pass"]:
-        reasons.append("testnet lifecycle pass yok")
+    if not checks["live_lifecycle_pass"]:
+        reasons.append("live lifecycle pass yok")
     if not checks["canary_run_pass"]:
         reasons.append("canary run pass değil")
     if not checks["smoke_ok"]:
@@ -821,7 +821,7 @@ def run_final_regression_validation(db: Session, *, current_user, symbol: str = 
 def run_single_flow_dry_run(db: Session, *, current_user, symbol: str = "BTCUSDT", size: float = 0.0001) -> dict:
     started_at = _utcnow()
     resolved_transient_alerts = _resolve_transient_critical_alerts(db)
-    lifecycle = run_testnet_lifecycle_validation(db, user_id=current_user.id, symbol=symbol, size=size)
+    lifecycle = run_live_lifecycle_validation(db, user_id=current_user.id, symbol=symbol, size=size)
     canary = run_canary_end_to_end_validation(db, current_user=current_user, symbol=symbol, size=size, strategy_name="ema_rsi")
     regression = run_final_regression_validation(db, current_user=current_user, symbol=symbol, size=size)
     resolved_transient_alerts += _resolve_transient_critical_alerts(db)
@@ -942,27 +942,27 @@ def get_proxy_exchange_health_snapshot(db: Session) -> dict:
     _hydrate_binance_env_from_file()
     spot_base_url = str(
         os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
-        or os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL")
+        or os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
         or os.environ.get("BINANCE_SPOT_BASE_URL")
         or ""
     ).strip()
     futures_base_url = str(
         os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
-        or os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL")
+        or os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
         or os.environ.get("BINANCE_FUTURES_BASE_URL")
         or ""
     ).strip()
 
     spot_token = str(
         os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
-        or os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN")
+        or os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
         or os.environ.get("BINANCE_SPOT_PROXY_TOKEN")
         or os.environ.get("BINANCE_PROXY_TOKEN")
         or ""
     ).strip()
     futures_token = str(
         os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
-        or os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN")
+        or os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
         or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN")
         or os.environ.get("BINANCE_PROXY_TOKEN")
         or ""

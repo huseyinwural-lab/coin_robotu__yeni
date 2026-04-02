@@ -57,7 +57,7 @@ class TestBybitVenueReadiness:
         assert "bybit" in checklist, "bybit must be in venue_config_checklist"
         
         bybit_checklist = checklist["bybit"]
-        required_fields = ["has_testnet_credentials", "has_live_credentials", "environment_mapped", "policy_valid", "reason_code"]
+        required_fields = ["has_live_credentials", "has_live_credentials", "environment_mapped", "policy_valid", "reason_code"]
         for field in required_fields:
             assert field in bybit_checklist, f"bybit checklist must have {field}"
         print(f"PASS: Bybit venue config checklist has all required fields: {list(bybit_checklist.keys())}")
@@ -101,22 +101,22 @@ class TestBybitVenueReadiness:
         print(f"PASS: Bybit venue has specific reason code: {bybit_reason}, state: {bybit_state}")
 
     def test_bybit_credentials_missing_reason_code(self):
-        """Verify BYBIT_TESTNET_CREDENTIALS_MISSING or BYBIT_LIVE_CREDENTIALS_MISSING reason codes"""
+        """Verify BYBIT_LIVE_CREDENTIALS_MISSING or BYBIT_LIVE_CREDENTIALS_MISSING reason codes"""
         mock_context = self._build_mock_context()
         mock_context["venue_config_checklist"] = {
-            "binance": {"has_testnet_credentials": True, "has_live_credentials": True, "environment_mapped": True, "policy_valid": True, "reason_code": "PASS"},
-            "bybit": {"has_testnet_credentials": False, "has_live_credentials": False, "environment_mapped": False, "policy_valid": True, "reason_code": "BYBIT_TESTNET_CREDENTIALS_MISSING"},
+            "binance": {"has_live_credentials": True, "has_live_credentials": True, "environment_mapped": True, "policy_valid": True, "reason_code": "PASS"},
+            "bybit": {"has_live_credentials": False, "has_live_credentials": False, "environment_mapped": False, "policy_valid": True, "reason_code": "BYBIT_LIVE_CREDENTIALS_MISSING"},
         }
         mock_context["exchange_matrix"] = {
             "binance": {"connectivity": "PASS", "orderbook": "PASS", "reason_code": "PASS"},
-            "bybit": {"connectivity": "FAIL", "orderbook": "FAIL", "reason_code": "BYBIT_TESTNET_CREDENTIALS_MISSING"},
+            "bybit": {"connectivity": "FAIL", "orderbook": "FAIL", "reason_code": "BYBIT_LIVE_CREDENTIALS_MISSING"},
         }
         
         result = run_go_live_validator(mock_context)
         checklist = result.get("venue_config_checklist", {})
         
         bybit_reason = checklist.get("bybit", {}).get("reason_code")
-        assert bybit_reason in ["BYBIT_TESTNET_CREDENTIALS_MISSING", "BYBIT_LIVE_CREDENTIALS_MISSING", "PASS"], f"Expected credential reason code, got: {bybit_reason}"
+        assert bybit_reason in ["BYBIT_LIVE_CREDENTIALS_MISSING", "BYBIT_LIVE_CREDENTIALS_MISSING", "PASS"], f"Expected credential reason code, got: {bybit_reason}"
         print(f"PASS: Bybit credentials missing reason code: {bybit_reason}")
 
     def _build_mock_context(self):
@@ -129,7 +129,7 @@ class TestBybitVenueReadiness:
             "kill_switch_active": False,
             "kill_switch_payload": {"active": False},
             "release_gate": {"status": "PASS", "reason_codes": []},
-            "connection": {"exists": True, "connection_health": "online", "can_trade": True, "validation_success": True, "environment": "testnet", "exchange": "binance", "latency_ms": 50},
+            "connection": {"exists": True, "connection_health": "online", "can_trade": True, "validation_success": True, "environment": "live", "exchange": "binance", "latency_ms": 50},
             "data_sources": {
                 "balances": {"available": True, "fallback_used": False, "payload": {"available_balance": 1000, "wallet_balance": 1000, "timestamp": datetime.now(timezone.utc).isoformat()}},
                 "positions": {"available": True, "fallback_used": False, "payload": []},
@@ -154,8 +154,8 @@ class TestBybitVenueReadiness:
                 "bybit": {"connectivity": "PASS", "orderbook": "PASS", "rate_limit": "UNKNOWN", "reason_code": "PASS"},
             },
             "venue_config_checklist": {
-                "binance": {"has_testnet_credentials": True, "has_live_credentials": True, "environment_mapped": True, "policy_valid": True, "reason_code": "PASS"},
-                "bybit": {"has_testnet_credentials": True, "has_live_credentials": False, "environment_mapped": True, "policy_valid": True, "reason_code": "PASS"},
+                "binance": {"has_live_credentials": True, "has_live_credentials": True, "environment_mapped": True, "policy_valid": True, "reason_code": "PASS"},
+                "bybit": {"has_live_credentials": True, "has_live_credentials": False, "environment_mapped": True, "policy_valid": True, "reason_code": "PASS"},
             },
             "adapter_credential_summary": {},
             "execution_tests": {"precision": {"status": "OK"}, "submit": {"status": "OK", "mocked": False}, "cancel": {"status": "OK", "mocked": False}},

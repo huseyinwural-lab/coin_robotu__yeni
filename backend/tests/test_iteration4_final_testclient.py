@@ -173,7 +173,7 @@ class TestGoLiveChecklist:
         # Verify checks
         checks = result.get("checks", {})
         expected_checks = [
-            "testnet_lifecycle_pass",
+            "live_lifecycle_pass",
             "canary_run_pass",
             "smoke_ok",
             "alert_spike_absent",
@@ -306,18 +306,18 @@ class TestTimelineEvents:
         print(f"Timeline events count: {len(data.get('items', []))}")
 
 
-class TestTestnetLifecycleValidation:
-    """Test testnet lifecycle validation - Real Binance testnet order lifecycle"""
+class TestLiveLifecycleValidation:
+    """Test live lifecycle validation - Real Binance live order lifecycle"""
     
-    def test_run_testnet_lifecycle(self, client, auth_headers):
-        """POST /api/runtime/exchange/testnet-lifecycle/run - Real order lifecycle and artifact"""
-        # First enable testnet trading
-        os.environ["EXECUTION_MODE"] = "testnet"
-        os.environ["TESTNET_TRADING_ENABLED"] = "true"
+    def test_run_live_lifecycle(self, client, auth_headers):
+        """POST /api/runtime/exchange/live-lifecycle/run - Real order lifecycle and artifact"""
+        # First enable live trading
+        os.environ["EXECUTION_MODE"] = "live"
+        os.environ["LIVE_TRADING_ENABLED"] = "true"
         os.environ["LIVE_TRADING_ENABLED"] = "false"
         
         response = client.post(
-            "/api/runtime/exchange/testnet-lifecycle/run",
+            "/api/runtime/exchange/live-lifecycle/run",
             headers=auth_headers,
             json={"symbol": "BTCUSDT", "size": 0.0001}
         )
@@ -330,7 +330,7 @@ class TestTestnetLifecycleValidation:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print("Testnet lifecycle PASS")
+            print("Live lifecycle PASS")
             
             # Verify artifact path
             assert "artifact_path" in result
@@ -353,9 +353,9 @@ class TestTestnetLifecycleValidation:
             print(f"DB state: {json.dumps(db_state, indent=2)}")
         else:
             # 409 or 400 means FAIL - log details
-            print(f"Testnet lifecycle returned {response.status_code}: {json.dumps(data, indent=2)[:500]}")
-            # This is expected if testnet credentials are not valid or exchange is down
-            pytest.skip(f"Testnet lifecycle validation failed: {response.status_code}")
+            print(f"Live lifecycle returned {response.status_code}: {json.dumps(data, indent=2)[:500]}")
+            # This is expected if live credentials are not valid or exchange is down
+            pytest.skip(f"Live lifecycle validation failed: {response.status_code}")
 
 
 class TestCanaryRun:
@@ -363,9 +363,9 @@ class TestCanaryRun:
     
     def test_run_canary(self, client, auth_headers):
         """POST /api/runtime/canary/run - Chain validation"""
-        # First enable testnet trading
-        os.environ["EXECUTION_MODE"] = "testnet"
-        os.environ["TESTNET_TRADING_ENABLED"] = "true"
+        # First enable live trading
+        os.environ["EXECUTION_MODE"] = "live"
+        os.environ["LIVE_TRADING_ENABLED"] = "true"
         os.environ["LIVE_TRADING_ENABLED"] = "false"
         
         response = client.post(
@@ -405,9 +405,9 @@ class TestFinalRegression:
     
     def test_run_final_regression(self, client, auth_headers):
         """POST /api/runtime/regression/final-run - Final regression PASS flow"""
-        # First enable testnet trading
-        os.environ["EXECUTION_MODE"] = "testnet"
-        os.environ["TESTNET_TRADING_ENABLED"] = "true"
+        # First enable live trading
+        os.environ["EXECUTION_MODE"] = "live"
+        os.environ["LIVE_TRADING_ENABLED"] = "true"
         os.environ["LIVE_TRADING_ENABLED"] = "false"
         
         response = client.post(

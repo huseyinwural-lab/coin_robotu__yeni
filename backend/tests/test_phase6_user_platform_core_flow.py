@@ -80,7 +80,7 @@ class TestPhase6UserPlatformCoreFlow:
             headers=headers,
             json={
                 "exchange": "binance",
-                "mode": "testnet",
+                "mode": "live",
                 "api_key": "FAKE_API_KEY_123456",
                 "api_secret": "FAKE_API_SECRET_654321",
             },

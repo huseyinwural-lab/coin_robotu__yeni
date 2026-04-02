@@ -22,7 +22,7 @@
 - /app/backend/core/execution/futures_cancel_replace_guard.py:31:        return {"can_replace": False, "reason_code": "ORDER_NOT_CANCELLED"}
 - /app/backend/core/execution/futures_execution_reconciler.py:14:        elif status in {"CANCELED", "CANCELLED"}:
 - /app/backend/core/execution/futures_execution_reconciler.py:15:            state = "cancelled"
-- /app/backend/core/execution/futures_testnet_adapter.py:32:        return {"status_code": status_code, "payload": payload, "cancelled": status_code == 200}
+- /app/backend/core/execution/futures_live_adapter.py:32:        return {"status_code": status_code, "payload": payload, "cancelled": status_code == 200}
 - /app/backend/core/readiness/go_live_validator.py:1819:    cancel_ok = cancel_status_raw == "CANCELLED" and not cancel_mocked
 - /app/backend/core/readiness/go_live_validator.py:1847:    cancel_ok = "CANCELLED" in lifecycle_states or "CANCELED" in lifecycle_states
 - /app/backend/services/runtime_ops_service.py:13:TERMINAL_STATES = {"filled", "canceled", "cancelled", "rejected", "expired"}

@@ -118,7 +118,7 @@ from model_domains.risk_execution_positions import (
     StrategyAllocation,
     StrategyAllocationApprovalRequest,
     StrategyAllocationSnapshot,
-    TestnetExecutionLog,
+    LiveExecutionLog,
     UserExecutionIntent,
 )
 from model_domains.scanner_universe import (
@@ -242,7 +242,7 @@ __all__ = [
     "RiskExposureGroup",
     "ExecutionStateTransition",
     "LiveActivationConfig",
-    "TestnetExecutionLog",
+    "LiveExecutionLog",
     "ExecutionMetric",
     "ExecutionPortfolio",
     "ExecutionPolicyVersion",

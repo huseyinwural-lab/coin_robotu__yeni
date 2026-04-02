@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from itertools import product
 
-from models import ExecutionMetric, TestnetExecutionLog, UserExecutionIntent
+from models import ExecutionMetric, LiveExecutionLog, UserExecutionIntent
 from services.execution_quality_service import evaluate_execution_quality
 from services.pipeline.cache_store import get_json, set_json
 
@@ -67,8 +67,8 @@ def build_execution_quality_replay_dataset(db, *, sample_size: int = 400) -> dic
         .all()
     )
     fallback_rows = (
-        db.query(TestnetExecutionLog)
-        .order_by(TestnetExecutionLog.created_at.desc())
+        db.query(LiveExecutionLog)
+        .order_by(LiveExecutionLog.created_at.desc())
         .limit(max(20, min(sample_size, 200)))
         .all()
     )

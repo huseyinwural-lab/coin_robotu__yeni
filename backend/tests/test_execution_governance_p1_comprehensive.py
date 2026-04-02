@@ -122,7 +122,7 @@ def _build_test_context(user_id: str, strategy: str = "p1_test_strategy", mode: 
         "strategy_binding": strategy,
         "symbol": "BTCUSDT",
         "side": "buy",
-        "environment": "testnet" if mode == "SIMULATION" else "live",
+        "environment": "live" if mode == "SIMULATION" else "live",
         "market_type": "spot",
         "margin_mode": "",
         "proposed_notional": 120.0,
@@ -230,7 +230,7 @@ class TestAutoActionRecommendation:
                 db,
                 severity="LOW",
                 reason_code="MINOR_ISSUE",
-                environment="testnet",
+                environment="live",
                 strategy_risk_class="LOW",
                 strategy_id="test_strategy",
             )
@@ -246,7 +246,7 @@ class TestAutoActionRecommendation:
                 db,
                 severity="MEDIUM",
                 reason_code="RISK_ISSUE",
-                environment="testnet",
+                environment="live",
                 strategy_risk_class="MEDIUM",
                 strategy_id="test_strategy",
             )
@@ -262,7 +262,7 @@ class TestAutoActionRecommendation:
                 db,
                 severity="HIGH",
                 reason_code="RISK_BREACH",
-                environment="testnet",
+                environment="live",
                 strategy_risk_class="MEDIUM",
                 strategy_id="test_strategy",
             )
@@ -584,7 +584,7 @@ class TestPolicyVersioning:
             version = create_policy_version(
                 db,
                 policy_code="p1:version_test_strategy",
-                conditions_payload={"environment_in": ["testnet"]},
+                conditions_payload={"environment_in": ["live"]},
                 rules_payload={"risk": {"max_order_notional": 50000}},
                 change_summary="Test version creation",
                 created_by=user.id,
@@ -733,7 +733,7 @@ class TestPolicyVersioning:
                 created_by=user.id,
             )
             approve_policy_version(db, version_id=v1.version_id, actor_user_id=user.id)
-            activate_policy_version(db, version_id=v1.version_id, actor_user_id=user.id, environment="testnet")
+            activate_policy_version(db, version_id=v1.version_id, actor_user_id=user.id, environment="live")
             db.commit()
 
             # Create and activate v2
@@ -746,7 +746,7 @@ class TestPolicyVersioning:
                 created_by=user.id,
             )
             approve_policy_version(db, version_id=v2.version_id, actor_user_id=user.id)
-            activate_policy_version(db, version_id=v2.version_id, actor_user_id=user.id, environment="testnet")
+            activate_policy_version(db, version_id=v2.version_id, actor_user_id=user.id, environment="live")
             db.commit()
 
             # Rollback to v1
@@ -844,7 +844,7 @@ class TestCanaryOverrideRouting:
             )
             v2.state = "CANARY"
             v2.rollout_strategy = {
-                "environments": ["testnet"],
+                "environments": ["live"],
                 "strategy_ids": ["canary_test_strategy"],
                 "traffic_percentage": 100,
             }
@@ -855,7 +855,7 @@ class TestCanaryOverrideRouting:
                 db,
                 policy_code=policy_code,
                 context={
-                    "environment": "testnet",
+                    "environment": "live",
                     "strategy_binding": "canary_test_strategy",
                     "symbol": "BTCUSDT",
                     "user_id": user.id,
@@ -888,7 +888,7 @@ class TestCanaryOverrideRouting:
             v1.state = "ACTIVE"
             v1.approval_status = "approved"
 
-            # Create canary version that only matches 'staging' environment (not testnet)
+            # Create canary version that only matches 'staging' environment (not live)
             v2 = create_policy_version(
                 db,
                 policy_code=policy_code,
@@ -900,17 +900,17 @@ class TestCanaryOverrideRouting:
             )
             v2.state = "CANARY"
             v2.rollout_strategy = {
-                "environments": ["staging"],  # Only matches staging, not testnet
+                "environments": ["staging"],  # Only matches staging, not live
                 "traffic_percentage": 100,
             }
             db.commit()
 
-            # Resolve override with testnet - should get active since canary only matches staging
+            # Resolve override with live - should get active since canary only matches staging
             override = resolve_policy_version_override(
                 db,
                 policy_code=policy_code,
                 context={
-                    "environment": "testnet",
+                    "environment": "live",
                     "strategy_binding": "test_strategy",
                     "symbol": "BTCUSDT",
                     "user_id": str(user.id),
@@ -918,8 +918,8 @@ class TestCanaryOverrideRouting:
             )
 
             assert override is not None
-            # Canary only matches staging, so testnet should get ACTIVE
-            assert override["mode"] == "ACTIVE", f"Expected ACTIVE but got {override['mode']} - canary for staging should not match testnet"
+            # Canary only matches staging, so live should get ACTIVE
+            assert override["mode"] == "ACTIVE", f"Expected ACTIVE but got {override['mode']} - canary for staging should not match live"
             assert override["version_id"] == v1.version_id
         finally:
             db.close()
@@ -963,7 +963,7 @@ class TestCanaryOverrideRouting:
             )
             v2.state = "CANARY"
             v2.rollout_strategy = {
-                "environments": ["testnet"],
+                "environments": ["live"],
                 "traffic_percentage": 0,  # BUG: This is treated as 100%
             }
             db.commit()
@@ -972,7 +972,7 @@ class TestCanaryOverrideRouting:
                 db,
                 policy_code=policy_code,
                 context={
-                    "environment": "testnet",
+                    "environment": "live",
                     "strategy_binding": "test_strategy",
                     "symbol": "BTCUSDT",
                     "user_id": str(user.id),
@@ -1027,7 +1027,7 @@ class TestStrategyHealthSummary:
                 db,
                 context={
                     "strategy_binding": "breakout",
-                    "environment": "testnet",
+                    "environment": "live",
                     "symbol": "BTCUSDT",
                     "margin_mode": "",
                 },
@@ -1172,7 +1172,7 @@ class TestReleaseGate:
                     limits={},
                     allowed_symbols=[],
                     allowed_margin_modes=[],
-                    allowed_environments=["testnet"],
+                    allowed_environments=["live"],
                 )
                 db.add(binding)
             else:

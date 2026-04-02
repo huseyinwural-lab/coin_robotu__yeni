@@ -124,16 +124,16 @@ class TestUserEconomicsFilters:
         assert data.get("environment") == "live"
         assert data.get("filters", {}).get("environment") is None or data.get("environment") == "live"
 
-    def test_filter_environment_testnet(self, admin_headers):
-        """Filter by environment=testnet"""
+    def test_filter_environment_live(self, admin_headers):
+        """Filter by environment=live"""
         response = requests.get(
             f"{BASE_URL}/api/admin/users/economics",
             headers=admin_headers,
-            params={"environment": "testnet"},
+            params={"environment": "live"},
         )
         assert response.status_code == 200
         data = response.json()
-        assert data.get("environment") == "testnet"
+        assert data.get("environment") == "live"
 
     def test_filter_churn_inactive_days(self, admin_headers):
         """Filter by churn_inactive_days"""
@@ -229,7 +229,7 @@ class TestUserEconomicsDeterminism:
         response1 = requests.get(
             f"{BASE_URL}/api/admin/users/economics",
             headers=admin_headers,
-            params={"environment": "testnet"},
+            params={"environment": "live"},
         )
         assert response1.status_code == 200
         data1 = response1.json()
@@ -237,7 +237,7 @@ class TestUserEconomicsDeterminism:
         response2 = requests.get(
             f"{BASE_URL}/api/admin/users/economics",
             headers=admin_headers,
-            params={"environment": "testnet"},
+            params={"environment": "live"},
         )
         assert response2.status_code == 200
         data2 = response2.json()
@@ -351,7 +351,7 @@ class TestRegressionExistingFlows:
         response = requests.post(
             f"{BASE_URL}/api/admin/commercial-ops/ingest/rest/run",
             headers=admin_headers,
-            json={"environment": "testnet", "market_types": ["spot"]},
+            json={"environment": "live", "market_types": ["spot"]},
         )
         # Should not return 500
         assert response.status_code != 500, f"Ingest endpoint returned 500: {response.text}"
@@ -361,7 +361,7 @@ class TestRegressionExistingFlows:
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial-ops/pnl/latest",
             headers=admin_headers,
-            params={"environment": "testnet"},
+            params={"environment": "live"},
         )
         # Should not return 500
         assert response.status_code != 500, f"PnL endpoint returned 500: {response.text}"
@@ -371,7 +371,7 @@ class TestRegressionExistingFlows:
         response = requests.post(
             f"{BASE_URL}/api/admin/commercial-ops/reconciliation/run",
             headers=admin_headers,
-            json={"environment": "testnet"},
+            json={"environment": "live"},
         )
         # Should not return 500
         assert response.status_code != 500, f"Reconciliation endpoint returned 500: {response.text}"
@@ -381,7 +381,7 @@ class TestRegressionExistingFlows:
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial-ops/data-quality",
             headers=admin_headers,
-            params={"environment": "testnet"},
+            params={"environment": "live"},
         )
         # Should not return 500
         assert response.status_code != 500, f"Data quality endpoint returned 500: {response.text}"
@@ -391,7 +391,7 @@ class TestRegressionExistingFlows:
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial-ops/live-gate",
             headers=admin_headers,
-            params={"environment": "testnet"},
+            params={"environment": "live"},
         )
         # Should not return 500
         assert response.status_code != 500, f"Live gate endpoint returned 500: {response.text}"
@@ -401,7 +401,7 @@ class TestRegressionExistingFlows:
         response = requests.get(
             f"{BASE_URL}/api/admin/revenue/summary",
             headers=admin_headers,
-            params={"environment": "testnet"},
+            params={"environment": "live"},
         )
         # Should not return 500
         assert response.status_code != 500, f"Revenue summary endpoint returned 500: {response.text}"

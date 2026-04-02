@@ -373,7 +373,7 @@ class TestU07U08U09ExchangeVenueBridge:
 
     def test_venues_access_check(self, user_client):
         """Test /venues/access-check returns access status"""
-        response = user_client.get(f"{BASE_URL}/api/venues/access-check?exchange=binance&market_type=spot&environment=testnet")
+        response = user_client.get(f"{BASE_URL}/api/venues/access-check?exchange=binance&market_type=spot&environment=live")
         assert response.status_code == 200
         data = response.json()
         

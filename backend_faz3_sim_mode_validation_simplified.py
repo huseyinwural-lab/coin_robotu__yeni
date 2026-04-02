@@ -83,7 +83,7 @@ class SIMModeTesterSimplified:
             sim_configs = [
                 "EXECUTION_MODE",
                 "LIVE_TRADING_ENABLED",
-                "TESTNET_TRADING_ENABLED",
+                "LIVE_TRADING_ENABLED",
                 "CANARY_MODE",
                 "EXECUTION_GUARD_ENFORCEMENT_ENABLED",
                 "EXECUTION_PREVIEW_FAST_MODE"

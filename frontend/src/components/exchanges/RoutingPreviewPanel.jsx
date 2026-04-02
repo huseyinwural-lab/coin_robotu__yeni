@@ -8,7 +8,7 @@ const defaultForm = {
   strategy_id: "",
   symbol: "BTCUSDT",
   market_type: "spot",
-  environment: "testnet",
+  environment: "live",
   order_side: "BUY",
   order_size_usd: 100,
 };
@@ -48,7 +48,7 @@ export const RoutingPreviewPanel = ({ approvedUsers, previewResult, loading, err
           <option value="futures">futures</option>
         </select>
         <select value={form.environment} onChange={(event) => setForm((prev) => ({ ...prev, environment: event.target.value }))} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-sm" data-testid="routing-preview-environment-select">
-          <option value="testnet">testnet</option>
+          <option value="live">live</option>
           <option value="live">live</option>
         </select>
         <select value={form.order_side} onChange={(event) => setForm((prev) => ({ ...prev, order_side: event.target.value }))} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-sm" data-testid="routing-preview-order-side-select">

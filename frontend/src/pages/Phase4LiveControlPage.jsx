@@ -9,7 +9,7 @@ import { apiClient } from "@/lib/api";
 
 const initialConfig = {
   exchange: "binance",
-  market_type: "futures_testnet",
+  market_type: "futures_live",
   safe_mode_enabled: true,
   live_mode_enabled: false,
   symbol_whitelist: [],
@@ -51,7 +51,7 @@ export const Phase4LiveControlPage = () => {
       ] = await Promise.all([
         apiClient.get("/phase4/live-config"),
         apiClient.get("/phase4/readiness-check"),
-        apiClient.get("/phase4/testnet-connectivity"),
+        apiClient.get("/phase4/live-connectivity"),
         apiClient.get("/phase4/admin/live-readiness-score"),
         apiClient.get("/phase4/admin/release-gate"),
         apiClient.get("/admin/execution-readiness"),
@@ -136,7 +136,7 @@ export const Phase4LiveControlPage = () => {
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="phase4-live-control-header">
         <h2 className="text-4xl font-black uppercase tracking-tight text-blue-300" data-testid="phase4-live-control-title">Phase-4 Controlled Live Activation</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="phase4-live-control-description">
-          Binance Futures Testnet hazırlık modu: key olmadan safety/permission/kill-switch doğrulaması.
+          Binance Futures Live hazırlık modu: key olmadan safety/permission/kill-switch doğrulaması.
         </p>
       </header>
 
@@ -145,7 +145,7 @@ export const Phase4LiveControlPage = () => {
         <MetricCard label="Exchange" value={readiness?.exchange || "-"} tone="blue" testId="phase4-metric-exchange" />
         <MetricCard label="Market" value={readiness?.market_type || "-"} tone="blue" testId="phase4-metric-market" />
         <MetricCard label="Whitelist" value={config?.symbol_whitelist?.join(",") || "-"} tone="orange" testId="phase4-metric-whitelist" />
-        <MetricCard label="Testnet" value={connectivity?.status || "-"} tone={connectivity?.status === "reachable" ? "blue" : "red"} testId="phase4-metric-testnet" />
+        <MetricCard label="Live" value={connectivity?.status || "-"} tone={connectivity?.status === "reachable" ? "blue" : "red"} testId="phase4-metric-live" />
         <MetricCard label="Live Readiness" value={readinessScore?.readiness_score ?? "-"} tone={Number(readinessScore?.readiness_score || 0) >= 80 ? "blue" : "red"} testId="phase4-metric-live-readiness-score" />
         <MetricCard label="Release Gate" value={releaseGate?.status || "-"} tone={releaseGate?.status === "PASS" ? "blue" : "red"} testId="phase4-metric-release-gate" />
         <MetricCard label="Live Activation" value={releaseGate?.live_activation || "disabled"} tone={releaseGate?.live_activation === "ready" ? "blue" : releaseGate?.live_activation === "guarded" || releaseGate?.live_activation === "guarded_override" ? "orange" : "red"} testId="phase4-metric-live-activation" />
@@ -212,14 +212,14 @@ export const Phase4LiveControlPage = () => {
         </div>
       </div>
 
-      <div className="border border-blue-900 bg-slate-900 p-4" data-testid="phase4-testnet-connectivity-panel">
-        <div className="flex flex-wrap items-center justify-between gap-3" data-testid="phase4-testnet-connectivity-header">
-          <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="phase4-testnet-connectivity-title">Binance Futures Testnet Connectivity</p>
-          <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={loadAll} data-testid="phase4-testnet-refresh-button">Yenile</Button>
+      <div className="border border-blue-900 bg-slate-900 p-4" data-testid="phase4-live-connectivity-panel">
+        <div className="flex flex-wrap items-center justify-between gap-3" data-testid="phase4-live-connectivity-header">
+          <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="phase4-live-connectivity-title">Binance Futures Live Connectivity</p>
+          <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={loadAll} data-testid="phase4-live-refresh-button">Yenile</Button>
         </div>
-        <p className="mt-3 text-sm text-slate-300" data-testid="phase4-testnet-connectivity-message">{connectivity?.message || "-"}</p>
-        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="phase4-testnet-connectivity-rest">REST: {connectivity?.rest_url || "-"}</p>
-        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="phase4-testnet-connectivity-ws">WS: {connectivity?.ws_url || "-"}</p>
+        <p className="mt-3 text-sm text-slate-300" data-testid="phase4-live-connectivity-message">{connectivity?.message || "-"}</p>
+        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="phase4-live-connectivity-rest">REST: {connectivity?.rest_url || "-"}</p>
+        <p className="mt-1 font-mono text-xs text-slate-400" data-testid="phase4-live-connectivity-ws">WS: {connectivity?.ws_url || "-"}</p>
       </div>
 
       <form onSubmit={saveConfig} className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="phase4-config-form">

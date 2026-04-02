@@ -294,7 +294,7 @@ class TestSystemHealthDashboardBackend:
         response = self.session.get(f"{BASE_URL}/api/exchange/readiness-checklist", params={
             "exchange": "binance",
             "market_type": "futures",
-            "environment": "testnet"
+            "environment": "live"
         })
         assert response.status_code == 200, f"Readiness checklist failed: {response.text}"
         
@@ -383,7 +383,7 @@ class TestRegressionExistingTabs:
         response = self.session.get(f"{BASE_URL}/api/venues/access-check", params={
             "exchange": "binance",
             "market_type": "futures",
-            "environment": "testnet"
+            "environment": "live"
         })
         assert response.status_code == 200, f"Access check failed: {response.text}"
         print("TEST PASS: Venues access check endpoint working")

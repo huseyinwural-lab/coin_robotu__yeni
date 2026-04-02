@@ -72,7 +72,7 @@ def _ensure_policy(db, strategy: str):
 
 
 def test_environment_normalization_mapping():
-    assert normalize_environment("testnet") == "DEV"
+    assert normalize_environment("live") == "DEV"
     assert normalize_environment("staging") == "STAGING"
     assert normalize_environment("prod") == "PROD"
 
@@ -109,7 +109,7 @@ def test_environment_override_is_deterministic_and_applied():
                 "portfolio_id": f"default:{user.id}",
                 "strategy_binding": strategy,
                 "symbol": "BTCUSDT",
-                "environment": "testnet",
+                "environment": "live",
                 "market_type": "spot",
                     "intent_type": "CLOSE_POSITION",
                     "reduce_only": True,
@@ -196,7 +196,7 @@ def test_safe_mode_auto_activation_and_enforcement():
                 "portfolio_id": f"default:{user.id}",
                 "strategy_binding": strategy,
                 "symbol": "BTCUSDT",
-                "environment": "testnet",
+                "environment": "live",
                 "market_type": "spot",
                 "intent_type": "OPEN_POSITION",
                 "reduce_only": False,

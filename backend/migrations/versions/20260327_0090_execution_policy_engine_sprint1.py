@@ -78,7 +78,7 @@ def upgrade() -> None:
             sa.Column("user_id", sa.String(), sa.ForeignKey("users.id"), nullable=True),
             sa.Column("symbol", sa.String(length=30), nullable=True),
             sa.Column("strategy_binding", sa.String(length=120), nullable=True),
-            sa.Column("environment", sa.String(length=30), nullable=False, server_default="testnet"),
+            sa.Column("environment", sa.String(length=30), nullable=False, server_default="live"),
             sa.Column("rollout_mode", sa.String(length=20), nullable=False, server_default="shadow"),
             sa.Column("recommended_action", sa.String(length=20), nullable=False, server_default="ALLOW"),
             sa.Column("enforced_action", sa.String(length=20), nullable=False, server_default="ALLOW"),

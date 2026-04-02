@@ -38,7 +38,7 @@ def run_exchange_adapter_smoke(*, symbols: list[str] | None = None, credentials_
 
     execution_results = []
     execution_scenarios = [
-        {"exchange": "bybit", "environment": "testnet"},
+        {"exchange": "bybit", "environment": "live"},
         {"exchange": "bybit", "environment": "live"},
         {"exchange": "okx", "environment": "live"},
     ]

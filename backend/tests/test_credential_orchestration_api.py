@@ -57,7 +57,7 @@ class TestCredentialOrchestrationAPI:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "include_inactive": True
             }
         )
@@ -73,7 +73,7 @@ class TestCredentialOrchestrationAPI:
             params={
                 "exchange": "bybit",
                 "market_type": "usdt_perp",
-                "environment": "testnet",
+                "environment": "live",
                 "include_inactive": True
             }
         )
@@ -124,7 +124,7 @@ class TestCredentialOrchestrationAPI:
                 "exchange": "binance",
                 "market_type": "spot",
                 "purpose": "market_data",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "TEST_BINANCE_SPOT_KEY",
                 "api_secret": "TEST_BINANCE_SPOT_SECRET"
             }
@@ -136,7 +136,7 @@ class TestCredentialOrchestrationAPI:
         assert data["exchange"] == "binance"
         assert data["market_type"] == "spot"
         assert data["purpose"] == "market_data"
-        assert data["environment"] == "testnet"
+        assert data["environment"] == "live"
         assert data["scope_type"] == "global"
         assert data["approval_status"] == "pending"
         assert data["is_active"] == False
@@ -156,7 +156,7 @@ class TestCredentialOrchestrationAPI:
                 "exchange": "bybit",
                 "market_type": "usdt_perp",
                 "purpose": "execution",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "TEST_BYBIT_PERP_KEY",
                 "api_secret": "TEST_BYBIT_PERP_SECRET"
             }
@@ -206,7 +206,7 @@ class TestCredentialOrchestrationAPI:
                 "exchange": "invalid_exchange",
                 "market_type": "spot",
                 "purpose": "market_data",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "TEST_KEY",
                 "api_secret": "TEST_SECRET"
             }
@@ -223,7 +223,7 @@ class TestCredentialOrchestrationAPI:
                 "exchange": "binance",
                 "market_type": "invalid_market",
                 "purpose": "market_data",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "TEST_KEY",
                 "api_secret": "TEST_SECRET"
             }
@@ -240,7 +240,7 @@ class TestCredentialOrchestrationAPI:
                 "exchange": "binance",
                 "market_type": "spot",
                 "purpose": "invalid_purpose",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "TEST_KEY",
                 "api_secret": "TEST_SECRET"
             }
@@ -260,7 +260,7 @@ class TestCredentialOrchestrationAPI:
                 "exchange": "binance",
                 "market_type": "spot",
                 "purpose": "execution",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "TEST_APPROVE_KEY",
                 "api_secret": "TEST_APPROVE_SECRET"
             }
@@ -292,7 +292,7 @@ class TestCredentialOrchestrationAPI:
                 "exchange": "binance",
                 "market_type": "spot",
                 "purpose": "market_data",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "TEST_DISABLE_KEY",
                 "api_secret": "TEST_DISABLE_SECRET"
             }
@@ -324,7 +324,7 @@ class TestCredentialOrchestrationAPI:
                 "exchange": "binance",
                 "market_type": "spot",
                 "purpose": "market_data",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "TEST_PROBE_KEY",
                 "api_secret": "TEST_PROBE_SECRET"
             }
@@ -356,7 +356,7 @@ class TestCredentialOrchestrationAPI:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet"
+                "environment": "live"
             }
         )
         assert response.status_code == 200
@@ -371,7 +371,7 @@ class TestCredentialOrchestrationAPI:
             json={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "tenant_id": None,
                 "user_id": None,
                 "preferred_source": "user",
@@ -383,7 +383,7 @@ class TestCredentialOrchestrationAPI:
         
         assert data["exchange"] == "binance"
         assert data["market_type"] == "spot"
-        assert data["environment"] == "testnet"
+        assert data["environment"] == "live"
         assert data["preferred_source"] == "user"
         assert data["fallback_enabled"] == True
         
@@ -397,7 +397,7 @@ class TestCredentialOrchestrationAPI:
             json={
                 "exchange": "bybit",
                 "market_type": "usdt_perp",
-                "environment": "testnet",
+                "environment": "live",
                 "preferred_source": "admin",
                 "fallback_enabled": True
             }
@@ -434,7 +434,7 @@ class TestCredentialOrchestrationAPI:
             json={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "preferred_source": "invalid_source",
                 "fallback_enabled": True
             }
@@ -454,7 +454,7 @@ class TestCredentialOrchestrationAPI:
                 "exchange": "binance",
                 "market_type": "spot",
                 "purpose": "execution",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "TEST_PREVIEW_KEY",
                 "api_secret": "TEST_PREVIEW_SECRET"
             }
@@ -472,7 +472,7 @@ class TestCredentialOrchestrationAPI:
             json={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "preferred_source": "user",
                 "fallback_enabled": True
             }
@@ -485,7 +485,7 @@ class TestCredentialOrchestrationAPI:
                 "user_id": "test-user-123",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution"
             }
         )
@@ -516,7 +516,7 @@ class TestCredentialOrchestrationAPI:
                 "user_id": "nonexistent-user",
                 "exchange": "nonexistent",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution"
             }
         )
@@ -531,7 +531,7 @@ class TestCredentialOrchestrationAPI:
                 "user_id": "test-user",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution"
             }
         )
@@ -546,7 +546,7 @@ class TestCredentialOrchestrationAPI:
                 "user_id": "test-user",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "fallback"
             }
         )

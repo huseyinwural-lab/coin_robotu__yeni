@@ -32,7 +32,7 @@ def test_acceptance_latest():
         session.headers['Authorization'] = f'Bearer {token}'
         
         # Test latest endpoint
-        response = session.get(f"{base_url}/api/execution-safety/acceptance/testnet/latest", timeout=30)
+        response = session.get(f"{base_url}/api/execution-safety/acceptance/live/latest", timeout=30)
         
         print(f"📊 Response Status: {response.status_code}")
         print(f"📋 Response Body: {response.text}")

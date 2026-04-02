@@ -69,7 +69,7 @@ def test_single_approve_auto_creates_venue_assignment(admin_headers: dict):
     binance_rows = [row for row in rows if row.get("exchange_code") == "binance"]
     assert len(binance_rows) >= 1
     assert bool(binance_rows[0].get("futures_allowed")) is True
-    assert bool(binance_rows[0].get("testnet_allowed")) is True
+    assert bool(binance_rows[0].get("live_allowed")) is True
 
 
 def test_bulk_approve_auto_creates_venue_assignment(admin_headers: dict):

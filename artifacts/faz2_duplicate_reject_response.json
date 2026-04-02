@@ -1,6 +1,0 @@
-{
-  "status": "rejected",
-  "reason_code": "DUPLICATE_INTENT",
-  "http_status": 409,
-  "source": "verify_phase2_idempotency"
-}

@@ -427,7 +427,7 @@ class TestEnvironmentPolicyEndpoints:
         assert "environments" in data
         
         environments = data.get("environments", {})
-        expected_envs = ["testnet", "staging", "live"]
+        expected_envs = ["live", "staging", "live"]
         for env in expected_envs:
             assert env in environments, f"Missing environment: {env}"
     

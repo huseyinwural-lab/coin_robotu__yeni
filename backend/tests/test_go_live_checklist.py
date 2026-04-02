@@ -5,7 +5,7 @@ def test_readiness_score_ready_when_all_components_pass(monkeypatch):
     def _fake_load(file_name: str):
         if file_name == go_live_checklist.CANARY_RUN_ARTIFACT:
             return {"status": "PASS", "pnl_summary": {"status": "ok"}, "artifact_path": "/tmp/canary.json"}
-        if file_name == go_live_checklist.TESTNET_LIFECYCLE_ARTIFACT:
+        if file_name == go_live_checklist.LIVE_LIFECYCLE_ARTIFACT:
             return {"status": "PASS", "artifact_path": "/tmp/lifecycle.json"}
         return {}
 
@@ -25,7 +25,7 @@ def test_go_live_checklist_blocks_when_kill_switch_validation_missing(monkeypatc
     def _fake_load(file_name: str):
         if file_name == go_live_checklist.CANARY_RUN_ARTIFACT:
             return {"status": "PASS", "pnl_summary": {"status": "ok"}}
-        if file_name == go_live_checklist.TESTNET_LIFECYCLE_ARTIFACT:
+        if file_name == go_live_checklist.LIVE_LIFECYCLE_ARTIFACT:
             return {"status": "PASS"}
         if file_name == go_live_checklist.KILL_SWITCH_VERIFICATION_ARTIFACT:
             return {"status": "FAIL"}

@@ -17,18 +17,18 @@ def _is_true(value: str | None) -> bool:
 class BinanceExecutionAdapter(BaseExecutionAdapter):
     adapter_name = "binance"
 
-    def __init__(self, *, mode: str = "testnet"):
-        self.mode = str(mode or "testnet").strip().lower()
-        self.api_key = str(os.environ.get("BINANCE_TESTNET_API_KEY") or "").strip()
-        self.api_secret = str(os.environ.get("BINANCE_TESTNET_API_SECRET") or "").strip()
+    def __init__(self, *, mode: str = "live"):
+        self.mode = str(mode or "live").strip().lower()
+        self.api_key = str(os.environ.get("BINANCE_LIVE_API_KEY") or "").strip()
+        self.api_secret = str(os.environ.get("BINANCE_LIVE_API_SECRET") or "").strip()
 
-        if self.mode == "testnet":
-            spot_override = os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
-            futures_override = os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL") or os.environ.get("BINANCE_FUTURES_BASE_URL")
-            spot_mode_proxy_token = os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN") or os.environ.get("BINANCE_SPOT_PROXY_TOKEN")
-            futures_mode_proxy_token = os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN") or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN")
-            default_spot_base_url = "https://testnet.binance.vision"
-            default_futures_base_url = "https://testnet.binancefuture.com"
+        if self.mode == "live":
+            spot_override = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
+            futures_override = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL") or os.environ.get("BINANCE_FUTURES_BASE_URL")
+            spot_mode_proxy_token = os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN") or os.environ.get("BINANCE_SPOT_PROXY_TOKEN")
+            futures_mode_proxy_token = os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN") or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN")
+            default_spot_base_url = "https://api.binance.com"
+            default_futures_base_url = "https://fapi.binance.com"
         else:
             spot_override = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
             futures_override = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL") or os.environ.get("BINANCE_FUTURES_BASE_URL")
@@ -51,11 +51,11 @@ class BinanceExecutionAdapter(BaseExecutionAdapter):
 
         self.execution_market_type = str(
             os.environ.get("BINANCE_EXECUTION_MARKET_TYPE")
-            or os.environ.get("BINANCE_TESTNET_MARKET_TYPE")
-            or ("futures" if self.mode == "testnet" else "spot")
+            or os.environ.get("BINANCE_LIVE_MARKET_TYPE")
+            or ("futures" if self.mode == "live" else "spot")
         ).strip().lower()
         if self.execution_market_type not in {"spot", "futures"}:
-            self.execution_market_type = "futures" if self.mode == "testnet" else "spot"
+            self.execution_market_type = "futures" if self.mode == "live" else "spot"
 
         try:
             timeout_seconds = float(os.environ.get("BINANCE_ADAPTER_TIMEOUT_SECONDS") or 20.0)
@@ -262,7 +262,7 @@ class BinanceExecutionAdapter(BaseExecutionAdapter):
     def _guard(self) -> None:
         execution_mode = str(os.environ.get("EXECUTION_MODE") or "sim").strip().lower()
         live_enabled = _is_true(os.environ.get("LIVE_TRADING_ENABLED"))
-        testnet_enabled = _is_true(os.environ.get("TESTNET_TRADING_ENABLED"))
+        live_enabled = _is_true(os.environ.get("LIVE_TRADING_ENABLED"))
         live_route_approved = _is_true(os.environ.get("LIVE_ROUTE_APPROVED"))
 
         if execution_mode == "live":
@@ -270,14 +270,14 @@ class BinanceExecutionAdapter(BaseExecutionAdapter):
                 raise RuntimeError("live_guard_blocked")
             raise RuntimeError("live_route_not_implemented")
 
-        if execution_mode != "testnet":
+        if execution_mode != "live":
             raise RuntimeError("invalid_binance_mode")
-        if not testnet_enabled:
-            raise RuntimeError("testnet_guard_blocked")
+        if not live_enabled:
+            raise RuntimeError("live_guard_blocked")
         if live_enabled:
-            raise RuntimeError("testnet_mode_invalid_live_enabled")
+            raise RuntimeError("live_mode_invalid_live_enabled")
         if not self.api_key or not self.api_secret:
-            raise RuntimeError("missing_testnet_credentials")
+            raise RuntimeError("missing_live_credentials")
 
     def _signed_request(self, method: str, endpoint: str, params: dict, *, base_url: str | None = None) -> dict:
         resolved_base_url = self._resolve_base_url_for_endpoint(endpoint=endpoint, explicit_base_url=base_url)

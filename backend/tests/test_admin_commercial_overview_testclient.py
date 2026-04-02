@@ -117,7 +117,7 @@ class TestAdminCommercialOverviewEndpoint:
 
     def test_custom_environment_parameter(self, client, auth_headers):
         """Query param environment should be applied"""
-        for environment in ["live", "testnet"]:
+        for environment in ["live", "live"]:
             response = client.get(
                 "/api/admin/commercial/overview",
                 params={"environment": environment},
@@ -131,7 +131,7 @@ class TestAdminCommercialOverviewEndpoint:
             assert applied_filters.get("environment") == environment, \
                 f"Expected environment={environment}, got {applied_filters.get('environment')}"
         
-        print("✓ Custom environment parameter works for live and testnet")
+        print("✓ Custom environment parameter works for live and live")
 
     def test_custom_from_to_parameters(self, client, auth_headers):
         """Query params from and to should create custom time range"""

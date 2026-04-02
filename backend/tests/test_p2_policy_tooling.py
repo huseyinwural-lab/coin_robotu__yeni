@@ -263,7 +263,7 @@ class TestP2PolicyTooling:
             "policy_code": version.get("policy_code"),
             "version_id": version.get("version_id"),
             "simulation_input": {
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_risk_class": "MEDIUM",
                 "strategy": "test-strategy",
                 "order": {
@@ -295,7 +295,7 @@ class TestP2PolicyTooling:
             "items": [
                 {
                     "version_id": "nonexistent_version",
-                    "environment": "testnet",
+                    "environment": "live",
                     "activation_mode": "ACTIVE",
                     "override_high_risk": False
                 }
@@ -380,7 +380,7 @@ class TestP2PolicyTooling:
         
         # Try to activate
         activate_payload = {
-            "environment": "testnet",
+            "environment": "live",
             "activation_mode": "ACTIVE",
             "override_high_risk": False
         }
@@ -417,7 +417,7 @@ class TestP2PolicyTooling:
         
         # Try to activate without override
         activate_payload = {
-            "environment": "testnet",
+            "environment": "live",
             "activation_mode": "ACTIVE",
             "override_high_risk": False
         }

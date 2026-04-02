@@ -3,7 +3,7 @@
 Final Backend Deep Validation for P0 Completion Package - Execution Safety Endpoints
 
 This script validates all execution safety endpoints mentioned in the review request:
-1. Acceptance endpoints (testnet run/latest/history)
+1. Acceptance endpoints (live run/latest/history)
 2. Reconcile engine endpoints (intent timeline/reconcile)
 3. Bulk recovery endpoints (bulk-retry/bulk-cancel/bulk-reconcile)
 4. Quarantine/artifact detail endpoints
@@ -83,10 +83,10 @@ class ExecutionSafetyValidator:
         """Test acceptance endpoints: POST run, GET latest, GET history"""
         results = {}
         
-        # Test 1: POST /api/execution-safety/acceptance/testnet/run
+        # Test 1: POST /api/execution-safety/acceptance/live/run
         try:
             response = self.session.post(
-                f"{self.base_url}/api/execution-safety/acceptance/testnet/run?symbol=BTCUSDT&qty=0.001",
+                f"{self.base_url}/api/execution-safety/acceptance/live/run?symbol=BTCUSDT&qty=0.001",
                 timeout=30
             )
             
@@ -113,10 +113,10 @@ class ExecutionSafetyValidator:
             self.log_test("Acceptance Run Endpoint", "FAIL", f"Exception: {str(e)}")
             results['run'] = False
         
-        # Test 2: GET /api/execution-safety/acceptance/testnet/latest
+        # Test 2: GET /api/execution-safety/acceptance/live/latest
         try:
             response = self.session.get(
-                f"{self.base_url}/api/execution-safety/acceptance/testnet/latest",
+                f"{self.base_url}/api/execution-safety/acceptance/live/latest",
                 timeout=30
             )
             
@@ -150,10 +150,10 @@ class ExecutionSafetyValidator:
             self.log_test("Acceptance Latest Endpoint", "FAIL", f"Exception: {str(e)}")
             results['latest'] = False
         
-        # Test 3: GET /api/execution-safety/acceptance/testnet/history
+        # Test 3: GET /api/execution-safety/acceptance/live/history
         try:
             response = self.session.get(
-                f"{self.base_url}/api/execution-safety/acceptance/testnet/history?limit=20",
+                f"{self.base_url}/api/execution-safety/acceptance/live/history?limit=20",
                 timeout=30
             )
             

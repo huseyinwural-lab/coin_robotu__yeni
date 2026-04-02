@@ -260,19 +260,19 @@ class TestSpotP0ChainEndpoints:
 class TestFuturesLiveGateRegression:
     """Test Futures live-gate regression"""
 
-    def test_futures_testnet_live_gate(self, admin_headers):
-        """GET /api/admin/commercial/p0/live-gate for futures testnet - no 500"""
+    def test_futures_live_live_gate(self, admin_headers):
+        """GET /api/admin/commercial/p0/live-gate for futures live - no 500"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/live-gate",
             headers=admin_headers,
             params={
                 "target_user_email": ADMIN_EMAIL,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": "futures",
             },
             timeout=30,
         )
-        assert response.status_code != 500, f"Futures testnet live-gate should not return 500: {response.text}"
+        assert response.status_code != 500, f"Futures live live-gate should not return 500: {response.text}"
         
         if response.status_code == 200:
             data = response.json()
@@ -280,10 +280,10 @@ class TestFuturesLiveGateRegression:
             assert "trade_ingest_ok" in controls, "Should have trade_ingest_ok control"
             assert "pnl_ok" in controls, "Should have pnl_ok control"
             assert "reconciliation_ok" in controls, "Should have reconciliation_ok control"
-            print(f"PASS: Futures testnet live-gate - status={response.status_code}")
+            print(f"PASS: Futures live live-gate - status={response.status_code}")
             print("  controls structure verified")
         else:
-            print(f"INFO: Futures testnet live-gate returned {response.status_code}")
+            print(f"INFO: Futures live live-gate returned {response.status_code}")
 
     def test_futures_live_gate(self, admin_headers):
         """GET /api/admin/commercial/p0/live-gate for futures live - no 500"""
@@ -394,17 +394,17 @@ class TestAuditLogsTimeline:
             print(f"  Found {len(items)} audit log items")
 
 
-class TestSpotTestnetComparison:
-    """Compare spot testnet vs live behavior"""
+class TestSpotLiveComparison:
+    """Compare spot live vs live behavior"""
 
-    def test_spot_testnet_ingestion_no_low_weight_mode(self, admin_headers):
-        """Spot testnet ingestion should NOT have low_weight_mode=true"""
+    def test_spot_live_ingestion_no_low_weight_mode(self, admin_headers):
+        """Spot live ingestion should NOT have low_weight_mode=true"""
         response = requests.post(
             f"{BASE_URL}/api/admin/commercial/p0/ingestion/rest-run",
             headers=admin_headers,
             json={
                 "target_user_email": ADMIN_EMAIL,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["spot"],
                 "symbols": ["BTCUSDT"],
                 "limit_per_symbol": 50,
@@ -420,10 +420,10 @@ class TestSpotTestnetComparison:
             spot_summary = market_summary.get("spot", {})
             low_weight_mode = spot_summary.get("low_weight_mode", False)
             
-            print(f"PASS: Spot testnet ingestion - status={response.status_code}")
-            print(f"  low_weight_mode={low_weight_mode} (expected: False for testnet)")
+            print(f"PASS: Spot live ingestion - status={response.status_code}")
+            print(f"  low_weight_mode={low_weight_mode} (expected: False for live)")
             
-            # Testnet should NOT have low_weight_mode
-            assert low_weight_mode is False, "low_weight_mode should be False for testnet"
+            # Live should NOT have low_weight_mode
+            assert low_weight_mode is False, "low_weight_mode should be False for live"
         else:
-            print(f"INFO: Spot testnet ingestion returned {response.status_code}")
+            print(f"INFO: Spot live ingestion returned {response.status_code}")

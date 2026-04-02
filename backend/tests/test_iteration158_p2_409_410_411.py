@@ -328,7 +328,7 @@ class TestP2410ValidationRerun:
             "user_id": None,
             "strategy_id": None,
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/validation-center/rerun",
@@ -343,7 +343,7 @@ class TestP2410ValidationRerun:
             "user_id": None,
             "strategy_id": None,
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/validation-center/rerun",

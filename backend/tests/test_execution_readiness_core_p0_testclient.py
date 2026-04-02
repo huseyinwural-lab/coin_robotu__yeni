@@ -354,22 +354,22 @@ class TestExecutionReadinessQuarantineActionsLocal:
 class TestGateHardBlockerBehavior:
     """Tests for hard blocker behavior in gate endpoint"""
 
-    def test_gate_blocked_when_testnet_disabled(self, client, auth_headers):
-        """Gate should be BLOCKED when TESTNET_TRADING_ENABLED=false"""
+    def test_gate_blocked_when_live_disabled(self, client, auth_headers):
+        """Gate should be BLOCKED when LIVE_TRADING_ENABLED=false"""
         # Note: This test verifies the current environment state
         response = client.get("/api/execution-readiness/gate", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
         
-        # Check if TESTNET_TRADING_DISABLED is in hard_blockers
+        # Check if LIVE_TRADING_DISABLED is in hard_blockers
         hard_blockers = data.get("hard_blockers", [])
-        testnet_enabled = os.environ.get("TESTNET_TRADING_ENABLED", "false").lower() in ["true", "1", "yes"]
+        live_enabled = os.environ.get("LIVE_TRADING_ENABLED", "false").lower() in ["true", "1", "yes"]
         
-        if not testnet_enabled:
-            assert "TESTNET_TRADING_DISABLED" in hard_blockers, "Expected TESTNET_TRADING_DISABLED in hard_blockers"
-            print("PASS: TESTNET_TRADING_DISABLED correctly in hard_blockers")
+        if not live_enabled:
+            assert "LIVE_TRADING_DISABLED" in hard_blockers, "Expected LIVE_TRADING_DISABLED in hard_blockers"
+            print("PASS: LIVE_TRADING_DISABLED correctly in hard_blockers")
         else:
-            print(f"PASS: TESTNET_TRADING_ENABLED=true, hard_blockers={hard_blockers}")
+            print(f"PASS: LIVE_TRADING_ENABLED=true, hard_blockers={hard_blockers}")
 
     def test_gate_execution_allowed_false_when_blocked(self, client, auth_headers):
         """execution_allowed should be False when gate_state is BLOCKED"""

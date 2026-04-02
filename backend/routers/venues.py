@@ -1477,7 +1477,6 @@ def admin_create_exchange(
         exchange_name=payload.exchange_name.strip(),
         status=payload.status.strip().lower(),
         supported_market_types=market_types,
-        supports_testnet=payload.supports_testnet,
         supports_live=payload.supports_live,
         health_status=payload.health_status.strip().lower(),
         rate_limit_status=payload.rate_limit_status.strip().lower(),
@@ -1855,7 +1854,6 @@ def admin_upsert_user_assignment(
 
     row.spot_allowed = payload.spot_allowed
     row.futures_allowed = payload.futures_allowed
-    row.testnet_allowed = payload.testnet_allowed
     row.live_allowed = payload.live_allowed
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -2293,7 +2291,7 @@ def admin_get_failover_state(
     user_id: str = Query(...),
     strategy_id: str = Query(...),
     market_type: str = Query(...),
-    environment: str = Query(default="testnet"),
+    environment: str = Query(default="live"),
     log_limit: int = Query(default=20, ge=1, le=200),
 ):
     key = _failover_rule_key(user_id=user_id, strategy_id=strategy_id, market_type=market_type, environment=environment)
@@ -3297,8 +3295,8 @@ def admin_patch_execution_credentials(
     allowed_keys = {
         "bybit_api_key",
         "bybit_secret",
-        "bybit_testnet_api_key",
-        "bybit_testnet_secret",
+        "bybit_live_api_key",
+        "bybit_live_secret",
         "bybit_live_api_key",
         "bybit_live_secret",
         "okx_api_key",
@@ -3354,7 +3352,7 @@ def admin_execution_validation(_: User = Depends(require_admin), db: Session = D
             "order_submit_test": checks_by_name.get("test_order_cancel_retry", {}).get("status", "WARN"),
             "cancel_test": checks_by_name.get("test_order_cancel_retry", {}).get("status", "WARN"),
             "retry_behavior": checks_by_name.get("test_order_cancel_retry", {}).get("status", "WARN"),
-            "bybit_testnet_live_ready": checks_by_name.get("permission_matrix_test", {}).get("status", "WARN"),
+            "bybit_live_live_ready": checks_by_name.get("permission_matrix_test", {}).get("status", "WARN"),
         },
         "validation_report": report,
         "timeline_event": timeline_event,
@@ -3697,7 +3695,7 @@ def admin_credential_resolution_preview(
     user_id: str,
     exchange: str = Query(default="binance"),
     market_type: str = Query(default="spot"),
-    environment: str = Query(default="testnet"),
+    environment: str = Query(default="live"),
     purpose: str = Query(default="execution"),
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),

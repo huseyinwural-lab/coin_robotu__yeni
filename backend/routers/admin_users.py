@@ -48,7 +48,6 @@ class UserVenueRepairResponse(BaseModel):
     assignment_changed: bool
     spot_allowed: bool
     futures_allowed: bool
-    testnet_allowed: bool
     live_allowed: bool
 
 
@@ -603,7 +602,6 @@ def repair_user_venue_assignment(
         assignment_changed=changed,
         spot_allowed=bool(row.spot_allowed),
         futures_allowed=bool(row.futures_allowed),
-        testnet_allowed=bool(row.testnet_allowed),
         live_allowed=bool(row.live_allowed),
     )
 

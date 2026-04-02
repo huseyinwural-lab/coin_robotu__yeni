@@ -218,7 +218,7 @@ export const AdminCommercialOpsPage = () => {
         <div className="mt-3 grid gap-2 md:grid-cols-5" data-testid="admin-commercial-overview-filter-grid">
           <select className="border border-black/40 bg-white px-3 py-2 text-sm" value={filters.environment} onChange={(event) => setFilters((prev) => ({ ...prev, environment: event.target.value }))} data-testid="admin-commercial-overview-environment-select">
             <option value="live">live</option>
-            <option value="testnet">testnet</option>
+            <option value="live">live</option>
           </select>
           <select className="border border-black/40 bg-white px-3 py-2 text-sm" value={filters.time_window} onChange={(event) => setFilters((prev) => ({ ...prev, time_window: event.target.value }))} data-testid="admin-commercial-overview-time-window-select">
             <option value="last_7_days">last_7_days</option>

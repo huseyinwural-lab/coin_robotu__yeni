@@ -1,9 +1,9 @@
 """
 Execution Safety Advanced P0 Tests - Iteration 175
 Tests for:
-- POST /api/execution-safety/acceptance/testnet/run (ack->fill sequence, acceptance_run_id/correlation_id generation)
-- GET /api/execution-safety/acceptance/testnet/latest
-- GET /api/execution-safety/acceptance/testnet/history
+- POST /api/execution-safety/acceptance/live/run (ack->fill sequence, acceptance_run_id/correlation_id generation)
+- GET /api/execution-safety/acceptance/live/latest
+- GET /api/execution-safety/acceptance/live/history
 - GET /api/execution-safety/intents/{intent_id}/timeline
 - GET /api/execution-safety/intents/{intent_id}/reconcile
 - GET /api/execution-safety/artifacts/{intent_id}
@@ -46,16 +46,16 @@ def auth_headers(client):
 
 
 # ============================================================================
-# ACCEPTANCE TESTNET ENDPOINTS
+# ACCEPTANCE LIVE ENDPOINTS
 # ============================================================================
 
-class TestAcceptanceTestnetRun:
-    """POST /api/execution-safety/acceptance/testnet/run"""
+class TestAcceptanceLiveRun:
+    """POST /api/execution-safety/acceptance/live/run"""
 
     def test_acceptance_run_returns_required_fields(self, client, auth_headers):
         """Acceptance run should return acceptance_run_id, correlation_id, final_verdict"""
         response = client.post(
-            "/api/execution-safety/acceptance/testnet/run?symbol=BTCUSDT&qty=0.001",
+            "/api/execution-safety/acceptance/live/run?symbol=BTCUSDT&qty=0.001",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -78,7 +78,7 @@ class TestAcceptanceTestnetRun:
     def test_acceptance_run_ack_fill_sequence(self, client, auth_headers):
         """Acceptance run should follow ack->fill sequence, skip fill if ack fails"""
         response = client.post(
-            "/api/execution-safety/acceptance/testnet/run?symbol=BTCUSDT&qty=0.001",
+            "/api/execution-safety/acceptance/live/run?symbol=BTCUSDT&qty=0.001",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -104,7 +104,7 @@ class TestAcceptanceTestnetRun:
     def test_acceptance_run_produces_artifact(self, client, auth_headers):
         """Acceptance run should always produce artifact manifest"""
         response = client.post(
-            "/api/execution-safety/acceptance/testnet/run?symbol=BTCUSDT&qty=0.001",
+            "/api/execution-safety/acceptance/live/run?symbol=BTCUSDT&qty=0.001",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -121,7 +121,7 @@ class TestAcceptanceTestnetRun:
     def test_acceptance_run_audit_record(self, client, auth_headers):
         """Acceptance run should produce audit record"""
         response = client.post(
-            "/api/execution-safety/acceptance/testnet/run?symbol=BTCUSDT&qty=0.001",
+            "/api/execution-safety/acceptance/live/run?symbol=BTCUSDT&qty=0.001",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -134,12 +134,12 @@ class TestAcceptanceTestnetRun:
         assert "entity_id" in audit
 
 
-class TestAcceptanceTestnetLatest:
-    """GET /api/execution-safety/acceptance/testnet/latest"""
+class TestAcceptanceLiveLatest:
+    """GET /api/execution-safety/acceptance/live/latest"""
 
     def test_latest_returns_200(self, client, auth_headers):
         response = client.get(
-            "/api/execution-safety/acceptance/testnet/latest",
+            "/api/execution-safety/acceptance/live/latest",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -149,7 +149,7 @@ class TestAcceptanceTestnetLatest:
     def test_latest_structure(self, client, auth_headers):
         """Latest should return latest acceptance run or null"""
         response = client.get(
-            "/api/execution-safety/acceptance/testnet/latest",
+            "/api/execution-safety/acceptance/live/latest",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -161,12 +161,12 @@ class TestAcceptanceTestnetLatest:
             assert isinstance(latest, dict)
 
 
-class TestAcceptanceTestnetHistory:
-    """GET /api/execution-safety/acceptance/testnet/history"""
+class TestAcceptanceLiveHistory:
+    """GET /api/execution-safety/acceptance/live/history"""
 
     def test_history_returns_200(self, client, auth_headers):
         response = client.get(
-            "/api/execution-safety/acceptance/testnet/history?limit=10",
+            "/api/execution-safety/acceptance/live/history?limit=10",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -176,7 +176,7 @@ class TestAcceptanceTestnetHistory:
 
     def test_history_respects_limit(self, client, auth_headers):
         response = client.get(
-            "/api/execution-safety/acceptance/testnet/history?limit=5",
+            "/api/execution-safety/acceptance/live/history?limit=5",
             headers=auth_headers,
         )
         assert response.status_code == 200
@@ -525,7 +525,7 @@ class TestCorrelationEnforcement:
         
         # Run acceptance
         response = client.post(
-            "/api/execution-safety/acceptance/testnet/run?symbol=BTCUSDT&qty=0.001",
+            "/api/execution-safety/acceptance/live/run?symbol=BTCUSDT&qty=0.001",
             headers=auth_headers,
         )
         assert response.status_code == 200

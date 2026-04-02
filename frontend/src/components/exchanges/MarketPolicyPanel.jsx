@@ -30,7 +30,7 @@ export const MarketPolicyPanel = ({ exchanges, data, loading, error, onRefresh, 
   const exchangeOptions = useMemo(() => (exchanges || []).map((item) => item.exchange_code), [exchanges]);
   const [exchangeCode, setExchangeCode] = useState(exchangeOptions[0] || "binance");
   const [marketType, setMarketType] = useState("spot");
-  const [environment, setEnvironment] = useState("testnet");
+  const [environment, setEnvironment] = useState("live");
   const [symbolRulesText, setSymbolRulesText] = useState("BTCUSDT,allow,20,tier1");
   const [restrictedClassesText, setRestrictedClassesText] = useState("meme,leverage_token");
   const [riskTierDefaultsText, setRiskTierDefaultsText] = useState('{"tier1":0.1,"tier2":0.05}');
@@ -95,7 +95,7 @@ export const MarketPolicyPanel = ({ exchanges, data, loading, error, onRefresh, 
           <option value="futures">futures</option>
         </select>
         <select value={environment} onChange={(event) => setEnvironment(event.target.value)} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-sm" data-testid="market-policy-environment-select">
-          <option value="testnet">testnet</option>
+          <option value="live">live</option>
           <option value="live">live</option>
         </select>
       </div>

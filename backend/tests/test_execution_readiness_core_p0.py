@@ -425,10 +425,10 @@ class TestServiceLevelFunctions:
         from services.execution_safety_core_service import HARD_BLOCK_REASON_CODES
         
         expected_codes = [
-            "TESTNET_TRADING_DISABLED",
+            "LIVE_TRADING_DISABLED",
             "MARKET_DATA_MISSING",
             "KILL_SWITCH_ACTIVE",
-            "BYBIT_TESTNET_CREDENTIALS_MISSING",
+            "BYBIT_LIVE_CREDENTIALS_MISSING",
             "BYBIT_AUTH_PROBE_FAIL",
             "BYBIT_CONNECTIVITY_FAIL",
             "BYBIT_ORDER_SMOKE_FAIL",

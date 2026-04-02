@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("account_label", sa.String(length=80), nullable=False, server_default="default"),
         sa.Column("exchange", sa.String(length=30), nullable=False, server_default="binance"),
         sa.Column("market_type", sa.String(length=20), nullable=False, server_default="spot"),
-        sa.Column("environment", sa.String(length=20), nullable=False, server_default="testnet"),
+        sa.Column("environment", sa.String(length=20), nullable=False, server_default="live"),
         sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("readiness_snapshot", sa.JSON(), nullable=False, server_default=sa.text("'{}'")),
         sa.Column("permission_snapshot", sa.JSON(), nullable=False, server_default=sa.text("'[]'")),

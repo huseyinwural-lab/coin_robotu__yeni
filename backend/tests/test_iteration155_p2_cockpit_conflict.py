@@ -249,14 +249,14 @@ class TestRouteChurnAnomalyThreshold:
         Trigger route churn anomaly by creating multiple failover transitions.
         This test creates a failover policy and applies manual overrides to generate transitions.
         """
-        test_key = "TEST_churn_user:TEST_churn_strategy:futures:testnet"
+        test_key = "TEST_churn_user:TEST_churn_strategy:futures:live"
         
         # Step 1: Create a failover policy
         failover_payload = {
             "user_id": "TEST_churn_user",
             "strategy_id": "TEST_churn_strategy",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": ["okx", "kucoin"],
@@ -278,7 +278,7 @@ class TestRouteChurnAnomalyThreshold:
                 "user_id": "TEST_churn_user",
                 "strategy_id": "TEST_churn_strategy",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "force_route": venue,
                 "force_disable": []
             }
@@ -371,7 +371,7 @@ class TestRoutingFailoverDataConsistency:
             "user_id": "TEST_consistency_user",
             "strategy_id": "TEST_consistency_strategy",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": [],
@@ -402,7 +402,7 @@ class TestRoutingFailoverDataConsistency:
             "user_id": "TEST_conflict_user",
             "strategy_id": "TEST_conflict_strategy",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "default_venue": "binance",
             "blocked_venues": ["binance"],  # Intentional conflict
             "preferred_venues": ["bybit"],

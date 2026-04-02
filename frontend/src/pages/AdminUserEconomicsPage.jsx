@@ -146,7 +146,7 @@ export const AdminUserEconomicsPage = () => {
       <section className="grid gap-2 rounded border border-black/30 bg-white p-3 md:grid-cols-4 lg:grid-cols-8" data-testid="admin-user-economics-filter-panel">
         <select className="h-10 rounded border px-2" value={filters.environment} onChange={(event) => setFilters((prev) => ({ ...prev, environment: event.target.value }))} data-testid="admin-user-economics-filter-environment-select">
           <option value="live">live</option>
-          <option value="testnet">testnet</option>
+          <option value="live">live</option>
         </select>
         <Input type="datetime-local" value={filters.start_date} onChange={(event) => setFilters((prev) => ({ ...prev, start_date: event.target.value }))} data-testid="admin-user-economics-filter-start-date-input" />
         <Input type="datetime-local" value={filters.end_date} onChange={(event) => setFilters((prev) => ({ ...prev, end_date: event.target.value }))} data-testid="admin-user-economics-filter-end-date-input" />

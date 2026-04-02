@@ -243,7 +243,7 @@ class TestPhase4LiveConfigWhitelist:
         # Update with empty whitelist
         update_payload = {
             "exchange": current_config.get("exchange", "binance"),
-            "market_type": current_config.get("market_type", "futures_testnet"),
+            "market_type": current_config.get("market_type", "futures_live"),
             "safe_mode_enabled": current_config.get("safe_mode_enabled", True),
             "live_mode_enabled": current_config.get("live_mode_enabled", False),
             "symbol_whitelist": [],  # Empty whitelist

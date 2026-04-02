@@ -290,7 +290,7 @@ class TestExchangeValidateFlows:
             params={
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet"
+                "environment": "live"
             },
             timeout=30,
         )

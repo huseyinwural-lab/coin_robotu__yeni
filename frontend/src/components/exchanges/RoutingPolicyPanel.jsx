@@ -30,7 +30,7 @@ export const RoutingPolicyPanel = ({
   const [userId, setUserId] = useState("");
   const [strategyId, setStrategyId] = useState("");
   const [marketType, setMarketType] = useState("spot");
-  const [environment, setEnvironment] = useState("testnet");
+  const [environment, setEnvironment] = useState("live");
   const [defaultVenue, setDefaultVenue] = useState(exchangeCodes[0] || "binance");
   const [preferredVenuesText, setPreferredVenuesText] = useState("binance,bybit");
   const [blockedVenuesText, setBlockedVenuesText] = useState("okx");
@@ -183,7 +183,7 @@ export const RoutingPolicyPanel = ({
           <option value="futures">futures</option>
         </select>
         <select value={environment} onChange={(event) => setEnvironment(event.target.value)} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-sm" data-testid="routing-policy-environment-select">
-          <option value="testnet">testnet</option>
+          <option value="live">live</option>
           <option value="live">live</option>
         </select>
       </div>

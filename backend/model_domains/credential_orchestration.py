@@ -17,7 +17,7 @@ class AdminExchangeCredential(Base):
     exchange: Mapped[str] = mapped_column(String(40), default="binance", index=True)
     market_type: Mapped[str] = mapped_column(String(20), default="spot", index=True)
     purpose: Mapped[str] = mapped_column(String(40), default="market_data", index=True)
-    environment: Mapped[str] = mapped_column(String(20), default="testnet", index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
 
     api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
     api_secret_encrypted: Mapped[str] = mapped_column(Text, default="")
@@ -50,7 +50,7 @@ class CredentialAssignmentRule(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     exchange: Mapped[str] = mapped_column(String(40), default="binance", index=True)
     market_type: Mapped[str] = mapped_column(String(20), default="spot", index=True)
-    environment: Mapped[str] = mapped_column(String(20), default="testnet", index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
 
     tenant_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     user_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True, index=True)

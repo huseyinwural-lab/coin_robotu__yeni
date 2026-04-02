@@ -51,12 +51,12 @@ class FuturesOrderPreflight:
             }
         )
 
-        testnet_enabled = bool(context.get("testnet_mode_enabled", False))
+        live_enabled = bool(context.get("live_mode_enabled", False))
         checks.append(
             {
-                "key": "testnet_mode_enabled",
-                "pass": testnet_enabled,
-                "reason": "TESTNET_MODE_DISABLED" if not testnet_enabled else "PASS",
+                "key": "live_mode_enabled",
+                "pass": live_enabled,
+                "reason": "LIVE_MODE_DISABLED" if not live_enabled else "PASS",
             }
         )
 
@@ -82,8 +82,8 @@ class FuturesOrderPreflight:
                 }
             )
 
-        environment = str(context.get("environment") or "testnet").lower()
-        live_endpoint_forbidden = environment == "testnet"
+        environment = str(context.get("environment") or "live").lower()
+        live_endpoint_forbidden = environment == "live"
         checks.append(
             {
                 "key": "live_endpoint_block",

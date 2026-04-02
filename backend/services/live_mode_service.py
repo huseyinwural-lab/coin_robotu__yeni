@@ -37,7 +37,7 @@ from models import (
     RiskExposureGroup,
     RiskOrchestratorPolicy,
     RiskPolicy,
-    TestnetExecutionLog,
+    LiveExecutionLog,
     User,
     UserExchangeConnection,
     UserExchangeSetting,
@@ -52,14 +52,14 @@ from services.system_alert_service import create_system_alert
 from services.pipeline.cache_store import read_candles
 from services.venue_service import check_user_venue_access, ensure_user_venue_assignment, seed_binance_venue_registry
 
-BINANCE_FUTURES_TESTNET_REST = "https://testnet.binancefuture.com"
-BINANCE_FUTURES_TESTNET_WS = "wss://stream.binancefuture.com/ws"
-BINANCE_SPOT_TESTNET_REST = "https://testnet.binance.vision"
+BINANCE_FUTURES_LIVE_REST = "https://fapi.binance.com"
+BINANCE_FUTURES_LIVE_WS = "wss://stream.binancefuture.com/ws"
+BINANCE_SPOT_LIVE_REST = "https://api.binance.com"
 BINANCE_FUTURES_LIVE_REST = "https://fapi.binance.com"
 BINANCE_SPOT_LIVE_REST = "https://api.binance.com"
 
-BINANCE_SPOT_TESTNET_BASE_URL = os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL")
-BINANCE_FUTURES_TESTNET_BASE_URL = os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL")
+BINANCE_SPOT_LIVE_BASE_URL = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
+BINANCE_FUTURES_LIVE_BASE_URL = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
 BINANCE_SPOT_LIVE_BASE_URL = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
 BINANCE_FUTURES_LIVE_BASE_URL = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
 DEFAULT_TEST_SYMBOL = "BTCUSDT"
@@ -81,7 +81,7 @@ OVERRIDE_REASON_CODES = {
 logger = logging.getLogger(__name__)
 
 
-class BinanceFuturesTestnetAdapter:
+class BinanceFuturesLiveAdapter:
     docs_references = [
         "https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",
         "https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/New-Order",
@@ -114,14 +114,14 @@ class BinanceFuturesTestnetAdapter:
             return fallback
 
     @staticmethod
-    def _futures_rest(environment: str = "testnet") -> str:
-        normalized = str(environment or "testnet").strip().lower()
-        if normalized == "testnet":
+    def _futures_rest(environment: str = "live") -> str:
+        normalized = str(environment or "live").strip().lower()
+        if normalized == "live":
             return str(
-                os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL")
+                os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
                 or os.environ.get("BINANCE_FUTURES_BASE_URL")
-                or BINANCE_FUTURES_TESTNET_BASE_URL
-                or BINANCE_FUTURES_TESTNET_REST
+                or BINANCE_FUTURES_LIVE_BASE_URL
+                or BINANCE_FUTURES_LIVE_REST
             )
         return str(
             os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
@@ -131,14 +131,14 @@ class BinanceFuturesTestnetAdapter:
         )
 
     @staticmethod
-    def _spot_rest(environment: str = "testnet") -> str:
-        normalized = str(environment or "testnet").strip().lower()
-        if normalized == "testnet":
+    def _spot_rest(environment: str = "live") -> str:
+        normalized = str(environment or "live").strip().lower()
+        if normalized == "live":
             return str(
-                os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL")
+                os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
                 or os.environ.get("BINANCE_SPOT_BASE_URL")
-                or BINANCE_SPOT_TESTNET_BASE_URL
-                or BINANCE_SPOT_TESTNET_REST
+                or BINANCE_SPOT_LIVE_BASE_URL
+                or BINANCE_SPOT_LIVE_REST
             )
         return str(
             os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
@@ -149,20 +149,20 @@ class BinanceFuturesTestnetAdapter:
 
     @staticmethod
     def _proxy_token(environment: str, market: str) -> str:
-        env = str(environment or "testnet").strip().lower()
+        env = str(environment or "live").strip().lower()
         mkt = str(market or "futures").strip().lower()
         if mkt == "spot":
             token = (
-                os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN")
-                if env == "testnet"
+                os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
+                if env == "live"
                 else os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
             )
             token = token or os.environ.get("BINANCE_SPOT_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
             return str(token or "").strip()
 
         token = (
-            os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN")
-            if env == "testnet"
+            os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
+            if env == "live"
             else os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
         )
         token = token or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
@@ -177,9 +177,9 @@ class BinanceFuturesTestnetAdapter:
         return headers
 
     def ping(self) -> dict:
-        return self.ping_with_environment("testnet")
+        return self.ping_with_environment("live")
 
-    def ping_with_environment(self, environment: str = "testnet") -> dict:
+    def ping_with_environment(self, environment: str = "live") -> dict:
         rest_url = self._futures_rest(environment)
         try:
             response = httpx.get(
@@ -192,19 +192,19 @@ class BinanceFuturesTestnetAdapter:
                 "status": "reachable",
                 "server_time": payload.get("serverTime"),
                 "rest_url": rest_url,
-                "ws_url": BINANCE_FUTURES_TESTNET_WS,
-                "message": "Binance Futures Testnet endpoint reachable.",
+                "ws_url": BINANCE_FUTURES_LIVE_WS,
+                "message": "Binance Futures Live endpoint reachable.",
             }
         except Exception as exc:
             return {
                 "status": "unreachable",
                 "server_time": None,
                 "rest_url": rest_url,
-                "ws_url": BINANCE_FUTURES_TESTNET_WS,
+                "ws_url": BINANCE_FUTURES_LIVE_WS,
                 "message": f"Endpoint check failed: {exc}",
             }
 
-    def exchange_info(self, symbol: str, *, environment: str = "testnet") -> dict:
+    def exchange_info(self, symbol: str, *, environment: str = "live") -> dict:
         try:
             response = httpx.get(
                 f"{self._futures_rest(environment)}/fapi/v1/exchangeInfo",
@@ -223,7 +223,7 @@ class BinanceFuturesTestnetAdapter:
         endpoint: str,
         params: dict,
         *,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int, dict]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
@@ -244,7 +244,7 @@ class BinanceFuturesTestnetAdapter:
         endpoint: str,
         params: dict,
         *,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int, dict]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
@@ -265,7 +265,7 @@ class BinanceFuturesTestnetAdapter:
         endpoint: str,
         params: dict,
         *,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
@@ -286,7 +286,7 @@ class BinanceFuturesTestnetAdapter:
         endpoint: str,
         params: dict,
         *,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
@@ -308,7 +308,7 @@ class BinanceFuturesTestnetAdapter:
         params: dict,
         *,
         spot: bool = False,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
@@ -323,7 +323,7 @@ class BinanceFuturesTestnetAdapter:
         payload = response.json() if response.content else {}
         return payload, response.status_code
 
-    def account_probe(self, api_key: str, api_secret: str, environment: str = "testnet") -> tuple[dict, int, dict]:
+    def account_probe(self, api_key: str, api_secret: str, environment: str = "live") -> tuple[dict, int, dict]:
         return self._signed_get(api_key, api_secret, "/fapi/v2/account", {}, environment=environment)
 
     def position_risk(
@@ -332,7 +332,7 @@ class BinanceFuturesTestnetAdapter:
         api_secret: str,
         symbol: str | None = None,
         *,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int, dict]:
         params = {"symbol": symbol} if symbol else {}
         return self._signed_get(api_key, api_secret, "/fapi/v2/positionRisk", params, environment=environment)
@@ -343,7 +343,7 @@ class BinanceFuturesTestnetAdapter:
         api_secret: str,
         symbol: str = "BTCUSDT",
         *,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int, dict]:
         params = {
             "symbol": symbol,
@@ -355,10 +355,10 @@ class BinanceFuturesTestnetAdapter:
         payload, status = self._signed_post(api_key, api_secret, "/fapi/v1/order", params, environment=environment)
         return payload, status, {}
 
-    def account_probe_spot(self, api_key: str, api_secret: str, environment: str = "testnet") -> tuple[dict, int, dict]:
+    def account_probe_spot(self, api_key: str, api_secret: str, environment: str = "live") -> tuple[dict, int, dict]:
         return self._signed_get_spot(api_key, api_secret, "/api/v3/account", {}, environment=environment)
 
-    def mark_price(self, symbol: str, *, environment: str = "testnet") -> float:
+    def mark_price(self, symbol: str, *, environment: str = "live") -> float:
         response = httpx.get(
             f"{self._futures_rest(environment)}/fapi/v1/ticker/price",
             params={"symbol": symbol},
@@ -370,7 +370,7 @@ class BinanceFuturesTestnetAdapter:
 
     def book_ticker(self, symbol: str) -> dict:
         response = httpx.get(
-            f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/ticker/bookTicker",
+            f"{BINANCE_FUTURES_LIVE_REST}/fapi/v1/ticker/bookTicker",
             params={"symbol": symbol},
             timeout=self._timeout("market_data", 8),
         )
@@ -394,7 +394,7 @@ class BinanceFuturesTestnetAdapter:
         symbol: str,
         leverage: int,
         *,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         return self._signed_post(
             api_key,
@@ -414,7 +414,7 @@ class BinanceFuturesTestnetAdapter:
         quantity: float,
         price: float,
         time_in_force: str,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         return self._signed_post(
             api_key,
@@ -439,7 +439,7 @@ class BinanceFuturesTestnetAdapter:
         symbol: str,
         side: str,
         quantity: float,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         return self._signed_post(
             api_key,
@@ -462,7 +462,7 @@ class BinanceFuturesTestnetAdapter:
         symbol: str,
         side: str,
         quote_order_qty: float,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         return self._signed_post_spot(
             api_key,
@@ -484,7 +484,7 @@ class BinanceFuturesTestnetAdapter:
         symbol: str,
         order_id: int,
         *,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         payload, status_code, _ = self._signed_get(
             api_key,
@@ -502,7 +502,7 @@ class BinanceFuturesTestnetAdapter:
         symbol: str,
         order_id: int,
         *,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         payload, status_code, _ = self._signed_get_spot(
             api_key,
@@ -521,7 +521,7 @@ class BinanceFuturesTestnetAdapter:
         order_id: int,
         *,
         market_type: str,
-        environment: str = "testnet",
+        environment: str = "live",
     ) -> tuple[dict, int]:
         if market_type == "spot":
             return self._signed_delete(
@@ -541,7 +541,7 @@ class BinanceFuturesTestnetAdapter:
             environment=environment,
         )
 
-    def evaluate_permission_controls(self, api_key: str | None, api_secret: str | None, *, environment: str = "testnet") -> dict:
+    def evaluate_permission_controls(self, api_key: str | None, api_secret: str | None, *, environment: str = "live") -> dict:
         now_iso = datetime.now(timezone.utc).isoformat()
         key = (api_key or "").strip()
         secret = (api_secret or "").strip()
@@ -622,7 +622,7 @@ class BinanceFuturesTestnetAdapter:
         overall = "pass" if all(item["status"] == "pass" for item in controls) else "fail"
         return {"overall_status": overall, "controls": controls, "invalid_credentials": False}
 
-    def permission_check(self, api_key: str | None, api_secret: str | None, *, environment: str = "testnet") -> dict:
+    def permission_check(self, api_key: str | None, api_secret: str | None, *, environment: str = "live") -> dict:
         has_key = bool(api_key and api_key.strip())
         has_secret = bool(api_secret and api_secret.strip())
         key = api_key.strip() if api_key else None
@@ -757,7 +757,7 @@ def permission_status_for_user(db: Session, user_id: str) -> dict:
     settings_row = get_or_create_exchange_settings(db, user_id)
     api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else None
     api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else None
-    check = adapter.permission_check(api_key, api_secret, environment=str(settings_row.mode or "testnet"))
+    check = adapter.permission_check(api_key, api_secret, environment=str(settings_row.mode or "live"))
     status = "ready" if check["status"] == "ready" else "blocked"
     return {
         "overall_status": "pass" if status == "ready" else "fail",
@@ -778,7 +778,7 @@ def _normalize_permissions(account_payload: dict, market_type: str, environment:
         elif market_type == "spot":
             permissions.add("SPOT")
         else:
-            permissions.add("FUTURES" if environment == "testnet" else "SPOT")
+            permissions.add("FUTURES" if environment == "live" else "SPOT")
     if bool(account_payload.get("canDeposit")):
         permissions.add("DEPOSIT")
     if bool(account_payload.get("canWithdraw")):
@@ -821,8 +821,8 @@ def normalize_failure_code(payload: dict | None, status_code: int | None = None,
         return "ip_restricted"
     if "insufficient" in message or "balance" in message:
         return "insufficient_balance"
-    if fallback == "testnet_unreachable" or status_code == 503:
-        return "testnet_unreachable"
+    if fallback == "live_unreachable" or status_code == 503:
+        return "live_unreachable"
     if status_code and status_code >= 400:
         return "exchange_rejected"
     return "unknown_exchange_error"
@@ -901,8 +901,8 @@ def validate_exchange_credentials_for_user(
     def _validation_hint(reason_codes: list[str]) -> str | None:
         normalized = {str(code).strip().lower() for code in (reason_codes or []) if str(code).strip()}
         if "invalid_key" in normalized:
-            if requested_environment == "testnet":
-                return "API key/secret geçersiz veya mainnet key testnet ortamında kullanılıyor olabilir. Testnet key kullanın ya da environment'i live seçin."
+            if requested_environment == "live":
+                return "API key/secret geçersiz veya mainnet key live ortamında kullanılıyor olabilir. Live key kullanın ya da environment'i live seçin."
             return "API key/secret geçersiz veya yetkiler yetersiz. Key/secret ve permission seçeneklerini kontrol edin."
         if "missing_trade_permission" in normalized:
             return "API key üzerinde trade yetkisi kapalı. Binance API izinlerinde trade/futures izinlerini açın."
@@ -911,7 +911,7 @@ def validate_exchange_credentials_for_user(
         if "exchange_error_451" in normalized:
             return "Bölgesel erişim kısıtı (451) oluştu. Farklı venue/environment veya uygun endpoint fallback ile doğrulayın."
         if "exchange_error_400" in normalized:
-            return "Exchange 400 hatası alındı: çoğunlukla API key/secret eşleşmiyor veya ortam (testnet/live) key ile uyumsuz. Key çiftini ve environment seçimini birlikte doğrulayın."
+            return "Exchange 400 hatası alındı: çoğunlukla API key/secret eşleşmiyor veya ortam (live/live) key ile uyumsuz. Key çiftini ve environment seçimini birlikte doğrulayın."
         if "assignment_required" in normalized:
             return "Venue assignment eksik. Exchange connection profilini varsayılan yapıp tekrar deneyin."
         if "settings_mismatch" in normalized:
@@ -1304,7 +1304,7 @@ def get_market_ticker(symbol: str = "BTCUSDT") -> dict:
     snapshot = adapter.book_ticker(symbol)
     return {
         "exchange": "binance",
-        "environment": "testnet",
+        "environment": "live",
         "symbol": snapshot["symbol"],
         "bid": snapshot["bid"],
         "ask": snapshot["ask"],
@@ -1576,7 +1576,7 @@ def user_readiness_checklist(
     settings_row = get_or_create_exchange_settings(db, user_id)
     requested_exchange = (exchange or settings_row.exchange or "binance").strip().lower()
     requested_market_type = (market_type or "futures").strip().lower()
-    requested_environment = (environment or settings_row.mode or "testnet").strip().lower()
+    requested_environment = (environment or settings_row.mode or "live").strip().lower()
 
     allowed, venue_state, capability_match, venue_reason_codes = check_user_venue_access(
         db,
@@ -1597,7 +1597,7 @@ def user_readiness_checklist(
 
     validation_success = bool(settings_row.last_validation_success)
     can_trade = bool(settings_row.can_trade_snapshot)
-    is_testnet = requested_environment == "testnet"
+    is_live = requested_environment == "live"
     reason_codes = settings_row.last_reason_codes or []
 
     readiness_status = "blocked"
@@ -1618,7 +1618,7 @@ def user_readiness_checklist(
         readiness_status = "blocked"
     else:
         gate = release_gate_view(db)
-        if gate["status"] == "BLOCKED" and requested_environment != "testnet":
+        if gate["status"] == "BLOCKED" and requested_environment != "live":
             readiness_status = "blocked"
             last_error_reason = "release_gate_forced_block"
         else:
@@ -1635,7 +1635,7 @@ def user_readiness_checklist(
         "has_api_secret": has_api_secret,
         "validation_success": validation_success,
         "can_trade": can_trade,
-        "is_testnet_environment": is_testnet,
+        "is_live_environment": is_live,
         "is_validation_stale": stale,
         "validation_timestamp": validation_ts,
         "validation_snapshot_id": settings_row.validation_snapshot_id,
@@ -1749,11 +1749,11 @@ def _map_order_status(status: str) -> str:
     return "failed"
 
 
-def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
+def run_controlled_test_order(db: Session, user: User) -> LiveExecutionLog:
     settings_row = get_or_create_exchange_settings(db, user.id)
     api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else None
     api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else None
-    environment = str(settings_row.mode or "testnet").strip().lower()
+    environment = str(settings_row.mode or "live").strip().lower()
 
     permission = adapter.permission_check(api_key, api_secret, environment=environment)
     permission_snapshot = permission.get("controls", [])
@@ -1814,7 +1814,7 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
             source="phase4_test_order",
             actor_user_id=user.id,
             actor_role=user.role.value,
-            entity_type="testnet_execution",
+            entity_type="live_execution",
             entity_id=f"test-order:{user.id}:{symbol}",
         )
     except ExecutionSafetyViolation as exc:
@@ -1859,7 +1859,7 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
         db.add(
             AuditLog(
                 action="CANARY_AUTO_HEAL_SPOT_FALLBACK",
-                entity_type="testnet_execution",
+                entity_type="live_execution",
                 entity_id=f"test-order:{user.id}:{symbol}",
                 actor_user_id=user.id,
                 actor_role=user.role.value,
@@ -1972,7 +1972,7 @@ def run_controlled_test_order(db: Session, user: User) -> TestnetExecutionLog:
         volatility_pct=volatility_pct,
     )
 
-    execution_log = TestnetExecutionLog(
+    execution_log = LiveExecutionLog(
         id=str(uuid.uuid4()),
         user_id=user.id,
         symbol=symbol,
@@ -2023,7 +2023,7 @@ def _safe_float(value: str | float | int | None, fallback: float) -> float:
         return fallback
 
 
-def _fetch_symbol_filters(symbol: str, *, environment: str = "testnet") -> dict:
+def _fetch_symbol_filters(symbol: str, *, environment: str = "live") -> dict:
     defaults = {
         "min_qty": 0.001,
         "step_size": 0.001,
@@ -2157,8 +2157,8 @@ def run_exchange_test_order_market(
 
     if normalized_exchange != "binance":
         raise ValueError("Sadece binance adaptörü aktif. exchange_rejected")
-    if normalized_environment != "testnet":
-        raise ValueError("Sadece testnet environment destekleniyor. exchange_rejected")
+    if normalized_environment != "live":
+        raise ValueError("Sadece live environment destekleniyor. exchange_rejected")
     if normalized_market_type not in {"spot", "futures"}:
         raise ValueError("market_type spot veya futures olmalı")
 
@@ -2177,7 +2177,7 @@ def run_exchange_test_order_market(
             "missing_trade_permission": "permission_denied",
             "ip_restriction": "ip_restricted",
             "insufficient_balance": "insufficient_balance",
-            "exchange_unreachable": "testnet_unreachable",
+            "exchange_unreachable": "live_unreachable",
             "stale_validation_snapshot": "stale_validation",
             "settings_mismatch": "stale_validation",
         }
@@ -2346,7 +2346,7 @@ def run_exchange_test_order_market(
                 environment=normalized_environment,
             )
     except httpx.HTTPError:
-        order_payload = {"msg": "testnet_unreachable"}
+        order_payload = {"msg": "live_unreachable"}
         order_status = 503
 
     ack_at = datetime.now(timezone.utc)
@@ -2772,9 +2772,9 @@ def latest_execution_quality(db: Session, user_id: str):
     if metric:
         return metric
     return (
-        db.query(TestnetExecutionLog)
-        .filter(TestnetExecutionLog.user_id == user_id)
-        .order_by(TestnetExecutionLog.created_at.desc())
+        db.query(LiveExecutionLog)
+        .filter(LiveExecutionLog.user_id == user_id)
+        .order_by(LiveExecutionLog.created_at.desc())
         .first()
     )
 
@@ -2783,7 +2783,7 @@ def list_execution_quality(db: Session, limit: int = 20):
     metrics = list_execution_metrics(db, limit=limit)
     if metrics:
         return metrics
-    return db.query(TestnetExecutionLog).order_by(TestnetExecutionLog.created_at.desc()).limit(limit).all()
+    return db.query(LiveExecutionLog).order_by(LiveExecutionLog.created_at.desc()).limit(limit).all()
 
 
 def enforce_release_gate(db: Session, environment: str = "prod") -> dict:
@@ -2835,7 +2835,7 @@ def _latest_execution_quality_score(db: Session) -> float:
     latest_metric = db.query(ExecutionMetric).order_by(ExecutionMetric.created_at.desc()).first()
     if latest_metric:
         return float(latest_metric.execution_quality_score or 0)
-    latest_exec = db.query(TestnetExecutionLog).order_by(TestnetExecutionLog.created_at.desc()).first()
+    latest_exec = db.query(LiveExecutionLog).order_by(LiveExecutionLog.created_at.desc()).first()
     if latest_exec:
         return float(latest_exec.execution_quality_score or 0)
     try:
@@ -3187,7 +3187,7 @@ def compute_live_readiness_score(db: Session) -> dict:
     if latest_metric:
         execution_simulation_pass = latest_metric.status in {"FILLED", "PARTIALLY_FILLED", "CANCELED", "EXPIRED"}
     else:
-        latest_exec = db.query(TestnetExecutionLog).order_by(TestnetExecutionLog.created_at.desc()).first()
+        latest_exec = db.query(LiveExecutionLog).order_by(LiveExecutionLog.created_at.desc()).first()
         execution_simulation_pass = bool(latest_exec and latest_exec.status in {"filled", "partial_fill", "cancelled"})
     correlation_model_pass = db.query(RiskExposureGroup).count() > 0
     latest_hardening = db.query(HardeningChecklistRun).order_by(HardeningChecklistRun.created_at.desc()).first()
@@ -3261,7 +3261,7 @@ def release_gate_view(db: Session, environment: str = "prod") -> dict:
     }
 
 
-adapter = BinanceFuturesTestnetAdapter()
+adapter = BinanceFuturesLiveAdapter()
 
 
 def get_or_create_live_config(db: Session) -> LiveActivationConfig:
@@ -3272,7 +3272,7 @@ def get_or_create_live_config(db: Session) -> LiveActivationConfig:
     config = LiveActivationConfig(
         id="global",
         exchange="binance",
-        market_type="futures_testnet",
+        market_type="futures_live",
         safe_mode_enabled=True,
         live_mode_enabled=False,
         symbol_whitelist=[],
@@ -3346,8 +3346,8 @@ def build_readiness_report(config: LiveActivationConfig, api_key: str | None = N
             "critical": True,
         },
         {
-            "key": "testnet_endpoint_reachable",
-            "label": "Binance Futures Testnet connectivity",
+            "key": "live_endpoint_reachable",
+            "label": "Binance Futures Live connectivity",
             "status": "pass" if endpoint_probe["status"] == "reachable" else "fail",
             "critical": True,
         },

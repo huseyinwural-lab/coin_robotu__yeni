@@ -223,7 +223,7 @@ def approve_user_account(db: Session, user_id: str) -> User:
         user_id=user.id,
         exchange_code="binance",
         market_type="futures",
-        environment="testnet",
+        environment="live",
         commit=False,
     )
     db.commit()

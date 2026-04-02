@@ -29,7 +29,7 @@
 - `EXPOSURE_LIMIT_BREACH`
 
 ## 6) Venue config kontrol adımları
-1. Credential mapping (testnet/live)
+1. Credential mapping (live)
 2. Environment-policy eşleşmesi
 3. Authenticated probe
 4. Market data availability

@@ -54,7 +54,7 @@ def test_validate_order_precheck_includes_explain():
                 account_label="default",
                 exchange="binance",
                 market_type="futures",
-                environment="testnet",
+                environment="live",
                 is_default=True,
                 readiness_snapshot={"connection_health": "online", "can_trade": True, "validation_success": True},
                 permission_snapshot=["trade"],

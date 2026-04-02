@@ -1,11 +1,11 @@
 # Canary Playbook (P1.3 Iteration 4)
 
 ## Amaç
-Testnet modunda küçük notional ile canlıya geçiş öncesi execution/risk/reconciliation davranışını doğrulamak.
+Live modunda küçük notional ile canlıya geçiş öncesi execution/risk/reconciliation davranışını doğrulamak.
 
 ## Zorunlu Başlangıç Konfigürasyonu
-1. `EXECUTION_MODE=testnet`
-2. `TESTNET_TRADING_ENABLED=true`
+1. `EXECUTION_MODE=live`
+2. `LIVE_TRADING_ENABLED=true`
 3. `LIVE_TRADING_ENABLED=false`
 4. `LIVE_ROUTE_APPROVED=false`
 5. `CANARY_MODE=true`
@@ -14,13 +14,13 @@ Testnet modunda küçük notional ile canlıya geçiş öncesi execution/risk/re
 8. `CANARY_ALLOWED_USER_IDS` (opsiyonel, boş ise sadece operasyonel hesaplarla koştur)
 
 ## Exchange/Proxy Gereksinimi (Binance)
-- Base URL, proxy endpoint olmalı (`BINANCE_SPOT_TESTNET_BASE_URL` veya `BINANCE_SPOT_BASE_URL`).
+- Base URL, proxy endpoint olmalı (`BINANCE_SPOT_LIVE_BASE_URL` veya `BINANCE_SPOT_BASE_URL`).
 - `X-Proxy-Token` header zorunlu (env üzerinden):
-  - `BINANCE_SPOT_TESTNET_PROXY_TOKEN` veya `BINANCE_SPOT_PROXY_TOKEN`
+  - `BINANCE_SPOT_LIVE_PROXY_TOKEN` veya `BINANCE_SPOT_PROXY_TOKEN`
   - Opsiyonel genel fallback: `BINANCE_PROXY_TOKEN`
-- Testnet key/secret tanımlı olmalı:
-  - `BINANCE_TESTNET_API_KEY`
-  - `BINANCE_TESTNET_API_SECRET`
+- Live key/secret tanımlı olmalı:
+  - `BINANCE_LIVE_API_KEY`
+  - `BINANCE_LIVE_API_SECRET`
 
 ## Canary Operasyon Akışı
 1. **Guard doğrulama**
@@ -59,7 +59,7 @@ Testnet modunda küçük notional ile canlıya geçiş öncesi execution/risk/re
 5. Timeline ve smoke çıktısıyla kapanış kanıtını kaydet
 
 ## Iteration 4 Kapanış Kontrol Listesi
-- [ ] Binance testnet order lifecycle çalıştı (proxy + token ile)
+- [ ] Binance live order lifecycle çalıştı (proxy + token ile)
 - [ ] Kill-switch aktifken yeni execution BLOCK oldu
 - [ ] Reconciliation akışı PASS
 - [ ] Canary guard limitleri doğru uygulandı

@@ -7,8 +7,8 @@ from core.execution.futures_paper_executor import FuturesPaperExecutor
 from core.execution.futures_reduce_only_guard import FuturesReduceOnlyGuard
 from core.execution.futures_retry_policy import FuturesRetryPolicy
 from core.execution.futures_slippage_tracker import FuturesSlippageTracker
-from core.execution.futures_testnet_adapter import FuturesTestnetAdapter
-from core.execution.futures_testnet_release_gate import FuturesTestnetReleaseGate
+from core.execution.futures_live_adapter import FuturesLiveAdapter
+from core.execution.futures_live_release_gate import FuturesLiveReleaseGate
 
 __all__ = [
     "FuturesCancelReplaceGuard",
@@ -21,6 +21,6 @@ __all__ = [
     "FuturesReduceOnlyGuard",
     "FuturesRetryPolicy",
     "FuturesSlippageTracker",
-    "FuturesTestnetAdapter",
-    "FuturesTestnetReleaseGate",
+    "FuturesLiveAdapter",
+    "FuturesLiveReleaseGate",
 ]

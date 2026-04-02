@@ -89,7 +89,7 @@ class TestRepairVenueAssignment:
         assert "assignment_changed" in data
         assert "spot_allowed" in data
         assert "futures_allowed" in data
-        assert "testnet_allowed" in data
+        assert "live_allowed" in data
         assert "live_allowed" in data
 
     def test_repair_endpoint_sets_proper_permissions(self, admin_headers: dict):
@@ -108,7 +108,7 @@ class TestRepairVenueAssignment:
         # Verify permissions are set correctly
         assert data["spot_allowed"] is True
         assert data["futures_allowed"] is True
-        assert data["testnet_allowed"] is True
+        assert data["live_allowed"] is True
         # Live should remain false as per default policy
         assert data["live_allowed"] is False
 
@@ -212,7 +212,7 @@ class TestExchangeValidateAutofix:
         # Call validate endpoint
         response = requests.get(
             f"{BASE_URL}/api/exchange/validate",
-            params={"exchange": "binance", "market_type": "futures", "environment": "testnet"},
+            params={"exchange": "binance", "market_type": "futures", "environment": "live"},
             headers=user_headers,
             timeout=20,
         )
@@ -259,7 +259,7 @@ class TestSingleApproveVenueAssignment:
         binance_rows = [row for row in rows if row.get("exchange_code") == "binance"]
         assert len(binance_rows) >= 1
         assert binance_rows[0].get("futures_allowed") is True
-        assert binance_rows[0].get("testnet_allowed") is True
+        assert binance_rows[0].get("live_allowed") is True
 
 
 class TestBulkApproveVenueAssignment:

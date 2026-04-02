@@ -16,11 +16,11 @@
     },
     "health": {
       "liveness_interval_seconds": {
-        "testnet": 4,
+        "live": 4,
         "live": 8
       },
       "signed_interval_seconds": {
-        "testnet": {
+        "live": {
           "open_position": 8,
           "idle": 28
         },
@@ -66,7 +66,7 @@
       },
       "health": {
         "signed_interval_seconds": {
-          "testnet": {
+          "live": {
             "open_position": 10,
             "idle": 32
           },
@@ -97,11 +97,11 @@
       },
       "health": {
         "liveness_interval_seconds": {
-          "testnet": 5,
+          "live": 5,
           "live": 10
         },
         "signed_interval_seconds": {
-          "testnet": {
+          "live": {
             "open_position": 12,
             "idle": 36
           },

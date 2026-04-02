@@ -37,11 +37,11 @@ from services.runtime_ops_service import (
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 HARD_BLOCK_REASON_CODES = {
-    "TESTNET_TRADING_DISABLED",
+    "LIVE_TRADING_DISABLED",
     "MARKET_DATA_MISSING",
     "MARKET_DATA_STALE",
     "KILL_SWITCH_ACTIVE",
-    "BYBIT_TESTNET_CREDENTIALS_MISSING",
+    "BYBIT_LIVE_CREDENTIALS_MISSING",
     "BYBIT_AUTH_PROBE_FAIL",
     "BYBIT_CONNECTIVITY_FAIL",
     "BYBIT_ORDER_SMOKE_FAIL",
@@ -138,14 +138,14 @@ def _safe_redis_set_json(key: str, payload: dict, ttl_sec: int) -> None:
         return
 
 
-def _resolve_bybit_testnet_credentials(db: Session) -> dict:
+def _resolve_bybit_live_credentials(db: Session) -> dict:
     _reload_local_env()
     adapter_credentials = execution_credentials_for_adapter(db)
     bybit = dict((adapter_credentials or {}).get("bybit") or {})
     return {
-        "api_key": bybit.get("testnet_key") or os.environ.get("BYBIT_TESTNET_API_KEY"),
-        "api_secret": bybit.get("testnet_secret") or os.environ.get("BYBIT_TESTNET_API_SECRET"),
-        "base_url": bybit.get("testnet_base_url") or os.environ.get("BYBIT_TESTNET_BASE_URL"),
+        "api_key": bybit.get("live_key") or os.environ.get("BYBIT_LIVE_API_KEY"),
+        "api_secret": bybit.get("live_secret") or os.environ.get("BYBIT_LIVE_API_SECRET"),
+        "base_url": bybit.get("live_base_url") or os.environ.get("BYBIT_LIVE_BASE_URL"),
     }
 
 
@@ -210,32 +210,32 @@ def _fetch_bybit_mark_price(base_url: str, symbol: str, timeout_sec: float = 8.0
         return None
 
 
-def run_bybit_testnet_order_smoke(db: Session, *, force_refresh: bool = False) -> dict:
+def run_bybit_live_order_smoke(db: Session, *, force_refresh: bool = False) -> dict:
     cache_key = "execution_safety:bybit:order_smoke"
     if not force_refresh:
         cached = _safe_redis_get_json(cache_key)
         if cached:
             return cached
 
-    if not _to_bool(os.environ.get("TESTNET_TRADING_ENABLED")):
+    if not _to_bool(os.environ.get("LIVE_TRADING_ENABLED")):
         result = {
             "status": "FAIL",
-            "reason_code": "TESTNET_TRADING_DISABLED",
-            "detail": "TESTNET_TRADING_ENABLED=false",
+            "reason_code": "LIVE_TRADING_DISABLED",
+            "detail": "LIVE_TRADING_ENABLED=false",
             "checked_at": _utcnow().isoformat(),
         }
         _safe_redis_set_json(cache_key, result, ttl_sec=30)
         return result
 
-    credentials = _resolve_bybit_testnet_credentials(db)
+    credentials = _resolve_bybit_live_credentials(db)
     api_key = str(credentials.get("api_key") or "").strip()
     api_secret = str(credentials.get("api_secret") or "").strip()
     base_url = str(credentials.get("base_url") or "").strip()
     if not api_key or not api_secret or not base_url:
         result = {
             "status": "FAIL",
-            "reason_code": "BYBIT_TESTNET_CREDENTIALS_MISSING",
-            "detail": "Missing BYBIT_TESTNET_API_KEY/BYBIT_TESTNET_API_SECRET/BYBIT_TESTNET_BASE_URL",
+            "reason_code": "BYBIT_LIVE_CREDENTIALS_MISSING",
+            "detail": "Missing BYBIT_LIVE_API_KEY/BYBIT_LIVE_API_SECRET/BYBIT_LIVE_BASE_URL",
             "checked_at": _utcnow().isoformat(),
         }
         _safe_redis_set_json(cache_key, result, ttl_sec=60)
@@ -252,8 +252,8 @@ def run_bybit_testnet_order_smoke(db: Session, *, force_refresh: bool = False) -
         _safe_redis_set_json(cache_key, result, ttl_sec=60)
         return result
 
-    symbol = str(os.environ.get("BYBIT_TESTNET_SMOKE_SYMBOL") or "BTCUSDT").upper()
-    qty = str(os.environ.get("BYBIT_TESTNET_SMOKE_QTY") or "0.001")
+    symbol = str(os.environ.get("BYBIT_LIVE_SMOKE_SYMBOL") or "BTCUSDT").upper()
+    qty = str(os.environ.get("BYBIT_LIVE_SMOKE_QTY") or "0.001")
 
     try:
         mark_price = _fetch_bybit_mark_price(base_url, symbol)
@@ -506,12 +506,12 @@ def _collect_gate_codes(validator: dict, bybit_smoke: dict) -> tuple[list[str], 
             }
         )
 
-    if not _to_bool(os.environ.get("TESTNET_TRADING_ENABLED")):
+    if not _to_bool(os.environ.get("LIVE_TRADING_ENABLED")):
         blockers_detail.append(
             {
                 "step_key": "EXECUTION_MODE",
-                "reason_code": "TESTNET_TRADING_DISABLED",
-                "message": "TESTNET_TRADING_ENABLED=false",
+                "reason_code": "LIVE_TRADING_DISABLED",
+                "message": "LIVE_TRADING_ENABLED=false",
             }
         )
 
@@ -526,7 +526,7 @@ def get_execution_safety_gate(db: Session, *, user_id: str | None = None, force_
 
     cache = pipeline_runtime.cache if pipeline_runtime else None
     validator = evaluate_go_live_readiness(db, cache, user_id=user_id)
-    bybit_smoke = run_bybit_testnet_order_smoke(db, force_refresh=force_refresh)
+    bybit_smoke = run_bybit_live_order_smoke(db, force_refresh=force_refresh)
     hard_blockers, soft_warnings, blockers_detail = _collect_gate_codes(validator, bybit_smoke)
 
     gate_state = _gate_state_from_readiness(str(validator.get("readiness_state") or "UNKNOWN"), hard_blockers)
@@ -1075,7 +1075,7 @@ def _build_runbook(gate_snapshot: dict, intents_snapshot: dict, quarantine_snaps
             {
                 "step": len(runbook) + 1,
                 "title": "Bybit order smoke bağlantısını doğrula",
-                "action": "Bybit testnet API erişimini/whitelist'i doğrula ve order smoke PASS olana kadar tekrar et.",
+                "action": "Bybit live API erişimini/whitelist'i doğrula ve order smoke PASS olana kadar tekrar et.",
                 "evidence": [
                     (gate_snapshot.get("bybit_order_smoke") or {}).get("reason_code"),
                     (gate_snapshot.get("bybit_order_smoke") or {}).get("detail"),

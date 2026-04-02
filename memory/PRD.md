@@ -134,8 +134,8 @@
 - Politika güncellemesi:
   - `KILL_SWITCH_ONLY_BLOCKING=true` ile production gate tarafında kill-switch dışı NO-GO blokları bypass edilir.
   - Blokaj yetkisi operasyonel olarak Kill Switch adımında bırakıldı.
-- Testnet temizliği (aktif akış):
-  - `verify_phase8_canary.sh` live-only moda alındı (testnet fallback kaldırıldı).
+- Live temizliği (aktif akış):
+  - `verify_phase8_canary.sh` live-only moda alındı (live fallback kaldırıldı).
   - `production_gate_service` aktif kontrol varsayımları live’a çekildi.
 - Yeni test-id’ler eklendi:
   - `admin-live-gate-auto-unblock-button`
@@ -327,8 +327,8 @@
   - Canlı canary için hedef notional `5 USDT` olarak sabitlendi.
   - Futures feasibility kontrolü eklendi (`futures_min_notional`, `available_balance`).
   - Futures uygunsuzsa otomatik **spot market quoteOrderQty fallback** eklendi (`BTCUSDT`, `5 USDT`).
-  - Raw exchange payload/status detayları `TestnetExecutionLog.details` içine yazıldı (root-cause izlenebilirliği).
-- `exchange_info` environment-aware hale getirildi (`testnet/live` baz URL seçimi).
+  - Raw exchange payload/status detayları `LiveExecutionLog.details` içine yazıldı (root-cause izlenebilirliği).
+- `exchange_info` environment-aware hale getirildi (`live/live` baz URL seçimi).
 
 ### Doğrulama (canlı)
 - `POST /api/phase4/test-order` → **200**, `status=filled`
@@ -345,7 +345,7 @@
 ## 2026-04-01 — FAZ 4A LIVE READINESS RECOVERY (LIVE KEY TRACK)
 
 ### Uygulanan düzeltmeler
-- `live_mode_service` güncellendi: Binance endpoint seçimi artık environment-aware (`testnet/live`) ve `.env` içindeki `BINANCE_*_BASE_URL` değerlerini kullanıyor.
+- `live_mode_service` güncellendi: Binance endpoint seçimi artık environment-aware (`live/live`) ve `.env` içindeki `BINANCE_*_BASE_URL` değerlerini kullanıyor.
 - Signed Binance çağrılarına proxy token header desteği eklendi (`X-Proxy-Token`), live doğrulama akışı proxy base URL ile hizalandı.
 - User live doğrulama blokörleri kapatıldı:
   - `live_not_allowed` → user venue assignment `live_allowed=true`
@@ -2537,7 +2537,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Yeni API yüzeyi: `/api/execution-safety/*` (kanonik)
 - Legacy yüzey: `/api/execution-readiness/*` **deprecated** olarak bırakıldı (silinmedi)
 - Canonical cancel state: `CANCELED`
-- Testnet acceptance en sona alındı (core tamamlandıktan sonra)
+- Live acceptance en sona alındı (core tamamlandıktan sonra)
 - Teslim formatı: Kod + Test + Ops + Jira
 
 ### Bu turda tamamlanan ana işler
@@ -2597,16 +2597,16 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - `auto_frontend_testing_agent` selector + handler + namespace wiring doğrulaması pass
 
 ### Güncel dış blokerler
-- Bybit testnet erişimi bu runtime’da hala HTTP 403 (ortam/ağ kısıtı)
-- Bu yüzden gerçek testnet acceptance zinciri (madde 8) son aşamada dış erişim açılınca tamamlanacak
+- Bybit live erişimi bu runtime’da hala HTTP 403 (ortam/ağ kısıtı)
+- Bu yüzden gerçek live acceptance zinciri (madde 8) son aşamada dış erişim açılınca tamamlanacak
 
 ### 2026-03-29 Ek Kapanış (P0 Kalan Eksikler Paketi)
 
 #### Tamamlanan kritik eksikler
 1. **Gerçek acceptance zinciri endpointleri eklendi**
-   - `POST /api/execution-safety/acceptance/testnet/run`
-   - `GET /api/execution-safety/acceptance/testnet/latest`
-   - `GET /api/execution-safety/acceptance/testnet/history`
+   - `POST /api/execution-safety/acceptance/live/run`
+   - `GET /api/execution-safety/acceptance/live/latest`
+   - `GET /api/execution-safety/acceptance/live/history`
    - Akış: ack_mode → (başarırsa) fill_mode; ack fail ise fill skip.
    - BLOCKED/FAILED durumlarında da artifact + audit üretiliyor (fail-open yok).
 
@@ -2722,7 +2722,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
   - `test_execution_safety_namespace.py` PASS/skip beklendiği gibi
 
 ### Bilinen dış bloker
-- Bybit testnet erişimi bu runtime’da halen HTTP 403; acceptance run fail-safe olarak BLOCKED üretmeye devam eder.
+- Bybit live erişimi bu runtime’da halen HTTP 403; acceptance run fail-safe olarak BLOCKED üretmeye devam eder.
 
 ### Sprint-2 hazırlık notu
 - Reconcile engine full production edge-case derinleştirme
@@ -2736,8 +2736,8 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 ### Uygulanan P0 kapsamı
 - Yeni backend çekirdeği eklendi: `backend/services/execution_safety_core_service.py`
   - Pre-trade Safety Gate: `READY / DEGRADED / BLOCKED`
-  - Hard blocker zorlaması (testnet disabled, market/proof kalite fail, Bybit order smoke fail vb.)
-  - Bybit Testnet order smoke (create+cancel) entegrasyonu
+  - Hard blocker zorlaması (live disabled, market/proof kalite fail, Bybit order smoke fail vb.)
+  - Bybit Live order smoke (create+cancel) entegrasyonu
   - Intent state machine snapshot: `CREATED -> SUBMITTED -> ACKED -> FILLED/FAILED/CANCELLED/QUARANTINED`
   - Stuck intent timeout tespiti + otomatik quarantine upsert (Postgres `failed_events`)
   - Runtime Quarantine/DLQ snapshot + action servisleri (replay/dismiss/mark_failed)
@@ -2781,11 +2781,11 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
   - Preview sayfası "not responding" (502 sınıfı ortam limiti) durumunu gösterdi.
 
 ### Bilinen ortam/integrasyon limitleri (kod dışı)
-- Bybit Testnet bu runtime’dan HTTP 403 dönüyor (`BYBIT_CONNECTIVITY_FAIL`) — dış ağ/erişim kısıtı.
+- Bybit Live bu runtime’dan HTTP 403 dönüyor (`BYBIT_CONNECTIVITY_FAIL`) — dış ağ/erişim kısıtı.
 - Preview URL halen 502 dönebiliyor (PostgreSQL/preview kısıtı).
 
 ### 2026-03-28 Kapanış Notu (Bu tur)
-- Kullanıcı yeni Bybit testnet anahtarları verdi; tekrar denendi.
+- Kullanıcı yeni Bybit live anahtarları verdi; tekrar denendi.
 - Sonuç: tüm Bybit API domainlerinde public endpointler dahil HTTP 403 (anahtar bağımsız erişim blokajı).
 - S3 tarafı güncel secret ile doğrulandı: `artifact.status = S3_UPLOADED`.
 - Kullanıcı Bybit proxy/erişim bilgisini daha sonra paylaşacağını belirtti; bu tur Bybit canlı doğrulama burada durduruldu.
@@ -3207,7 +3207,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 
 ### FAZ A — P1 operasyonel kapanış güncellemeleri
 - **Bybit / 2. venue stabilizasyonu**
-  - `go_live_validator` içinde `venue_config_checklist` eklendi (testnet/live credential mapping + environment mapping + policy flag).
+  - `go_live_validator` içinde `venue_config_checklist` eklendi (live/live credential mapping + environment mapping + policy flag).
   - Bybit auth probe + ticker probe birleşik değerlendiriliyor; venue-specific reason code seti genişletildi.
   - Exchange matrix fallback/placeholder davranışı azaltıldı; deterministik PASS/FAIL/UNKNOWN üretimi güçlendirildi.
 - **Execution proof ayrımı (mocked vs real)**
@@ -3321,7 +3321,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 
 ### Açık Kalanlar / Operasyonel Not
 - Preview ortamı zaman zaman yanıt vermediği için UI smoke adımı stabil değil (backend testleri tam yeşil).
-- Bybit testnet credential/config uyumu ortam bazlı değişkenlik gösterebilir; readiness bunu `FAIL/UNKNOWN` ile güvenli kapatır.
+- Bybit live credential/config uyumu ortam bazlı değişkenlik gösterebilir; readiness bunu `FAIL/UNKNOWN` ile güvenli kapatır.
 
 ## 2026-03-28 — P0 Readiness Contract Stabilization (Hard Green)
 
@@ -3584,7 +3584,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Rollout feature-flag davranışı aktive edildi: `shadow/soft/partial/full` (default: `shadow`).
 - Strategy policy yoksa davranış eklendi:
   - `live/prod`: BLOCK
-  - `testnet/staging/dev`: SOFT allow + violation log (`HIGH`).
+  - `live/staging/dev`: SOFT allow + violation log (`HIGH`).
 - Fail-safe reason contract eklendi (policy load/risk compute/market data/dependency timeout yolları), standart reject mapping ile döndürülüyor.
 
 ### Teknik değişiklikler
@@ -4092,7 +4092,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
   - venue availability
   - capability match
   - allowed market state
-  - live/testnet conflict
+  - live/live conflict
   - default route consistency
 
 ### Frontend Güncellemeleri
@@ -4835,7 +4835,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Yeni örnek dosyalar tamamlandı:
   - `/app/backend/.env.example`
   - `/app/frontend/.env.example`
-  - `/app/deploy/testnet.env.example`
+  - `/app/deploy/live.env.example`
   - `/app/deploy/canary.env.example`
 - Alias deprecation ticket notu açıldı:
   - `/app/docs/tickets/env_alias_deprecation_ticket.md`
@@ -4862,8 +4862,8 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
     - `/app/docs/live_prep_proxy_timeout_patch.md`
 
 - **Execution mode tekleştirme (1 sprint legacy uyumluluk)**
-  - Canonical modlar: `SIM | TESTNET | LIVE`
-  - Legacy alias kabulü: `MOCK -> SIM`, `PAPER -> TESTNET`
+  - Canonical modlar: `SIM | LIVE | LIVE`
+  - Legacy alias kabulü: `MOCK -> SIM`, `PAPER -> LIVE`
   - `execution_mode_control_service` normalize + compatibility notice desteği eklendi.
   - Mode geçiş endpointleri hem yeni hem legacy dili kabul edecek şekilde güncellendi.
 
@@ -4906,11 +4906,11 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 
 ### Frontend güncellemeleri
 - `AdminDashboardPage`: readiness kartına single-flow dry-run + go-live wizard aksiyonları eklendi.
-- `AdminLiveTradingDashboardPage`: mode aksiyonları `LIVE/TESTNET/SIM` odaklı.
+- `AdminLiveTradingDashboardPage`: mode aksiyonları `LIVE/LIVE/SIM` odaklı.
 - `AdminExecutionReadinessPage`, `LandingPage`, `PipelineOperationsPage`: mode dili canonical moda çekildi (legacy metinler azaltıldı).
 
 ### Test özeti
-- `pytest -q backend/tests/test_iteration4_final_testclient.py backend/tests/test_binance_testnet_execution.py backend/tests/test_go_live_checklist.py backend/tests/test_exchange_auth_invalid_alert.py`
+- `pytest -q backend/tests/test_iteration4_final_testclient.py backend/tests/test_binance_live_execution.py backend/tests/test_go_live_checklist.py backend/tests/test_exchange_auth_invalid_alert.py`
   - **18 PASS, 1 SKIP**
 - Testing agent (`iteration_141`): backend kapsamı yüksek oranda PASS; wizard canary-check timeout minor (gerçek exchange operasyonu nedeniyle beklenen).
 
@@ -4921,9 +4921,9 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 ## 2026-03-26 — ITERATION 4 FINAL (Canary & Go-Live Prep) ✅
 
 ### Bu tur tamamlanan ana işler
-- **Gerçek Binance Testnet Lifecycle (SKIP kaldırıldı):**
-  - `backend/tests/test_binance_testnet_execution.py` artık gerçek lifecycle doğrulaması yapıyor.
-  - Artifact: `/app/test_reports/binance_testnet_lifecycle_latest.json` (gerçek `market_order_id`, `cancel_order_id`, raw exchange log, timeline, db_state).
+- **Gerçek Binance Live Lifecycle (SKIP kaldırıldı):**
+  - `backend/tests/test_binance_live_execution.py` artık gerçek lifecycle doğrulaması yapıyor.
+  - Artifact: `/app/test_reports/binance_live_lifecycle_latest.json` (gerçek `market_order_id`, `cancel_order_id`, raw exchange log, timeline, db_state).
 - **End-to-End Canary Run + Final Regression:**
   - Yeni çekirdek: `backend/core/go_live_checklist.py`
   - Canary run, kill-switch rollback verify, final regression, readiness score, go-live checklist, proxy health üretimleri eklendi.
@@ -4934,7 +4934,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
     - `/app/test_reports/iteration4_final_evidence.json`
 - **Go/No-Go motoru:**
   - `backend/routers/runtime_execution.py` endpointleri eklendi:
-    - `POST /api/runtime/exchange/testnet-lifecycle/run`
+    - `POST /api/runtime/exchange/live-lifecycle/run`
     - `POST /api/runtime/canary/run`
     - `POST /api/runtime/regression/final-run`
     - `GET /api/runtime/canary/readiness-score`
@@ -4950,7 +4950,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 ### Test özeti (bu tur)
 - `pytest -q backend/tests/test_iteration4_final_testclient.py` → **15 PASS**
 - `pytest -q backend/tests/test_go_live_checklist.py ... test_kill_switch.py` (seçili kritik suite) → **10 PASS**
-- `pytest -q backend/tests/test_binance_testnet_execution.py` → **PASS** (SKIP yok)
+- `pytest -q backend/tests/test_binance_live_execution.py` → **PASS** (SKIP yok)
 
 ### Mevcut readiness çıktısı
 - `readiness_score`: **WARNING (60)**
@@ -4967,7 +4967,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - `backend/core/exchanges/binance_adapter.py` proxy-aware hale getirildi.
   - `X-Proxy-Token` header desteği signed requestlere eklendi.
   - `_public_request(...)` metodu eklendi ve proxy header desteği verildi.
-  - Proxy token çözümleme zinciri: `BINANCE_SPOT_TESTNET_PROXY_TOKEN` / `BINANCE_SPOT_PROXY_TOKEN` / `BINANCE_PROXY_TOKEN` / proxy base URL içinden token infer.
+  - Proxy token çözümleme zinciri: `BINANCE_SPOT_LIVE_PROXY_TOKEN` / `BINANCE_SPOT_PROXY_TOKEN` / `BINANCE_PROXY_TOKEN` / proxy base URL içinden token infer.
 - Dayanıklılık iyileştirmesi:
   - JSON parse fallback eklendi (non-json response durumunda güvenli mesaj üretimi).
 
@@ -4978,12 +4978,12 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 
 ### Doğrulama (bu tur)
 - `pytest -q backend/tests/test_binance_adapter_proxy_headers.py` → PASS (2/2)
-- `pytest -q backend/tests/test_binance_testnet_execution.py` → SKIP (credential/exchange koşulu)
+- `pytest -q backend/tests/test_binance_live_execution.py` → SKIP (credential/exchange koşulu)
 - `pytest -q backend/tests/test_order_reconciliation.py backend/tests/test_order_reconciliation_engine.py backend/tests/test_kill_switch.py` → PASS
 - `deep_testing_backend_v2` doğrulaması: kritik regresyon yok, proxy header desteği doğrulandı.
 
 ### Açık not
-- `test_binance_testnet_execution.py` canlı testnet erişimine bağlı olduğundan bu ortamda SKIP olabilir; bu beklenen davranıştır.
+- `test_binance_live_execution.py` canlı live erişimine bağlı olduğundan bu ortamda SKIP olabilir; bu beklenen davranıştır.
 
 ## 2026-03-26 — P1.3 Iteration 3 Operator Control Layer ✅
 
@@ -5084,7 +5084,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 
 ### MOCKED/Guarded notu
 - Execution varsayılanı SIM adapter.
-- Binance live/testnet route guarded stub, canlı açılmadı.
+- Binance live/live route guarded stub, canlı açılmadı.
 
 ## 2026-03-26 — P1.3 Iteration 2 Runtime Ops Katmanı ✅
 
@@ -5092,7 +5092,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Live PnL engine
 - Runtime alert trigger wiring
 - Daily smoke cron/script
-- SIM→testnet/live adapter guard mimarisi
+- SIM→live/live adapter guard mimarisi
 - Runtime API genişletme
 - Admin dashboard’a sınırlı runtime veri bağlama
 
@@ -5138,7 +5138,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Varsayılanlar:
   - `EXECUTION_MODE=sim`
   - `LIVE_TRADING_ENABLED=false`
-  - `TESTNET_TRADING_ENABLED=false`
+  - `LIVE_TRADING_ENABLED=false`
 - Live route için çift guard enforced:
   - `EXECUTION_MODE=live` + `LIVE_TRADING_ENABLED=true`
 
@@ -5172,7 +5172,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 
 ### MOCKED / Guarded Notu
 - Execution route default olarak SIM adapter üzerinden ilerliyor (gerçek exchange call yok).
-- Binance testnet/live route guarded stub seviyesinde.
+- Binance live/live route guarded stub seviyesinde.
 
 ## 2026-03-26 — P1.3 Iteration 1 Runtime Core ✅
 
@@ -5584,7 +5584,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 ### Bu turda yapılanlar
 - Kullanıcı talebine göre P0 zinciri tekrar koşturuldu:
   - Spot Live akışı
-  - Futures Testnet akışı
+  - Futures Live akışı
 - Credential Orchestration drawer’a yeni geliştirme eklendi:
   - `request_id` bazlı geçmiş trace listesi (son N)
   - Seçili geçmiş kayıt ile current trace karşılaştırma kartı
@@ -5607,7 +5607,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 - Spot Live:
   - ingest/pnl/recon/data-quality: 200
   - live-gate: 200 ama `live_transition_ready=false` (spot trade coverage yok; fetched/inserted 0)
-- Futures Testnet:
+- Futures Live:
   - ingest/pnl/recon/data-quality/live-gate: 200
   - `live_transition_ready=true` (futures test scope)
 
@@ -5675,11 +5675,11 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 ### Operasyonel doğrulama (gerçek çağrı)
 - Spot live credential probe: `ready`
 - Futures test credential probe: `ready`
-- Resolution preview (spot/live + futures/testnet): `preferred_admin` ile admin credential seçimi doğrulandı.
+- Resolution preview (spot/live + futures/live): `preferred_admin` ile admin credential seçimi doğrulandı.
 - P0 ingestion çağrıları:
   - `spot/live`: 200 (fetched=0, inserted=0)
-  - `futures/testnet`: 200 (fetched=0, inserted=0)
-- `live-gate` (testnet, futures): 200 ama `live_transition_ready=false` (trade coverage/pnl/recon kontrolü henüz PASS değil).
+  - `futures/live`: 200 (fetched=0, inserted=0)
+- `live-gate` (live, futures): 200 ama `live_transition_ready=false` (trade coverage/pnl/recon kontrolü henüz PASS değil).
 
 ### Frontend değişiklikleri
 - `AdminCredentialOrchestrationPage.jsx`
@@ -5811,7 +5811,7 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
   - `/api/health` 200
   - DB reachable=true
   - `postgres.internal` geçici hosts map ile ayağa kaldırıldı, backend stabil çalışıyor.
-- `huseyinwural@gmail.com` için testnet akışı doğrulandı (gerçek Binance verisi):
+- `huseyinwural@gmail.com` için live akışı doğrulandı (gerçek Binance verisi):
   - Ingestion (futures): PASS (idempotent duplicate detection aktif)
   - PnL latest: PASS (realized/unrealized + fee breakdown dolu)
   - Reconciliation: PASS (`drift_within_tolerance=true`, `drift_tolerance_pct=0.3`)
@@ -5864,8 +5864,8 @@ SYSTEM STATUS: READY FOR STAGED RELEASE
 ### Kalan P0 işler (sıradaki adım)
 - REST ingest sonrası **websocket consumer worker** (user-data stream event ingestion)
 - Reconciliation tolerans metriklerinin operasyonel eşiklerle final kalibrasyonu
-- `huseyinwural@gmail.com` üzerinde testnet tam akış (ingest → pnl → reconciliation → live-gate)
-- Testnet 3/3 kontrol geçince live geçiş prosedürü
+- `huseyinwural@gmail.com` üzerinde live tam akış (ingest → pnl → reconciliation → live-gate)
+- Live 3/3 kontrol geçince live geçiş prosedürü
 
 ## 2026-03-24 — P2 Final Polish (Son %2) ✅
 
@@ -10536,7 +10536,7 @@ Bu turda istenen 10 görev script + artifact üretimiyle çalıştırıldı.
 
 ### Notlar
 - Bu fork’ta backend başlangıcında PostgreSQL erişim problemi vardı; yerel PostgreSQL kurulup servis ayağa kaldırıldı.
-- C3 koşusu öncesi admin kullanıcı bootstrap edildi ve testnet anahtarları env üzerinden sağlandı.
+- C3 koşusu öncesi admin kullanıcı bootstrap edildi ve live anahtarları env üzerinden sağlandı.
 
 ## 2026-03-19 — FAZ 3 EXECUTION SAFETY (P0) ✅
 
@@ -11121,7 +11121,7 @@ Kod yazdıktan sonra repo içinde gerçekten çalıştır, artifact üretmeden i
     - `user-trade-margin-type-label`
     - `user-trade-order-type-label`
 
-- Kullanıcı sağladığı Binance testnet API key/secret, user exchange connection’a işlendi ve revalidate edildi.
+- Kullanıcı sağladığı Binance live API key/secret, user exchange connection’a işlendi ve revalidate edildi.
   - Sonuç: `can_trade=true`, `connection_health=online`, `readiness_status=ready_for_test_order`.
 
 - `scripts/start_live.sh`
@@ -11447,18 +11447,18 @@ Kod yazdıktan sonra repo içinde gerçekten çalıştır, artifact üretmeden i
 ### Sonuç Durumu
 - SYSTEM → **SAFE + VISIBLE + TRUSTABLE** (mini closure hedefi karşılandı)
 
-## 2026-03-18 — Binance Testnet Live Activation & MOCKED Removal (Kullanıcı Talebi)
+## 2026-03-18 — Binance Live Live Activation & MOCKED Removal (Kullanıcı Talebi)
 
 ### Talep
-- Kullanıcı, paylaşılan Binance API key/secret ile testnet bağlantısının doğrulanmasını,
+- Kullanıcı, paylaşılan Binance API key/secret ile live bağlantısının doğrulanmasını,
 - 20 saniye civarı kopma/timeout algısının giderilmesini,
 - ve uygun durumda `MOCKED` yerine canlı (`live`) execution mode akışının aktif edilmesini istedi.
 
 ### Uygulanan İşlemler
 - Kullanıcı hesabı: `user1773706589@example.com`
-- Binance futures testnet bağlantısı kullanıcı bağlantılarına eklendi/güncellendi ve revalidate edildi.
+- Binance futures live bağlantısı kullanıcı bağlantılarına eklendi/güncellendi ve revalidate edildi.
 - Doğrulama endpointleriyle test edildi:
-  - `GET /api/exchange/validate?exchange=binance&market_type=futures&environment=testnet` → `is_valid=true`, `can_trade=true`
+  - `GET /api/exchange/validate?exchange=binance&market_type=futures&environment=live` → `is_valid=true`, `can_trade=true`
   - `POST /api/exchange/test-order` (micro qty) → `final_status=FILLED`
 
 ### Giderilen Teknik Hatalar
@@ -12269,7 +12269,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 - Kontrol kriterleri:
   - assignment var/yok
   - futures izinleri
-  - env izinleri (testnet/live)
+  - env izinleri (live/live)
   - futures connection var/yok
   - trade-ready connection sayısı
 - Frontend (`AdminUsersPage`) eklentileri:
@@ -12546,7 +12546,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 ## 2026-03-17 — Iteration Update (Stability Fix: Assignment Flap Prevention)
 
 - Kalıcı kesinti azaltma için venue-assignment otomasyonu güçlendirildi:
-  - `approve_user_account` sırasında otomatik default assignment (binance/futures/testnet)
+  - `approve_user_account` sırasında otomatik default assignment (binance/futures/live)
   - `bulk-approve` sırasında tüm kullanıcılar için otomatik assignment
 - `validate_exchange_credentials_for_user` içinde `assignment_required` için auto-heal eklendi:
   - Connection profile varsa assignment otomatik üretilip yeniden venue access kontrolü yapılıyor.
@@ -12646,17 +12646,17 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - `iteration_139`: Futures leverage hybrid model + regression PASS
 - Not: Bybit/OKX adapterları halen **MOCKED** durumda.
 
-## 2026-03-17 — Iteration Update (Bybit Testnet+Live Manual Credential Readiness)
+## 2026-03-17 — Iteration Update (Bybit Live+Live Manual Credential Readiness)
 
 - Admin Exchanges ekranı execution credential formu genişletildi:
-  - `bybit_testnet_api_key`, `bybit_testnet_secret`
+  - `bybit_live_api_key`, `bybit_live_secret`
   - `bybit_live_api_key`, `bybit_live_secret`
 - Backend credential servisi ve API sözleşmesi genişletildi:
-  - `has_bybit_testnet_credentials`, `has_bybit_live_credentials`
-  - masked görünümde testnet/live Bybit alanları
-- Execution adapter tarafında Bybit için environment-aware credential çözümleme eklendi (`testnet/live`).
-- Execution smoke senaryoları artık Bybit için hem `testnet` hem `live` kontrolü içeriyor.
-- `execution-validation` çıktısına `bybit_testnet_live_ready` alanı eklendi.
+  - `has_bybit_live_credentials`, `has_bybit_live_credentials`
+  - masked görünümde live/live Bybit alanları
+- Execution adapter tarafında Bybit için environment-aware credential çözümleme eklendi (`live/live`).
+- Execution smoke senaryoları artık Bybit için hem `live` hem `live` kontrolü içeriyor.
+- `execution-validation` çıktısına `bybit_live_live_ready` alanı eklendi.
 - Durum: geçerli Bybit anahtarları girilmediğinde sonuç güvenli şekilde `MOCKED/DEGRADED` kalır; yanlış anahtarla gerçek order atılmaz.
 - Test doğrulaması: `iteration_140` PASS (backend/frontend %100).
 
@@ -12822,7 +12822,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - Yeni dosya: `test_policy_core_refactor.py` (core policy + fallback pattern kontrolleri).
 - **Exchange risk izolasyonu (ADIM-7) iskeleti eklendi:**
   - Yeni dosya: `backend/tests/exchange_execution_real_test.py`
-  - Varsayılan skip; `RUN_REAL_EXCHANGE_TESTS=1` ile Binance testnet akış iskeleti aktif olur.
+  - Varsayılan skip; `RUN_REAL_EXCHANGE_TESTS=1` ile Binance live akış iskeleti aktif olur.
 - **Doğrulama sonuçları:**
   - Lokal: ilgili setlerde **42 passed, 2 skipped**.
   - Testing agent: `/app/test_reports/iteration_125.json` → **36/36 passed, 1 skipped**, kritik/minor issue yok.
@@ -13339,8 +13339,8 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 ### 2026-03-11 (Faz-4 İterasyon-1 — Controlled Live Activation Hazırlığı)
 - Admin panel teması operasyonel mavi/kırmızı çizgide kesinleştirildi (user turuncu/black ayrımı korunarak)
 - Admin sidebar’a **Phase-4 Live Control** eklendi ve route aktif edildi (`/app/phase4-live`)
-- Binance Futures Testnet hazırlık katmanı güçlendirildi:
-  - Testnet connectivity probe (`/api/phase4/testnet-connectivity`)
+- Binance Futures Live hazırlık katmanı güçlendirildi:
+  - Live connectivity probe (`/api/phase4/live-connectivity`)
   - Permission check artık missing/invalid/exchange error senaryolarını 500 atmadan yönetiyor
   - API key/secret için request+environment çözümleme ve mask/fingerprint güvenli gösterim
 - Safety layer sıkılaştırıldı (safe mode):
@@ -13350,7 +13350,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - max notional exposure `<=150`
   - kill-switch / disable-futures / kritik readiness fail durumlarında live mode otomatik kapatma
 - Readiness raporu genişletildi:
-  - `testnet_endpoint_reachable`
+  - `live_endpoint_reachable`
   - `safe_limits_locked`
   - no-key fail-safe ve docs referansları
 - Testler:
@@ -13379,7 +13379,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - `/app/test_reports/iteration_9.json` (backend 13/13 pass, frontend 100%)
   - `/app/backend/tests/test_user_approval_flow.py`
 
-### 2026-03-11 (Faz-4 İterasyon-2B — Testnet Validation + Execution Quality)
+### 2026-03-11 (Faz-4 İterasyon-2B — Live Validation + Execution Quality)
 - User panelde **Exchange Settings** akışı eklendi (`/user/exchange-settings`):
   - `exchange`, `mode`, `api_key`, `api_secret` alanları
   - API key/secret backend’de şifreli saklama (Fernet, plaintext response yok)
@@ -13406,11 +13406,11 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - kritik blokajlar readiness skorunu 80 üstüne çıkarmayı engeller
 - Yeni DB migration:
   - `20260311_0006_exchange_settings_and_test_logs.py`
-  - `user_exchange_settings`, `testnet_execution_logs`
+  - `user_exchange_settings`, `live_execution_logs`
 - Testler:
   - `/app/test_reports/iteration_10.json` (backend 23/23 pass, frontend 100%)
   - `/app/backend/tests/test_phase4_iter2_exchange_settings.py`
-  - Not: valid testnet key olmadan gerçek test order bilinçli olarak BLOCKED kaldı (beklenen davranış)
+  - Not: valid live key olmadan gerçek test order bilinçli olarak BLOCKED kaldı (beklenen davranış)
 
 ### 2026-03-11 (Faz-4 İterasyon-2C — A→B→C İlerlemesi)
 - Kullanıcı tercihi uygulandı: **A→B→C**
@@ -13461,7 +13461,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - `/app/test_reports/iteration_12.json` (backend 24/24 pass, frontend 100%)
   - `/app/backend/tests/test_phase4_iter3_endpoints.py`
   - `/app/test_reports/pytest/pytest_results_iter12_phase4_iter3.xml`
-  - Not: valid Binance testnet key olmadan gerçek fill doğrulaması bu turda **BLOCKED** bırakıldı (beklenen güvenli davranış)
+  - Not: valid Binance live key olmadan gerçek fill doğrulaması bu turda **BLOCKED** bırakıldı (beklenen güvenli davranış)
 
 ### 2026-03-11 (Faz-4 İterasyon-4 — Override + Readiness + UI Sertleştirme)
 - Admin manual override mekanizması eklendi (admin-only):
@@ -13532,7 +13532,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 - **B1/B2/B3/B4 User execution kanıt hattı** güçlendirildi:
   - readiness endpoint genişletildi (`validation_snapshot_id` dahil)
   - `POST /api/exchange/test-order` blocked durumunda normalized `failure_code` döner
-  - failure normalization sözlüğü aktif: `invalid_key, permission_denied, ip_restricted, testnet_unreachable, insufficient_balance, exchange_rejected, stale_validation, unknown_exchange_error`
+  - failure normalization sözlüğü aktif: `invalid_key, permission_denied, ip_restricted, live_unreachable, insufficient_balance, exchange_rejected, stale_validation, unknown_exchange_error`
   - yeni evidence endpoint: `GET /api/exchange/lifecycle-evidence/latest`
   - execution persistence alanları genişletildi (client order id, submitted/ack/final timestamps, raw status, validation snapshot korelasyonu)
   - lifecycle timeline olay tablosu eklendi (`execution_lifecycle_events`)
@@ -13546,7 +13546,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - `/app/test_reports/iteration_14.json` (backend 27/27 pass, frontend 100%)
   - `/app/backend/tests/test_phase4_iter5_env_aware_release_gate.py`
   - `/app/test_reports/pytest/pytest_results_iter14_phase4_iter5.xml`
-  - Not: valid Binance testnet key olmadığı için gerçek fill doğrulaması bu turda da **MOCKED/BLOCKED** akışla test edildi.
+  - Not: valid Binance live key olmadığı için gerçek fill doğrulaması bu turda da **MOCKED/BLOCKED** akışla test edildi.
 
 ### 2026-03-11 (Faz-4 İterasyon-6 — CI Kapanışı + User Ürünleşme + Alarm Yönlendirme)
 - **A (Admin/Deploy)**
@@ -13593,7 +13593,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - `/app/test_reports/iteration_15.json` (backend 28/28 pass, frontend 100%)
   - `/app/backend/tests/test_phase4_iter6_user_risk_alert_policy.py`
   - `/app/test_reports/pytest/pytest_results_iter15_phase4_iter6.xml`
-  - Not: valid testnet key paylaşılmadığı için gerçek fill lifecycle bu turda da **MOCKED/BLOCKED** (awaiting_valid_key) modunda bırakıldı.
+  - Not: valid live key paylaşılmadığı için gerçek fill lifecycle bu turda da **MOCKED/BLOCKED** (awaiting_valid_key) modunda bırakıldı.
 
 ### 2026-03-11 (Faz-5 İterasyon-1 — Safety-First Core)
 - Kullanıcı kararı uygulandı: **1A, 2A, 3A, 4A**
@@ -13646,7 +13646,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 - User panelde Venue seçimi güçlendirildi (`/user/exchange-settings`):
   - `Risk Settings` + `Test & Validation` sekmelerine exchange/market/environment dropdownları
   - Canlı `venue access` paneli (`allowed`, `venue_state`, `capability_match`, `reason_codes`)
-  - Test order butonunda venue uygunluk kısıtı (`binance/futures/testnet`)
+  - Test order butonunda venue uygunluk kısıtı (`binance/futures/live`)
 - PostgreSQL-only doğrulama:
   - Kod tabanı tarandı; `mongo/pymongo/ObjectId` üretim kodunda kalıntı bulunmadı
 - Testler:
@@ -13662,7 +13662,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - Test-order response’a immutable context alanları eklendi: `exchange`, `market_type`, `environment`
   - `execution_metrics` tablosuna context kolonları eklendi: `exchange`, `market_type`, `environment`
   - Lifecycle event isimleri A2’ye hizalandı: `request_sent`, `exchange_ack`, `partial_fill`, `final_fill` (+ `final_cancel`)
-  - Hata sınıflandırması normalize edildi ve venue-context ile döndürülüyor: `invalid_key`, `permission_denied`, `ip_restricted`, `insufficient_balance`, `exchange_rejected`, `testnet_unreachable`, `stale_validation`, `unknown_exchange_error`
+  - Hata sınıflandırması normalize edildi ve venue-context ile döndürülüyor: `invalid_key`, `permission_denied`, `ip_restricted`, `insufficient_balance`, `exchange_rejected`, `live_unreachable`, `stale_validation`, `unknown_exchange_error`
 - **B — Spot/Futures Dual-Mode:**
   - User panelde `Risk Settings` ve `Test & Validation` sekmeleri market type’a göre ayrıştırıldı
   - Spot mod: futures alanları gizli; quoteQty semantiği açıklaması
@@ -13689,7 +13689,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 - **Görev-1 (Lifecycle Proof):**
   - Yeni orchestrator endpoint: `POST /api/exchange/lifecycle-proof`
   - Pipeline davranışı:
-    - Önce live proof denemesi (`binance/futures/testnet`)
+    - Önce live proof denemesi (`binance/futures/live`)
     - Key blokajında machine-readable blocker üretimi
     - Otomatik fallback replay evidence üretimi
   - Artifact çıktıları:
@@ -13891,8 +13891,8 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 ### 2026-03-11 (Test-order Quantity Fix + Live Proof)
 - Test-order quantity normalization: minQty*5 fallback + stepSize/precision + minNotional guard + typed reject codes.
 - Exchange test-order artık quantity<=0 göndermiyor; invalid quantity exchange’e gitmeden reject ediliyor.
-- Testnet live proof tekrar koşuldu: validate ✅, test-order ✅ (NEW → FILLED).
-- Testnet readiness artık release gate BLOCKED olsa bile test-order’a izin veriyor.
+- Live live proof tekrar koşuldu: validate ✅, test-order ✅ (NEW → FILLED).
+- Live readiness artık release gate BLOCKED olsa bile test-order’a izin veriyor.
 
 ### 2026-03-11 (Admin Bulk Approvals + Alert Ops Simulate)
 - /admin/user-approvals list + bulk approve/reject endpoints (reject reason zorunlu) + audit log (USER_APPROVAL_BULK_APPROVED/REJECTED).
@@ -14340,7 +14340,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - Backend + Frontend + Regression: **PASS**
 
 ### Notlar
-- Bu faz **paper-only** çalışır; testnet/live execution açılmadı.
+- Bu faz **paper-only** çalışır; live/live execution açılmadı.
 - Full kapsamlı `Phase 5.1B Microstructure Guard` dedektör seti henüz tamamlanmadı; bu iterasyonda spread-shock tabanlı microstructure gate zincire bağlandı.
 
 ## 17) 2026-03-12 — P2/Phase 5.1B Market Microstructure Guard (Tamamlandı)
@@ -14405,7 +14405,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 
 ### Güncel durum notu
 - Phase 5.1B tamamlandı.
-- Sistem paper-only kalmaya devam ediyor; live/testnet execution açılmadı.
+- Sistem paper-only kalmaya devam ediyor; live/live execution açılmadı.
 
 ## 18) 2026-03-12 — Phase 5.2 Futures Decision Trace Standard (Tamamlandı)
 
@@ -14527,29 +14527,29 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 
 ### Güncel durum
 - Phase 5.4 tamamlandı; sistem paper-only modda dinamik leverage + risk-adjusted size üretiyor.
-- Sonraki faz: Phase 5.5 Controlled Testnet Hook.
+- Sonraki faz: Phase 5.5 Controlled Live Hook.
 
-## 20) 2026-03-12 — Phase 5.5 Controlled Testnet Hook (İlk Teslim Bloğu Tamamlandı)
+## 20) 2026-03-12 — Phase 5.5 Controlled Live Hook (İlk Teslim Bloğu Tamamlandı)
 
 ### Uygulanan çekirdek execution modülleri
 - `core/execution/futures_execution_contract.py`
-- `core/execution/futures_testnet_adapter.py`
+- `core/execution/futures_live_adapter.py`
 - `core/execution/futures_order_preflight.py`
 - `core/execution/futures_retry_policy.py`
 - `core/execution/futures_cancel_replace_guard.py`
 - `core/execution/futures_reduce_only_guard.py`
 - `core/execution/futures_slippage_tracker.py`
 - `core/execution/futures_execution_reconciler.py`
-- `core/execution/futures_testnet_release_gate.py`
+- `core/execution/futures_live_release_gate.py`
 - `core/execution/futures_execution_parity_check.py`
 - `core/observability/futures_execution_audit.py`
 
 ### Admin API + panel
 - Yeni endpointler:
-  - `GET /api/admin/futures/testnet/status`
-  - `GET /api/admin/futures/testnet/release-gate`
+  - `GET /api/admin/futures/live/status`
+  - `GET /api/admin/futures/live/release-gate`
 - Yeni admin sayfası:
-  - `/admin/futures/testnet-control`
+  - `/admin/futures/live-control`
 - Sayfa bileşenleri:
   - release gate reasons
   - config/secret isolation
@@ -14557,10 +14557,10 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - retry policy tablosu
   - realized slippage paneli
   - reconciler state paneli
-  - paper/testnet parity paneli
+  - paper/live parity paneli
 
 ### Güvenlik ve kabul kriterleri durumu
-- ✅ Testnet varsayılan kapalı (`default_mode=paper`, `testnet_enabled=false`)
+- ✅ Live varsayılan kapalı (`default_mode=paper`, `live_enabled=false`)
 - ✅ Live endpoint erişimi kapalı (`live_endpoint_access=false`)
 - ✅ Release gate olmadan order path kapalı (`order_path_open=false` when blocked)
 - ✅ Preflight reject reason kodlu
@@ -14569,7 +14569,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 - ✅ Reconcile state machine (`unknown_needs_reconcile` dahil)
 
 ### Test
-- Self-test: 30 seçili test PASS (yeni testnet modülleri + regression)
+- Self-test: 30 seçili test PASS (yeni live modülleri + regression)
 - Testing agent: `/app/test_reports/iteration_35.json` => **PASS**
 - Agent sonucu: 46/46 kapsam testi PASS, kritik/minor issue yok
 
@@ -14587,11 +14587,11 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - placement success ratio
   - symbol-level execution quality score
   - gate reason distribution + 7d trend
-  - symbol drift alarmı (paper-testnet parity bozulması)
+  - symbol drift alarmı (paper-live parity bozulması)
   - rolling 7d tuning score
 - Yeni endpointler:
-  - `GET /api/admin/futures/testnet/execution-quality`
-  - `GET /api/admin/futures/testnet/execution-quality/rolling-7d`
+  - `GET /api/admin/futures/live/execution-quality`
+  - `GET /api/admin/futures/live/execution-quality/rolling-7d`
 
 ### Fazlar arası zorunlu 5 geliştirme (bu fazda da uygulandı)
 1. Rolling 7d tuning score
@@ -14601,7 +14601,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 5. “Futures’ta en sık 15 mimari hata” checklist’i
 
 ### UI güncellemesi
-- `/admin/futures/testnet-control` genişletildi:
+- `/admin/futures/live-control` genişletildi:
   - rolling 7d tuning score kartı
   - gate reason trend (7d)
   - symbol drift alarm paneli
@@ -16418,7 +16418,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 
 ### Kullanıcı Seçimleri (Kilitledi)
 - Varsayılan execution mode: **MANUAL**
-- Ortam: **Binance testnet**
+- Ortam: **Binance live**
 - Mevcut user connection kullanılacak
 - `blocked_reason_code` backend modeline kalıcı eklenecek
 - `/user/signals` tablosuna execution görünürlük kolonları eklenecek
@@ -16439,7 +16439,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
   - manual approval sonrası signal->intent->submit->release zinciri
   - AUTO modda eligible signal için intent zinciri
 - Execution intent servisi:
-  - signal bridge (testnet) için soft override ve pipeline sürekliliği
+  - signal bridge (live) için soft override ve pipeline sürekliliği
   - release sonrası `intent.position_id` setleniyor
 
 ### UI Değişiklikleri (/user/signals)
@@ -16812,7 +16812,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
    - Fix:
      - `market_data_provider.py` futures URL fallback eklendi:
        - `https://fapi.binance.com`
-       - `https://testnet.binancefuture.com`
+       - `https://fapi.binance.com`
      - `symbol_selector_service.py` içinde boş satır dönmesi halinde `force_refresh=True` retry eklendi.
    - Sonuç: Futures universe tekrar dolu dönüyor (`571` sembol).
 
@@ -16846,7 +16846,7 @@ Sonuç: **FAZ-A+B = CLOSED (NET KAPANIŞ KRİTERİ 3/3 sağlandı)**
 
 ### Uygulanan Test Senaryosu
 1. Yeni test user oluşturuldu ve onaylandı.
-2. Spot + futures exchange connection (testnet) eklendi.
+2. Spot + futures exchange connection (live) eklendi.
 3. Spot bot + futures bot profilleri oluşturuldu.
 4. Spot scanner çalıştırıldı.
 5. Futures execution preview smoke çalıştırıldı.

@@ -13,10 +13,10 @@ class _FakeResponse:
 
 
 def test_signed_request_adds_proxy_header(monkeypatch):
-    monkeypatch.setenv("BINANCE_TESTNET_API_KEY", "k")
-    monkeypatch.setenv("BINANCE_TESTNET_API_SECRET", "s")
-    monkeypatch.setenv("BINANCE_SPOT_TESTNET_BASE_URL", "http://proxy.local/p/inferred-token")
-    monkeypatch.delenv("BINANCE_SPOT_TESTNET_PROXY_TOKEN", raising=False)
+    monkeypatch.setenv("BINANCE_LIVE_API_KEY", "k")
+    monkeypatch.setenv("BINANCE_LIVE_API_SECRET", "s")
+    monkeypatch.setenv("BINANCE_SPOT_LIVE_BASE_URL", "http://proxy.local/p/inferred-token")
+    monkeypatch.delenv("BINANCE_SPOT_LIVE_PROXY_TOKEN", raising=False)
     monkeypatch.delenv("BINANCE_SPOT_PROXY_TOKEN", raising=False)
     monkeypatch.delenv("BINANCE_PROXY_TOKEN", raising=False)
 
@@ -28,7 +28,7 @@ def test_signed_request_adds_proxy_header(monkeypatch):
 
     monkeypatch.setattr("core.exchanges.binance_adapter.httpx.request", _fake_request)
 
-    adapter = BinanceExecutionAdapter(mode="testnet")
+    adapter = BinanceExecutionAdapter(mode="live")
     adapter._signed_request("GET", "/api/v3/account", {})
 
     assert captured_headers.get("X-MBX-APIKEY") == "k"
@@ -36,10 +36,10 @@ def test_signed_request_adds_proxy_header(monkeypatch):
 
 
 def test_public_request_uses_explicit_proxy_token(monkeypatch):
-    monkeypatch.setenv("BINANCE_TESTNET_API_KEY", "k")
-    monkeypatch.setenv("BINANCE_TESTNET_API_SECRET", "s")
-    monkeypatch.setenv("BINANCE_SPOT_TESTNET_BASE_URL", "http://proxy.local/p/ignored-token")
-    monkeypatch.setenv("BINANCE_SPOT_TESTNET_PROXY_TOKEN", "explicit-token")
+    monkeypatch.setenv("BINANCE_LIVE_API_KEY", "k")
+    monkeypatch.setenv("BINANCE_LIVE_API_SECRET", "s")
+    monkeypatch.setenv("BINANCE_SPOT_LIVE_BASE_URL", "http://proxy.local/p/ignored-token")
+    monkeypatch.setenv("BINANCE_SPOT_LIVE_PROXY_TOKEN", "explicit-token")
 
     captured_headers = {}
 
@@ -49,7 +49,7 @@ def test_public_request_uses_explicit_proxy_token(monkeypatch):
 
     monkeypatch.setattr("core.exchanges.binance_adapter.httpx.request", _fake_request)
 
-    adapter = BinanceExecutionAdapter(mode="testnet")
+    adapter = BinanceExecutionAdapter(mode="live")
     adapter._public_request("GET", "/api/v3/ping")
 
     assert captured_headers.get("X-Proxy-Token") == "explicit-token"

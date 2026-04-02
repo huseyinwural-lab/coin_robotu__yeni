@@ -30,9 +30,9 @@ def _base_url_environment_mismatch(environment: str, base_url: str | None) -> bo
     env = str(environment or "").lower()
     if not url:
         return False
-    if env == "live" and "testnet" in url:
+    if env == "live" and "live" in url:
         return True
-    if env == "testnet" and "testnet" not in url and any(part in url for part in ["binance.com", "bybit.com", "okx.com"]):
+    if env == "live" and "live" not in url and any(part in url for part in ["binance.com", "bybit.com", "okx.com"]):
         return True
     return False
 
@@ -150,12 +150,12 @@ def run_venue_control_plane_sanity(db: Session) -> dict:
             continue
         grouped[f"{row.exchange}:{row.market_type}:{fp}"].add(str(row.environment))
     for identity, envs in grouped.items():
-        if {"live", "testnet"}.issubset(envs):
+        if {"live", "live"}.issubset(envs):
             same_fingerprint_conflicts.append(identity)
     if same_fingerprint_conflicts:
-        checks.append(_check("live_testnet_conflict", "WARN", "live_testnet_credential_conflict", "medium", ["Live ve testnet için farklı key setleri kullanın."], {"conflicts": same_fingerprint_conflicts[:20]}))
+        checks.append(_check("live_live_conflict", "WARN", "live_live_credential_conflict", "medium", ["Live ve live için farklı key setleri kullanın."], {"conflicts": same_fingerprint_conflicts[:20]}))
     else:
-        checks.append(_check("live_testnet_conflict", "PASS", "live_testnet_conflict_free", "low", []))
+        checks.append(_check("live_live_conflict", "PASS", "live_live_conflict_free", "low", []))
 
     default_counter = defaultdict(int)
     for row in active_credentials:

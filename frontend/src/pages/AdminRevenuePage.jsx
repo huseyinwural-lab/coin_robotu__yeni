@@ -64,7 +64,7 @@ export const AdminRevenuePage = () => {
           data-testid="admin-revenue-filter-environment-select"
         >
           <option value="live">live</option>
-          <option value="testnet">testnet</option>
+          <option value="live">live</option>
         </select>
         <Input type="datetime-local" value={filters.start_date} onChange={(event) => setFilters((prev) => ({ ...prev, start_date: event.target.value }))} data-testid="admin-revenue-filter-start-date-input" />
         <Input type="datetime-local" value={filters.end_date} onChange={(event) => setFilters((prev) => ({ ...prev, end_date: event.target.value }))} data-testid="admin-revenue-filter-end-date-input" />

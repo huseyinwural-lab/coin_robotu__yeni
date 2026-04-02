@@ -19,8 +19,8 @@ const BUILDER_FIELDS = [
 const BUILDER_OPERATORS = [">", "<", ">=", "<=", "=="];
 const BUILDER_ACTIONS = ["BLOCK", "WARN", "THROTTLE", "REDUCE_ONLY"];
 const BUILDER_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
-const BUILDER_ENVIRONMENTS = ["DEV", "STAGING", "PROD", "TESTNET", "LIVE"];
-const ACTIVATION_ENVIRONMENTS = ["dev", "staging", "testnet", "live", "prod"];
+const BUILDER_ENVIRONMENTS = ["DEV", "STAGING", "PROD", "LIVE", "LIVE"];
+const ACTIVATION_ENVIRONMENTS = ["dev", "staging", "live", "live", "prod"];
 const RISK_CLASSES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 const TABS = [
   { id: "builder", label: "Builder" },
@@ -116,7 +116,7 @@ export const ExecutionPoliciesPage = () => {
 
   const [selectedVersionId, setSelectedVersionId] = useState("");
   const [versionValidation, setVersionValidation] = useState(null);
-  const [versionEnvironment, setVersionEnvironment] = useState("testnet");
+  const [versionEnvironment, setVersionEnvironment] = useState("live");
   const [overrideHighRisk, setOverrideHighRisk] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
   const [rollbackReason, setRollbackReason] = useState("");
@@ -130,7 +130,7 @@ export const ExecutionPoliciesPage = () => {
   const [isDiffLoading, setIsDiffLoading] = useState(false);
 
   const [simulationVersionId, setSimulationVersionId] = useState("");
-  const [simulationEnvironment, setSimulationEnvironment] = useState("testnet");
+  const [simulationEnvironment, setSimulationEnvironment] = useState("live");
   const [simulationRiskClass, setSimulationRiskClass] = useState("MEDIUM");
   const [simulationStrategy, setSimulationStrategy] = useState("");
   const [simulationOrderJson, setSimulationOrderJson] = useState(`{
@@ -144,7 +144,7 @@ export const ExecutionPoliciesPage = () => {
   const [isSimulationRunning, setIsSimulationRunning] = useState(false);
 
   const [bulkActivateVersions, setBulkActivateVersions] = useState("");
-  const [bulkActivateEnvironment, setBulkActivateEnvironment] = useState("testnet");
+  const [bulkActivateEnvironment, setBulkActivateEnvironment] = useState("live");
   const [bulkActivateMode, setBulkActivateMode] = useState("ACTIVE");
   const [bulkActivateOverride, setBulkActivateOverride] = useState(false);
   const [bulkActivateReason, setBulkActivateReason] = useState("");

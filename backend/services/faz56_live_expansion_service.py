@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import AuditLog, FailedEvent, PaperPosition, TestnetExecutionLog
+from models import AuditLog, FailedEvent, PaperPosition, LiveExecutionLog
 from services.artifact_service import write_signed_artifact
 from services.execution_safety_service import execution_safety_snapshot
 from services.live_mode_service import get_or_create_live_config, release_gate_view
@@ -102,9 +102,9 @@ def compute_live_session_metrics(db: Session, *, window_minutes: int = OBSERVATI
     since = now - timedelta(minutes=max(window_minutes, 5))
 
     rows = (
-        db.query(TestnetExecutionLog)
-        .filter(TestnetExecutionLog.created_at >= since)
-        .order_by(TestnetExecutionLog.created_at.desc())
+        db.query(LiveExecutionLog)
+        .filter(LiveExecutionLog.created_at >= since)
+        .order_by(LiveExecutionLog.created_at.desc())
         .limit(1200)
         .all()
     )
@@ -399,9 +399,9 @@ def generate_daily_live_report_artifact(db: Session, cache, *, timezone_name: st
     utc_day_start = local_day_start.astimezone(timezone.utc)
 
     day_rows = (
-        db.query(TestnetExecutionLog)
-        .filter(TestnetExecutionLog.created_at >= utc_day_start)
-        .order_by(TestnetExecutionLog.created_at.desc())
+        db.query(LiveExecutionLog)
+        .filter(LiveExecutionLog.created_at >= utc_day_start)
+        .order_by(LiveExecutionLog.created_at.desc())
         .all()
     )
     total_trades = len(day_rows)
@@ -461,9 +461,9 @@ def build_closure_proof_bundle(db: Session, cache, *, timezone_name: str = "Euro
     metrics_24h = compute_live_session_metrics(db, window_minutes=1440)
 
     latest_filled = (
-        db.query(TestnetExecutionLog)
-        .filter(TestnetExecutionLog.created_at >= since_24h, TestnetExecutionLog.status == "filled")
-        .order_by(TestnetExecutionLog.created_at.desc())
+        db.query(LiveExecutionLog)
+        .filter(LiveExecutionLog.created_at >= since_24h, LiveExecutionLog.status == "filled")
+        .order_by(LiveExecutionLog.created_at.desc())
         .first()
     )
 

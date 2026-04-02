@@ -1164,7 +1164,7 @@ class PermissionCheckResponse(BaseModel):
     controls: list[dict] = Field(default_factory=list)
 
 
-class TestnetConnectivityResponse(BaseModel):
+class LiveConnectivityResponse(BaseModel):
     status: str
     server_time: int | None
     rest_url: str
@@ -1252,7 +1252,7 @@ class UserReadinessChecklistResponse(BaseModel):
     has_api_secret: bool
     validation_success: bool
     can_trade: bool
-    is_testnet_environment: bool
+    is_live_environment: bool
     is_validation_stale: bool
     validation_timestamp: datetime | None
     validation_snapshot_id: str | None
@@ -1341,7 +1341,7 @@ class ReplayRunRequest(BaseModel):
     timeframe: str = "15m"
     exchange: str = "binance"
     market_type: str = "futures"
-    environment: str = "testnet"
+    environment: str = "live"
     strategy_type: str = "trend_following"
     limit: int = Field(default=300, ge=120, le=1000)
 
@@ -2088,7 +2088,7 @@ class UserPortfolioOverviewResponse(BaseModel):
 
 class UserExchangeConnectRequest(BaseModel):
     exchange: str = "binance"
-    mode: str = "testnet"
+    mode: str = "live"
     api_key: str
     api_secret: str
 
@@ -2107,7 +2107,7 @@ class UserExchangeConnectionUpsertRequest(BaseModel):
     account_label: str
     exchange: str = "binance"
     market_type: str = "spot"
-    environment: str = "testnet"
+    environment: str = "live"
     is_default: bool = False
     api_key: str | None = None
     api_secret: str | None = None
@@ -3925,7 +3925,7 @@ class UserFundWithdrawResponse(BaseModel):
 class CommercialP0IngestionRequest(BaseModel):
     target_user_id: str | None = None
     target_user_email: str | None = None
-    environment: str = "testnet"
+    environment: str = "live"
     market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
     symbols: list[str] = Field(default_factory=list)
     start_ts: str | None = None
@@ -3967,7 +3967,7 @@ class CommercialP0PnlResponse(BaseModel):
 class CommercialP0ReconciliationRequest(BaseModel):
     target_user_id: str | None = None
     target_user_email: str | None = None
-    environment: str = "testnet"
+    environment: str = "live"
     market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
     symbols: list[str] = Field(default_factory=list)
     start_ts: str | None = None
@@ -4168,7 +4168,7 @@ class UserEconomicsSnapshotTrendResponse(BaseModel):
 class CommercialP0WebsocketBootstrapRequest(BaseModel):
     target_user_id: str | None = None
     target_user_email: str | None = None
-    environment: str = "testnet"
+    environment: str = "live"
     market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
 
 
@@ -4185,14 +4185,14 @@ class CommercialP0WebsocketBootstrapResponse(BaseModel):
 class CommercialP0WsWorkerStartRequest(BaseModel):
     target_user_id: str | None = None
     target_user_email: str | None = None
-    environment: str = "testnet"
+    environment: str = "live"
     market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
 
 
 class CommercialP0WsWorkerStopRequest(BaseModel):
     target_user_id: str | None = None
     target_user_email: str | None = None
-    environment: str = "testnet"
+    environment: str = "live"
     market_types: list[str] = Field(default_factory=list)
 
 
@@ -4908,7 +4908,6 @@ class ExchangeRegistryResponse(BaseModel):
     exchange_name: str
     status: str
     supported_market_types: list[str]
-    supports_testnet: bool
     supports_live: bool
     health_status: str
     rate_limit_status: str
@@ -4928,8 +4927,7 @@ class ExchangeRegistryCreate(BaseModel):
     exchange_name: str
     status: str = "active"
     supported_market_types: list[str] = Field(default_factory=lambda: ["spot", "futures"])
-    supports_testnet: bool = True
-    supports_live: bool = False
+    supports_live: bool = True
     health_status: str = "healthy"
     rate_limit_status: str = "ok"
     adapter_version: str = "v1"
@@ -5004,7 +5002,6 @@ class UserVenueAssignmentResponse(BaseModel):
     exchange_code: str
     spot_allowed: bool
     futures_allowed: bool
-    testnet_allowed: bool
     live_allowed: bool
     updated_at: datetime
 
@@ -5014,7 +5011,6 @@ class UserVenueAssignmentUpdate(BaseModel):
     exchange_code: str
     spot_allowed: bool
     futures_allowed: bool
-    testnet_allowed: bool
     live_allowed: bool
 
 
@@ -5399,7 +5395,7 @@ class ProductionGateOverrideCreateRequest(BaseModel):
 
 
 class ProductionGateModeTransitionRequest(BaseModel):
-    target_mode: str = Field(pattern="^(LIVE|TESTNET|SIM|PAPER|MOCK)$")
+    target_mode: str = Field(pattern="^(LIVE|LIVE|SIM|PAPER|MOCK)$")
     reason_text: str = Field(min_length=8, max_length=600)
     confirmation_phrase: str = Field(min_length=5, max_length=80)
 
@@ -5571,14 +5567,14 @@ class ProductionGateTimelineResponse(BaseModel):
 class CapabilityDiscoveryRequest(BaseModel):
     exchange_code: str
     market_type: str = "spot"
-    environment: str = "testnet"
+    environment: str = "live"
     symbols: list[str] = Field(default_factory=list)
 
 
 class MarketPolicyLayerUpdateRequest(BaseModel):
     exchange_code: str
     market_type: str
-    environment: str = "testnet"
+    environment: str = "live"
     symbol_rules: list[dict] = Field(default_factory=list)
     restricted_symbol_classes: list[str] = Field(default_factory=list)
     risk_tier_defaults: dict = Field(default_factory=dict)
@@ -5607,7 +5603,7 @@ class RoutingPreviewRequest(BaseModel):
 class CapabilityMatrixOverrideRequest(BaseModel):
     exchange_code: str
     market_type: str
-    environment: str = "testnet"
+    environment: str = "live"
     symbol: str
     support_level: str | None = None
     supports_leverage: bool | None = None
@@ -5633,7 +5629,7 @@ class FailoverPolicyUpsertRequest(BaseModel):
     user_id: str
     strategy_id: str
     market_type: str
-    environment: str = "testnet"
+    environment: str = "live"
     primary_venue: str
     secondary_venue: str | None = None
     fallback_chain: list[str] = Field(default_factory=list)
@@ -5646,7 +5642,7 @@ class FailoverManualOverrideRequest(BaseModel):
     user_id: str
     strategy_id: str
     market_type: str
-    environment: str = "testnet"
+    environment: str = "live"
     force_route: str | None = None
     force_disable: list[str] = Field(default_factory=list)
     reason: str | None = None
@@ -5657,7 +5653,7 @@ class ValidationCenterRerunRequest(BaseModel):
     user_id: str | None = None
     strategy_id: str | None = None
     market_type: str | None = None
-    environment: str = "testnet"
+    environment: str = "live"
 
 
 class ConflictAutoRemediationApplyRequest(BaseModel):

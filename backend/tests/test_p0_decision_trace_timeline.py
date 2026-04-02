@@ -3,7 +3,7 @@ Test P0 Commercial Ops endpoints and Decision Trace Timeline features.
 Tests:
 - /api/venues/admin/credentials with purpose filter + multi-market alias
 - Spot live probe and Futures test probe endpoint flows
-- P0 endpoints: /api/admin/commercial/p0/ingestion/rest-run (spot/live + futures/testnet)
+- P0 endpoints: /api/admin/commercial/p0/ingestion/rest-run (spot/live + futures/live)
 - P0 endpoint: /api/admin/commercial/p0/live-gate (futures required)
 - Decision Trace Timeline UI data structure
 """
@@ -195,15 +195,15 @@ class TestCredentialProbeEndpoints:
         assert "last_probe_at" in probe_data
         print(f"PASS: Spot live probe returned status={probe_data.get('last_probe_status')}")
 
-    def test_futures_testnet_credential_probe(self, admin_headers):
-        """Test futures testnet credential probe - should return probe status"""
-        # First get credentials to find a futures/testnet credential
+    def test_futures_live_credential_probe(self, admin_headers):
+        """Test futures live credential probe - should return probe status"""
+        # First get credentials to find a futures/live credential
         response = requests.get(
             f"{BASE_URL}/api/venues/admin/credentials",
             params={
                 "exchange": "binance",
                 "market_type": "usdt_perp",
-                "environment": "testnet",
+                "environment": "live",
                 "include_inactive": True,
             },
             headers=admin_headers,
@@ -212,7 +212,7 @@ class TestCredentialProbeEndpoints:
         credentials = response.json()
         
         if not credentials:
-            # Create a test credential for futures/testnet
+            # Create a test credential for futures/live
             create_response = requests.post(
                 f"{BASE_URL}/api/venues/admin/credentials",
                 json={
@@ -220,9 +220,9 @@ class TestCredentialProbeEndpoints:
                     "exchange": "binance",
                     "market_type": "usdt_perp",
                     "purpose": "execution",
-                    "environment": "testnet",
-                    "api_key": "test_futures_testnet_key",
-                    "api_secret": "test_futures_testnet_secret",
+                    "environment": "live",
+                    "api_key": "test_futures_live_key",
+                    "api_secret": "test_futures_live_secret",
                     "is_default": False,
                 },
                 headers=admin_headers,
@@ -244,7 +244,7 @@ class TestCredentialProbeEndpoints:
         assert "last_probe_status" in probe_data
         assert "last_probe_message" in probe_data
         assert "last_probe_at" in probe_data
-        print(f"PASS: Futures testnet probe returned status={probe_data.get('last_probe_status')}")
+        print(f"PASS: Futures live probe returned status={probe_data.get('last_probe_status')}")
 
 
 class TestP0IngestionEndpoints:
@@ -284,13 +284,13 @@ class TestP0IngestionEndpoints:
         assert response.status_code in [200, 400, 404], f"Unexpected status: {response.status_code}: {response.text}"
         print(f"PASS: P0 ingestion spot/live with symbols returned {response.status_code}")
 
-    def test_p0_ingestion_futures_testnet(self, admin_headers):
-        """Test P0 ingestion for futures/testnet"""
+    def test_p0_ingestion_futures_live(self, admin_headers):
+        """Test P0 ingestion for futures/live"""
         response = requests.post(
             f"{BASE_URL}/api/admin/commercial/p0/ingestion/rest-run",
             json={
                 "target_user_email": ADMIN_EMAIL,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["futures"],
                 "symbols": [],  # Futures can work without symbols
                 "limit_per_symbol": 10,
@@ -299,7 +299,7 @@ class TestP0IngestionEndpoints:
         )
         # This may fail due to credential issues, but should not be 500
         assert response.status_code in [200, 400, 404], f"Unexpected status: {response.status_code}: {response.text}"
-        print(f"PASS: P0 ingestion futures/testnet returned {response.status_code}")
+        print(f"PASS: P0 ingestion futures/live returned {response.status_code}")
 
 
 class TestP0LiveGateEndpoint:
@@ -311,7 +311,7 @@ class TestP0LiveGateEndpoint:
             f"{BASE_URL}/api/admin/commercial/p0/live-gate",
             params={
                 "target_user_email": ADMIN_EMAIL,
-                "environment": "testnet",
+                "environment": "live",
                 "required_market_types": ["futures"],
             },
             headers=admin_headers,
@@ -340,7 +340,7 @@ class TestP0LiveGateEndpoint:
             f"{BASE_URL}/api/admin/commercial/p0/live-gate",
             params={
                 "target_user_email": ADMIN_EMAIL,
-                "environment": "testnet",
+                "environment": "live",
                 "required_market_types": ["spot", "futures"],
             },
             headers=admin_headers,
@@ -366,7 +366,7 @@ class TestDecisionTraceTimeline:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "include_inactive": True,
             },
             headers=admin_headers,
@@ -383,7 +383,7 @@ class TestDecisionTraceTimeline:
                     "exchange": "binance",
                     "market_type": "spot",
                     "purpose": "execution",
-                    "environment": "testnet",
+                    "environment": "live",
                     "api_key": "test_timeline_key",
                     "api_secret": "test_timeline_secret",
                     "is_default": True,
@@ -412,7 +412,7 @@ class TestDecisionTraceTimeline:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution",
             },
             headers=admin_headers,
@@ -450,7 +450,7 @@ class TestDecisionTraceTimeline:
                     "user_id": user_id,
                     "exchange": "binance",
                     "market_type": "spot",
-                    "environment": "testnet",
+                    "environment": "live",
                     "purpose": purpose,
                 },
                 headers=admin_headers,
@@ -481,7 +481,7 @@ class TestCredentialRulesEndpoints:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
             headers=admin_headers,
         )
@@ -497,7 +497,7 @@ class TestCredentialRulesEndpoints:
             json={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "preferred_source": "user",
                 "fallback_enabled": True,
             },
@@ -521,7 +521,7 @@ class TestP0DataQualityEndpoint:
             f"{BASE_URL}/api/admin/commercial/p0/data-quality",
             params={
                 "target_user_email": ADMIN_EMAIL,
-                "environment": "testnet",
+                "environment": "live",
             },
             headers=admin_headers,
         )

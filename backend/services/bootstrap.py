@@ -268,7 +268,7 @@ def _seed_live_activation_config(db: Session):
         LiveActivationConfig(
             id="global",
             exchange="binance",
-            market_type="futures_testnet",
+            market_type="futures_live",
             safe_mode_enabled=True,
             live_mode_enabled=False,
             symbol_whitelist=[],

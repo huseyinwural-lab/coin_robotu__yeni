@@ -1,6 +1,6 @@
 """
 Phase-4 Controlled Live Activation - Backend API Tests
-Tests: testnet connectivity, permission-check, live-config safety enforcement, readiness-check
+Tests: live connectivity, permission-check, live-config safety enforcement, readiness-check
 """
 import os
 import pytest
@@ -26,17 +26,17 @@ def admin_headers(admin_token):
     return {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
 
 
-class TestPhase4TestnetConnectivity:
-    """GET /api/phase4/testnet-connectivity tests"""
+class TestPhase4LiveConnectivity:
+    """GET /api/phase4/live-connectivity tests"""
 
-    def test_testnet_connectivity_returns_200(self, admin_headers):
-        """Testnet connectivity endpoint should return 200"""
-        response = requests.get(f"{BASE_URL}/api/phase4/testnet-connectivity", headers=admin_headers)
+    def test_live_connectivity_returns_200(self, admin_headers):
+        """Live connectivity endpoint should return 200"""
+        response = requests.get(f"{BASE_URL}/api/phase4/live-connectivity", headers=admin_headers)
         assert response.status_code == 200
 
-    def test_testnet_connectivity_response_fields(self, admin_headers):
-        """Testnet connectivity should return status/rest_url/ws_url fields"""
-        response = requests.get(f"{BASE_URL}/api/phase4/testnet-connectivity", headers=admin_headers)
+    def test_live_connectivity_response_fields(self, admin_headers):
+        """Live connectivity should return status/rest_url/ws_url fields"""
+        response = requests.get(f"{BASE_URL}/api/phase4/live-connectivity", headers=admin_headers)
         data = response.json()
         
         assert "status" in data
@@ -45,13 +45,13 @@ class TestPhase4TestnetConnectivity:
         assert "message" in data
         
         # Validate expected values
-        assert data["rest_url"] == "https://testnet.binancefuture.com"
+        assert data["rest_url"] == "https://fapi.binance.com"
         assert data["ws_url"] == "wss://stream.binancefuture.com/ws"
         assert data["status"] in ["reachable", "unreachable"]
 
-    def test_testnet_connectivity_requires_admin(self):
-        """Testnet connectivity should require admin auth"""
-        response = requests.get(f"{BASE_URL}/api/phase4/testnet-connectivity")
+    def test_live_connectivity_requires_admin(self):
+        """Live connectivity should require admin auth"""
+        response = requests.get(f"{BASE_URL}/api/phase4/live-connectivity")
         assert response.status_code == 401
 
 
@@ -125,7 +125,7 @@ class TestPhase4LiveConfigSafetyEnforcement:
         # Try to set leverage to 3 (max allowed by schema)
         payload = {
             "exchange": "binance",
-            "market_type": "futures_testnet",
+            "market_type": "futures_live",
             "safe_mode_enabled": True,
             "live_mode_enabled": False,
             "symbol_whitelist": ["BTCUSDT"],
@@ -148,7 +148,7 @@ class TestPhase4LiveConfigSafetyEnforcement:
         """max_position_pct should be clamped to MAX_SAFE_POSITION_PCT=0.1"""
         payload = {
             "exchange": "binance",
-            "market_type": "futures_testnet",
+            "market_type": "futures_live",
             "safe_mode_enabled": True,
             "live_mode_enabled": False,
             "symbol_whitelist": ["BTCUSDT"],
@@ -171,7 +171,7 @@ class TestPhase4LiveConfigSafetyEnforcement:
         """max_notional_exposure should be clamped to MAX_SAFE_NOTIONAL_EXPOSURE=150"""
         payload = {
             "exchange": "binance",
-            "market_type": "futures_testnet",
+            "market_type": "futures_live",
             "safe_mode_enabled": True,
             "live_mode_enabled": False,
             "symbol_whitelist": ["BTCUSDT"],
@@ -194,7 +194,7 @@ class TestPhase4LiveConfigSafetyEnforcement:
         """symbol_whitelist should be restricted to BTCUSDT in safe mode"""
         payload = {
             "exchange": "binance",
-            "market_type": "futures_testnet",
+            "market_type": "futures_live",
             "safe_mode_enabled": True,
             "live_mode_enabled": False,
             "symbol_whitelist": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],  # Multiple symbols
@@ -217,7 +217,7 @@ class TestPhase4LiveConfigSafetyEnforcement:
         """Leverage above schema max (3) should be rejected by validation"""
         payload = {
             "exchange": "binance",
-            "market_type": "futures_testnet",
+            "market_type": "futures_live",
             "safe_mode_enabled": True,
             "live_mode_enabled": False,
             "symbol_whitelist": ["BTCUSDT"],
@@ -242,14 +242,14 @@ class TestPhase4ReadinessCheck:
         response = requests.get(f"{BASE_URL}/api/phase4/readiness-check", headers=admin_headers)
         assert response.status_code == 200
 
-    def test_readiness_check_contains_testnet_connectivity_check(self, admin_headers):
-        """Readiness check should contain testnet_endpoint_reachable check"""
+    def test_readiness_check_contains_live_connectivity_check(self, admin_headers):
+        """Readiness check should contain live_endpoint_reachable check"""
         response = requests.get(f"{BASE_URL}/api/phase4/readiness-check", headers=admin_headers)
         data = response.json()
         
         assert "checks" in data
         check_keys = [check["key"] for check in data["checks"]]
-        assert "testnet_endpoint_reachable" in check_keys
+        assert "live_endpoint_reachable" in check_keys
 
     def test_readiness_check_contains_safe_limits_check(self, admin_headers):
         """Readiness check should contain safe_limits_locked check"""

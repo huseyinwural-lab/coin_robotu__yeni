@@ -156,7 +156,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "test_strategy_001",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100,
         }
@@ -178,7 +178,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "test_strategy_002",
             "symbol": "ETHUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/routing-preview-v2",
@@ -200,7 +200,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "test_strategy_003",
             "symbol": "BTCUSDT",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
         }
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/routing-preview-v2",
@@ -222,7 +222,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "test_strategy_004",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/routing-preview-v2",
@@ -245,7 +245,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "test_strategy_005",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/routing-preview-v2",
@@ -269,7 +269,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "test_strategy_006",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/routing-preview-v2",
@@ -295,7 +295,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "test_strategy_007",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/routing-preview-v2",
@@ -317,7 +317,7 @@ class TestCapabilityMatrixOverride:
         payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbol": "TESTUSDT",
             "support_level": "supported",
             "note": "Test override from iteration 153",
@@ -339,7 +339,7 @@ class TestCapabilityMatrixOverride:
         payload = {
             "exchange_code": "binance",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "symbol": "BTCUSDT",
             "support_level": "supported",
             "note": "Test override iteration 153 - BTCUSDT",
@@ -366,7 +366,7 @@ class TestCapabilityMatrixOverride:
         payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbol": "AUDITUSDT",
             "support_level": "partial",
             "note": "Audit test override",
@@ -513,7 +513,7 @@ class TestMarketPolicyLayer:
         payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbol_rules": [
                 {"symbol": "BTCUSDT", "action": "allow", "max_leverage": 20, "risk_tier": "tier1"},
                 {"symbol": "PEPEUSDT", "action": "deny"},
@@ -538,7 +538,7 @@ class TestMarketPolicyLayer:
         payload = {
             "exchange_code": "binance",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "symbol_rules": [{"symbol": "ETHUSDT", "action": "allow"}],
             "restricted_symbol_classes": ["leverage_token"],
             "risk_tier_defaults": {"tier1": 0.15},
@@ -556,7 +556,7 @@ class TestMarketPolicyLayer:
         )
         data = response.json()
         rules = data.get("rules", {})
-        key = "binance:futures:testnet"
+        key = "binance:futures:live"
         
         assert key in rules, f"Policy key {key} not found in rules"
         assert "symbol_rules" in rules[key], "Missing symbol_rules in saved policy"
@@ -643,7 +643,7 @@ class TestCapabilityDiscovery:
         payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbols": ["BTCUSDT", "ETHUSDT"],
         }
         response = requests.post(
@@ -659,7 +659,7 @@ class TestCapabilityDiscovery:
         payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbols": ["BTCUSDT"],
         }
         response = requests.post(

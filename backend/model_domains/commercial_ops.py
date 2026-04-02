@@ -27,7 +27,7 @@ class CommercialTrade(Base):
 
     exchange: Mapped[str] = mapped_column(String(30), default="binance", index=True)
     market_type: Mapped[str] = mapped_column(String(20), default="spot", index=True)
-    environment: Mapped[str] = mapped_column(String(20), default="testnet", index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
 
     symbol: Mapped[str] = mapped_column(String(30), index=True)
     base_asset: Mapped[str] = mapped_column(String(20), default="", index=True)
@@ -74,7 +74,7 @@ class PnlRecord(Base):
 
     exchange: Mapped[str] = mapped_column(String(30), default="binance", index=True)
     market_type: Mapped[str] = mapped_column(String(20), default="all", index=True)
-    environment: Mapped[str] = mapped_column(String(20), default="testnet", index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
 
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     window_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -105,7 +105,7 @@ class ExchangeReconciliationLog(Base):
 
     exchange: Mapped[str] = mapped_column(String(30), default="binance", index=True)
     market_type: Mapped[str] = mapped_column(String(20), default="all", index=True)
-    environment: Mapped[str] = mapped_column(String(20), default="testnet", index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
 
     run_source: Mapped[str] = mapped_column(String(40), default="manual")
     status: Mapped[str] = mapped_column(String(20), default="running", index=True)
@@ -145,7 +145,7 @@ class RevenueLedger(Base):
 
     exchange: Mapped[str] = mapped_column(String(30), default="binance", index=True)
     market_type: Mapped[str] = mapped_column(String(20), default="spot", index=True)
-    environment: Mapped[str] = mapped_column(String(20), default="testnet", index=True)
+    environment: Mapped[str] = mapped_column(String(20), default="live", index=True)
     symbol: Mapped[str] = mapped_column(String(30), default="", index=True)
     trade_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 

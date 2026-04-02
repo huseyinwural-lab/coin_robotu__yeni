@@ -73,10 +73,10 @@ ensure_canary_keys() {
   fi
 
   if [[ -z "${live_key}" ]]; then
-    live_key="$(load_env_value BINANCE_TESTNET_API_KEY)"
+    live_key="$(load_env_value BINANCE_LIVE_API_KEY)"
   fi
   if [[ -z "${live_secret}" ]]; then
-    live_secret="$(load_env_value BINANCE_TESTNET_API_SECRET)"
+    live_secret="$(load_env_value BINANCE_LIVE_API_SECRET)"
   fi
 
   [[ -n "${generic_key}" ]] && export BINANCE_API_KEY="${generic_key}"

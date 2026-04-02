@@ -255,7 +255,7 @@ class TestExchangeSettingsPageRegression:
         resp = user_session.get(f"{BASE_URL}/api/exchange/readiness-checklist", params={
             "exchange": "binance",
             "market_type": "futures",
-            "environment": "testnet"
+            "environment": "live"
         })
         assert resp.status_code == 200
 

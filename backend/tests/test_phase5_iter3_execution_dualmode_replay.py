@@ -54,7 +54,7 @@ def _ensure_assignment(admin_token: str, user_id: str):
             "exchange_code": "binance",
             "spot_allowed": True,
             "futures_allowed": True,
-            "testnet_allowed": True,
+            "live_allowed": True,
             "live_allowed": False,
         },
         timeout=20,
@@ -72,7 +72,7 @@ class TestInfrastructureReadiness:
         response = requests.get(
             f"{BASE_URL}/api/exchange/readiness-checklist",
             headers=_headers(user_context["token"]),
-            params={"exchange": "binance", "market_type": "futures", "environment": "testnet"},
+            params={"exchange": "binance", "market_type": "futures", "environment": "live"},
             timeout=20,
         )
         assert response.status_code == 200
@@ -80,7 +80,7 @@ class TestInfrastructureReadiness:
         # Venue context fields
         assert data["exchange"] == "binance"
         assert data["market_type"] == "futures"
-        assert data["environment"] == "testnet"
+        assert data["environment"] == "live"
         # Standard readiness fields
         assert "readiness_status" in data
         assert "has_api_key" in data
@@ -92,21 +92,21 @@ class TestInfrastructureReadiness:
         response = requests.get(
             f"{BASE_URL}/api/exchange/readiness-checklist",
             headers=_headers(user_context["token"]),
-            params={"exchange": "binance", "market_type": "spot", "environment": "testnet"},
+            params={"exchange": "binance", "market_type": "spot", "environment": "live"},
             timeout=20,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["exchange"] == "binance"
         assert data["market_type"] == "spot"
-        assert data["environment"] == "testnet"
+        assert data["environment"] == "live"
 
     def test_test_order_error_contract_includes_venue_context(self, user_context):
         """Test-order failure response MUST include normalized failure_code + venue context"""
         response = requests.post(
             f"{BASE_URL}/api/exchange/test-order",
             headers=_headers(user_context["token"]),
-            params={"exchange": "binance", "market_type": "futures", "environment": "testnet", "leverage": 3},
+            params={"exchange": "binance", "market_type": "futures", "environment": "live", "leverage": 3},
             timeout=30,
         )
         assert response.status_code in (200, 400)
@@ -115,7 +115,7 @@ class TestInfrastructureReadiness:
             # Venue context fields MUST be present
             assert detail["exchange"] == "binance"
             assert detail["market_type"] == "futures"
-            assert detail["environment"] == "testnet"
+            assert detail["environment"] == "live"
             # Normalized failure_code MUST be present and valid
             assert detail["failure_code"] in {
                 "invalid_key",
@@ -123,7 +123,7 @@ class TestInfrastructureReadiness:
                 "ip_restricted",
                 "insufficient_balance",
                 "exchange_rejected",
-                "testnet_unreachable",
+                "live_unreachable",
                 "stale_validation",
                 "unknown_exchange_error",
             }
@@ -214,7 +214,7 @@ class TestDualModeBackend:
             params={
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "leverage": 5,
                 "margin_mode": "isolated",
                 "position_side": "LONG",
@@ -227,7 +227,7 @@ class TestDualModeBackend:
             data = response.json()
             assert data["exchange"] == "binance"
             assert data["market_type"] == "futures"
-            assert data["environment"] == "testnet"
+            assert data["environment"] == "live"
 
 
 # ==================== C: Replay Backend Tests ====================
@@ -247,7 +247,7 @@ class TestReplayBackend:
                 "timeframe": "15m",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_type": "trend_following",
                 "limit": 180,
             },
@@ -259,7 +259,7 @@ class TestReplayBackend:
         assert run["candles_processed"] >= 120
         assert run["exchange"] == "binance"
         assert run["market_type"] == "futures"
-        assert run["environment"] == "testnet"
+        assert run["environment"] == "live"
         assert run["timeframe"] == "15m"
 
     def test_replay_run_1m_timeframe(self, admin_token, user_context):
@@ -274,7 +274,7 @@ class TestReplayBackend:
                 "timeframe": "1m",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_type": "trend_following",
                 "limit": 180,
             },
@@ -297,7 +297,7 @@ class TestReplayBackend:
                 "timeframe": "5m",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_type": "trend_following",
                 "limit": 180,
             },
@@ -320,7 +320,7 @@ class TestReplayBackend:
                 "timeframe": "1h",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_type": "trend_following",
                 "limit": 180,
             },
@@ -343,7 +343,7 @@ class TestReplayBackend:
                 "timeframe": "4h",  # Not in supported: 1m, 5m, 15m, 1h
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_type": "trend_following",
                 "limit": 180,
             },
@@ -365,7 +365,7 @@ class TestReplayBackend:
                 "timeframe": "15m",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_type": "trend_following",
                 "limit": 180,
             },
@@ -404,7 +404,7 @@ class TestReplayBackend:
                 "timeframe": "15m",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_type": "trend_following",
                 "limit": 180,
             },

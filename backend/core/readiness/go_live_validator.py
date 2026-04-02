@@ -25,7 +25,7 @@ from models import (
     PortfolioExposureSnapshot,
     PnlRecord,
     Position,
-    TestnetExecutionLog,
+    LiveExecutionLog,
     UserExchangeConnection,
     UserExecutionIntent,
 )
@@ -35,7 +35,7 @@ from services.admin_exchange_credentials_service import execution_credentials_fo
 from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter
 from services.exchange_adapter.market_data_adapter import ExchangeMarketDataAdapter
 from services.live_mode_service import (
-    BinanceFuturesTestnetAdapter,
+    BinanceFuturesLiveAdapter,
     _rate_limit_health,
     _risk_orchestrator_enabled,
     _worker_lag_seconds,
@@ -703,13 +703,13 @@ def build_go_live_context(
             price=50000,
             qty=0.001,
             leverage=1,
-            environment="testnet",
+            environment="live",
         )
         cancel_result = exec_adapter.cancel_order(
             exchange=test_exchange,
             symbol=test_symbol,
             order_id="readiness-dry",
-            environment="testnet",
+            environment="live",
         )
     except Exception as exc:  # pragma: no cover - defensive
         precision_result = {"status": "ERROR", "error": str(exc)}
@@ -717,7 +717,7 @@ def build_go_live_context(
         cancel_result = {"status": "ERROR", "error": str(exc), "mocked": True}
 
     api_key, api_secret, credential_source = resolve_runtime_credentials(None, None)
-    adapter = BinanceFuturesTestnetAdapter()
+    adapter = BinanceFuturesLiveAdapter()
     credentials_available = bool(api_key and api_secret)
 
     account_payload = None
@@ -810,9 +810,9 @@ def build_go_live_context(
 
     dry_run_count = 0
     try:
-        dry_run_query = db.query(TestnetExecutionLog)
+        dry_run_query = db.query(LiveExecutionLog)
         if user_id:
-            dry_run_query = dry_run_query.filter(TestnetExecutionLog.user_id == user_id)
+            dry_run_query = dry_run_query.filter(LiveExecutionLog.user_id == user_id)
         dry_run_count = dry_run_query.count()
     except Exception:
         dry_run_count = 0
@@ -933,7 +933,7 @@ def build_go_live_context(
     sample_symbol = symbols[0] if symbols else test_symbol
     exchange_matrix: dict[str, dict] = {}
     venue_config_checklist: dict[str, dict] = {}
-    runtime_environment = str(connection_payload.get("environment") or "testnet").lower()
+    runtime_environment = str(connection_payload.get("environment") or "live").lower()
 
     required_venues = _resolve_required_venues()
     venue_policy = str(os.environ.get("GO_LIVE_VENUE_POLICY") or "binance_only").strip().lower()
@@ -950,7 +950,6 @@ def build_go_live_context(
             "environment": runtime_environment,
         }
         checklist = {
-            "has_testnet_credentials": False,
             "has_live_credentials": False,
             "environment_mapped": True,
             "policy_valid": True,
@@ -969,15 +968,14 @@ def build_go_live_context(
             venue_payload["reason_code"] = "PASS" if venue_payload["connectivity"] == "PASS" and venue_payload["orderbook"] == "PASS" else "BINANCE_PROBE_FAIL"
         else:
             bybit_creds = (adapter_credentials or {}).get("bybit") or {}
-            checklist["has_testnet_credentials"] = bool(bybit_creds.get("testnet_api_key") and bybit_creds.get("testnet_api_secret"))
             checklist["has_live_credentials"] = bool(bybit_creds.get("live_api_key") and bybit_creds.get("live_api_secret"))
 
             if runtime_environment == "live" and not checklist["has_live_credentials"]:
                 checklist["environment_mapped"] = False
                 checklist["reason_code"] = "BYBIT_LIVE_CREDENTIALS_MISSING"
-            elif runtime_environment != "live" and not checklist["has_testnet_credentials"]:
+            elif runtime_environment != "live" and not checklist["has_live_credentials"]:
                 checklist["environment_mapped"] = False
-                checklist["reason_code"] = "BYBIT_TESTNET_CREDENTIALS_MISSING"
+                checklist["reason_code"] = "BYBIT_LIVE_CREDENTIALS_MISSING"
 
             started = time.perf_counter()
             try:
@@ -1259,10 +1257,10 @@ def run_go_live_validator(context: dict) -> dict:
     if connection_exists:
         if execution_mode == "LIVE":
             env_ok = connection_env in {"live", "prod", "production"}
-        elif execution_mode == "TESTNET":
-            env_ok = connection_env in {"testnet", "paper"}
+        elif execution_mode == "LIVE":
+            env_ok = connection_env in {"live", "paper"}
         elif execution_mode == "SIM":
-            env_ok = connection_env in {"testnet", "paper", "sim", "mock"}
+            env_ok = connection_env in {"live", "paper", "sim", "mock"}
     env_status = "PASS" if env_ok else "UNKNOWN" if not connection_exists else "FAIL"
     add_step(
         "core",
@@ -1955,7 +1953,7 @@ def run_go_live_validator(context: dict) -> dict:
             status="PASS" if proof_quality_ok else "FAIL",
             blocking=True,
             reason_code="PASS" if proof_quality_ok else "EXECUTION_PROOF_ONLY_MOCKED",
-            message="Execution proof gerçek testnet verisi içeriyor" if proof_quality_ok else "Execution proof sadece mocked",
+            message="Execution proof gerçek live verisi içeriyor" if proof_quality_ok else "Execution proof sadece mocked",
             details={
                 "real_metric_count": real_metric_count,
                 "mocked_metric_count": mocked_metric_count,
@@ -2408,7 +2406,7 @@ def run_go_live_validator(context: dict) -> dict:
                 "successful_lifecycle_count": successful_lifecycle_count,
                 "mocked": submit_mocked,
             },
-            data_source="testnet_execution_log",
+            data_source="live_execution_log",
             started_at=time.perf_counter(),
         ),
     )

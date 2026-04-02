@@ -1,4 +1,4 @@
-"""phase4 exchange settings and testnet execution logs
+"""phase4 exchange settings and live execution logs
 
 Revision ID: 20260311_0006
 Revises: 20260311_0005
@@ -43,12 +43,12 @@ def upgrade() -> None:
         )
         op.create_index("ix_user_exchange_settings_user_id", "user_exchange_settings", ["user_id"], unique=True)
 
-    if not _table_exists(bind, "testnet_execution_logs"):
+    if not _table_exists(bind, "live_execution_logs"):
         user_fk = []
         if users_exists:
             user_fk.append(sa.ForeignKeyConstraint(["user_id"], ["users.id"]))
         op.create_table(
-            "testnet_execution_logs",
+            "live_execution_logs",
             sa.Column("id", sa.String(), nullable=False),
             sa.Column("user_id", sa.String(), nullable=False),
             sa.Column("symbol", sa.String(length=20), nullable=False),
@@ -68,14 +68,14 @@ def upgrade() -> None:
             *user_fk,
             sa.PrimaryKeyConstraint("id"),
         )
-        op.create_index("ix_testnet_execution_logs_user_id", "testnet_execution_logs", ["user_id"], unique=False)
+        op.create_index("ix_live_execution_logs_user_id", "live_execution_logs", ["user_id"], unique=False)
 
 
 def downgrade() -> None:
     bind = op.get_bind()
-    if _table_exists(bind, "testnet_execution_logs"):
-        op.drop_index("ix_testnet_execution_logs_user_id", table_name="testnet_execution_logs")
-        op.drop_table("testnet_execution_logs")
+    if _table_exists(bind, "live_execution_logs"):
+        op.drop_index("ix_live_execution_logs_user_id", table_name="live_execution_logs")
+        op.drop_table("live_execution_logs")
 
     if _table_exists(bind, "user_exchange_settings"):
         op.drop_index("ix_user_exchange_settings_user_id", table_name="user_exchange_settings")

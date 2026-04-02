@@ -111,7 +111,7 @@ def seed_default_strategy_bindings(db: Session, *, strategy_ids: list[str]) -> i
                 },
                 allowed_symbols=[],
                 allowed_margin_modes=[],
-                allowed_environments=["testnet", "staging", "dev", "live"],
+                allowed_environments=["live", "staging", "dev", "live"],
                 state="enabled",
             )
         )
@@ -196,7 +196,7 @@ def upsert_strategy_binding(
 
 def evaluate_strategy_binding_constraints(db: Session, *, context: dict) -> dict:
     strategy_id = str(context.get("strategy_binding") or "")
-    env = str(context.get("environment") or "testnet").lower()
+    env = str(context.get("environment") or "live").lower()
     symbol = str(context.get("symbol") or "").upper()
     margin_mode = str(context.get("margin_mode") or "").lower()
 
@@ -307,7 +307,7 @@ def select_auto_action(
 ) -> str:
     _ = db
     severity_normalized = str(severity or "LOW").upper()
-    env = str(environment or "testnet").lower()
+    env = str(environment or "live").lower()
     reason = str(reason_code or "")
     risk_class = str(strategy_risk_class or "MEDIUM").upper()
 
@@ -547,7 +547,7 @@ def activate_policy_version(
     row = db.query(ExecutionPolicyVersion).filter(ExecutionPolicyVersion.version_id == version_id).first()
     if row is None:
         raise ValueError("policy_version_not_found")
-    env = str(environment or "testnet").lower()
+    env = str(environment or "live").lower()
     mode = str(activation_mode or "ACTIVE").upper()
     if mode not in {"ACTIVE", "CANARY"}:
         raise ValueError("invalid_activation_mode")

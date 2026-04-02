@@ -194,7 +194,7 @@ class TestExchangeValidateNoAssignmentRequired:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet"
+                "environment": "live"
             }
         )
         
@@ -219,7 +219,7 @@ class TestExchangeValidateNoAssignmentRequired:
             params={
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet"
+                "environment": "live"
             }
         )
         
@@ -269,7 +269,7 @@ class TestExchangeValidateNoAssignmentRequired:
             "user_id": user_id,
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "api_key_plain": "test_api_key_iter82",
             "api_secret_plain": "test_api_secret_iter82",
             "is_default": True,
@@ -291,7 +291,7 @@ class TestExchangeValidateNoAssignmentRequired:
                 json={
                     "exchange": "binance",
                     "market_type": "spot",
-                    "environment": "testnet",
+                    "environment": "live",
                     "api_key_plain": "test_api_key_iter82",
                     "api_secret_plain": "test_api_secret_iter82",
                     "is_default": True,
@@ -308,7 +308,7 @@ class TestExchangeValidateNoAssignmentRequired:
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "exchange": "binance",
-                "mode": "testnet",
+                "mode": "live",
                 "api_key": "test_api_key_iter82",
                 "api_secret": "test_api_secret_iter82"
             }
@@ -322,7 +322,7 @@ class TestExchangeValidateNoAssignmentRequired:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet"
+                "environment": "live"
             }
         )
         
@@ -407,7 +407,7 @@ class TestExchangeValidateWithVenueAssignment:
             json={
                 "exchange": "binance",
                 "market_types": ["spot", "futures"],
-                "environments": ["testnet"]
+                "environments": ["live"]
             }
         )
         print(f"Venue assignment response: {venue_assign.status_code}")
@@ -424,7 +424,7 @@ class TestExchangeValidateWithVenueAssignment:
             headers={"Authorization": f"Bearer {user_token}"},
             json={
                 "exchange": "binance",
-                "mode": "testnet",
+                "mode": "live",
                 "api_key": f"test_key_{uuid.uuid4().hex[:8]}",
                 "api_secret": f"test_secret_{uuid.uuid4().hex[:8]}"
             }
@@ -438,7 +438,7 @@ class TestExchangeValidateWithVenueAssignment:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet"
+                "environment": "live"
             }
         )
         

@@ -185,7 +185,7 @@ const adminOnlyItems = [
       { to: "/admin/futures/live-readiness", label: "futures/live-readiness", icon: LineChart, testId: "nav-admin-advanced-futures-live-readiness-link" },
       { to: "/admin/futures/scaling-validation", label: "futures/scaling-validation", icon: LineChart, testId: "nav-admin-advanced-futures-scaling-validation-link" },
       { to: "/admin/futures/microstructure-guard", label: "futures/microstructure-guard", icon: LineChart, testId: "nav-admin-advanced-futures-microstructure-guard-link" },
-      { to: "/admin/futures/testnet-control", label: "futures/testnet-control", icon: LineChart, testId: "nav-admin-advanced-futures-testnet-control-link" },
+      { to: "/admin/futures/live-control", label: "futures/live-control", icon: LineChart, testId: "nav-admin-advanced-futures-live-control-link" },
       { to: "/admin/proofs", label: "proofs", icon: FileText, testId: "nav-admin-advanced-proofs-link" },
       { to: "/admin/reports/archive", label: "reports/archive", icon: FileText, testId: "nav-admin-advanced-reports-archive-link" },
       { to: "/admin/runtime/quarantine", label: "runtime/quarantine", icon: ShieldAlert, testId: "nav-admin-advanced-runtime-quarantine-link" },

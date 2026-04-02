@@ -176,9 +176,9 @@ def _resolve_bybit_credentials(db: Session) -> tuple[str, str, str]:
     load_dotenv('/app/backend/.env', override=True)
     cfg = execution_credentials_for_adapter(db)
     bybit = dict((cfg or {}).get("bybit") or {})
-    api_key = str(bybit.get("testnet_key") or os.environ.get("BYBIT_TESTNET_API_KEY") or "").strip()
-    api_secret = str(bybit.get("testnet_secret") or os.environ.get("BYBIT_TESTNET_API_SECRET") or "").strip()
-    base_url = str(bybit.get("testnet_base_url") or os.environ.get("BYBIT_TESTNET_BASE_URL") or "https://api-testnet.bybit.com").strip()
+    api_key = str(bybit.get("live_key") or os.environ.get("BYBIT_LIVE_API_KEY") or "").strip()
+    api_secret = str(bybit.get("live_secret") or os.environ.get("BYBIT_LIVE_API_SECRET") or "").strip()
+    base_url = str(bybit.get("live_base_url") or os.environ.get("BYBIT_LIVE_BASE_URL") or "https://api-live.bybit.com").strip()
     return api_key, api_secret, base_url
 
 
@@ -667,8 +667,8 @@ def get_artifact_by_intent(db: Session, *, intent_id: str) -> dict:
 def _record_acceptance_artifact(payload: dict) -> dict:
     artifact = write_signed_artifact(
         payload,
-        artifact_type="execution_testnet_acceptance",
-        filename_prefix="execution_testnet_acceptance",
+        artifact_type="execution_live_acceptance",
+        filename_prefix="execution_live_acceptance",
     )
     return {
         "artifact_id": artifact.get("artifact_id"),
@@ -796,7 +796,7 @@ def _run_single_acceptance_mode(
         db.commit()
         failure_payload = {
             "schema_version": "1.0",
-            "proof_type": "execution_testnet_acceptance_failure",
+            "proof_type": "execution_live_acceptance_failure",
             "acceptance_run_id": acceptance_run_id,
             "mode": mode,
             "correlation_id": correlation_id,
@@ -807,7 +807,7 @@ def _run_single_acceptance_mode(
         acceptance_artifact = _record_acceptance_artifact(failure_payload)
         create_audit_log(
             db,
-            action="execution_testnet_acceptance_failed",
+            action="execution_live_acceptance_failed",
             entity_type="execution_intent",
             entity_id=intent.intent_id,
             actor_user_id=requested_by,
@@ -892,7 +892,7 @@ def _run_single_acceptance_mode(
     )
     acceptance_payload = {
         "schema_version": "1.0",
-        "proof_type": "execution_testnet_acceptance_step",
+        "proof_type": "execution_live_acceptance_step",
         "acceptance_run_id": acceptance_run_id,
         "mode": mode,
         "correlation_id": correlation_id,
@@ -904,7 +904,7 @@ def _run_single_acceptance_mode(
     acceptance_artifact = _record_acceptance_artifact(acceptance_payload)
     create_audit_log(
         db,
-        action="execution_testnet_acceptance_step_completed",
+        action="execution_live_acceptance_step_completed",
         entity_type="execution_intent",
         entity_id=intent.intent_id,
         actor_user_id=requested_by,
@@ -934,7 +934,7 @@ def _run_single_acceptance_mode(
     }
 
 
-def run_testnet_acceptance(
+def run_live_acceptance(
     db: Session,
     *,
     symbol: str = "BTCUSDT",
@@ -955,7 +955,7 @@ def run_testnet_acceptance(
     if str(gate.get("state") or "").upper() == "BLOCKED":
         blocked_payload = {
             "schema_version": "1.0",
-            "proof_type": "execution_testnet_acceptance_blocked",
+            "proof_type": "execution_live_acceptance_blocked",
             "acceptance_run_id": acceptance_run_id,
             "correlation_id": correlation_id,
             "symbol": symbol,
@@ -968,7 +968,7 @@ def run_testnet_acceptance(
         run_artifact = _record_acceptance_artifact(blocked_payload)
         create_audit_log(
             db,
-            action="execution_testnet_acceptance_blocked",
+            action="execution_live_acceptance_blocked",
             entity_type="execution_acceptance_run",
             entity_id=acceptance_run_id,
             actor_user_id=requested_by,
@@ -994,7 +994,7 @@ def run_testnet_acceptance(
             "reason_code": "acceptance_blocked_by_hard_gate",
             "gate": gate,
             "artefact_manifest": {"run": run_artifact},
-            "audit_record": {"action": "execution_testnet_acceptance_blocked", "entity_id": acceptance_run_id},
+            "audit_record": {"action": "execution_live_acceptance_blocked", "entity_id": acceptance_run_id},
         }
 
     ack_result = _run_single_acceptance_mode(
@@ -1021,7 +1021,7 @@ def run_testnet_acceptance(
     final_status = "PASS" if ack_result.get("status") == "PASS" and (fill_result and fill_result.get("status") == "PASS") else "FAILED"
     summary_payload = {
         "schema_version": "1.0",
-        "proof_type": "execution_testnet_acceptance_run_summary",
+        "proof_type": "execution_live_acceptance_run_summary",
         "acceptance_run_id": acceptance_run_id,
         "correlation_id": correlation_id,
         "symbol": symbol,
@@ -1037,7 +1037,7 @@ def run_testnet_acceptance(
     run_artifact = _record_acceptance_artifact(summary_payload)
     create_audit_log(
         db,
-        action="execution_testnet_acceptance_run_completed",
+        action="execution_live_acceptance_run_completed",
         entity_type="execution_acceptance_run",
         entity_id=acceptance_run_id,
         actor_user_id=requested_by,
@@ -1049,7 +1049,7 @@ def run_testnet_acceptance(
             "action": "acceptance_run",
             "target_type": "execution_acceptance_run",
             "target_id": acceptance_run_id,
-            "reason": "testnet_acceptance",
+            "reason": "live_acceptance",
             "before_state": "STARTED",
             "after_state": final_status,
             "correlation_id": correlation_id,
@@ -1083,14 +1083,14 @@ def run_testnet_acceptance(
             "run": run_artifact,
         },
         "audit_record": {
-            "action": "execution_testnet_acceptance_run_completed",
+            "action": "execution_live_acceptance_run_completed",
             "entity_id": acceptance_run_id,
         },
     }
 
 
 def _acceptance_manifest_items(limit: int = 50) -> list[dict]:
-    manifest = Path("/app/artifacts/manifests/execution_testnet_acceptance_manifest.jsonl")
+    manifest = Path("/app/artifacts/manifests/execution_live_acceptance_manifest.jsonl")
     if not manifest.exists():
         return []
     rows: list[dict] = []
@@ -1107,12 +1107,12 @@ def _acceptance_manifest_items(limit: int = 50) -> list[dict]:
     return rows[:limit]
 
 
-def get_latest_testnet_acceptance() -> dict:
+def get_latest_live_acceptance() -> dict:
     items = _acceptance_manifest_items(limit=1)
     return {"latest": items[0] if items else None}
 
 
-def get_testnet_acceptance_history(limit: int = 50) -> dict:
+def get_live_acceptance_history(limit: int = 50) -> dict:
     return {"items": _acceptance_manifest_items(limit=limit), "total": len(_acceptance_manifest_items(limit=5000))}
 
 
@@ -1149,7 +1149,7 @@ def _select_bulk_targets(
         for row in intent_rows:
             if states and _normalize_state(row.status) not in states:
                 continue
-            if environment and str((row.metadata or {}).get("environment") or "testnet").lower() != environment:
+            if environment and str((row.metadata or {}).get("environment") or "live").lower() != environment:
                 continue
             created_at = _as_utc(row.created_at)
             if age_cutoff and created_at and created_at > age_cutoff:

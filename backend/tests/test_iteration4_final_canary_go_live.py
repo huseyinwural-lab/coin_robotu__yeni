@@ -1,6 +1,6 @@
 """
 Iteration 4 Final Testing: Canary & Go-Live Prep
-- POST /api/runtime/exchange/testnet-lifecycle/run: Real order lifecycle and artifact generation
+- POST /api/runtime/exchange/live-lifecycle/run: Real order lifecycle and artifact generation
 - POST /api/runtime/canary/run: Chain validation (strategy->risk->queue->execution->exchange->order->pnl->alert->timeline->snapshot)
 - GET /api/runtime/canary/readiness-score: Score/status/components validation
 - GET /api/runtime/go-live/checklist: go_live + reasons/checks validation
@@ -188,7 +188,7 @@ class TestGoLiveChecklist:
         # Verify checks
         checks = result.get("checks", {})
         expected_checks = [
-            "testnet_lifecycle_pass",
+            "live_lifecycle_pass",
             "canary_run_pass",
             "smoke_ok",
             "alert_spike_absent",
@@ -247,13 +247,13 @@ class TestKillSwitchVerifyRollback:
             print(f"Kill-switch verify returned {response.status_code}: {data}")
 
 
-class TestTestnetLifecycleValidation:
-    """Test testnet lifecycle validation - Real Binance testnet order lifecycle"""
+class TestLiveLifecycleValidation:
+    """Test live lifecycle validation - Real Binance live order lifecycle"""
     
-    def test_run_testnet_lifecycle(self, auth_headers):
-        """POST /api/runtime/exchange/testnet-lifecycle/run - Real order lifecycle and artifact"""
+    def test_run_live_lifecycle(self, auth_headers):
+        """POST /api/runtime/exchange/live-lifecycle/run - Real order lifecycle and artifact"""
         response = requests.post(
-            f"{BASE_URL}/api/runtime/exchange/testnet-lifecycle/run",
+            f"{BASE_URL}/api/runtime/exchange/live-lifecycle/run",
             headers=auth_headers,
             json={"symbol": "BTCUSDT", "size": 0.0001},
             timeout=120  # Longer timeout for real exchange operations
@@ -267,7 +267,7 @@ class TestTestnetLifecycleValidation:
             assert data.get("status") == "ok"
             result = data.get("result", {})
             assert result.get("status") == "PASS"
-            print("Testnet lifecycle PASS")
+            print("Live lifecycle PASS")
             
             # Verify artifact path
             assert "artifact_path" in result
@@ -290,9 +290,9 @@ class TestTestnetLifecycleValidation:
             print(f"DB state: {json.dumps(db_state, indent=2)}")
         else:
             # 409 or 400 means FAIL - log details
-            print(f"Testnet lifecycle returned {response.status_code}: {json.dumps(data, indent=2)[:500]}")
-            # This is expected if testnet credentials are not valid or exchange is down
-            pytest.skip(f"Testnet lifecycle validation failed: {response.status_code}")
+            print(f"Live lifecycle returned {response.status_code}: {json.dumps(data, indent=2)[:500]}")
+            # This is expected if live credentials are not valid or exchange is down
+            pytest.skip(f"Live lifecycle validation failed: {response.status_code}")
 
 
 class TestCanaryRun:

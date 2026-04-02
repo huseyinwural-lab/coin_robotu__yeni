@@ -37,8 +37,8 @@ def _safe_float(value, default: float = 0.0) -> float:
 
 
 def _normalize_environment(value: str | None) -> str:
-    candidate = (value or "testnet").strip().lower()
-    return candidate if candidate in {"testnet", "live"} else "testnet"
+    candidate = (value or "live").strip().lower()
+    return candidate if candidate in {"live", "live"} else "live"
 
 
 def _normalize_market_types(items: list[str] | None) -> list[str]:
@@ -113,14 +113,14 @@ class BinanceCommercialClient:
         self.api_secret = api_secret
         self.environment = _normalize_environment(environment)
         default_spot_base = (
-            "https://testnet.binance.vision" if self.environment == "testnet" else "https://api.binance.com"
+            "https://api.binance.com" if self.environment == "live" else "https://api.binance.com"
         )
         default_futures_base = (
-            "https://testnet.binancefuture.com" if self.environment == "testnet" else "https://fapi.binance.com"
+            "https://fapi.binance.com" if self.environment == "live" else "https://fapi.binance.com"
         )
-        if self.environment == "testnet":
-            spot_override = os.environ.get("BINANCE_SPOT_TESTNET_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
-            futures_override = os.environ.get("BINANCE_FUTURES_TESTNET_BASE_URL") or os.environ.get("BINANCE_FUTURES_BASE_URL")
+        if self.environment == "live":
+            spot_override = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
+            futures_override = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL") or os.environ.get("BINANCE_FUTURES_BASE_URL")
         else:
             spot_override = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL") or os.environ.get("BINANCE_SPOT_BASE_URL")
             futures_override = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL") or os.environ.get("BINANCE_FUTURES_BASE_URL")
@@ -128,9 +128,9 @@ class BinanceCommercialClient:
         self.spot_base_url = str(spot_override or default_spot_base).strip().rstrip("/")
         self.futures_base_url = str(futures_override or default_futures_base).strip().rstrip("/")
         generic_proxy_token = os.environ.get("BINANCE_PROXY_TOKEN")
-        if self.environment == "testnet":
-            spot_token = os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN")
-            futures_token = os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN")
+        if self.environment == "live":
+            spot_token = os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
+            futures_token = os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
         else:
             spot_token = os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
             futures_token = os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
@@ -286,7 +286,7 @@ class BinanceCommercialClient:
             payload = self._api_key_request(method="POST", base_url=self.spot_base_url, endpoint="/api/v3/userDataStream")
             listen_key = str(payload.get("listenKey") or "").strip()
             ws_base = (
-                "wss://testnet.binance.vision/ws" if self.environment == "testnet" else "wss://stream.binance.com:9443/ws"
+                "wss://api.binance.com/ws" if self.environment == "live" else "wss://stream.binance.com:9443/ws"
             )
             streams["spot"] = {
                 "listen_key": listen_key,
@@ -296,7 +296,7 @@ class BinanceCommercialClient:
             payload = self._api_key_request(method="POST", base_url=self.futures_base_url, endpoint="/fapi/v1/listenKey")
             listen_key = str(payload.get("listenKey") or "").strip()
             ws_base = (
-                "wss://stream.binancefuture.com/ws" if self.environment == "testnet" else "wss://fstream.binance.com/ws"
+                "wss://stream.binancefuture.com/ws" if self.environment == "live" else "wss://fstream.binance.com/ws"
             )
             streams["futures"] = {
                 "listen_key": listen_key,

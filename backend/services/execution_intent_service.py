@@ -583,7 +583,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
 
     requested_exchange = str(payload.get("exchange") or normalized.get("exchange") or "binance").strip().lower()
     requested_market_type = str(normalized.get("market_type") or payload.get("market_type") or "spot").strip().lower()
-    requested_environment = str(payload.get("environment") or normalized.get("environment") or "testnet").strip().lower()
+    requested_environment = str(payload.get("environment") or normalized.get("environment") or "live").strip().lower()
     exchange_connection_id = str(payload.get("exchange_connection_id") or "").strip() or None
     account_label = str(payload.get("account_label") or normalized.get("account_label") or "default").strip()
 
@@ -878,13 +878,13 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     )
     gate_decision = str(risk_engine_result.get("risk_decision") or risk_impact.get("decision") or "ALLOW")
 
-    if bool(payload.get("signal_bridge_context")) and requested_environment == "testnet":
+    if bool(payload.get("signal_bridge_context")) and requested_environment == "live":
         soft_override_codes = {"strategy_conflict_loser", "symbol_not_allowed", "assignment_required", "venue_access_blocked"}
         hard_codes = [code for code in final_reject_codes if code not in soft_override_codes]
         if not hard_codes:
             validation["validation_status"] = "valid"
             final_reject_codes = []
-            final_risk_flags = sorted(set([*final_risk_flags, "testnet_signal_bridge_soft_override"]))
+            final_risk_flags = sorted(set([*final_risk_flags, "live_signal_bridge_soft_override"]))
 
     pipeline_context = {
         "intent_token": token,
@@ -1141,7 +1141,7 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     validation["decision_trace"] = pipeline_result.get("decision_trace") or {}
     validation["standardized_reject"] = pipeline_reject if pipeline_reject else None
     validation["rollout_mode"] = pipeline_result.get("rollout_mode") or "shadow"
-    validation["execution_mode"] = str(requested_environment or "testnet").lower()
+    validation["execution_mode"] = str(requested_environment or "live").lower()
 
     try:
         db.commit()
@@ -1195,7 +1195,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         "strategy_binding": normalized_payload.get("strategy_binding") or "",
         "symbol": str(intent.symbol or ""),
         "side": str(normalized_payload.get("side") or "buy"),
-        "environment": normalized_payload.get("environment") or "testnet",
+        "environment": normalized_payload.get("environment") or "live",
         "market_type": str(intent.market_type or "spot"),
         "margin_mode": normalized_payload.get("margin_mode") or "",
         "volatility_pct": _to_float(normalized_payload.get("volatility_pct"), 0.0),

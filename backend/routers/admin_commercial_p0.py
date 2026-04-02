@@ -100,7 +100,7 @@ def run_rest_ingestion_alias(
 def build_latest_pnl(
     target_user_id: str | None = Query(default=None),
     target_user_email: str | None = Query(default=None),
-    environment: str = Query(default="testnet"),
+    environment: str = Query(default="live"),
     market_types: list[str] = Query(default=["spot", "futures"]),
     start_ts: str | None = Query(default=None),
     end_ts: str | None = Query(default=None),
@@ -153,7 +153,7 @@ def run_reconciliation(
 def data_quality(
     target_user_id: str | None = Query(default=None),
     target_user_email: str | None = Query(default=None),
-    environment: str = Query(default="testnet"),
+    environment: str = Query(default="live"),
     required_market_types: list[str] = Query(default=["spot", "futures"]),
     _: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
@@ -176,7 +176,7 @@ def data_quality(
 def live_gate(
     target_user_id: str | None = Query(default=None),
     target_user_email: str | None = Query(default=None),
-    environment: str = Query(default="testnet"),
+    environment: str = Query(default="live"),
     required_market_types: list[str] = Query(default=["spot", "futures"]),
     _: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
@@ -275,7 +275,7 @@ def websocket_worker_status(
 def export_canonical_trades_csv(
     target_user_id: str | None = Query(default=None),
     target_user_email: str | None = Query(default=None),
-    environment: str = Query(default="testnet"),
+    environment: str = Query(default="live"),
     market_type: str | None = Query(default=None),
     symbol: str | None = Query(default=None),
     start_ts: str | None = Query(default=None),
@@ -305,7 +305,7 @@ def export_canonical_trades_csv(
 def export_canonical_trades_csv_alias(
     target_user_id: str | None = Query(default=None),
     target_user_email: str | None = Query(default=None),
-    environment: str = Query(default="testnet"),
+    environment: str = Query(default="live"),
     market_type: str | None = Query(default=None),
     symbol: str | None = Query(default=None),
     start_ts: str | None = Query(default=None),

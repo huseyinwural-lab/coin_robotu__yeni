@@ -179,11 +179,11 @@ class TestActivationGate:
         
         # Try to activate without approval (should work for non-prod)
         activate_payload = {
-            "environment": "testnet",
+            "environment": "live",
             "activation_mode": "ACTIVE"
         }
         response = client.post(f"/api/admin/execution-policies/versions/{version_id}/activate", json=activate_payload, headers=auth_headers)
-        # Should succeed for testnet without approval
+        # Should succeed for live without approval
         print(f"Activation response: {response.status_code} - {response.text[:200]}")
         # The activation gate checks validation errors - if no errors, it should proceed
         assert response.status_code in [200, 400, 403], f"Unexpected status: {response.status_code}"
@@ -216,7 +216,7 @@ class TestActivationGate:
         
         # Try to activate without override - should fail
         activate_payload = {
-            "environment": "testnet",
+            "environment": "live",
             "activation_mode": "ACTIVE",
             "override_high_risk": False
         }
@@ -376,7 +376,7 @@ class TestSimulationPanel:
             "policy_code": "TEST_p2_simulation",
             "version_id": version_id,
             "simulation_input": {
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_risk_class": "MEDIUM",
                 "strategy": "test-strategy",
                 "order": {
@@ -421,7 +421,7 @@ class TestSimulationPanel:
             "policy_code": test_versions[0].get("policy_code"),
             "version_id": version_id,
             "simulation_input": {
-                "environment": "testnet",
+                "environment": "live",
                 "strategy_risk_class": "LOW",
                 "order": {
                     "exposure": 10000,  # Below threshold
@@ -478,7 +478,7 @@ class TestBulkOperations:
             "items": [
                 {
                     "version_id": vid,
-                    "environment": "testnet",
+                    "environment": "live",
                     "activation_mode": "ACTIVE"
                 }
                 for vid in version_ids

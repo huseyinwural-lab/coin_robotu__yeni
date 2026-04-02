@@ -68,7 +68,7 @@ class TestAdminCredentialOrchestrationList:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "include_inactive": True
             },
             timeout=15
@@ -91,7 +91,7 @@ class TestAdminCredentialOrchestrationCreate:
             "exchange": "binance",
             "market_type": "spot",
             "purpose": "market_data",
-            "environment": "testnet",
+            "environment": "live",
             "api_key": f"TEST_KEY_{unique_id}",
             "api_secret": f"TEST_SECRET_{unique_id}",
             "passphrase": None,
@@ -135,7 +135,7 @@ class TestAdminCredentialOrchestrationCreate:
             "exchange": "invalid_exchange",
             "market_type": "spot",
             "purpose": "market_data",
-            "environment": "testnet",
+            "environment": "live",
             "api_key": "test_key",
             "api_secret": "test_secret",
             "is_default": False
@@ -223,7 +223,7 @@ class TestAdminCredentialOrchestrationRevoke:
             "exchange": "binance",
             "market_type": "spot",
             "purpose": "market_data",
-            "environment": "testnet",
+            "environment": "live",
             "api_key": f"REVOKE_TEST_KEY_{unique_id}",
             "api_secret": f"REVOKE_TEST_SECRET_{unique_id}",
             "is_default": False
@@ -268,7 +268,7 @@ class TestAdminCredentialOrchestrationRotate:
             "exchange": "binance",
             "market_type": "spot",
             "purpose": "market_data",
-            "environment": "testnet",
+            "environment": "live",
             "api_key": f"ROTATE_TEST_KEY_{unique_id}",
             "api_secret": f"ROTATE_TEST_SECRET_{unique_id}",
             "is_default": False
@@ -437,14 +437,14 @@ class TestCredentialResolutionPreview:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution"
             },
             timeout=15
         )
         # May return 404 if no credential found, or 409 for various blocks
         if response.status_code == 404:
-            print("✓ Resolution preview returned 404 (no credential found) - expected for testnet")
+            print("✓ Resolution preview returned 404 (no credential found) - expected for live")
             return
         if response.status_code == 409:
             print(f"✓ Resolution preview returned 409 (blocked): {response.json().get('detail')}")
@@ -523,7 +523,7 @@ class TestCredentialAssignmentRules:
         payload = {
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "tenant_id": None,
             "user_id": None,
             "preferred_source": "user",
@@ -557,7 +557,7 @@ class TestLifecycleStatusFlow:
             "exchange": "binance",
             "market_type": "spot",
             "purpose": "market_data",
-            "environment": "testnet",
+            "environment": "live",
             "api_key": f"LIFECYCLE_TEST_KEY_{unique_id}",
             "api_secret": f"LIFECYCLE_TEST_SECRET_{unique_id}",
             "is_default": False

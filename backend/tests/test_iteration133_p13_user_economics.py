@@ -98,16 +98,16 @@ class TestRetentionTrendEndpoint:
         assert data["lookback_periods"] == 6
         print(f"Monthly retention trend: {len(data['points'])} points")
 
-    def test_retention_trend_testnet_environment(self, auth_headers):
-        """Test retention trend for testnet environment"""
+    def test_retention_trend_live_environment(self, auth_headers):
+        """Test retention trend for live environment"""
         response = requests.get(
             f"{BASE_URL}/api/admin/users/economics/retention-trend",
             headers=auth_headers,
-            params={"environment": "testnet"}
+            params={"environment": "live"}
         )
         assert response.status_code == 200, f"Failed: {response.text}"
         data = response.json()
-        assert data["environment"] == "testnet"
+        assert data["environment"] == "live"
 
     def test_retention_trend_invalid_granularity(self, auth_headers):
         """Test retention trend with invalid granularity returns 400"""
@@ -252,7 +252,7 @@ class TestExportEndpoints:
             f"{BASE_URL}/api/admin/users/economics/export.csv",
             headers=auth_headers,
             params={
-                "environment": "testnet",
+                "environment": "live",
                 "churn_inactive_days": 14,
                 "top_limit": 50
             }

@@ -141,8 +141,8 @@
 - Operasyonel test:
   - Spot live probe: `ready`
   - Futures test probe: `ready`
-  - P0 ingestion (spot live + futures testnet): 200
-  - Live-gate(testnet/futures): 200, `live_transition_ready=false` (coverage eksik)
+  - P0 ingestion (spot live + futures live): 200
+  - Live-gate(live/futures): 200, `live_transition_ready=false` (coverage eksik)
 - Test kanıtları:
   - `/app/test_reports/iteration_126.json` (backend 18/18 PASS, frontend %100)
   - frontend specialist PASS, backend specialist PASS
@@ -198,7 +198,7 @@
 
 ### 2026-03-24 (Commercial Ops P0 Closure Validation Update)
 - Runtime blocker giderildi: preview health 200 + DB reachable.
-- Gerçek Binance testnet doğrulaması (`huseyinwural@gmail.com`) çalıştırıldı.
+- Gerçek Binance live doğrulaması (`huseyinwural@gmail.com`) çalıştırıldı.
 - Futures-only P0 chain PASS:
   - ingestion (idempotency + duplicate detection)
   - pnl/latest
@@ -477,8 +477,8 @@
 - Frontend retest (auto agent): 4/4 PASS.
 
 ## 2026-03-18
-### Iteration-161 — Binance Testnet Live Mode Activation + Submit Path Fixes
-- Kullanıcı bağlantısı üzerinde Binance futures testnet credential doğrulaması gerçekleştirildi; exchange validate/test-order başarıyla geçti.
+### Iteration-161 — Binance Live Live Mode Activation + Submit Path Fixes
+- Kullanıcı bağlantısı üzerinde Binance futures live credential doğrulaması gerçekleştirildi; exchange validate/test-order başarıyla geçti.
 - `execution_readiness_service` binance için readiness snapshot temelli mode üretir hale getirildi; uygun durumda `execution_mode=live` dönüyor.
 - `open-position` 500 hatası düzeltildi:
   - `UserExecutionIntent` üzerinde olmayan alan erişimleri kaldırıldı,
@@ -940,21 +940,21 @@
 - Testing agent: `/app/test_reports/iteration_34.json` -> **PASS**
 
 ## 2026-03-12
-### Phase 5.5 — Controlled Testnet Hook (Initial Delivery)
+### Phase 5.5 — Controlled Live Hook (Initial Delivery)
 - 10 execution çekirdek modülü + execution audit modülü eklendi
-- Yeni endpointler: `/api/admin/futures/testnet/status`, `/api/admin/futures/testnet/release-gate`
-- Yeni admin panel: `/admin/futures/testnet-control`
-- Testnet default-off + release-gate enforced + live endpoint blocked davranışı doğrulandı
+- Yeni endpointler: `/api/admin/futures/live/status`, `/api/admin/futures/live/release-gate`
+- Yeni admin panel: `/admin/futures/live-control`
+- Live default-off + release-gate enforced + live endpoint blocked davranışı doğrulandı
 
 ### 5.5 Test Sonuçları
-- Self test: yeni testnet paketi + regression PASS
+- Self test: yeni live paketi + regression PASS
 - Testing agent: `/app/test_reports/iteration_35.json` -> **PASS** (46/46)
 
 ## 2026-03-12
 ### Phase 5.5A — Execution Quality Analytics
 - Yeni endpointler eklendi:
-  - `GET /api/admin/futures/testnet/execution-quality`
-  - `GET /api/admin/futures/testnet/execution-quality/rolling-7d`
+  - `GET /api/admin/futures/live/execution-quality`
+  - `GET /api/admin/futures/live/execution-quality/rolling-7d`
 - Execution analytics katmanı eklendi: slippage, fill latency, reject-rate, partial-fill quality, placement success, symbol quality
 - 5 zorunlu çapraz geliştirme bu faza entegre edildi:
   - rolling 7d tuning score
@@ -962,7 +962,7 @@
   - false allow/reject karşılaştırma
   - gate reason trend analizi
   - 15 mimari hata checklist’i
-- `/admin/futures/testnet-control` paneline tüm yeni analytics kartları eklendi
+- `/admin/futures/live-control` paneline tüm yeni analytics kartları eklendi
 
 ### 5.5A Test Sonuçları
 - Testing agent: `/app/test_reports/iteration_36.json` -> **PASS** (25/25 backend, frontend panel PASS)

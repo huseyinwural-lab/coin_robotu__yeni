@@ -88,7 +88,7 @@ def main() -> int:
     ingest_target_user_email = _required_env("DAILY_SMOKE_INGEST_TARGET_USER_EMAIL")
     if ingest_admin_email.strip().lower() == admin_email.strip().lower():
         raise RuntimeError("invalid_smoke_config:ingest_admin_must_be_different_from_admin")
-    smoke_environment = str(os.environ.get("DAILY_SMOKE_ENVIRONMENT") or "testnet").strip().lower()
+    smoke_environment = str(os.environ.get("DAILY_SMOKE_ENVIRONMENT") or "live").strip().lower()
     market_types = [item.strip().lower() for item in str(os.environ.get("DAILY_SMOKE_MARKET_TYPES") or "futures").split(",") if item.strip()]
     if not market_types:
         market_types = ["futures"]

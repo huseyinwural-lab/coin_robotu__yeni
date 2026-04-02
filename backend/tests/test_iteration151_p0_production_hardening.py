@@ -538,8 +538,8 @@ class TestLiveHardGateReasonCode:
 class TestCredentialResolutionPreview:
     """Additional tests for credential resolution preview"""
 
-    def test_resolution_preview_testnet_works(self, auth_headers):
-        """Test that testnet credential resolution works"""
+    def test_resolution_preview_live_works(self, auth_headers):
+        """Test that live credential resolution works"""
         # Get a user ID
         users_response = requests.get(
             f"{BASE_URL}/api/auth/admin/user-approval-requests",
@@ -556,7 +556,7 @@ class TestCredentialResolutionPreview:
         
         user_id = users[0]["id"]
         
-        # Try testnet resolution
+        # Try live resolution
         response = requests.get(
             f"{BASE_URL}/api/venues/admin/credential-resolution-preview",
             headers=auth_headers,
@@ -564,7 +564,7 @@ class TestCredentialResolutionPreview:
                 "user_id": user_id,
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "purpose": "execution"
             },
             timeout=30
@@ -577,10 +577,10 @@ class TestCredentialResolutionPreview:
             data = response.json()
             assert "source" in data, "Missing source field"
             assert "audit_metadata" in data, "Missing audit_metadata"
-            print(f"Testnet resolution: source={data['source']}")
+            print(f"Live resolution: source={data['source']}")
         else:
             data = response.json()
-            print(f"Testnet resolution blocked: {data.get('detail')}")
+            print(f"Live resolution blocked: {data.get('detail')}")
 
 
 class TestCredentialAssignmentRules:
@@ -606,7 +606,7 @@ class TestCredentialAssignmentRules:
             json={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "tenant_id": None,
                 "user_id": None,
                 "preferred_source": "user",

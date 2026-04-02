@@ -11,7 +11,7 @@ from services.artifact_service import write_signed_artifact
 from services.pipeline.position_sizing_engine import compute_position_sizing
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
-BINANCE_FUTURES_TESTNET_REST = "https://testnet.binancefuture.com"
+BINANCE_FUTURES_LIVE_REST = "https://fapi.binance.com"
 SUPPORTED_INTERVALS = {"1m", "5m", "15m", "1h"}
 
 
@@ -21,12 +21,12 @@ def _fetch_futures_klines(symbol: str, timeframe: str, limit: int) -> list[dict]
 
     try:
         response = httpx.get(
-            f"{BINANCE_FUTURES_TESTNET_REST}/fapi/v1/klines",
+            f"{BINANCE_FUTURES_LIVE_REST}/fapi/v1/klines",
             params={"symbol": symbol.upper(), "interval": timeframe, "limit": limit},
             timeout=12,
         )
     except httpx.HTTPError as exc:
-        raise ValueError("testnet_unreachable") from exc
+        raise ValueError("live_unreachable") from exc
 
     if response.status_code >= 400:
         raise ValueError("exchange_rejected")

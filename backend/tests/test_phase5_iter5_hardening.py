@@ -113,7 +113,7 @@ class TestReplayRiskAuditFeed:
                 "timeframe": "15m",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "limit": 150,
             },
             timeout=80,

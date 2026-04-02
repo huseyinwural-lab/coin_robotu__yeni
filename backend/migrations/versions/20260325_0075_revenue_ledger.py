@@ -32,7 +32,7 @@ def upgrade() -> None:
         sa.Column("trade_id", sa.String(), sa.ForeignKey("commercial_trades.id"), nullable=False),
         sa.Column("exchange", sa.String(length=30), nullable=False, server_default="binance"),
         sa.Column("market_type", sa.String(length=20), nullable=False, server_default="spot"),
-        sa.Column("environment", sa.String(length=20), nullable=False, server_default="testnet"),
+        sa.Column("environment", sa.String(length=20), nullable=False, server_default="live"),
         sa.Column("symbol", sa.String(length=30), nullable=False, server_default=""),
         sa.Column("trade_time", sa.DateTime(timezone=True), nullable=False),
         sa.Column("component_type", sa.String(length=30), nullable=False, server_default="fee"),

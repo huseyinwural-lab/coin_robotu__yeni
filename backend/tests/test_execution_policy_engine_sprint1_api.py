@@ -121,7 +121,7 @@ class TestExecutionPolicyEngineSprint1API:
             "position_size_value": 100.0,
             "execution_mode": "manual",
             "strategy_binding": "trend_following",
-            "environment": "testnet",
+            "environment": "live",
         }
         
         resp = client.post(
@@ -168,7 +168,7 @@ class TestExecutionPolicyEngineSprint1API:
             "position_size_value": 50.0,
             "execution_mode": "manual",
             "strategy_binding": f"nonexistent_strategy_{uuid.uuid4().hex[:6]}",
-            "environment": "testnet",
+            "environment": "live",
         }
         
         resp = client.post(
@@ -181,7 +181,7 @@ class TestExecutionPolicyEngineSprint1API:
         
         if resp.status_code == 200:
             data = resp.json()
-            # In testnet with missing strategy, should be soft-allowed (PREVIEWED)
+            # In live with missing strategy, should be soft-allowed (PREVIEWED)
             # Check standardized_reject for STRATEGY_POLICY_MISSING
             standardized_reject = data.get("standardized_reject") or {}
             
@@ -193,7 +193,7 @@ class TestExecutionPolicyEngineSprint1API:
             assert data.get("intent_status") in ["PREVIEWED", "REJECTED"], \
                 f"Unexpected intent_status: {data.get('intent_status')}"
             
-            print(f"PASS: Missing strategy in testnet - intent_status={data.get('intent_status')}")
+            print(f"PASS: Missing strategy in live - intent_status={data.get('intent_status')}")
         else:
             print("PASS: Preview returned 409 (duplicate intent)")
 
@@ -264,7 +264,7 @@ class TestExecutionPolicyEngineSprint1API:
             "position_size_value": 100.0,
             "execution_mode": "manual",
             "strategy_binding": "trend_following",
-            "environment": "testnet",
+            "environment": "live",
         }
         
         preview_resp = client.post(
@@ -386,7 +386,7 @@ class TestExecutionPolicyEngineSprint1API:
             "position_size_value": 100.0,
             "execution_mode": "manual",
             "strategy_binding": f"shadow_test_strategy_{uuid.uuid4().hex[:6]}",
-            "environment": "testnet",
+            "environment": "live",
         }
         
         resp = client.post(
@@ -435,7 +435,7 @@ class TestExecutionPolicyEngineSprint1API:
             "position_size_value": 100.0,
             "execution_mode": "manual",
             "strategy_binding": f"reject_test_{uuid.uuid4().hex[:6]}",
-            "environment": "testnet",
+            "environment": "live",
         }
         
         resp = client.post(

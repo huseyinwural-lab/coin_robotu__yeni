@@ -9,7 +9,7 @@ from core.exchanges.sim_adapter import SimExecutionAdapter
 def test_adapter_default_is_sim():
     os.environ["EXECUTION_MODE"] = "sim"
     os.environ["LIVE_TRADING_ENABLED"] = "false"
-    os.environ["TESTNET_TRADING_ENABLED"] = "false"
+    os.environ["LIVE_TRADING_ENABLED"] = "false"
     adapter = get_execution_adapter()
     assert isinstance(adapter, SimExecutionAdapter)
 

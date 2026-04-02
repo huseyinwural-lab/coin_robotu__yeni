@@ -16,13 +16,12 @@ DEFAULT_LATENCY_THRESHOLDS = {
     "execution_latency_ms": 1600,
 }
 
-CANONICAL_MODES = {"LIVE", "TESTNET", "SIM"}
+CANONICAL_MODES = {"LIVE", "SIM"}
 LEGACY_MODE_ALIASES = {"PAPER", "MOCK"}
 MODE_ALIAS_MAP = {
     "LIVE": "LIVE",
-    "TESTNET": "TESTNET",
     "SIM": "SIM",
-    "PAPER": "TESTNET",
+    "PAPER": "LIVE",
     "MOCK": "SIM",
 }
 
@@ -53,7 +52,7 @@ def get_execution_mode(db: Session, cache) -> str:
     if config and bool(config.live_mode_enabled) and not bool(config.safe_mode_enabled):
         return "LIVE"
     if config and bool(config.safe_mode_enabled):
-        return "TESTNET"
+        return "SIM"
     return "SIM"
 
 
@@ -95,8 +94,8 @@ def infer_requested_execution_mode(intent: UserExecutionIntent) -> str:
         return "SIM"
 
     market_type = str(intent.market_type or "").lower()
-    if "paper" in market_type or "sim" in market_type or "testnet" in market_type:
-        return "TESTNET"
+    if "paper" in market_type or "sim" in market_type or "live" in market_type:
+        return "LIVE"
 
     return "LIVE"
 

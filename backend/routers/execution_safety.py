@@ -29,11 +29,11 @@ from services.execution_safety_advanced_service import (
     get_artifact_by_intent,
     get_intent_reconcile,
     get_intent_timeline,
-    get_latest_testnet_acceptance,
+    get_latest_live_acceptance,
     get_quarantine_detail,
-    get_testnet_acceptance_history,
+    get_live_acceptance_history,
     run_bulk_recovery,
-    run_testnet_acceptance,
+    run_live_acceptance,
 )
 from services.execution_safety_p1_service import (
     analytics_blockers,
@@ -555,31 +555,31 @@ def execution_safety_recovery_action(
         raise HTTPException(status_code=status_code, detail=detail) from exc
 
 
-@router.post("/acceptance/testnet/run")
+@router.post("/acceptance/live/run")
 def execution_safety_acceptance_run(
     symbol: str = Query(default="BTCUSDT"),
     qty: float = Query(default=0.001),
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    return run_testnet_acceptance(db, symbol=symbol, qty=qty, requested_by=current_user.id)
+    return run_live_acceptance(db, symbol=symbol, qty=qty, requested_by=current_user.id)
 
 
-@router.get("/acceptance/testnet/latest")
+@router.get("/acceptance/live/latest")
 def execution_safety_acceptance_latest(
     current_user: User = Depends(require_admin),
 ):
     _ = current_user
-    return get_latest_testnet_acceptance()
+    return get_latest_live_acceptance()
 
 
-@router.get("/acceptance/testnet/history")
+@router.get("/acceptance/live/history")
 def execution_safety_acceptance_history(
     limit: int = Query(default=50, ge=1, le=500),
     current_user: User = Depends(require_admin),
 ):
     _ = current_user
-    return get_testnet_acceptance_history(limit=limit)
+    return get_live_acceptance_history(limit=limit)
 
 
 @router.get("/observability")

@@ -86,19 +86,19 @@ class UserEconomicsBackendTest:
                 data = response.json()
                 self.log_result("User Economics Live", "PASS", f"HTTP 200, status: {data.get('status')}")
                 
-                # Test testnet environment
-                response_testnet = requests.get(
-                    f"{self.base_url}/api/admin/users/economics?environment=testnet",
+                # Test live environment
+                response_live = requests.get(
+                    f"{self.base_url}/api/admin/users/economics?environment=live",
                     headers=self.get_headers(),
                     timeout=30
                 )
                 
-                if response_testnet.status_code == 200:
-                    data_testnet = response_testnet.json()
-                    self.log_result("User Economics Testnet", "PASS", f"HTTP 200, status: {data_testnet.get('status')}")
+                if response_live.status_code == 200:
+                    data_live = response_live.json()
+                    self.log_result("User Economics Live", "PASS", f"HTTP 200, status: {data_live.get('status')}")
                     return True
                 else:
-                    self.log_result("User Economics Testnet", "FAIL", f"HTTP {response_testnet.status_code}")
+                    self.log_result("User Economics Live", "FAIL", f"HTTP {response_live.status_code}")
                     return False
             else:
                 self.log_result("User Economics Live", "FAIL", f"HTTP {response.status_code}: {response.text}")
@@ -112,7 +112,7 @@ class UserEconomicsBackendTest:
         """Test 2: Verify KPI fields are populated"""
         try:
             response = requests.get(
-                f"{self.base_url}/api/admin/users/economics?environment=testnet",
+                f"{self.base_url}/api/admin/users/economics?environment=live",
                 headers=self.get_headers(),
                 timeout=30
             )
@@ -174,7 +174,7 @@ class UserEconomicsBackendTest:
             end_date = datetime.now().isoformat()
             
             response = requests.get(
-                f"{base_url_economics}?environment=testnet&start_date={start_date}&end_date={end_date}",
+                f"{base_url_economics}?environment=live&start_date={start_date}&end_date={end_date}",
                 headers=headers,
                 timeout=30
             )
@@ -197,7 +197,7 @@ class UserEconomicsBackendTest:
                 test_email = data["rows"][0].get("email")
                 if test_email:
                     response = requests.get(
-                        f"{base_url_economics}?environment=testnet&user_email={test_email}",
+                        f"{base_url_economics}?environment=live&user_email={test_email}",
                         headers=headers,
                         timeout=30
                     )
@@ -215,7 +215,7 @@ class UserEconomicsBackendTest:
             
             # Test symbol filter
             response = requests.get(
-                f"{base_url_economics}?environment=testnet&symbol=BTCUSDT",
+                f"{base_url_economics}?environment=live&symbol=BTCUSDT",
                 headers=headers,
                 timeout=30
             )
@@ -233,7 +233,7 @@ class UserEconomicsBackendTest:
             
             # Test cohort_month filter
             response = requests.get(
-                f"{base_url_economics}?environment=testnet&cohort_month=2024-01",
+                f"{base_url_economics}?environment=live&cohort_month=2024-01",
                 headers=headers,
                 timeout=30
             )
@@ -251,7 +251,7 @@ class UserEconomicsBackendTest:
             
             # Test churn_inactive_days filter
             response = requests.get(
-                f"{base_url_economics}?environment=testnet&churn_inactive_days=60",
+                f"{base_url_economics}?environment=live&churn_inactive_days=60",
                 headers=headers,
                 timeout=30
             )
@@ -275,7 +275,7 @@ class UserEconomicsBackendTest:
     def test_deterministic_behavior(self) -> bool:
         """Test 4: Verify deterministic behavior"""
         try:
-            url = f"{self.base_url}/api/admin/users/economics?environment=testnet"
+            url = f"{self.base_url}/api/admin/users/economics?environment=live"
             headers = self.get_headers()
             
             # Make two identical requests
@@ -314,7 +314,7 @@ class UserEconomicsBackendTest:
         """Test 5: Behavioral validation of data sources"""
         try:
             response = requests.get(
-                f"{self.base_url}/api/admin/users/economics?environment=testnet",
+                f"{self.base_url}/api/admin/users/economics?environment=live",
                 headers=self.get_headers(),
                 timeout=30
             )
@@ -378,7 +378,7 @@ class UserEconomicsBackendTest:
                     headers=headers,
                     json={
                         "target_user_email": "test@example.com",
-                        "environment": "testnet",
+                        "environment": "live",
                         "market_types": ["futures"],
                         "limit_per_symbol": 10
                     },
@@ -394,7 +394,7 @@ class UserEconomicsBackendTest:
             # Test /api/admin/commercial/p0/pnl/latest
             try:
                 response = requests.get(
-                    f"{self.base_url}/api/admin/commercial/p0/pnl/latest?environment=testnet&target_user_email=test@example.com",
+                    f"{self.base_url}/api/admin/commercial/p0/pnl/latest?environment=live&target_user_email=test@example.com",
                     headers=headers,
                     timeout=30
                 )
@@ -412,7 +412,7 @@ class UserEconomicsBackendTest:
                     headers=headers,
                     json={
                         "target_user_email": "test@example.com",
-                        "environment": "testnet",
+                        "environment": "live",
                         "market_types": ["futures"],
                         "drift_tolerance_pct": 0.1
                     },
@@ -428,7 +428,7 @@ class UserEconomicsBackendTest:
             # Test /api/admin/commercial/p0/data-quality
             try:
                 response = requests.get(
-                    f"{self.base_url}/api/admin/commercial/p0/data-quality?environment=testnet&target_user_email=test@example.com",
+                    f"{self.base_url}/api/admin/commercial/p0/data-quality?environment=live&target_user_email=test@example.com",
                     headers=headers,
                     timeout=30
                 )
@@ -442,7 +442,7 @@ class UserEconomicsBackendTest:
             # Test /api/admin/commercial/p0/live-gate
             try:
                 response = requests.get(
-                    f"{self.base_url}/api/admin/commercial/p0/live-gate?environment=testnet&target_user_email=test@example.com",
+                    f"{self.base_url}/api/admin/commercial/p0/live-gate?environment=live&target_user_email=test@example.com",
                     headers=headers,
                     timeout=30
                 )

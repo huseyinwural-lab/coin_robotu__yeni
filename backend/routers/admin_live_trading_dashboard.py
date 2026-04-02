@@ -37,7 +37,6 @@ OPS_ALLOWED_ALERT_ACTIONS = {"resolve", "mute", "fix_action"}
 
 MODE_SWITCH_PHRASE = {
     "LIVE": "SWITCH TO LIVE",
-    "TESTNET": "SWITCH TO TESTNET",
     "SIM": "SWITCH TO SIM",
     "PAPER": "SWITCH TO PAPER",
     "MOCK": "SWITCH TO MOCK",
@@ -63,7 +62,7 @@ SCANNER_UNIVERSE_PHRASE = "UPDATE SYMBOL UNIVERSE"
 
 
 class ExecutionModeSwitchRequest(BaseModel):
-    mode: str = Field(pattern="^(LIVE|TESTNET|SIM|PAPER|MOCK)$")
+    mode: str = Field(pattern="^(LIVE|SIM|PAPER|MOCK)$")
     reason: str = Field(min_length=5, max_length=300)
     confirmation_phrase: str = Field(min_length=5, max_length=80)
 

@@ -324,7 +324,7 @@ class TestExecuteContext:
             headers=user_headers, params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet"
+                "environment": "live"
             })
         assert response.status_code == 200
         data = response.json()

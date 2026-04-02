@@ -370,7 +370,7 @@ class TestUserReadinessChecklist:
             "has_api_secret",
             "validation_success",
             "can_trade",
-            "is_testnet_environment",
+            "is_live_environment",
             "is_validation_stale",
             "validation_timestamp",
             "stale_after_minutes",
@@ -416,7 +416,7 @@ class TestTestOrderBlocking:
             headers=user_headers,
             json={
                 "exchange": "binance",
-                "mode": "testnet",
+                "mode": "live",
                 "api_key": "",
                 "api_secret": "",
             },

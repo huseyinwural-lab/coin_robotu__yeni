@@ -110,20 +110,20 @@ def test_execution_safety_artifact_missing_intent(client, auth_headers):
 
 def test_execution_safety_policy_roundtrip(client, auth_headers):
     update = client.post(
-        "/api/execution-safety/recovery/policy/testnet?enable_flag=true&validation_status=VALIDATED&path_open=true",
+        "/api/execution-safety/recovery/policy/live?enable_flag=true&validation_status=VALIDATED&path_open=true",
         headers=auth_headers,
     )
     assert update.status_code == 200
     payload = update.json()
-    assert payload.get("environments", {}).get("testnet", {}).get("validation_status") == "VALIDATED"
+    assert payload.get("environments", {}).get("live", {}).get("validation_status") == "VALIDATED"
 
 
 def test_execution_safety_acceptance_endpoints(client, auth_headers):
-    latest = client.get("/api/execution-safety/acceptance/testnet/latest", headers=auth_headers)
+    latest = client.get("/api/execution-safety/acceptance/live/latest", headers=auth_headers)
     assert latest.status_code == 200
-    history = client.get("/api/execution-safety/acceptance/testnet/history?limit=5", headers=auth_headers)
+    history = client.get("/api/execution-safety/acceptance/live/history?limit=5", headers=auth_headers)
     assert history.status_code == 200
-    run = client.post("/api/execution-safety/acceptance/testnet/run?symbol=BTCUSDT&qty=0.001", headers=auth_headers)
+    run = client.post("/api/execution-safety/acceptance/live/run?symbol=BTCUSDT&qty=0.001", headers=auth_headers)
     assert run.status_code == 200
 
 

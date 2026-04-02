@@ -24,7 +24,7 @@ from services.secret_provider_service import (
 ALLOWED_SCOPE_TYPES = {"global", "tenant", "group"}
 ALLOWED_EXCHANGES = {"binance", "bybit", "okx"}
 ALLOWED_MARKETS = {"spot", "futures", "usdt_perp", "coin_perp"}
-ALLOWED_ENVS = {"testnet", "live"}
+ALLOWED_ENVS = {"live", "live"}
 ALLOWED_PURPOSES = {"market_data", "execution", "fallback", "execution_fallback", "ops_probe"}
 ALLOWED_SOURCES = {"user", "admin", "admin_fallback"}
 PROBE_STATUS = {
@@ -166,9 +166,9 @@ def _base_url_environment_mismatch(*, environment: str, base_url: str | None) ->
     env = _norm(environment)
     if not url:
         return False
-    if env == "live" and "testnet" in url:
+    if env == "live" and "live" in url:
         return True
-    if env == "testnet" and "testnet" not in url and any(part in url for part in ["binance.com", "bybit.com", "okx.com"]):
+    if env == "live" and "live" not in url and any(part in url for part in ["binance.com", "bybit.com", "okx.com"]):
         return True
     return False
 
@@ -182,15 +182,15 @@ def _proxy_headers_for_probe(*, exchange: str, market_type: str, environment: st
     if normalized_exchange == "binance":
         if normalized_market == "spot":
             token = (
-                os.environ.get("BINANCE_SPOT_TESTNET_PROXY_TOKEN")
-                if normalized_env == "testnet"
+                os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
+                if normalized_env == "live"
                 else os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
             )
             token = token or os.environ.get("BINANCE_SPOT_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
         else:
             token = (
-                os.environ.get("BINANCE_FUTURES_TESTNET_PROXY_TOKEN")
-                if normalized_env == "testnet"
+                os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
+                if normalized_env == "live"
                 else os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
             )
             token = token or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
@@ -206,17 +206,17 @@ def _proxy_headers_for_probe(*, exchange: str, market_type: str, environment: st
 
 def _default_spot_base(exchange: str, environment: str) -> str:
     if exchange == "binance":
-        return "https://testnet.binance.vision" if environment == "testnet" else "https://api.binance.com"
+        return "https://api.binance.com" if environment == "live" else "https://api.binance.com"
     if exchange == "bybit":
-        return "https://api-testnet.bybit.com" if environment == "testnet" else "https://api.bybit.com"
+        return "https://api-live.bybit.com" if environment == "live" else "https://api.bybit.com"
     return "https://www.okx.com"
 
 
 def _default_futures_base(exchange: str, environment: str) -> str:
     if exchange == "binance":
-        return "https://testnet.binancefuture.com" if environment == "testnet" else "https://fapi.binance.com"
+        return "https://fapi.binance.com" if environment == "live" else "https://fapi.binance.com"
     if exchange == "bybit":
-        return "https://api-testnet.bybit.com" if environment == "testnet" else "https://api.bybit.com"
+        return "https://api-live.bybit.com" if environment == "live" else "https://api.bybit.com"
     return "https://www.okx.com"
 
 
@@ -284,7 +284,7 @@ def _spot_probe(*, base_url: str, api_key: str, api_secret: str, extra_headers: 
         return "invalid_key", "spot_invalid_key", {"status": status, "code": code, "message": msg}
     if "permission" in msg:
         return "permission_restricted", "spot_permission_restricted", {"status": status, "code": code, "message": msg}
-    if "testnet" in msg or "live" in msg:
+    if "live" in msg or "live" in msg:
         return "env_mismatch", "spot_environment_mismatch", {"status": status, "code": code, "message": msg}
     return "unreachable", "spot_probe_failed", {"status": status, "code": code, "message": msg}
 
@@ -322,7 +322,7 @@ def _futures_probe(*, base_url: str, api_key: str, api_secret: str, extra_header
         return "invalid_key", "futures_invalid_key", {"status": status, "code": code, "message": msg}
     if "permission" in msg:
         return "permission_restricted", "futures_permission_restricted", {"status": status, "code": code, "message": msg}
-    if "testnet" in msg or "live" in msg:
+    if "live" in msg or "live" in msg:
         return "env_mismatch", "futures_environment_mismatch", {"status": status, "code": code, "message": msg}
     return "unreachable", "futures_probe_failed", {"status": status, "code": code, "message": msg}
 
@@ -1097,7 +1097,7 @@ def resolve_exchange_credentials(
 
     if _is_execution_purpose(normalized_purpose):
         env_lock = _norm(os.environ.get("VENUE_ENV_LOCK"))
-        if env_lock in {"testnet", "live"} and normalized_env != env_lock:
+        if env_lock in {"live", "live"} and normalized_env != env_lock:
             raise ValueError("environment_lock_blocked")
 
         if normalized_env == "live":

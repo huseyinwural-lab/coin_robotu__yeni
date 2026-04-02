@@ -117,7 +117,7 @@ class TestUserExchangeConnectionsCRUD:
             "account_label": f"test_conn_{os.urandom(4).hex()}",
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "is_default": False,
         }
         response = self.session.post(
@@ -130,7 +130,7 @@ class TestUserExchangeConnectionsCRUD:
         assert data["account_label"] == payload["account_label"]
         assert data["exchange"] == "binance"
         assert data["market_type"] == "spot"
-        assert data["environment"] == "testnet"
+        assert data["environment"] == "live"
         print(f"test_create_exchange_connection: PASS - created {data['id']}")
 
     def test_create_duplicate_label_fails(self):
@@ -141,7 +141,7 @@ class TestUserExchangeConnectionsCRUD:
             "account_label": label,
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         # Create first
         response1 = self.session.post(
@@ -167,7 +167,7 @@ class TestUserExchangeConnectionsCRUD:
             "account_label": f"update_test_{os.urandom(4).hex()}",
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         create_response = self.session.post(
             f"{BASE_URL}/api/user/exchange-connections",
@@ -195,7 +195,7 @@ class TestUserExchangeConnectionsCRUD:
             "account_label": f"default_test_{os.urandom(4).hex()}",
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "is_default": False,
         }
         create_response = self.session.post(
@@ -222,7 +222,7 @@ class TestUserExchangeConnectionsCRUD:
             "account_label": f"delete_test_{os.urandom(4).hex()}",
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
         }
         create_response = self.session.post(
             f"{BASE_URL}/api/user/exchange-connections",
@@ -274,7 +274,7 @@ class TestLegacySync:
             "account_label": f"legacy_sync_{os.urandom(4).hex()}",
             "exchange": "binance",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "is_default": True,
         }
         create_response = self.session.post(
@@ -316,7 +316,7 @@ class TestExecutionPreviewVenueContext:
         self.session.headers.update({"Authorization": f"Bearer {token}"})
 
     def _ensure_venue_assignment(self):
-        """Ensure user has venue assignment for binance spot testnet"""
+        """Ensure user has venue assignment for binance spot live"""
         # Login as admin
         admin_login = self.session.post(
             f"{BASE_URL}/api/auth/login",
@@ -352,7 +352,7 @@ class TestExecutionPreviewVenueContext:
             "exchange_code": "binance",
             "spot_allowed": True,
             "futures_allowed": True,
-            "testnet_allowed": True,
+            "live_allowed": True,
             "live_allowed": False,
         }
         admin_session.post(f"{BASE_URL}/api/admin/venues/assignments", json=venue_payload)
@@ -371,7 +371,7 @@ class TestExecutionPreviewVenueContext:
             "position_size_mode": "fixed_notional",
             "position_size_value": 25,
             "exchange": "binance",
-            "environment": "testnet",
+            "environment": "live",
         }
 
         response = self.session.post(

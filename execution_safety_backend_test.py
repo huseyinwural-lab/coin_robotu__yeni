@@ -395,7 +395,7 @@ class ExecutionSafetyTester:
         
         # Test policy POST endpoint for specific environment
         try:
-            url = f"{self.base_url}/api/execution-safety/recovery/policy/testnet"
+            url = f"{self.base_url}/api/execution-safety/recovery/policy/live"
             params = {
                 "enable_flag": True,
                 "validation_status": "VALIDATED",
@@ -408,7 +408,7 @@ class ExecutionSafetyTester:
                 data = response.json()
                 results["policy_post"] = {
                     "status": "success",
-                    "updated_environment": "testnet",
+                    "updated_environment": "live",
                     "has_environments": "environments" in data
                 }
             else:

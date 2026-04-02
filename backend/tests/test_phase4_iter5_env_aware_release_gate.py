@@ -165,7 +165,7 @@ class TestPhase4Iter5ReadinessAndEvidence:
             "has_api_secret",
             "validation_success",
             "can_trade",
-            "is_testnet_environment",
+            "is_live_environment",
             "is_validation_stale",
             "validation_timestamp",
             "validation_snapshot_id",
@@ -188,7 +188,7 @@ class TestPhase4Iter5ReadinessAndEvidence:
                 "invalid_key",
                 "permission_denied",
                 "ip_restricted",
-                "testnet_unreachable",
+                "live_unreachable",
                 "stale_validation",
                 "exchange_rejected",
                 "insufficient_balance",
@@ -370,7 +370,7 @@ class TestPhase4Iter5UserExchangeEndpoints:
 
     def test_exchange_validate_endpoint(self):
         """GET /api/exchange/validate returns validation result"""
-        response = self.session.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=testnet")
+        response = self.session.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=live")
         # May return error if no valid credentials
         assert response.status_code in [200, 400, 403, 503]
         data = response.json()

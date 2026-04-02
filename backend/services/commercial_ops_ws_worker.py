@@ -319,7 +319,7 @@ def stop_ws_worker(*, target_user_id: str, environment: str, market_types: list[
 
 
 def ws_worker_status(*, target_user_id: str | None, environment: str | None) -> dict:
-    env = _normalize_environment(environment or "testnet") if environment else None
+    env = _normalize_environment(environment or "live") if environment else None
     payload = []
     for key, worker in _WS_WORKERS.items():
         if target_user_id and worker.user_id != target_user_id:

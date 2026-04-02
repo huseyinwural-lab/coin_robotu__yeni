@@ -456,16 +456,16 @@ export const AdminDashboardPage = () => {
     }
   }, [loadDashboard]);
 
-  const runTestnetLifecycleValidation = useCallback(async () => {
+  const runLiveLifecycleValidation = useCallback(async () => {
     setRuntimeValidationLoading(true);
     try {
-      const { data } = await apiClient.post("/runtime/exchange/testnet-lifecycle/run", { symbol: "BTCUSDT", size: 0.0001 });
+      const { data } = await apiClient.post("/runtime/exchange/live-lifecycle/run", { symbol: "BTCUSDT", size: 0.0001 });
       setRuntimeCanaryRunResult(data?.result || null);
-      toast.success("Testnet lifecycle doğrulaması PASS");
+      toast.success("Live lifecycle doğrulaması PASS");
       await loadDashboard();
     } catch (error) {
       const detail = error?.response?.data?.detail;
-      const message = typeof detail === "string" ? detail : (detail?.status ? JSON.stringify(detail) : "Testnet lifecycle doğrulaması başarısız");
+      const message = typeof detail === "string" ? detail : (detail?.status ? JSON.stringify(detail) : "Live lifecycle doğrulaması başarısız");
       toast.error(message);
     } finally {
       setRuntimeValidationLoading(false);
@@ -1055,8 +1055,8 @@ export const AdminDashboardPage = () => {
           </div>
 
           <div className="mt-2 flex flex-wrap gap-2" data-testid="admin-dashboard-runtime-readiness-actions">
-            <Button size="sm" variant="outline" onClick={runTestnetLifecycleValidation} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-testnet-lifecycle-button">
-              Testnet Lifecycle Run
+            <Button size="sm" variant="outline" onClick={runLiveLifecycleValidation} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-live-lifecycle-button">
+              Live Lifecycle Run
             </Button>
             <Button size="sm" variant="outline" onClick={runCanaryValidation} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-canary-button">
               Canary Run

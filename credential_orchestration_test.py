@@ -145,8 +145,8 @@ class CredentialOrchestrationTester:
             },
             {
                 "name": "environment_filter",
-                "params": {"environment": "testnet"},
-                "description": "Filter by environment=testnet"
+                "params": {"environment": "live"},
+                "description": "Filter by environment=live"
             },
             {
                 "name": "combined_filters",
@@ -154,7 +154,7 @@ class CredentialOrchestrationTester:
                     "exchange": "binance",
                     "market_type": "spot",
                     "purpose": "market_data",
-                    "environment": "testnet"
+                    "environment": "live"
                 },
                 "description": "Combined filters"
             }
@@ -234,7 +234,7 @@ class CredentialOrchestrationTester:
                     "exchange": "binance",
                     "market_type": "spot",
                     "purpose": "execution",
-                    "environment": "testnet",
+                    "environment": "live",
                     "api_key": f"test_key_{uuid.uuid4().hex[:8]}",
                     "api_secret": f"test_secret_{uuid.uuid4().hex[:8]}",
                     "description": "Test Binance Spot Execution"
@@ -246,7 +246,7 @@ class CredentialOrchestrationTester:
                     "exchange": "bybit",
                     "market_type": "usdt_perp",
                     "purpose": "market_data",
-                    "environment": "testnet",
+                    "environment": "live",
                     "api_key": f"test_key_{uuid.uuid4().hex[:8]}",
                     "api_secret": f"test_secret_{uuid.uuid4().hex[:8]}",
                     "description": "Test Bybit USDT Perp Market Data"
@@ -258,7 +258,7 @@ class CredentialOrchestrationTester:
                     "exchange": "okx",
                     "market_type": "coin_perp",
                     "purpose": "fallback",
-                    "environment": "testnet",
+                    "environment": "live",
                     "api_key": f"test_key_{uuid.uuid4().hex[:8]}",
                     "api_secret": f"test_secret_{uuid.uuid4().hex[:8]}",
                     "description": "Test OKX Coin Perp Fallback"
@@ -449,7 +449,7 @@ class CredentialOrchestrationTester:
                     {
                         "exchange": "binance",
                         "market_type": "spot",
-                        "environment": "testnet",
+                        "environment": "live",
                         "preferred_source": "user",
                         "fallback_enabled": True
                     }
@@ -514,7 +514,7 @@ class CredentialOrchestrationTester:
                     "exchange": "binance",
                     "market_type": "spot",
                     "purpose": "execution",
-                    "environment": "testnet"
+                    "environment": "live"
                 }
             },
             {
@@ -524,7 +524,7 @@ class CredentialOrchestrationTester:
                     "exchange": "binance",
                     "market_type": "spot",
                     "purpose": "fallback",
-                    "environment": "testnet"
+                    "environment": "live"
                 }
             },
             {
@@ -534,7 +534,7 @@ class CredentialOrchestrationTester:
                     "exchange": "bybit",
                     "market_type": "usdt_perp",
                     "purpose": "market_data",
-                    "environment": "testnet"
+                    "environment": "live"
                 }
             }
         ]

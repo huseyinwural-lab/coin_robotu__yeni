@@ -113,10 +113,10 @@ def exchange_test_order(
             "missing_trade_permission": "permission_denied",
             "ip_restriction": "ip_restricted",
             "insufficient_balance": "insufficient_balance",
-            "exchange_unreachable": "testnet_unreachable",
+            "exchange_unreachable": "live_unreachable",
             "stale_validation_snapshot": "stale_validation",
             "release_gate_forced_block": "exchange_rejected",
-            "exchange_health_degraded": "testnet_unreachable",
+            "exchange_health_degraded": "live_unreachable",
             "settings_mismatch": "stale_validation",
         }
         failure_code = reason_map.get(
@@ -136,7 +136,7 @@ def exchange_test_order(
                 "market_type": readiness.get("market_type"),
                 "environment": readiness.get("environment"),
                 "symbol": symbol,
-                "message": f"Binance Testnet API key ve secret doğrulanmadan gerçek test-order çalıştırılamaz. ({reason_message})",
+                "message": f"Binance Live API key ve secret doğrulanmadan gerçek test-order çalıştırılamaz. ({reason_message})",
             },
         )
 
@@ -146,7 +146,7 @@ def exchange_test_order(
             current_user,
             exchange=readiness.get("exchange") or "binance",
             market_type=readiness.get("market_type") or "futures",
-            environment=readiness.get("environment") or "testnet",
+            environment=readiness.get("environment") or "live",
             symbol=symbol,
             leverage=leverage,
             margin_mode=margin_mode,
@@ -160,7 +160,7 @@ def exchange_test_order(
             "ip_restricted",
             "insufficient_balance",
             "exchange_rejected",
-            "testnet_unreachable",
+            "live_unreachable",
             "stale_validation",
             "unknown_exchange_error",
             "invalid_test_order_quantity",
@@ -367,7 +367,7 @@ def run_lifecycle_proof_pipeline(
 ):
     exchange = "binance"
     market_type = "futures"
-    environment = "testnet"
+    environment = "live"
     timestamp = datetime.now(timezone.utc)
     proof_id = f"{current_user.id}_{timestamp.strftime('%Y%m%d%H%M%S')}"
 
@@ -474,7 +474,7 @@ def run_lifecycle_proof_pipeline(
             exchange_evidence_file=str(exchange_artifact["path"]),
             fallback_replay_evidence_file=None,
             replay_run_id=None,
-            message="Gerçek Binance Futures Testnet lifecycle proof tamamlandı",
+            message="Gerçek Binance Futures Live lifecycle proof tamamlandı",
             generated_at=timestamp,
         )
 

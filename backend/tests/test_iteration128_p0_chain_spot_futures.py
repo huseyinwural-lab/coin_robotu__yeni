@@ -100,7 +100,7 @@ class TestP0PnlLatestMarketTypes:
             f"{BASE_URL}/api/admin/commercial/p0/pnl/latest",
             params={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["futures"]
             },
             headers=admin_headers,
@@ -120,7 +120,7 @@ class TestP0PnlLatestMarketTypes:
             f"{BASE_URL}/api/admin/commercial/p0/pnl/latest",
             params={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["spot", "futures"]
             },
             headers=admin_headers,
@@ -162,7 +162,7 @@ class TestP0DataQualityMarketTypes:
             f"{BASE_URL}/api/admin/commercial/p0/data-quality",
             params={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "required_market_types": ["futures"]
             },
             headers=admin_headers,
@@ -204,13 +204,13 @@ class TestP0LiveGateRegressionFix:
             assert "live_transition_ready" in data
             print(f"Live-gate spot-only data: {data}")
     
-    def test_live_gate_futures_testnet(self, admin_headers, test_user_id):
-        """Test live-gate with futures testnet should return calculation"""
+    def test_live_gate_futures_live(self, admin_headers, test_user_id):
+        """Test live-gate with futures live should return calculation"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/live-gate",
             params={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "required_market_types": ["futures"]
             },
             headers=admin_headers,
@@ -218,14 +218,14 @@ class TestP0LiveGateRegressionFix:
         )
         # Should not return 500
         assert response.status_code != 500, f"Unexpected 500 error: {response.text}"
-        print(f"Live-gate futures testnet response: {response.status_code}")
+        print(f"Live-gate futures live response: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
             assert "status" in data
             assert "live_transition_ready" in data
             assert "controls" in data
-            print(f"Live-gate futures testnet controls: {data.get('controls')}")
+            print(f"Live-gate futures live controls: {data.get('controls')}")
 
 
 class TestP0SpotLiveChain:
@@ -299,12 +299,12 @@ class TestP0FuturesTestChain:
     """Test futures test chain calls should not return 500"""
     
     def test_futures_test_ingest_no_500(self, admin_headers, test_user_id):
-        """Test futures testnet ingestion endpoint"""
+        """Test futures live ingestion endpoint"""
         response = requests.post(
             f"{BASE_URL}/api/admin/commercial/p0/ingestion/rest-run",
             json={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["futures"],
                 "symbols": [],  # Futures can work without symbols
                 "limit_per_symbol": 10
@@ -317,12 +317,12 @@ class TestP0FuturesTestChain:
         print(f"Futures test ingest response: {response.status_code}")
     
     def test_futures_test_pnl_no_500(self, admin_headers, test_user_id):
-        """Test futures testnet PnL endpoint"""
+        """Test futures live PnL endpoint"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/pnl/latest",
             params={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["futures"]
             },
             headers=admin_headers,
@@ -332,12 +332,12 @@ class TestP0FuturesTestChain:
         print(f"Futures test PnL response: {response.status_code}")
     
     def test_futures_test_recon_no_500(self, admin_headers, test_user_id):
-        """Test futures testnet reconciliation endpoint"""
+        """Test futures live reconciliation endpoint"""
         response = requests.post(
             f"{BASE_URL}/api/admin/commercial/p0/reconciliation/run",
             json={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["futures"],
                 "symbols": [],
                 "limit_per_symbol": 10
@@ -349,12 +349,12 @@ class TestP0FuturesTestChain:
         print(f"Futures test recon response: {response.status_code}")
     
     def test_futures_test_data_quality_no_500(self, admin_headers, test_user_id):
-        """Test futures testnet data-quality endpoint"""
+        """Test futures live data-quality endpoint"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/data-quality",
             params={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "required_market_types": ["futures"]
             },
             headers=admin_headers,
@@ -364,12 +364,12 @@ class TestP0FuturesTestChain:
         print(f"Futures test data-quality response: {response.status_code}")
     
     def test_futures_test_live_gate_returns_calculation(self, admin_headers, test_user_id):
-        """Test futures testnet live-gate returns calculation"""
+        """Test futures live live-gate returns calculation"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/live-gate",
             params={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "required_market_types": ["futures"]
             },
             headers=admin_headers,

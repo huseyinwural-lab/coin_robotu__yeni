@@ -23,7 +23,7 @@ class FuturesExecutionRequest(BaseModel):
 
 class FuturesExecutionResponse(BaseModel):
     accepted: bool
-    environment: str = "testnet"
+    environment: str = "live"
     reason_code: str
     exchange_order_id: str | None = None
     client_order_id: str

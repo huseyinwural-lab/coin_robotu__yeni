@@ -171,7 +171,7 @@ class TestTestOrderInvalidKeyBlocking:
         """Setup: Save invalid API credentials for test user"""
         payload = {
             "exchange": "binance",
-            "mode": "testnet",
+            "mode": "live",
             "api_key": "INVALID_FAKE_KEY_FOR_TESTING_12345",
             "api_secret": "INVALID_FAKE_SECRET_FOR_TESTING_67890",
         }
@@ -283,7 +283,7 @@ class TestUserExchangeSettingsFlow:
         """PUT exchange-settings should update and return updated flags"""
         payload = {
             "exchange": "binance",
-            "mode": "testnet",
+            "mode": "live",
             "api_key": "TEST_NEW_KEY_12345",
             "api_secret": "TEST_NEW_SECRET_67890",
         }
@@ -298,7 +298,7 @@ class TestUserExchangeSettingsFlow:
         assert data["has_api_key"] is True
         assert data["has_api_secret"] is True
         assert data["exchange"] == "binance"
-        assert data["mode"] == "testnet"
+        assert data["mode"] == "live"
 
 
 class TestPermissionStatusControlsFormat:

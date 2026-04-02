@@ -345,7 +345,7 @@ try:
         db,
         user_id=admin.id,
         exchange='binance',
-        mode='testnet',
+        mode='live',
         api_key=api_key_plain,
         api_secret=api_secret_plain,
     )

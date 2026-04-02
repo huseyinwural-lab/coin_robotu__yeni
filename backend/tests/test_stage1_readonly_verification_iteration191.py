@@ -291,7 +291,7 @@ class TestStage1ReadOnlyVerification:
             for pos in data:
                 exec_mode = pos.get("execution_mode", "").lower()
                 # Stage 1 should be simulation/mocked
-                assert exec_mode in ["mocked", "simulation", "sim", "testnet", ""], \
+                assert exec_mode in ["mocked", "simulation", "sim", "live", ""], \
                     f"Unexpected execution_mode: {exec_mode}"
         
         print("✓ Execution mode verification passed (simulation/read-only)")

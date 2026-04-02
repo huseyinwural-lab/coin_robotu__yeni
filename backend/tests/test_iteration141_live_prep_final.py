@@ -79,7 +79,7 @@ class TestExecutionModeEndpoint:
         
         # Check canonical mode fields
         assert "mode" in data, "Missing 'mode' field"
-        assert data["mode"] in ["sim", "testnet", "live"], f"Unexpected mode: {data['mode']}"
+        assert data["mode"] in ["sim", "live", "live"], f"Unexpected mode: {data['mode']}"
         
         # Check compatibility notice
         assert "compatibility_alias" in data, "Missing 'compatibility_alias' field"

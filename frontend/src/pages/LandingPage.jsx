@@ -180,7 +180,7 @@ export const LandingPage = () => {
           >
             <h1 className="text-4xl font-black uppercase tracking-tight sm:text-5xl lg:text-5xl" data-testid="landing-main-heading">{appName}</h1>
             <p className="mt-3 max-w-xl text-base font-medium" data-testid="landing-subtitle">
-              Binance adapter + SIM/TESTNET execution ile güvenli başlangıç. User/Admin panel, bot config, risk policy ve strategy template yönetimi ilk fazda hazır.
+              Binance adapter + SIM/LIVE execution ile güvenli başlangıç. User/Admin panel, bot config, risk policy ve strategy template yönetimi ilk fazda hazır.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link to="/user/login" data-testid="landing-start-link">
@@ -312,7 +312,7 @@ export const LandingPage = () => {
           <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="landing-live-status-grid">
             <p className="text-xs" data-testid="landing-live-status-platform">Platform: 🟢 Online</p>
             <p className="text-xs" data-testid="landing-live-status-engine">Execution Engine: 🟢 İşlemde</p>
-            <p className="text-xs" data-testid="landing-live-status-note">Not: İlk kurulumda testnet ile başlamanız önerilir.</p>
+            <p className="text-xs" data-testid="landing-live-status-note">Not: İlk kurulumda live ile başlamanız önerilir.</p>
           </div>
         </section>
 

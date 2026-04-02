@@ -12,24 +12,21 @@ def seed_binance_venue_registry(db: Session):
             "exchange_code": "binance",
             "exchange_name": "Binance",
             "supported_market_types": ["spot", "futures"],
-            "supports_testnet": True,
-            "supports_live": False,
+            "supports_live": True,
             "adapter_version": "v1",
         },
         {
             "exchange_code": "bybit",
             "exchange_name": "Bybit",
             "supported_market_types": ["spot", "futures"],
-            "supports_testnet": True,
-            "supports_live": False,
+            "supports_live": True,
             "adapter_version": "v1-alpha",
         },
         {
             "exchange_code": "okx",
             "exchange_name": "OKX",
             "supported_market_types": ["spot", "futures"],
-            "supports_testnet": True,
-            "supports_live": False,
+            "supports_live": True,
             "adapter_version": "v1-alpha",
         },
     ]
@@ -42,7 +39,6 @@ def seed_binance_venue_registry(db: Session):
                 exchange_name=exchange_payload["exchange_name"],
                 status="active",
                 supported_market_types=exchange_payload["supported_market_types"],
-                supports_testnet=exchange_payload["supports_testnet"],
                 supports_live=exchange_payload["supports_live"],
                 health_status="healthy",
                 rate_limit_status="ok",
@@ -96,9 +92,9 @@ def seed_binance_venue_registry(db: Session):
                 )
 
     allowed_defaults = [
-        ("spot", "testnet", True),
+        ("spot", "live", True),
         ("spot", "live", False),
-        ("futures", "testnet", True),
+        ("futures", "live", True),
         ("futures", "live", False),
     ]
     for exchange_payload in exchanges:
@@ -156,8 +152,7 @@ def ensure_user_venue_assignment(
             exchange_code=normalized_exchange,
             spot_allowed=True,
             futures_allowed=True,
-            testnet_allowed=True,
-            live_allowed=False,
+            live_allowed=True,
             updated_at=now,
         )
         db.add(row)
@@ -169,8 +164,8 @@ def ensure_user_venue_assignment(
         if not row.futures_allowed:
             row.futures_allowed = True
             changed = True
-        if not row.testnet_allowed:
-            row.testnet_allowed = True
+        if not row.live_allowed:
+            row.live_allowed = True
             changed = True
 
     if normalized_market == "spot" and not row.spot_allowed:
@@ -180,9 +175,6 @@ def ensure_user_venue_assignment(
         row.futures_allowed = True
         changed = True
 
-    if normalized_environment == "testnet" and not row.testnet_allowed:
-        row.testnet_allowed = True
-        changed = True
     if normalized_environment == "live" and not row.live_allowed:
         row.live_allowed = True
         changed = True
@@ -226,15 +218,13 @@ def user_allowed_venue_options(db: Session, user_id: str) -> list[dict]:
                     {
                         "exchange": assignment.exchange_code,
                         "market_type": market_type,
-                        "environment": "testnet",
+                        "environment": "live",
                         "venue_state": "capability_mismatch",
                     }
                 )
                 continue
 
-            for environment in ["testnet", "live"]:
-                if environment == "testnet" and not assignment.testnet_allowed:
-                    continue
+            for environment in ["live"]:
                 if environment == "live" and not assignment.live_allowed:
                     continue
                 allowed_market = (
@@ -277,8 +267,6 @@ def check_user_venue_access(db: Session, user_id: str, exchange: str, market_typ
         return False, "venue_blocked", False, ["spot_not_allowed"]
     if market_type == "futures" and not assignment.futures_allowed:
         return False, "venue_blocked", False, ["futures_not_allowed"]
-    if environment == "testnet" and not assignment.testnet_allowed:
-        return False, "venue_blocked", False, ["testnet_not_allowed"]
     if environment == "live" and not assignment.live_allowed:
         return False, "venue_blocked", False, ["live_not_allowed"]
 

@@ -14,7 +14,7 @@ class ReplayRun(Base):
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), index=True)
     exchange: Mapped[str] = mapped_column(String(30), default="binance")
     market_type: Mapped[str] = mapped_column(String(20), default="futures")
-    environment: Mapped[str] = mapped_column(String(20), default="testnet")
+    environment: Mapped[str] = mapped_column(String(20), default="live")
     symbol: Mapped[str] = mapped_column(String(20), nullable=False)
     timeframe: Mapped[str] = mapped_column(String(10), default="15m")
     strategy_type: Mapped[str] = mapped_column(String(50), default="trend_following")

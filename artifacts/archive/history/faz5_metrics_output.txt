@@ -1,3 +1,0 @@
-observability_error_rate_ratio 0
-observability_latency_ms_p95 0
-observability_queue_size 0

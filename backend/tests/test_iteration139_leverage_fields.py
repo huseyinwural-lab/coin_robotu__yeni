@@ -96,7 +96,7 @@ class TestTradingPreviewLeverageFields:
             "margin_mode": "cross",
             "execution_mode": "manual",
             "exchange": "binance",
-            "environment": "testnet"
+            "environment": "live"
         }
         
         response = requests.post(
@@ -154,7 +154,7 @@ class TestTradingPreviewLeverageFields:
             "position_size_value": 25,
             "execution_mode": "manual",
             "exchange": "binance",
-            "environment": "testnet"
+            "environment": "live"
         }
         
         response = requests.post(
@@ -197,7 +197,7 @@ class TestTradingPreviewLeverageFields:
             "margin_mode": "cross",
             "execution_mode": "manual",
             "exchange": "binance",
-            "environment": "testnet"
+            "environment": "live"
         }
         
         response = requests.post(
@@ -244,7 +244,7 @@ class TestExchangeTestOrderLeverageFields:
         # First check readiness
         readiness_response = requests.get(
             f"{BASE_URL}/api/exchange/readiness-checklist",
-            params={"exchange": "binance", "market_type": "futures", "environment": "testnet"},
+            params={"exchange": "binance", "market_type": "futures", "environment": "live"},
             headers=headers
         )
         
@@ -263,7 +263,7 @@ class TestExchangeTestOrderLeverageFields:
             params={
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "symbol": "BTCUSDT",
                 "leverage": 3,
                 "margin_mode": "cross",

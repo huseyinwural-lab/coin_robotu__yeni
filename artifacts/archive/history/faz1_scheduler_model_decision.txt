@@ -1,2 +1,0 @@
-OFFICIAL_SCHEDULER_MODEL=backend_scheduler
-SECONDARY_CRON_STATUS=non-authoritative_reference_only

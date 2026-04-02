@@ -441,7 +441,7 @@ class TestReadinessChecklistAndTestOrder:
             "has_api_secret",
             "validation_success",
             "can_trade",
-            "is_testnet_environment",
+            "is_live_environment",
             "is_validation_stale",
             "stale_after_minutes",
             "last_error_reason",

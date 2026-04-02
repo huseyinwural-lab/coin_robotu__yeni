@@ -1043,7 +1043,7 @@ def detect_false_decisions(
 
 def _bybit_market_read(symbol: str) -> dict:
     load_dotenv("/app/backend/.env", override=True)
-    base_url = str(os.environ.get("BYBIT_TESTNET_BASE_URL") or "https://api-testnet.bybit.com").strip()
+    base_url = str(os.environ.get("BYBIT_LIVE_BASE_URL") or "https://api-live.bybit.com").strip()
     try:
         ticker_resp = httpx.get(
             f"{base_url}/v5/market/tickers",

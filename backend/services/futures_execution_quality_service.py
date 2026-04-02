@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import ExecutionMetric, TestnetExecutionLog
+from models import ExecutionMetric, LiveExecutionLog
 
 
 def _start_of_day_utc(dt: datetime) -> datetime:
@@ -25,7 +25,7 @@ def _percentile(values: list[float], percentile: float) -> float:
     return float(ordered[index])
 
 
-def _symbol_drift_alerts(rows: list[TestnetExecutionLog], threshold_bps: float = 25.0) -> list[dict]:
+def _symbol_drift_alerts(rows: list[LiveExecutionLog], threshold_bps: float = 25.0) -> list[dict]:
     bucket: dict[str, list[float]] = {}
     for row in rows:
         expected = _safe_float(row.expected_price)
@@ -107,7 +107,7 @@ def _rolling_tuning_score(metrics: list[ExecutionMetric], false_allow_count: int
 def _architecture_checklist_15(snapshot: dict) -> list[dict]:
     checks = [
         ("default_mode_is_paper", snapshot.get("default_mode") == "paper", "default_mode"),
-        ("testnet_default_closed", snapshot.get("testnet_enabled") is False, "testnet_enabled"),
+        ("live_default_closed", snapshot.get("live_enabled") is False, "live_enabled"),
         ("live_endpoint_forbidden", snapshot.get("live_endpoint_access") is False, "live_endpoint_access"),
         ("release_gate_required", bool((snapshot.get("release_gate") or {}).get("status")), "release_gate.status"),
         ("preflight_reason_coded", bool((snapshot.get("preflight_template") or {}).get("reason_code")), "preflight_template.reason_code"),
@@ -152,9 +152,9 @@ def build_execution_quality_snapshot(
         .all()
     )
     logs = (
-        db.query(TestnetExecutionLog)
-        .filter(TestnetExecutionLog.user_id == user_id, TestnetExecutionLog.created_at >= start_at)
-        .order_by(TestnetExecutionLog.created_at.desc())
+        db.query(LiveExecutionLog)
+        .filter(LiveExecutionLog.user_id == user_id, LiveExecutionLog.created_at >= start_at)
+        .order_by(LiveExecutionLog.created_at.desc())
         .all()
     )
 

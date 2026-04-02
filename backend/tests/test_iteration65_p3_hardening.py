@@ -343,18 +343,18 @@ class TestH03CrossScreenConsistency:
     def test_readiness_release_gate_consistency(self, admin_session):
         """Verify readiness score and release gate status consistency"""
         live_readiness = admin_session.get(f"{BASE_URL}/api/admin/futures/live-readiness")
-        testnet_status = admin_session.get(f"{BASE_URL}/api/admin/futures/testnet/status")
+        live_status = admin_session.get(f"{BASE_URL}/api/admin/futures/live/status")
         
         assert live_readiness.status_code == 200
-        assert testnet_status.status_code == 200
+        assert live_status.status_code == 200
         
         readiness_data = live_readiness.json()
-        testnet_data = testnet_status.json()
+        live_data = live_status.json()
         
         assert "readiness_score" in readiness_data
-        assert "release_gate" in testnet_data
+        assert "release_gate" in live_data
         
-        print(f"Readiness={readiness_data.get('readiness_score')}, Gate={testnet_data.get('release_gate', {}).get('status')}")
+        print(f"Readiness={readiness_data.get('readiness_score')}, Gate={live_data.get('release_gate', {}).get('status')}")
 
     def test_strategy_state_consistency(self, admin_session):
         """Verify strategy allocation and intelligence consistency"""

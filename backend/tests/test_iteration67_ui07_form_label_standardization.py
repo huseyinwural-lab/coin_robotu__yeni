@@ -330,7 +330,7 @@ class TestExchangeConnectionsAPI:
             "account_label": unique_label,
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "is_default": False
         }
         response = requests.post(f"{BASE_URL}/api/user/exchange-connections", json=payload, headers=user_headers)
@@ -340,7 +340,7 @@ class TestExchangeConnectionsAPI:
         assert data["account_label"] == unique_label
         assert data["exchange"] == "binance"
         assert data["market_type"] == "spot"
-        assert data["environment"] == "testnet"
+        assert data["environment"] == "live"
         print(f"Exchange connection create PASS - id: {data['id']}")
         return data["id"]
 

@@ -41,7 +41,7 @@ class FakeDb:
                 created_at=None,
             ),
         ]
-        self.testnet_rows = [SimpleNamespace(status="filled", slippage=0.2, expected_price=100.0, execution_latency=1200, created_at=None)]
+        self.live_rows = [SimpleNamespace(status="filled", slippage=0.2, expected_price=100.0, execution_latency=1200, created_at=None)]
 
     def query(self, model):
         model_name = getattr(model, "__name__", "")
@@ -49,7 +49,7 @@ class FakeDb:
             return FakeQuery(self.execution_rows)
         if model_name == "UserExecutionIntent":
             return FakeQuery(self.intent_rows)
-        return FakeQuery(self.testnet_rows)
+        return FakeQuery(self.live_rows)
 
 
 class FakeCache:

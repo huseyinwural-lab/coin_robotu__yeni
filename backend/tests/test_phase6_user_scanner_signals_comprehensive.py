@@ -438,7 +438,7 @@ class TestPhase6ScannerSignalsAPI:
             headers={"Authorization": f"Bearer {user_token}"},
             json={
                 "exchange": "binance",
-                "mode": "testnet",
+                "mode": "live",
                 "api_key": "test_api_key_123",
                 "api_secret": "test_api_secret_456"
             }

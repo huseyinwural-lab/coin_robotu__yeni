@@ -366,11 +366,11 @@ class TestHardBlockReasonCodes:
         from services.execution_safety_core_service import HARD_BLOCK_REASON_CODES
         
         expected_codes = [
-            "TESTNET_TRADING_DISABLED",
+            "LIVE_TRADING_DISABLED",
             "MARKET_DATA_MISSING",
             "MARKET_DATA_STALE",
             "KILL_SWITCH_ACTIVE",
-            "BYBIT_TESTNET_CREDENTIALS_MISSING",
+            "BYBIT_LIVE_CREDENTIALS_MISSING",
             "BYBIT_AUTH_PROBE_FAIL",
             "BYBIT_CONNECTIVITY_FAIL",
             "BYBIT_ORDER_SMOKE_FAIL",
@@ -429,16 +429,16 @@ class TestIntentAllowedTransitions:
 
 
 class TestBybitOrderSmoke:
-    """Tests for run_bybit_testnet_order_smoke function"""
+    """Tests for run_bybit_live_order_smoke function"""
 
     def test_smoke_returns_expected_structure(self):
-        """run_bybit_testnet_order_smoke should return expected structure"""
+        """run_bybit_live_order_smoke should return expected structure"""
         from db import SessionLocal
-        from services.execution_safety_core_service import run_bybit_testnet_order_smoke
+        from services.execution_safety_core_service import run_bybit_live_order_smoke
         
         db = SessionLocal()
         try:
-            result = run_bybit_testnet_order_smoke(db)
+            result = run_bybit_live_order_smoke(db)
             
             assert "status" in result, "Missing status"
             assert "reason_code" in result, "Missing reason_code"
@@ -451,13 +451,13 @@ class TestBybitOrderSmoke:
             db.close()
 
     def test_smoke_with_force_refresh(self):
-        """run_bybit_testnet_order_smoke should accept force_refresh parameter"""
+        """run_bybit_live_order_smoke should accept force_refresh parameter"""
         from db import SessionLocal
-        from services.execution_safety_core_service import run_bybit_testnet_order_smoke
+        from services.execution_safety_core_service import run_bybit_live_order_smoke
         
         db = SessionLocal()
         try:
-            result = run_bybit_testnet_order_smoke(db, force_refresh=True)
+            result = run_bybit_live_order_smoke(db, force_refresh=True)
             
             assert "status" in result, "Missing status"
             assert "checked_at" in result, "Missing checked_at"

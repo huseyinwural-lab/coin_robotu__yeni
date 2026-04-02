@@ -59,6 +59,10 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None, for
 
     cache = pipeline_runtime.cache if pipeline_runtime else None
     validator = evaluate_go_live_readiness(db, cache, user_id=user_id)
+    try:
+        db.rollback()
+    except Exception:
+        pass
     step_index = {step.get("step_key"): step for step in validator.get("steps") or []}
 
     row = _latest_connection(db, user_id)

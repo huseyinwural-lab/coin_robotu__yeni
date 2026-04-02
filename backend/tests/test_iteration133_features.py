@@ -161,7 +161,7 @@ class TestExchangeConnectionsNewFields:
                 "account_label": f"test-conn-{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": False,
             }
             create_resp = user_session.post(f"{BASE_URL}/api/user/exchange-connections", json=payload)
@@ -199,7 +199,7 @@ class TestExchangeConnectionsNewFields:
                 "account_label": f"revalidate-test-{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": False,
             }
             create_resp = user_session.post(f"{BASE_URL}/api/user/exchange-connections", json=payload)

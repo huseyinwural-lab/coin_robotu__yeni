@@ -8,7 +8,7 @@ export const CapabilityDiscoveryPanel = ({ exchanges, result, loading, error, on
   const [form, setForm] = useState({
     exchange_code: exchangeOptions[0] || "binance",
     market_type: "spot",
-    environment: "testnet",
+    environment: "live",
     symbols: "BTCUSDT,ETHUSDT",
   });
 
@@ -39,7 +39,7 @@ export const CapabilityDiscoveryPanel = ({ exchanges, result, loading, error, on
           <option value="futures">futures</option>
         </select>
         <select value={form.environment} onChange={(event) => setForm((prev) => ({ ...prev, environment: event.target.value }))} className="rounded-md border border-slate-700 bg-slate-900 px-2 py-2 text-sm" data-testid="capability-discovery-environment-select">
-          <option value="testnet">testnet</option>
+          <option value="live">live</option>
           <option value="live">live</option>
         </select>
         <Input value={form.symbols} onChange={(event) => setForm((prev) => ({ ...prev, symbols: event.target.value }))} placeholder="BTCUSDT,ETHUSDT" data-testid="capability-discovery-symbols-input" />

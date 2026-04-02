@@ -119,7 +119,7 @@ class TestExchangeValidateHint:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
         )
         # Response can be 200 (success) or 4xx (failure with hint)
@@ -151,7 +151,7 @@ class TestExchangeValidateHintMessages:
         """Verify hint text for invalid_key scenario"""
         # The hint function in live_mode_service.py:
         # if "invalid_key" in normalized:
-        #     return "API key/secret geçersiz veya mainnet key testnet ortamında..."
+        #     return "API key/secret geçersiz veya mainnet key live ortamında..."
 
         # This is a unit-level check - the function exists and returns proper hints
         # We verify by checking the service code has the mapping
@@ -207,7 +207,7 @@ class TestExchangeValidateBypassLogic:
                 "account_label": f"test_iter83_{uuid.uuid4().hex[:8]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "api_key": "test_key_new",
                 "api_secret": "test_secret_new",
                 "is_default": True,
@@ -227,7 +227,7 @@ class TestExchangeValidateBypassLogic:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
         )
 
@@ -285,7 +285,7 @@ class TestVenueOptionsEndpoint:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
         )
         assert response.status_code == 200
@@ -315,7 +315,7 @@ class TestExchangeReadinessChecklist:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
         )
         assert response.status_code == 200

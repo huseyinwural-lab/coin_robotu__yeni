@@ -140,13 +140,13 @@ class TestLowWeightSpotIngestMode:
             # Should be limited to LOW_WEIGHT_SPOT_MAX_SYMBOLS (default 1)
             assert len(processed_symbols) <= 1, f"Expected limited symbols in low-weight mode, got {len(processed_symbols)}"
     
-    def test_spot_testnet_ingest_no_low_weight_mode(self, admin_headers, test_user_id):
-        """Test spot testnet ingestion does NOT have low_weight_mode (only live has it)"""
+    def test_spot_live_ingest_no_low_weight_mode(self, admin_headers, test_user_id):
+        """Test spot live ingestion does NOT have low_weight_mode (only live has it)"""
         response = requests.post(
             f"{BASE_URL}/api/admin/commercial/p0/ingestion/rest-run",
             json={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "market_types": ["spot"],
                 "symbols": ["BTCUSDT"],
                 "limit_per_symbol": 100
@@ -155,18 +155,18 @@ class TestLowWeightSpotIngestMode:
             timeout=60
         )
         # Should not return 500
-        assert response.status_code != 500, f"Spot testnet ingest returned 500: {response.text}"
-        print(f"Spot testnet ingest response: {response.status_code}")
+        assert response.status_code != 500, f"Spot live ingest returned 500: {response.text}"
+        print(f"Spot live ingest response: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
             market_summary = data.get("market_summary", {})
             spot_summary = market_summary.get("spot", {})
             
-            # Verify low_weight_mode is false for testnet
+            # Verify low_weight_mode is false for live
             low_weight_mode = spot_summary.get("low_weight_mode", False)
-            print(f"testnet low_weight_mode: {low_weight_mode}")
-            assert low_weight_mode is False, f"Expected low_weight_mode=false for testnet, got {low_weight_mode}"
+            print(f"live low_weight_mode: {low_weight_mode}")
+            assert low_weight_mode is False, f"Expected low_weight_mode=false for live, got {low_weight_mode}"
 
 
 class TestSpotLiveChainNo500:
@@ -261,20 +261,20 @@ class TestSpotLiveChainNo500:
 class TestFuturesTestLiveGateRegression:
     """Test futures test live-gate regression check"""
     
-    def test_futures_testnet_live_gate_no_500(self, admin_headers, test_user_id):
-        """Test futures testnet live-gate does not return 500"""
+    def test_futures_live_live_gate_no_500(self, admin_headers, test_user_id):
+        """Test futures live live-gate does not return 500"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/live-gate",
             params={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "required_market_types": ["futures"]
             },
             headers=admin_headers,
             timeout=30
         )
-        assert response.status_code != 500, f"Futures testnet live-gate returned 500: {response.text}"
-        print(f"Futures testnet live-gate response: {response.status_code}")
+        assert response.status_code != 500, f"Futures live live-gate returned 500: {response.text}"
+        print(f"Futures live live-gate response: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
@@ -282,15 +282,15 @@ class TestFuturesTestLiveGateRegression:
             assert "live_transition_ready" in data
             assert "controls" in data
             controls = data.get("controls", {})
-            print(f"Futures testnet live-gate controls: {controls}")
+            print(f"Futures live live-gate controls: {controls}")
     
-    def test_futures_testnet_live_gate_returns_controls(self, admin_headers, test_user_id):
-        """Test futures testnet live-gate returns proper controls structure"""
+    def test_futures_live_live_gate_returns_controls(self, admin_headers, test_user_id):
+        """Test futures live live-gate returns proper controls structure"""
         response = requests.get(
             f"{BASE_URL}/api/admin/commercial/p0/live-gate",
             params={
                 "target_user_id": test_user_id,
-                "environment": "testnet",
+                "environment": "live",
                 "required_market_types": ["futures"]
             },
             headers=admin_headers,

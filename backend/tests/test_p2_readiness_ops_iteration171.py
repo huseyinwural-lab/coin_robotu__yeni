@@ -175,7 +175,7 @@ class TestBybitVenueReadiness:
         if checklist:
             print(f"Bybit config_checklist: {checklist}")
             # Verify expected fields
-            expected_fields = ["has_testnet_credentials", "has_live_credentials", "environment_mapped"]
+            expected_fields = ["has_live_credentials", "has_live_credentials", "environment_mapped"]
             for field in expected_fields:
                 if field in checklist:
                     print(f"  - {field}: {checklist.get(field)}")

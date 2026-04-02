@@ -143,14 +143,14 @@ def _build_panel_inventory() -> list[dict]:
             "interaction_model": {"supports_refresh": True, "supports_filters": False},
         },
         {
-            "panel_key": "futures_testnet_control",
-            "title": "Futures Testnet Control",
-            "route": "/admin/futures/testnet-control",
-            "file_name": "AdminFuturesTestnetControlPage.jsx",
+            "panel_key": "futures_live_control",
+            "title": "Futures Live Control",
+            "route": "/admin/futures/live-control",
+            "file_name": "AdminFuturesLiveControlPage.jsx",
             "api_endpoints": [
-                "/admin/futures/testnet/status",
-                "/admin/futures/testnet/release-gate",
-                "/admin/futures/testnet/execution-quality",
+                "/admin/futures/live/status",
+                "/admin/futures/live/release-gate",
+                "/admin/futures/live/execution-quality",
             ],
             "interaction_model": {"supports_refresh": True, "supports_filters": True},
         },
@@ -314,15 +314,15 @@ def _build_contract_specs() -> dict[str, dict]:
             "required_fields": {"generated_at": "string", "scaling_robustness_score": "number", "stress_replay_dashboard": "array"},
             "empty_rule": {"type": "field_array", "field": "stress_replay_dashboard"},
         },
-        "/admin/futures/testnet/status": {
-            "required_fields": {"testnet_enabled": "boolean", "safe_mode_enabled": "boolean", "release_gate": "object"},
+        "/admin/futures/live/status": {
+            "required_fields": {"live_enabled": "boolean", "safe_mode_enabled": "boolean", "release_gate": "object"},
             "empty_rule": {"type": "never"},
         },
-        "/admin/futures/testnet/release-gate": {
+        "/admin/futures/live/release-gate": {
             "required_fields": {"status": "string", "reasons": "array", "updated_at": "string"},
             "empty_rule": {"type": "field_array", "field": "reasons"},
         },
-        "/admin/futures/testnet/execution-quality": {
+        "/admin/futures/live/execution-quality": {
             "required_fields": {"days": "number", "total_orders": "number", "execution_quality_score": "number"},
             "empty_rule": {"type": "never"},
         },

@@ -26,8 +26,8 @@ def _normalize_market_type(market_type: str | None) -> str:
 
 
 def _normalize_environment(environment: str | None) -> str:
-    candidate = (environment or "testnet").strip().lower()
-    return candidate if candidate in {"testnet", "live"} else "testnet"
+    candidate = (environment or "live").strip().lower()
+    return candidate if candidate in {"live", "live"} else "live"
 
 
 def _default_readiness_snapshot(db: Session, user_id: str, exchange: str, market_type: str, environment: str) -> dict:
@@ -352,7 +352,7 @@ def _bootstrap_from_legacy(db: Session, user_id: str) -> None:
         account_label="default",
         exchange=(legacy.exchange or "binance").strip().lower(),
         market_type="spot",
-        environment=(legacy.mode or "testnet").strip().lower(),
+        environment=(legacy.mode or "live").strip().lower(),
         is_default=True,
         readiness_snapshot={},
         permission_snapshot=legacy.permissions_snapshot or [],

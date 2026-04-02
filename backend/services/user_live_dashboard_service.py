@@ -15,7 +15,7 @@ from models import (
     PaperPosition,
     PositionLedgerEvent,
     RiskPolicy,
-    TestnetExecutionLog,
+    LiveExecutionLog,
     UserDecisionTrace,
     UserExecutionIntent,
     UserRiskSetting,
@@ -250,11 +250,11 @@ def _execution_rows(db: Session, user_id: str, since: datetime) -> list[Executio
     )
 
 
-def _testnet_rows(db: Session, user_id: str, since: datetime) -> list[TestnetExecutionLog]:
+def _live_rows(db: Session, user_id: str, since: datetime) -> list[LiveExecutionLog]:
     return (
-        db.query(TestnetExecutionLog)
-        .filter(TestnetExecutionLog.user_id == user_id, TestnetExecutionLog.created_at >= since)
-        .order_by(TestnetExecutionLog.created_at.desc())
+        db.query(LiveExecutionLog)
+        .filter(LiveExecutionLog.user_id == user_id, LiveExecutionLog.created_at >= since)
+        .order_by(LiveExecutionLog.created_at.desc())
         .limit(1000)
         .all()
     )
@@ -279,7 +279,7 @@ def build_user_live_execution_quality(db: Session, user_id: str, *, window: str 
             "reject_rate": round(reject_count / max(len(metrics), 1), 6),
         }
 
-    fallback = _testnet_rows(db, user_id, since)
+    fallback = _live_rows(db, user_id, since)
     latencies = [_safe_float(row.execution_latency) for row in fallback if row.execution_latency is not None]
     slippages = [abs(_safe_float(row.slippage)) for row in fallback if row.slippage is not None]
     quality_scores = [_safe_float(row.execution_quality_score) for row in fallback]

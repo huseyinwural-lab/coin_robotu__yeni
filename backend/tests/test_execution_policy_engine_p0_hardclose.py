@@ -146,7 +146,7 @@ def _seed_market_data() -> None:
         pass
 
 
-def _submit_context(*, user_id: str, intent_token: str, strategy_binding: str, environment: str = "testnet") -> dict:
+def _submit_context(*, user_id: str, intent_token: str, strategy_binding: str, environment: str = "live") -> dict:
     return {
         "intent_token": intent_token,
         "user_id": user_id,
@@ -201,7 +201,7 @@ def test_failsafe_dependency_timeout_hard_blocks_in_shadow_mode():
                 "strategy_binding": "p0_timeout_strategy",
                 "symbol": "BTCUSDT",
                 "side": "buy",
-                "environment": "testnet",
+                "environment": "live",
                 "market_type": "spot",
                 "proposed_notional": 120.0,
                 "market_data_available": True,
@@ -248,7 +248,7 @@ def test_failsafe_market_data_missing_hard_blocks_in_full_mode():
                 "strategy_binding": "p0_market_data_strategy",
                 "symbol": "BTCUSDT",
                 "side": "buy",
-                "environment": "testnet",
+                "environment": "live",
                 "market_type": "spot",
                 "proposed_notional": 120.0,
                 "market_data_available": False,  # Missing market data
@@ -531,7 +531,7 @@ def test_portfolio_exposure_separate_from_user_exposure():
                 "strategy_binding": "p0_exposure_sep_strategy",
                 "symbol": "BTCUSDT",
                 "side": "buy",
-                "environment": "testnet",
+                "environment": "live",
                 "market_type": "spot",
                 "proposed_notional": 100.0,
                 "market_data_available": True,
@@ -582,7 +582,7 @@ def test_portfolio_limit_breach_blocks_even_when_user_limit_ok():
                 "strategy_binding": "p0_portfolio_limit_strategy",
                 "symbol": "BTCUSDT",
                 "side": "buy",
-                "environment": "testnet",
+                "environment": "live",
                 "market_type": "spot",
                 "proposed_notional": 20.0,  # Would push portfolio to 110, exceeding 100 limit
                 "market_data_available": True,
@@ -678,7 +678,7 @@ def test_full_pipeline_with_execution_and_post_trade_violations():
                     user_id=user.id,
                     intent_token=str(uuid.uuid4()),
                     strategy_binding="p0_full_pipeline_strategy",
-                    environment="testnet",
+                    environment="live",
                 ),
                 "execution_result": {
                     "executed_price": 110.0,  # 10% deviation = 1000 bps, exceeds 5 bps

@@ -29,12 +29,12 @@ ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-canary.admin@platform.local}"
 ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-CanaryAdmin123!}"
 USER_EMAIL="${CANARY_TEST_USER_EMAIL:-canary_1774010877@example.com}"
 USER_PASSWORD="${CANARY_TEST_USER_PASSWORD:-TestPass123!}"
-TESTNET_API_KEY="${BINANCE_TESTNET_API_KEY:-}"
-TESTNET_API_SECRET="${BINANCE_TESTNET_API_SECRET:-}"
+LIVE_API_KEY="${BINANCE_LIVE_API_KEY:-}"
+LIVE_API_SECRET="${BINANCE_LIVE_API_SECRET:-}"
 
-HAS_TESTNET_KEYS="0"
-if [[ -n "${TESTNET_API_KEY}" && -n "${TESTNET_API_SECRET}" ]]; then
-  HAS_TESTNET_KEYS="1"
+HAS_LIVE_KEYS="0"
+if [[ -n "${LIVE_API_KEY}" && -n "${LIVE_API_SECRET}" ]]; then
+  HAS_LIVE_KEYS="1"
 fi
 
 # C4: all symbols + production limits + 2h gözlem
@@ -126,12 +126,12 @@ ensure_user_login() {
 }
 
 set_exchange_keys() {
-  if [[ "${HAS_TESTNET_KEYS}" != "1" ]]; then
-    log "WARN: BINANCE_TESTNET_API_KEY/SECRET bulunamadı, kayıtlı user exchange key kullanılacak"
+  if [[ "${HAS_LIVE_KEYS}" != "1" ]]; then
+    log "WARN: BINANCE_LIVE_API_KEY/SECRET bulunamadı, kayıtlı user exchange key kullanılacak"
     return 0
   fi
   local payload code
-  payload="{\"exchange\":\"binance\",\"mode\":\"futures_testnet\",\"api_key\":\"${TESTNET_API_KEY}\",\"api_secret\":\"${TESTNET_API_SECRET}\"}"
+  payload="{\"exchange\":\"binance\",\"mode\":\"futures_live\",\"api_key\":\"${LIVE_API_KEY}\",\"api_secret\":\"${LIVE_API_SECRET}\"}"
   code="$(request_json PUT "${BASE_URL}/api/phase4/exchange-settings" "${payload}" "${USER_TOKEN}" "/tmp/c4_exchange_settings.json")"
   [[ "${code}" == "200" ]] || fail "exchange settings update başarısız http=${code}"
   log "PASS: exchange settings güncellendi"

@@ -501,12 +501,12 @@ def ensure_dynamic_execution_policies(db: Session) -> None:
     )
     _ensure_policy(
         db,
-        policy_code="sprint1:env:testnet",
+        policy_code="sprint1:env:live",
         scope="environment",
-        scope_key="testnet",
+        scope_key="live",
         priority=20,
         override_behavior="merge",
-        conditions_payload={"environment_in": ["testnet", "staging", "dev"]},
+        conditions_payload={"environment_in": ["live", "staging", "dev"]},
         rules_payload={"enforcement": {"require_strategy_policy": True}},
     )
 
@@ -1125,7 +1125,7 @@ def evaluate_execution_policy_engine(db: Session, context: dict, *, stage: str =
             db,
             severity=severity,
             reason_code=str(item.get("reason_code") or ""),
-            environment=str(context.get("environment") or "testnet"),
+            environment=str(context.get("environment") or "live"),
             strategy_risk_class=strategy_risk_class,
             strategy_id=str(strategy_binding or ""),
         )
@@ -1614,7 +1614,7 @@ def append_execution_policy_decision_log(
             db,
             severity=str(reject.get("severity") or row.severity),
             reason_code=str(reject.get("reason_code") or ""),
-            environment=str(context.get("environment") or "testnet"),
+            environment=str(context.get("environment") or "live"),
             strategy_risk_class=str(context.get("strategy_risk_class") or "MEDIUM"),
             strategy_id=str(context.get("strategy_binding") or ""),
         )

@@ -46,7 +46,7 @@ class TestEnvironmentPhase1API:
         # DEV variants
         assert normalize_environment("dev") == "DEV"
         assert normalize_environment("development") == "DEV"
-        assert normalize_environment("testnet") == "DEV"
+        assert normalize_environment("live") == "DEV"
         assert normalize_environment("DEV") == "DEV"
 
         # STAGING variants
@@ -350,7 +350,7 @@ class TestEnvironmentPhase1API:
                     "portfolio_id": f"default:{user.id}",
                     "strategy_binding": strategy,
                     "symbol": "BTCUSDT",
-                    "environment": "testnet",
+                    "environment": "live",
                     "market_type": "spot",
                     "intent_type": "CLOSE_POSITION",
                     "reduce_only": True,
@@ -367,7 +367,7 @@ class TestEnvironmentPhase1API:
             assert "input" in env_trace, "trace.environment.input missing"
             assert "normalized" in env_trace, "trace.environment.normalized missing"
             assert "override_trace" in env_trace, "trace.environment.override_trace missing"
-            assert env_trace["normalized"] == "DEV"  # testnet normalizes to DEV
+            assert env_trace["normalized"] == "DEV"  # live normalizes to DEV
 
             # Verify safe_mode in trace
             assert "safe_mode" in trace, "trace.safe_mode missing"
@@ -463,7 +463,7 @@ class TestEnvironmentPhase1API:
                     "portfolio_id": f"default:{user.id}",
                     "strategy_binding": strategy,
                     "symbol": "BTCUSDT",
-                    "environment": "testnet",  # Normalizes to DEV
+                    "environment": "live",  # Normalizes to DEV
                     "market_type": "spot",
                     "intent_type": "CLOSE_POSITION",
                     "reduce_only": True,
@@ -621,7 +621,7 @@ class TestSafeModeAutoActivation:
                     "portfolio_id": f"default:{user.id}",
                     "strategy_binding": strategy,
                     "symbol": "BTCUSDT",
-                    "environment": "testnet",
+                    "environment": "live",
                     "market_type": "spot",
                     "intent_type": "OPEN_POSITION",
                     "reduce_only": False,

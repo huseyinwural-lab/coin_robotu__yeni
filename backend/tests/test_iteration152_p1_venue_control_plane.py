@@ -53,7 +53,7 @@ class TestCapabilityDiscovery:
         payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbols": ["BTCUSDT", "ETHUSDT"],
         }
         response = requests.post(
@@ -84,7 +84,7 @@ class TestCapabilityDiscovery:
         payload = {
             "exchange_code": "binance",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "symbols": ["BTCUSDT"],
         }
         response = requests.post(
@@ -114,7 +114,7 @@ class TestCapabilityMatrix:
         discovery_payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbols": ["BTCUSDT"],
         }
         requests.post(
@@ -131,11 +131,11 @@ class TestCapabilityMatrix:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         data = response.json()
         
-        # Should be a dict with keys like "binance:spot:testnet"
+        # Should be a dict with keys like "binance:spot:live"
         assert isinstance(data, dict), "capability-matrix should return a dict"
         
         # Check if our discovery was persisted
-        expected_key = "binance:spot:testnet"
+        expected_key = "binance:spot:live"
         if expected_key in data:
             print(f"Found persisted capability for {expected_key}")
             assert "symbol_capabilities" in data[expected_key], "Persisted capability should have symbol_capabilities"
@@ -150,7 +150,7 @@ class TestMarketPolicyLayer:
         payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbol_rules": [
                 {"symbol": "BTCUSDT", "action": "allow"},
                 {"symbol": "TESTUSDT", "action": "deny"},
@@ -182,7 +182,7 @@ class TestMarketPolicyLayer:
         # Should have rules dict
         assert "rules" in get_data, "GET should return rules"
         
-        expected_key = "binance:spot:testnet"
+        expected_key = "binance:spot:live"
         if expected_key in get_data.get("rules", {}):
             rule = get_data["rules"][expected_key]
             assert "symbol_rules" in rule, "Rule should have symbol_rules"
@@ -259,7 +259,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "test-strategy-456",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100,
         }
@@ -394,7 +394,7 @@ class TestMarketPolicySymbolDenyEnforcement:
         policy_payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbol_rules": [
                 {"symbol": "BLOCKEDUSDT", "action": "deny"},
             ],
@@ -425,7 +425,7 @@ class TestMarketPolicySymbolDenyEnforcement:
             "strategy_id": "test-strategy-456",
             "symbol": "BLOCKEDUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100,
         }
@@ -459,7 +459,7 @@ class TestControlPlaneConfigPersistence:
         discovery_payload = {
             "exchange_code": "binance",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "symbols": ["BTCUSDT", "ETHUSDT"],
         }
         
@@ -479,7 +479,7 @@ class TestControlPlaneConfigPersistence:
         matrix_data = matrix_response.json()
         
         # Verify the discovery was persisted
-        expected_key = "binance:futures:testnet"
+        expected_key = "binance:futures:live"
         assert expected_key in matrix_data, f"Expected key {expected_key} not found in matrix"
         
         persisted = matrix_data[expected_key]
@@ -497,7 +497,7 @@ class TestUnifiedContractFormat:
         payload = {
             "exchange_code": "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "symbols": [],
         }
         response = requests.post(

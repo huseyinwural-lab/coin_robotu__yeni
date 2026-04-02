@@ -30,7 +30,7 @@ def test_normalized_event_contains_mandatory_schema_keys():
             "correlation_id": "corr-1",
             "strategy_id": "s1",
             "symbol": "BTCUSDT",
-            "environment": "testnet",
+            "environment": "live",
         },
     )
     normalized = normalize_audit_log_event(row).envelope

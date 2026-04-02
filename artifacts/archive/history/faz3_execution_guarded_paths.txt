@@ -1,7 +1,0 @@
-execution_intent_service.submit_execution_intent -> enforce_execution_open_allowed_or_raise
-execution_intent_service.approve_execution_intent -> enforce_execution_open_allowed_or_raise
-runtime_execution_service.dispatch_decision_result -> enforce_execution_open_allowed_or_raise
-runtime_execution_service.process_submission_event_once -> enforce_execution_open_allowed_or_raise
-user_execution router -> ExecutionSafetyViolation => 423 + reason_code
-user_trading router -> ExecutionSafetyViolation => 423 + reason_code
-admin_execution router -> ExecutionSafetyViolation => 423 + reason_code

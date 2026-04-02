@@ -105,14 +105,14 @@ class TestExchangeValidateContract:
 
     def test_validate_endpoint_returns_expected_codes(self, user_headers):
         """GET exchange/validate should return 200 or 4xx with proper fields"""
-        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=testnet", headers=user_headers)
+        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=live", headers=user_headers)
         # Can be 200 (success), 400 (missing key), or 403 (permission/ip issue)
         assert response.status_code in [200, 400, 403], \
             f"Expected 200/400/403, got {response.status_code}: {response.text}"
 
     def test_validate_success_response_has_all_fields(self, user_headers):
         """Successful validate should have required fields"""
-        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=testnet", headers=user_headers)
+        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=live", headers=user_headers)
         
         # Get response data
         if response.status_code == 200:
@@ -131,13 +131,13 @@ class TestExchangeValidateContract:
         # First clear credentials
         clear_payload = {
             "exchange": "binance",
-            "mode": "testnet",
+            "mode": "live",
             "api_key": "",
             "api_secret": "",
         }
         requests.put(f"{BASE_URL}/api/phase4/exchange-settings", headers=user_headers, json=clear_payload)
         
-        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=testnet", headers=user_headers)
+        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=live", headers=user_headers)
         
         # Should be 400 for missing credentials
         assert response.status_code == 400, \
@@ -154,13 +154,13 @@ class TestExchangeValidateContract:
         # Set invalid credentials
         invalid_payload = {
             "exchange": "binance",
-            "mode": "testnet",
+            "mode": "live",
             "api_key": "INVALID_KEY_12345",
             "api_secret": "INVALID_SECRET_67890",
         }
         requests.put(f"{BASE_URL}/api/phase4/exchange-settings", headers=user_headers, json=invalid_payload)
         
-        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=testnet", headers=user_headers)
+        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=live", headers=user_headers)
         
         # Should be 400 for invalid key
         assert response.status_code == 400, \
@@ -168,7 +168,7 @@ class TestExchangeValidateContract:
 
     def test_validate_reason_codes_mapping(self, user_headers):
         """Validate should return appropriate reason_codes"""
-        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=testnet", headers=user_headers)
+        response = requests.get(f"{BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=live", headers=user_headers)
         
         if response.status_code == 200:
             data = response.json()
@@ -206,7 +206,7 @@ class TestExchangeTestOrder:
         # Setup invalid credentials
         invalid_payload = {
             "exchange": "binance",
-            "mode": "testnet",
+            "mode": "live",
             "api_key": "FAKE_INVALID_KEY_123",
             "api_secret": "FAKE_INVALID_SECRET_456",
         }
@@ -227,7 +227,7 @@ class TestExchangeTestOrder:
         # Clear credentials
         clear_payload = {
             "exchange": "binance",
-            "mode": "testnet",
+            "mode": "live",
             "api_key": "",
             "api_secret": "",
         }

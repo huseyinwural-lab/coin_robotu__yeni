@@ -372,7 +372,7 @@ class TestExchangeSettingsEndpoint:
         response = authenticated_user_client.get(f"{BASE_URL}/api/exchange/readiness-checklist", params={
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet"
+            "environment": "live"
         })
         assert response.status_code == 200, f"Readiness checklist failed: {response.status_code}"
         data = response.json()
@@ -396,7 +396,7 @@ class TestVenueEndpoints:
         response = authenticated_user_client.get(f"{BASE_URL}/api/venues/access-check", params={
             "exchange": "binance",
             "market_type": "spot",
-            "environment": "testnet"
+            "environment": "live"
         })
         assert response.status_code == 200, f"Venue access check failed: {response.status_code}"
         print("PASS: Venue access check endpoint working")

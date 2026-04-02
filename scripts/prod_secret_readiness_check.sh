@@ -31,8 +31,8 @@ optional_keys = [
     'RESEND_API_KEY',
     'ALERT_FROM',
     'ALERT_TO',
-    'BINANCE_TESTNET_API_KEY',
-    'BINANCE_TESTNET_API_SECRET',
+    'BINANCE_LIVE_API_KEY',
+    'BINANCE_LIVE_API_SECRET',
 ]
 
 

@@ -73,7 +73,7 @@ class TestFailoverPoliciesPUT:
             "user_id": test_user_id,
             "strategy_id": "TEST_strategy_p2",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": ["okx", "kucoin"],
@@ -98,7 +98,7 @@ class TestFailoverPoliciesPUT:
             "user_id": test_user_id,
             "strategy_id": "TEST_strategy_p2",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": ["okx"],
@@ -119,7 +119,7 @@ class TestFailoverPoliciesPUT:
             "user_id": test_user_id,
             "strategy_id": "TEST_strategy_p2_rule",
             "market_type": "futures",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": ["okx", "kucoin"],
@@ -145,7 +145,7 @@ class TestFailoverPoliciesPUT:
             "user_id": test_user_id,
             "strategy_id": "TEST_strategy_p2_state",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": [],
@@ -174,7 +174,7 @@ class TestFailoverManualOverridePOST:
             "user_id": test_user_id,
             "strategy_id": "TEST_manual_override",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": ["okx"],
@@ -192,7 +192,7 @@ class TestFailoverManualOverridePOST:
             "user_id": test_user_id,
             "strategy_id": "TEST_manual_override",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "force_route": "bybit",
             "force_disable": [],
             "reason": "Testing force route",
@@ -214,7 +214,7 @@ class TestFailoverManualOverridePOST:
             "user_id": test_user_id,
             "strategy_id": "TEST_manual_disable",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": ["okx"],
@@ -232,7 +232,7 @@ class TestFailoverManualOverridePOST:
             "user_id": test_user_id,
             "strategy_id": "TEST_manual_disable",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "force_route": None,
             "force_disable": ["okx", "kucoin"],
             "reason": "Testing force disable",
@@ -253,7 +253,7 @@ class TestFailoverManualOverridePOST:
             "user_id": test_user_id,
             "strategy_id": "TEST_manual_clear",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": [],
@@ -276,7 +276,7 @@ class TestFailoverManualOverridePOST:
             "user_id": test_user_id,
             "strategy_id": "TEST_manual_clear",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "clear_override": True
         }
         response = api_client.post(f"{BASE_URL}/api/venues/admin/failover/manual-override", json=clear_payload, timeout=30)
@@ -331,7 +331,7 @@ class TestFailoverPoliciesGET:
             "user_id": test_user_id,
             "strategy_id": "TEST_failover_state_get",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "primary_venue": "binance",
             "secondary_venue": "bybit",
             "fallback_chain": [],
@@ -349,7 +349,7 @@ class TestFailoverPoliciesGET:
             "user_id": test_user_id,
             "strategy_id": "TEST_failover_state_get",
             "market_type": "spot",
-            "environment": "testnet"
+            "environment": "live"
         }
         response = api_client.get(f"{BASE_URL}/api/venues/admin/failover-state", params=params, timeout=30)
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
@@ -360,7 +360,7 @@ class TestFailoverPoliciesGET:
             "user_id": test_user_id,
             "strategy_id": "TEST_failover_state_get",
             "market_type": "spot",
-            "environment": "testnet"
+            "environment": "live"
         }
         response = api_client.get(f"{BASE_URL}/api/venues/admin/failover-state", params=params, timeout=30)
         if response.status_code == 404:
@@ -380,7 +380,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "TEST_routing_preview",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -394,7 +394,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "TEST_routing_preview",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -410,7 +410,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "TEST_routing_preview",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -426,7 +426,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "TEST_routing_preview",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -442,7 +442,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "TEST_routing_preview",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -457,7 +457,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "TEST_routing_preview",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -473,7 +473,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "TEST_routing_preview",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -491,7 +491,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "TEST_routing_preview",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -509,7 +509,7 @@ class TestRoutingPreviewV2:
             "strategy_id": "TEST_deterministic",
             "symbol": "ETHUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "SELL",
             "order_size_usd": 50
         }
@@ -535,7 +535,7 @@ class TestRoutingDecisionFactors:
             "strategy_id": "TEST_factors",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -553,7 +553,7 @@ class TestRoutingDecisionFactors:
             "strategy_id": "TEST_factors",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -571,7 +571,7 @@ class TestRoutingDecisionFactors:
             "strategy_id": "TEST_factors",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -589,7 +589,7 @@ class TestRoutingDecisionFactors:
             "strategy_id": "TEST_factors",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -607,7 +607,7 @@ class TestRoutingDecisionFactors:
             "strategy_id": "TEST_factors",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -632,7 +632,7 @@ class TestValidationConsistency:
             "strategy_id": "TEST_consistency",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }
@@ -649,7 +649,7 @@ class TestValidationConsistency:
             "strategy_id": "TEST_consistency",
             "symbol": "BTCUSDT",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "order_side": "BUY",
             "order_size_usd": 100
         }

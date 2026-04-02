@@ -121,7 +121,7 @@ class TestValidationCenterRerun:
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/validation-center/rerun",
             headers=auth_headers,
-            json={"market_type": "spot", "environment": "testnet"},
+            json={"market_type": "spot", "environment": "live"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -136,7 +136,7 @@ class TestValidationCenterRerun:
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/validation-center/rerun",
             headers=auth_headers,
-            json={"market_type": "spot", "environment": "testnet"},
+            json={"market_type": "spot", "environment": "live"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -151,7 +151,7 @@ class TestValidationCenterRerun:
         response = requests.post(
             f"{BASE_URL}/api/venues/admin/validation-center/rerun",
             headers=auth_headers,
-            json={"market_type": "spot", "environment": "testnet"},
+            json={"market_type": "spot", "environment": "live"},
         )
         assert response.status_code == 200
         data = response.json()

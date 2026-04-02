@@ -80,7 +80,7 @@ def test_acceptance_blocked_by_gate(monkeypatch):
     monkeypatch.setattr(adv, "_record_acceptance_artifact", lambda payload: {"artifact_id": "a1", "payload": payload})
     monkeypatch.setattr(adv, "create_audit_log", lambda *args, **kwargs: None)
 
-    payload = adv.run_testnet_acceptance(DummyDB(), symbol="BTCUSDT", qty=0.001, requested_by="tester")
+    payload = adv.run_live_acceptance(DummyDB(), symbol="BTCUSDT", qty=0.001, requested_by="tester")
     assert payload["final_verdict"] == "BLOCKED"
     assert payload["reason_code"] == "acceptance_blocked_by_hard_gate"
 
@@ -103,7 +103,7 @@ def test_reconcile_missing_intent_raises():
 
 def test_acceptance_history_empty_when_manifest_missing(monkeypatch):
     monkeypatch.setattr(adv, "_acceptance_manifest_items", lambda limit=50: [])
-    payload = adv.get_testnet_acceptance_history(limit=10)
+    payload = adv.get_live_acceptance_history(limit=10)
     assert payload["items"] == []
     assert payload["total"] == 0
 

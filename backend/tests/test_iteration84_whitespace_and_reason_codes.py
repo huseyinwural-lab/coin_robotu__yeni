@@ -96,7 +96,7 @@ class TestWhitespaceTrimming:
                 "account_label": f"whitespace_test_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": False,
                 "api_key": whitespace_api_key,
                 "api_secret": whitespace_api_secret,
@@ -129,7 +129,7 @@ class TestWhitespaceTrimming:
                 "account_label": f"update_ws_test_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": False,
                 "api_key": "initialKey123",
                 "api_secret": "initialSecret456",
@@ -179,7 +179,7 @@ class TestReasonCodeNormalization:
                 "account_label": f"invalid_key_test_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": True,
                 "api_key": "INVALID_API_KEY_12345",
                 "api_secret": "INVALID_API_SECRET_67890",
@@ -194,7 +194,7 @@ class TestReasonCodeNormalization:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
             headers=headers,
         )
@@ -242,7 +242,7 @@ class TestReasonCodeNormalization:
                 "account_label": f"ws_only_test_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": True,
                 "api_key": "   ",  # Only whitespace
                 "api_secret": "\t\n  \t",  # Only whitespace
@@ -258,7 +258,7 @@ class TestReasonCodeNormalization:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
             headers=headers,
         )
@@ -295,7 +295,7 @@ class TestHintFieldConsistency:
                 "account_label": f"hint_test_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": True,
                 "api_key": "BAD_KEY_FOR_HINT_TEST",
                 "api_secret": "BAD_SECRET_FOR_HINT_TEST",
@@ -310,7 +310,7 @@ class TestHintFieldConsistency:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
             headers=headers,
         )
@@ -366,7 +366,7 @@ class TestExchangeConnectionCRUDRegression:
                 "account_label": f"regression_create_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": False,
                 "api_key": "test_key_regression",
                 "api_secret": "test_secret_regression",
@@ -392,7 +392,7 @@ class TestExchangeConnectionCRUDRegression:
                 "account_label": f"regression_update_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": False,
             },
             headers=headers,
@@ -421,7 +421,7 @@ class TestExchangeConnectionCRUDRegression:
                 "account_label": f"regression_delete_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": False,
             },
             headers=headers,
@@ -456,7 +456,7 @@ class TestValidateEndpointRegression:
                 "account_label": f"validate_regression_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": True,
                 "api_key": "test_key_validate",
                 "api_secret": "test_secret_validate",
@@ -470,7 +470,7 @@ class TestValidateEndpointRegression:
             params={
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
             },
             headers=headers,
         )
@@ -517,7 +517,7 @@ class TestExtractReasonCodesLogic:
                 "account_label": f"reason_code_direct_{uuid.uuid4().hex[:6]}",
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
                 "is_default": True,
                 "api_key": "COMPLETELY_INVALID_KEY",
                 "api_secret": "COMPLETELY_INVALID_SECRET",
@@ -530,7 +530,7 @@ class TestExtractReasonCodesLogic:
             params={
                 "exchange": "binance",
                 "market_type": "futures",
-                "environment": "testnet",
+                "environment": "live",
             },
             headers=headers,
         )

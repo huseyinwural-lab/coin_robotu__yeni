@@ -90,7 +90,7 @@ from services.execution_environment_control_service import (
     list_safe_mode_states,
     upsert_environment_override,
 )
-from services.futures_testnet_control_service import build_testnet_execution_quality, build_testnet_execution_quality_rolling_7d
+from services.futures_live_control_service import build_live_execution_quality, build_live_execution_quality_rolling_7d
 from services.execution_readiness_service import evaluate_execution_readiness
 from services.guard_metrics_service import build_guard_telemetry_payload
 from services.execution_safety_service import ExecutionSafetyViolation
@@ -257,19 +257,19 @@ def _builder_schema_from_version(row) -> dict:
 
 @router.get("/futures/execution-quality")
 def admin_futures_execution_quality_alias(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    payload = build_testnet_execution_quality(db, pipeline_runtime.cache, current_admin.id)
+    payload = build_live_execution_quality(db, pipeline_runtime.cache, current_admin.id)
     return {
         **payload,
-        "alias_of": "/api/admin/futures/testnet/execution-quality",
+        "alias_of": "/api/admin/futures/live/execution-quality",
     }
 
 
 @router.get("/execution/metrics")
 def admin_execution_metrics_alias(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    quality = build_testnet_execution_quality(db, pipeline_runtime.cache, current_admin.id)
-    rolling = build_testnet_execution_quality_rolling_7d(db, pipeline_runtime.cache, current_admin.id)
+    quality = build_live_execution_quality(db, pipeline_runtime.cache, current_admin.id)
+    rolling = build_live_execution_quality_rolling_7d(db, pipeline_runtime.cache, current_admin.id)
     return {
-        "alias_of": "/api/admin/futures/testnet/execution-quality",
+        "alias_of": "/api/admin/futures/live/execution-quality",
         "execution_quality": quality,
         "rolling_7d": rolling,
     }
@@ -338,7 +338,7 @@ class PolicyVersionCreateRequest(BaseModel):
 
 
 class PolicyVersionActivateRequest(BaseModel):
-    environment: str = "testnet"
+    environment: str = "live"
     activation_mode: str = "ACTIVE"
     override_high_risk: bool = False
     override_reason: str | None = None
@@ -397,7 +397,7 @@ class PolicySimulationRequest(BaseModel):
 
 class BulkActivateItem(BaseModel):
     version_id: str
-    environment: str = "testnet"
+    environment: str = "live"
     activation_mode: str = "ACTIVE"
     override_high_risk: bool = False
     override_reason: str | None = None
