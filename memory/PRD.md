@@ -1,3 +1,33 @@
+## 2026-04-02 — FINAL BASELINE (OVERRIDE’SIZ GO/PASS + STANDART OPERASYON)
+
+### Uygulanan standartlar
+- Admin canlı baseline tek profile sabitlendi:
+  - Execution mode: `LIVE`
+  - Trading: `enabled`
+  - `canary_enabled=false`, `symbol_whitelist=[]`, `disable_futures=false`
+- User execution modeli kalıcılaştırıldı:
+  - Binance live spot/futures için `preferred_source=user`
+  - `fallback_enabled=false`
+- Allowed markets standardı:
+  - Binance `spot/live` ve `futures/live` => `enabled=true`
+
+### Blok temizliği / gate durumu
+- Production Gate: `configured_state=GO`, `effective_state=GO`, `deploy_allowed=true`, `blocked_reason_codes=[]`
+- Release Gate: `PASS`, `override_active=false`
+- Execution Readiness: `READY`, `mode=LIVE`, `go_live_allowed=true`, `override_active=false`
+- Readiness endpointleri: `/api/health` = 200, `/api/ready` = 200
+
+### Kalıcı stabilite iyileştirmeleri
+- `ExecutionMetric.timestamp` kaynaklı kill-switch loop hatası kalıcı giderildi (created_at + fallback).
+- Root health aliasları eklendi (`/health`, `/ready`) ve `/api/*` health standardı korunarak uyumluluk sağlandı.
+- Gate/check stale toleransları env bazlı yönetilebilir hale getirildi:
+  - `EXCHANGE_VALIDATION_STALE_MINUTES`
+  - `PRODUCTION_GATE_STALE_MINUTES`
+
+### Operasyon notu
+- Standart açılış artık bloksuz profile göre çalışır; kullanıcı key girince user-key execution yoluna düşer.
+- Spot/Futures emir fill sonucu kullanıcı hesabı izin/bakiye/notional koşullarına bağlıdır.
+
 ## 2026-04-01 — FAZ 5–6 IMPLEMENTATION (CANLI GENİŞLEME + KAPANIŞ ALTYAPISI)
 
 ### Uygulanan backend modülleri
