@@ -52,34 +52,16 @@ ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-canary.admin@platform.local}"
 ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-CanaryAdmin123!}"
 USER_EMAIL="${CANARY_TEST_USER_EMAIL:-canary_$(date +%s)@example.com}"
 USER_PASSWORD="${CANARY_TEST_USER_PASSWORD:-CanaryPass123!}"
-TESTNET_API_KEY="${BINANCE_TESTNET_API_KEY:-}"
-TESTNET_API_SECRET="${BINANCE_TESTNET_API_SECRET:-}"
 LIVE_API_KEY="${BINANCE_LIVE_API_KEY:-${BINANCE_API_KEY:-}}"
 LIVE_API_SECRET="${BINANCE_LIVE_API_SECRET:-${BINANCE_API_SECRET:-}}"
-EXCHANGE_MODE="${CANARY_EXCHANGE_MODE:-live}"
+EXCHANGE_MODE="live"
 EXCHANGE_MARKET_TYPE="${CANARY_EXCHANGE_MARKET_TYPE:-futures}"
-EXCHANGE_ENVIRONMENT="${CANARY_EXCHANGE_ENVIRONMENT:-live}"
-CANARY_AUTO_FALLBACK_LIVE="${CANARY_AUTO_FALLBACK_LIVE:-false}"
+EXCHANGE_ENVIRONMENT="live"
 CANARY_ALLOW_451_BYPASS="${CANARY_ALLOW_451_BYPASS:-true}"
 
 resolve_exchange_credentials() {
-  case "${EXCHANGE_MODE}" in
-    live)
-      if [[ -n "${LIVE_API_KEY}" && -n "${LIVE_API_SECRET}" ]]; then
-        ACTIVE_API_KEY="${LIVE_API_KEY}"
-        ACTIVE_API_SECRET="${LIVE_API_SECRET}"
-      else
-        # Bazı ortamlarda live key'ler yanlışlıkla TESTNET değişkenlerine yazılıyor.
-        # Live mod fallback'inde aynı key pair'i de dene.
-        ACTIVE_API_KEY="${TESTNET_API_KEY}"
-        ACTIVE_API_SECRET="${TESTNET_API_SECRET}"
-      fi
-      ;;
-    *)
-      ACTIVE_API_KEY="${TESTNET_API_KEY}"
-      ACTIVE_API_SECRET="${TESTNET_API_SECRET}"
-      ;;
-  esac
+  ACTIVE_API_KEY="${LIVE_API_KEY}"
+  ACTIVE_API_SECRET="${LIVE_API_SECRET}"
 }
 
 resolve_exchange_credentials
@@ -302,24 +284,11 @@ validate_exchange_ready() {
   code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
 
   if [[ "${code}" != "200" ]]; then
-    local invalid_key
-    invalid_key="$(has_reason_code "/tmp/faz8_exchange_validate.json" "invalid_key")"
-    if [[ "${invalid_key}" == "true" && "${EXCHANGE_MODE}" == "testnet" && "${CANARY_AUTO_FALLBACK_LIVE}" == "true" ]]; then
-      log "WARN: testnet invalid_key alındı, live mode fallback deneniyor"
-      EXCHANGE_MODE="live"
-      EXCHANGE_ENVIRONMENT="live"
-      set_exchange_keys
-      code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
-    fi
-  fi
-
-  if [[ "${code}" != "200" ]]; then
-    local live_not_allowed assignment_required testnet_not_allowed market_disabled
+    local live_not_allowed assignment_required market_disabled
     live_not_allowed="$(has_reason_code "/tmp/faz8_exchange_validate.json" "live_not_allowed")"
     assignment_required="$(has_reason_code "/tmp/faz8_exchange_validate.json" "assignment_required")"
-    testnet_not_allowed="$(has_reason_code "/tmp/faz8_exchange_validate.json" "testnet_not_allowed")"
     market_disabled="$(has_reason_code "/tmp/faz8_exchange_validate.json" "market_disabled")"
-    if [[ "${live_not_allowed}" == "true" || "${assignment_required}" == "true" || "${testnet_not_allowed}" == "true" ]]; then
+    if [[ "${live_not_allowed}" == "true" || "${assignment_required}" == "true" ]]; then
       log "WARN: venue assignment reason detected, admin repair deneniyor"
       repair_user_venue_assignment "${EXCHANGE_ENVIRONMENT}" "${EXCHANGE_MARKET_TYPE}"
       code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"

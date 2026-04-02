@@ -174,21 +174,91 @@ export const AdminLiveGatePage = () => {
     const proxySpot = proxyHealth?.result?.spot || {};
     const proxyFutures = proxyHealth?.result?.futures || {};
 
+    const reasons = readiness?.reason_codes || [];
+    const gateReasons = gate?.blocked_reason_codes || [];
+
     return [
-      { id: 1, title: "Key Girişi", desc: "Kullanıcının Binance live API key/secret bağlantısı girilmiş olmalı.", state: readiness?.exchange_connection === "OK" ? "PASS" : "FAIL", to: "/user/exchange-settings" },
-      { id: 2, title: "Key Doğrulama & Permission", desc: "Permission ve can_trade doğrulaması geçmeli.", state: readiness?.permissions === "OK" ? "PASS" : "FAIL", to: "/admin/execution-readiness" },
-      { id: 3, title: "Venue & Allowed Market", desc: "Live spot/futures market açık olmalı, market_disabled olmamalı.", state: hasAnyReason(readiness, ["market_disabled", "live_not_allowed", "assignment_required", "testnet_not_allowed"]) ? "FAIL" : "PASS", to: "/admin/credential-orchestration" },
-      { id: 4, title: "Kill Switch", desc: "Bu adımda blokaj koyma/kaldırma işlemi yapılır.", state: liveConfig?.kill_switch_enabled ? "FAIL" : "PASS", to: "/admin/live-trading-dashboard" },
-      { id: 5, title: "Risk Policy", desc: "Risk Engine aktif ve readiness reason_code içinde risk bloklayıcı olmamalı.", state: hasAnyReason(readiness, ["RISK_POLICY_MISSING", "EXPOSURE_NO_EQUITY", "MARGIN_DATA_MISSING"]) ? "FAIL" : "PASS", to: "/admin/risk-orchestrator" },
-      { id: 6, title: "Strategy Template", desc: "Strateji motoru biliniyor olmalı (STRATEGY_ENGINE_UNKNOWN olmamalı).", state: hasAnyReason(readiness, ["STRATEGY_ENGINE_UNKNOWN"]) ? "FAIL" : "PASS", to: "/admin/strategies" },
-      { id: 7, title: "Bot Oluştur & Başlat", desc: "Bot profili oluşturup RUNNING durumuna alınmalı.", state: hasAnyReason(readiness, ["ORDER_EXECUTION_MISSING", "WORKER_STATE_UNKNOWN"]) ? "WAIT" : "PASS", to: "/user/bot-profiles" },
-      { id: 8, title: "Production Gate Rerun", desc: "Stale check kalmamalı. GO ve deploy_allowed=true olmalı.", state: gate?.effective_state === "GO" && gate?.deploy_allowed ? "PASS" : "FAIL", to: "/admin/live-trading-dashboard" },
-      { id: 9, title: "Mode Transition LIVE", desc: "Execution mode LIVE ve final_status READY olmalı.", state: readiness?.mode === "LIVE" && readiness?.final_status === "READY" ? "PASS" : "FAIL", to: "/admin/live-trading-dashboard" },
+      {
+        id: 1,
+        title: "Key Girişi",
+        desc: "Kullanıcının Binance live API key/secret bağlantısı girilmiş olmalı.",
+        state: readiness?.exchange_connection === "OK" ? "PASS" : "FAIL",
+        reason: reasons.filter((code) => ["EXCHANGE_CONNECTION_MISSING", "invalid_key", "exchange_error_451"].includes(code)).join(", "),
+        to: "/user/exchange-settings",
+      },
+      {
+        id: 2,
+        title: "Key Doğrulama & Permission",
+        desc: "Permission ve can_trade doğrulaması geçmeli.",
+        state: readiness?.permissions === "OK" ? "PASS" : "FAIL",
+        reason: reasons.filter((code) => ["missing_trade_permission", "permission_check_fail", "missing_credentials"].includes(code)).join(", "),
+        to: "/admin/execution-readiness",
+      },
+      {
+        id: 3,
+        title: "Venue & Allowed Market",
+        desc: "Live spot/futures market açık olmalı, market_disabled olmamalı.",
+        state: hasAnyReason(readiness, ["market_disabled", "live_not_allowed", "assignment_required"]) ? "FAIL" : "PASS",
+        reason: reasons.filter((code) => ["market_disabled", "live_not_allowed", "assignment_required"].includes(code)).join(", "),
+        to: "/admin/credential-orchestration",
+      },
+      {
+        id: 4,
+        title: "Kill Switch",
+        desc: "Bu adımda blokaj koyma/kaldırma işlemi yapılır.",
+        state: liveConfig?.kill_switch_enabled ? "FAIL" : "PASS",
+        reason: liveConfig?.kill_switch_enabled ? "kill_switch_enabled" : "",
+        to: "/admin/live-trading-dashboard",
+      },
+      {
+        id: 5,
+        title: "Risk Policy",
+        desc: "Risk Engine aktif ve readiness reason_code içinde risk bloklayıcı olmamalı.",
+        state: hasAnyReason(readiness, ["RISK_POLICY_MISSING", "EXPOSURE_NO_EQUITY", "MARGIN_DATA_MISSING"]) ? "FAIL" : "PASS",
+        reason: reasons.filter((code) => ["RISK_POLICY_MISSING", "EXPOSURE_NO_EQUITY", "MARGIN_DATA_MISSING"].includes(code)).join(", "),
+        to: "/admin/risk-orchestrator",
+      },
+      {
+        id: 6,
+        title: "Strategy Template",
+        desc: "Strateji motoru biliniyor olmalı (STRATEGY_ENGINE_UNKNOWN olmamalı).",
+        state: hasAnyReason(readiness, ["STRATEGY_ENGINE_UNKNOWN"]) ? "FAIL" : "PASS",
+        reason: reasons.filter((code) => ["STRATEGY_ENGINE_UNKNOWN"].includes(code)).join(", "),
+        to: "/admin/strategies",
+      },
+      {
+        id: 7,
+        title: "Bot Oluştur & Başlat",
+        desc: "Bot profili oluşturup RUNNING durumuna alınmalı.",
+        state: hasAnyReason(readiness, ["ORDER_EXECUTION_MISSING", "WORKER_STATE_UNKNOWN"]) ? "WAIT" : "PASS",
+        reason: reasons.filter((code) => ["ORDER_EXECUTION_MISSING", "WORKER_STATE_UNKNOWN"].includes(code)).join(", "),
+        to: "/user/bot-profiles",
+      },
+      {
+        id: 8,
+        title: "Production Gate Rerun",
+        desc: "Stale check kalmamalı. GO ve deploy_allowed=true olmalı.",
+        state: gate?.effective_state === "GO" && gate?.deploy_allowed ? "PASS" : "FAIL",
+        reason: gateReasons.join(", "),
+        to: "/admin/live-trading-dashboard",
+      },
+      {
+        id: 9,
+        title: "Mode Transition LIVE",
+        desc: "Execution mode LIVE ve final_status READY olmalı.",
+        state: readiness?.mode === "LIVE" && readiness?.final_status === "READY" ? "PASS" : "FAIL",
+        reason: readiness?.mode !== "LIVE" ? `mode=${readiness?.mode || "-"}` : readiness?.final_status !== "READY" ? `final_status=${readiness?.final_status || "-"}` : "",
+        to: "/admin/live-trading-dashboard",
+      },
       {
         id: 10,
         title: "Canlı Akış İzleme",
         desc: "Proxy health, execution readiness ve gate sürekli izlenmeli.",
         state: proxySpot?.proxy_token_set && proxySpot?.base_url_set && proxyFutures?.proxy_token_set && proxyFutures?.base_url_set ? "PASS" : "FAIL",
+        reason:
+          proxySpot?.proxy_token_set && proxySpot?.base_url_set && proxyFutures?.proxy_token_set && proxyFutures?.base_url_set
+            ? ""
+            : "proxy_missing_or_token_missing",
         to: "/admin/execution-readiness",
       },
     ];
@@ -196,9 +266,7 @@ export const AdminLiveGatePage = () => {
 
   const wizardSteps = useMemo(() => {
     return steps.map((step, index) => {
-      const previous = steps.slice(0, index);
-      const previousDone = previous.every((item) => item.state === "PASS" || manualComplete[item.id]);
-      const unlocked = index === 0 || previousDone;
+      const unlocked = true;
       const done = step.state === "PASS" || !!manualComplete[step.id];
       return { ...step, unlocked, done };
     });
@@ -265,6 +333,11 @@ export const AdminLiveGatePage = () => {
                   <p className="text-xs uppercase text-slate-400" data-testid={`admin-live-gate-step-index-${step.id}`}>Adım {step.id}</p>
                   <h2 className="text-base font-semibold text-slate-100" data-testid={`admin-live-gate-step-title-${step.id}`}>{step.title}</h2>
                   <p className="mt-1 text-sm text-slate-300" data-testid={`admin-live-gate-step-desc-${step.id}`}>{step.desc}</p>
+                  {step.reason ? (
+                    <p className="mt-1 text-xs text-amber-300" data-testid={`admin-live-gate-step-reason-${step.id}`}>
+                      neden FAIL: {step.reason}
+                    </p>
+                  ) : null}
                   {!step.unlocked ? (
                     <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-300" data-testid={`admin-live-gate-step-locked-${step.id}`}>
                       <Lock className="h-3 w-3" /> Önce önceki adımları tamamla

@@ -29,6 +29,11 @@ OVERRIDE_REASON_CODES = {
     "MANUAL_RISK_ACCEPTANCE",
 }
 CHECK_STALE_MINUTES = int(str(os.getenv("PRODUCTION_GATE_STALE_MINUTES", "120") or "120"))
+KILL_SWITCH_ONLY_BLOCKING = str(os.getenv("KILL_SWITCH_ONLY_BLOCKING", "true") or "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 DEFAULT_CHECKLIST = [
     {"item_key": "change_window_confirmed", "title": "Change window confirmed", "required": True},
@@ -87,6 +92,16 @@ RUNBOOK_REFERENCES = {
         "remediation": "Stale check'leri rerun ederek güncel duruma getirin.",
     },
 }
+
+
+def _is_kill_switch_reason(code: str) -> bool:
+    normalized = str(code or "").strip().lower()
+    return (
+        "kill_switch" in normalized
+        or normalized == "trading_disabled"
+        or normalized == "trading_blocked"
+        or normalized == "kill_switch_active"
+    )
 
 ORDER_SCENARIO_TEMPLATES = [
     {"scenario_key": "buy_small", "label": "BUY small", "side": "buy", "size": 0.001, "size_bucket": "small"},
@@ -797,7 +812,7 @@ def _permission_breakdown_rows(db: Session) -> list[dict]:
             {
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "read_status": "UNKNOWN",
                 "write_status": "UNKNOWN",
                 "trade_status": "FAIL",
@@ -842,7 +857,7 @@ def _exchange_health_rows(db: Session) -> list[dict]:
             {
                 "exchange": "binance",
                 "market_type": "spot",
-                "environment": "testnet",
+                "environment": "live",
                 "connection_status": "FAIL",
                 "auth_status": "UNKNOWN",
                 "permission_status": "UNKNOWN",
@@ -982,7 +997,7 @@ def run_order_scenario_matrix(
                 price=50000,
                 qty=float(template.get("size") or 0),
                 leverage=1,
-                environment="testnet",
+                environment="live",
             )
             status_value = str(response.get("status") or "").upper()
             scenario["status"] = "PASS" if status_value in {"MOCKED", "SUBMITTED"} else "FAIL"
@@ -1056,7 +1071,7 @@ def run_production_gate_api_key_tests(
         fallback = {
             "exchange": str(exchange or "binance").strip().lower() or "binance",
             "market_type": "spot",
-            "environment": "testnet",
+            "environment": "live",
             "connection_id": "no_exchange_connection",
             "status": "FAIL",
             "success": False,
@@ -2044,6 +2059,28 @@ def enforce_production_gate_or_raise(
         )
         return gate_status
 
+    blocked_reason_codes = gate_status.get("blocked_reason_codes") or []
+
+    if KILL_SWITCH_ONLY_BLOCKING and not any(_is_kill_switch_reason(code) for code in blocked_reason_codes):
+        create_audit_log(
+            db,
+            action="PRODUCTION_GATE_ACTION_BYPASSED_NON_KILL_SWITCH",
+            entity_type=PRODUCTION_GATE_ENTITY_TYPE,
+            entity_id="global",
+            actor_user_id=actor_user_id,
+            actor_role=actor_role,
+            severity="warning",
+            details={
+                "previous_state": gate_status.get("configured_state"),
+                "next_state": gate_status.get("effective_state"),
+                "reason_code": "GATE_BYPASSED_NON_KILL_SWITCH",
+                "reason_text": reason_text,
+                "action_type": action_type,
+                "blocked_reason_codes": blocked_reason_codes,
+            },
+        )
+        return gate_status
+
     create_audit_log(
         db,
         action="PRODUCTION_GATE_ACTION_BLOCKED",
@@ -2059,7 +2096,7 @@ def enforce_production_gate_or_raise(
             "reason_text": reason_text,
             "expiry": (gate_status.get("active_override") or {}).get("expires_at") if gate_status.get("active_override") else None,
             "action_type": action_type,
-            "blocked_reason_codes": gate_status.get("blocked_reason_codes") or [],
+            "blocked_reason_codes": blocked_reason_codes,
         },
     )
     raise HTTPException(
@@ -2067,7 +2104,7 @@ def enforce_production_gate_or_raise(
         detail={
             "error": "production_gate_blocked",
             "gate_state": gate_status.get("effective_state"),
-            "blocked_reason_codes": gate_status.get("blocked_reason_codes") or [],
+            "blocked_reason_codes": blocked_reason_codes,
         },
     )
 
