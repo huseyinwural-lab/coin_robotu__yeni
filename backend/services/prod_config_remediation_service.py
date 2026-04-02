@@ -4,6 +4,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from core.users.user_exchange_connector import decrypt_exchange_secret, encrypt_exchange_secret
@@ -414,7 +415,20 @@ def build_prod_config_remediation_state(db: Session) -> dict:
     final_payload = _read_json(ROOT_DIR / "artifacts" / "final_release_gate_report.json")
 
     try:
+        db.close()
         gate_payload = enforce_release_gate(db, environment="prod")
+    except OperationalError:
+        db.rollback()
+        db.close()
+        try:
+            gate_payload = enforce_release_gate(db, environment="prod")
+        except Exception:
+            db.rollback()
+            gate_payload = {
+                "status": "BLOCKED",
+                "reason_codes": ["release_gate_runtime_error"],
+                "deploy_enable_flag": False,
+            }
     except Exception:
         db.rollback()
         gate_payload = {

@@ -8,6 +8,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from db import redis_client
@@ -1583,6 +1584,8 @@ def get_production_gate_status(db: Session, *, refresh_checks: bool = False, aud
     changed = False
 
     if refresh_checks or len(list(store.get("checks") or [])) == 0:
+        # Uzun süren remediation scriptleri sonrası stale DB connection riskini azalt.
+        db.close()
         remediation_state = build_prod_config_remediation_state(db)
         store["checks"] = _build_checks_from_remediation(remediation_state)
         store["updated_at"] = _iso(_utcnow())
@@ -2015,7 +2018,13 @@ def enforce_production_gate_or_raise(
     action_type: str,
     reason_text: str,
 ) -> dict:
-    gate_status = get_production_gate_status(db, refresh_checks=False, audit_limit=0)
+    try:
+        gate_status = get_production_gate_status(db, refresh_checks=False, audit_limit=0)
+    except OperationalError:
+        # transient DB bağlantı kapanmalarında tek seferlik refresh dene
+        db.rollback()
+        db.close()
+        gate_status = get_production_gate_status(db, refresh_checks=False, audit_limit=0)
     if bool(gate_status.get("deploy_allowed")):
         create_audit_log(
             db,

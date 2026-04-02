@@ -224,7 +224,7 @@ def _create_and_verify_engine(database_url: str) -> Engine:
 
     engine_kwargs: dict = {
         "pool_pre_ping": True,
-        "pool_recycle": 180,
+        "pool_recycle": 600,
         "connect_args": connect_args,
     }
     if use_null_pool:

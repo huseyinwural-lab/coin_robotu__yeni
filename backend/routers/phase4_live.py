@@ -167,7 +167,15 @@ def update_live_config(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    if bool(payload.live_mode_enabled) or bool(payload.trading_enabled):
+    config = get_or_create_live_config(db)
+
+    enabling_live_mode = (not bool(config.live_mode_enabled)) and bool(payload.live_mode_enabled)
+    enabling_trading = (not bool(config.trading_enabled)) and bool(payload.trading_enabled)
+
+    # Production gate sadece DISABLED -> ENABLED geçişlerinde zorunlu olsun.
+    # Canary/limit güncellemelerinde aynı check'i her PUT'ta tekrar çalıştırmak,
+    # CI'da gereksiz uzun gate refresh + transient 5xx dalgalanması oluşturuyordu.
+    if enabling_live_mode or enabling_trading:
         enforce_production_gate_or_raise(
             db,
             actor_user_id=current_admin.id,
@@ -176,7 +184,6 @@ def update_live_config(
             reason_text="phase4_live_config_enable",
         )
 
-    config = get_or_create_live_config(db)
     updated = apply_config_update(db, config, payload.model_dump())
     create_audit_log(
         db,
