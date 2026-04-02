@@ -1,0 +1,1457 @@
+{
+  "base_url": "http://127.0.0.1:8001",
+  "results": [
+    {
+      "step": "execution_mode_live",
+      "status_code": 200,
+      "ok": true,
+      "detail": "{\"status\":\"ok\",\"mode\":\"LIVE\",\"requested_mode\":\"LIVE\",\"compatibility_alias_used\":false,\"compatibility_notice\":null,\"previous_mode\":\"LIVE\",\"snapshot\":{\"mode\":\"LIVE\",\"requested_mode\":"
+    },
+    {
+      "step": "kill_switch_enable",
+      "status_code": 200,
+      "ok": true,
+      "detail": "{\"trading_enabled\":true,\"max_total_exposure\":5000.0,\"max_active_positions\":50,\"current_total_exposure\":840.0,\"current_active_positions\":28,\"open_positions_count\":0,\"pending_user_in"
+    },
+    {
+      "step": "production_checks_rerun",
+      "status_code": 200,
+      "ok": true,
+      "detail": "{\"configured_state\":\"GO\",\"effective_state\":\"GO\",\"deploy_allowed\":true,\"checklist_complete\":true,\"checks_all_pass\":true,\"has_stale_or_running\":false,\"blocked_reason_codes\":[],\"block"
+    },
+    {
+      "step": "production_state_go",
+      "status_code": 200,
+      "ok": true,
+      "detail": "{\"configured_state\":\"GO\",\"effective_state\":\"GO\",\"deploy_allowed\":true,\"checklist_complete\":true,\"checks_all_pass\":true,\"has_stale_or_running\":false,\"blocked_reason_codes\":[],\"block"
+    },
+    {
+      "step": "live_config_standard",
+      "status_code": 200,
+      "ok": true,
+      "detail": "{\"exchange\":\"binance\",\"market_type\":\"futures_testnet\",\"safe_mode_enabled\":false,\"live_mode_enabled\":false,\"symbol_whitelist\":[],\"max_position_pct\":0.08,\"leverage_cap\":1,\"max_trades"
+    },
+    {
+      "step": "credential_rule_spot",
+      "status_code": 200,
+      "ok": true,
+      "detail": "{\"id\":\"dd0f9995-6adf-4da0-91a1-482ee880ab60\",\"exchange\":\"binance\",\"market_type\":\"spot\",\"environment\":\"live\",\"tenant_id\":null,\"user_id\":null,\"preferred_source\":\"user\",\"fallback_enab"
+    },
+    {
+      "step": "credential_rule_futures",
+      "status_code": 200,
+      "ok": true,
+      "detail": "{\"id\":\"93126c86-0037-4a7b-8967-f0059869d3fd\",\"exchange\":\"binance\",\"market_type\":\"futures\",\"environment\":\"live\",\"tenant_id\":null,\"user_id\":null,\"preferred_source\":\"user\",\"fallback_e"
+    },
+    {
+      "step": "allowed_market_spot",
+      "status_code": 200,
+      "ok": true,
+      "detail": "{\"id\":\"35dbb73a-8cea-44ff-be56-a7dbf3d430e7\",\"exchange_code\":\"binance\",\"market_type\":\"spot\",\"environment\":\"live\",\"enabled\":true,\"updated_at\":\"2026-04-02T00:27:12.375655Z\"}"
+    },
+    {
+      "step": "allowed_market_futures",
+      "status_code": 200,
+      "ok": true,
+      "detail": "{\"id\":\"20081939-b147-4d94-a889-e340414ed266\",\"exchange_code\":\"binance\",\"market_type\":\"futures\",\"environment\":\"live\",\"enabled\":true,\"updated_at\":\"2026-04-02T00:27:16.208714Z\"}"
+    }
+  ],
+  "snapshots": {
+    "/api/admin/release-gate": {
+      "status_code": 200,
+      "payload": {
+        "status": "PASS",
+        "reasons": [
+          "permission_check_bypassed",
+          "kill_switch_not_tested",
+          "chain_integrity_bypassed",
+          "live_mode_disabled"
+        ],
+        "fail_reasons": [],
+        "warning_reasons": [
+          "permission_check_bypassed",
+          "kill_switch_not_tested",
+          "chain_integrity_bypassed",
+          "live_mode_disabled"
+        ],
+        "reason_codes": [
+          "permission_check_bypassed",
+          "kill_switch_not_tested",
+          "chain_integrity_bypassed",
+          "live_mode_disabled"
+        ],
+        "blocking_metrics": {
+          "exchange_health": true,
+          "execution_quality_score": 98.0,
+          "permission_drift_alert": false,
+          "active_override": false,
+          "live_mode_enabled": false,
+          "clock_drift_seconds": 0.070548,
+          "worker_lag_seconds": 0.0,
+          "rate_limit_health": "ok",
+          "risk_orchestrator_enabled": true,
+          "kill_switch_tested": false,
+          "chain_integrity_broken": true,
+          "failed_event_backlog": 0
+        },
+        "live_activation": "guarded",
+        "environment": "prod",
+        "reason_code": "permission_check_bypassed",
+        "deploy_enable_flag": true,
+        "override_active": false,
+        "override_expires_at": null,
+        "override_id": null
+      }
+    },
+    "/api/admin/execution-readiness": {
+      "status_code": 200,
+      "payload": {
+        "exchange_connection": "FAIL",
+        "permissions": "FAIL",
+        "latency_ms": 0,
+        "order_test": "OK",
+        "mode": "LIVE",
+        "final_status": "READY",
+        "mocked_flag": false,
+        "override_active": false,
+        "reason_codes": [
+          "BALANCE_DATA_MISSING",
+          "BALANCE_DATA_STALE",
+          "BINANCE_PROBE_FAIL",
+          "CANCEL_PATH_INVALID",
+          "CREDENTIAL_ENV_MISMATCH",
+          "DRAW_DOWN_DATA_MISSING",
+          "DRY_RUN_REQUIRED",
+          "EXCHANGE_API_UNAVAILABLE",
+          "EXCHANGE_CONNECTION_MISSING",
+          "EXECUTION_CANCEL_MOCKED",
+          "EXECUTION_LIFECYCLE_SYNC_FAIL",
+          "EXECUTION_PROOF_MOCKED_PATHS",
+          "EXECUTION_PROOF_ONLY_MOCKED",
+          "EXECUTION_TEST_MOCKED",
+          "EXPLICIT_LIVE_DISABLED",
+          "EXPOSURE_NO_EQUITY",
+          "FILL_PATH_INVALID",
+          "MARGIN_DATA_MISSING",
+          "MARKET_DATA_MISSING",
+          "OPEN_ORDERS_DATA_MISSING",
+          "OPEN_ORDERS_MISMATCH",
+          "ORDER_EXECUTION_MISSING",
+          "ORDER_EXECUTION_PCTL_MISSING",
+          "PARTIAL_FILL_INVALID",
+          "POSITION_DATA_MISSING",
+          "REJECT_PATH_INVALID",
+          "RELEASE_GATE_PASS_OVERRIDELESS",
+          "ROUND_TRIP_MISSING",
+          "ROUND_TRIP_PCTL_MISSING",
+          "STRATEGY_ENGINE_UNKNOWN",
+          "TICK_TO_TRADE_MISSING",
+          "TICK_TO_TRADE_PCTL_MISSING",
+          "WEBSOCKET_MISSING",
+          "WORKER_STATE_UNKNOWN"
+        ],
+        "execution_proof": {
+          "real_metric_count": 0,
+          "mocked_metric_count": 0,
+          "submit_mocked": true,
+          "cancel_mocked": true,
+          "has_mocked_paths": true,
+          "proof_status": "MOCKED_ONLY"
+        },
+        "mocked_paths": true,
+        "readiness_state": "READY_BY_RELEASE_GATE",
+        "execution_allowed": true,
+        "go_live_allowed": true
+      }
+    },
+    "/api/phase4/admin/production-gate": {
+      "status_code": 200,
+      "payload": {
+        "configured_state": "GO",
+        "effective_state": "GO",
+        "deploy_allowed": true,
+        "checklist_complete": true,
+        "checks_all_pass": true,
+        "has_stale_or_running": false,
+        "blocked_reason_codes": [],
+        "blocked_reason_text": null,
+        "release_gate_contract": "PASS",
+        "validation_block_http_status": 400,
+        "deploy_block_http_status": 403,
+        "checklist": [
+          {
+            "item_key": "change_window_confirmed",
+            "title": "Change window confirmed",
+            "required": true,
+            "checked": true,
+            "updated_at": "2026-04-01T21:17:28.708996Z",
+            "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1"
+          },
+          {
+            "item_key": "rollback_plan_verified",
+            "title": "Rollback plan verified",
+            "required": true,
+            "checked": true,
+            "updated_at": "2026-04-01T21:17:33.076580Z",
+            "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1"
+          },
+          {
+            "item_key": "oncall_ready",
+            "title": "On-call owner ready",
+            "required": true,
+            "checked": true,
+            "updated_at": "2026-04-01T21:17:37.438868Z",
+            "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1"
+          },
+          {
+            "item_key": "stakeholder_communication_ready",
+            "title": "Stakeholder communication ready",
+            "required": true,
+            "checked": true,
+            "updated_at": "2026-04-01T21:17:41.802672Z",
+            "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1"
+          }
+        ],
+        "checks": [
+          {
+            "check_key": "prod_env_resolution",
+            "title": "Prod Env Resolution",
+            "status": "PASS",
+            "blocking": false,
+            "fail_reason": null,
+            "remediation": null,
+            "remediation_payload": {
+              "severity": "info",
+              "suggested_action": null,
+              "runbook_ref": "RBK-GENERIC-001"
+            },
+            "last_run_at": "2026-04-02T00:26:36.366066Z",
+            "stale": false,
+            "flapping_detail": {
+              "is_flapping": false,
+              "count": 0,
+              "window_sec": 300,
+              "severity": "LOW"
+            }
+          },
+          {
+            "check_key": "secret_readiness",
+            "title": "Secret Readiness",
+            "status": "PASS",
+            "blocking": false,
+            "fail_reason": null,
+            "remediation": null,
+            "remediation_payload": {
+              "severity": "info",
+              "suggested_action": null,
+              "runbook_ref": "RBK-GENERIC-001"
+            },
+            "last_run_at": "2026-04-02T00:26:36.366066Z",
+            "stale": false,
+            "flapping_detail": {
+              "is_flapping": false,
+              "count": 0,
+              "window_sec": 300,
+              "severity": "LOW"
+            }
+          },
+          {
+            "check_key": "prod_env_preflight",
+            "title": "Prod Env Preflight",
+            "status": "PASS",
+            "blocking": false,
+            "fail_reason": null,
+            "remediation": null,
+            "remediation_payload": {
+              "severity": "info",
+              "suggested_action": null,
+              "runbook_ref": "RBK-GENERIC-001"
+            },
+            "last_run_at": "2026-04-02T00:26:36.366066Z",
+            "stale": false,
+            "flapping_detail": {
+              "is_flapping": false,
+              "count": 0,
+              "window_sec": 300,
+              "severity": "LOW"
+            }
+          },
+          {
+            "check_key": "final_release_gate",
+            "title": "Final Release Gate",
+            "status": "PASS",
+            "blocking": false,
+            "fail_reason": null,
+            "remediation": null,
+            "remediation_payload": {
+              "severity": "info",
+              "suggested_action": null,
+              "runbook_ref": "RBK-GENERIC-001"
+            },
+            "last_run_at": "2026-04-02T00:26:36.366066Z",
+            "stale": false,
+            "flapping_detail": {
+              "is_flapping": false,
+              "count": 0,
+              "window_sec": 300,
+              "severity": "LOW"
+            }
+          },
+          {
+            "check_key": "release_gate_contract",
+            "title": "Release Gate Contract",
+            "status": "PASS",
+            "blocking": false,
+            "fail_reason": null,
+            "remediation": null,
+            "remediation_payload": {
+              "severity": "info",
+              "suggested_action": "Release gate BLOCKED reason_code listesindeki blokajları kapatın.",
+              "reason_codes": [],
+              "runbook_ref": "RBK-GENERIC-001"
+            },
+            "last_run_at": "2026-04-02T00:26:36.366066Z",
+            "stale": false,
+            "flapping_detail": {
+              "is_flapping": false,
+              "count": 0,
+              "window_sec": 300,
+              "severity": "LOW"
+            }
+          }
+        ],
+        "active_override": null,
+        "risk_score": 30,
+        "risk_level": "LOW",
+        "risk_factors": {
+          "fail_rate": 0.0,
+          "flapping": 0.0,
+          "override_usage": 1.0,
+          "stale_checks": 0.0
+        },
+        "risk_explanation": [
+          "Frequent override usage"
+        ],
+        "risk_model_version": "v2-explainable",
+        "flapping_checks": [],
+        "updated_at": "2026-04-02T00:26:48.597171Z",
+        "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+        "audit_history": [
+          {
+            "id": "6877c63d-2412-4386-943a-0b5b4a9b6a75",
+            "action": "PRODUCTION_GATE_ACTION_ALLOWED",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "GATE_ALLOWED",
+              "reason_text": "phase4_live_config_enable",
+              "expiry": null,
+              "action_type": "phase4_live_config_enable",
+              "request_id": "db005c89-3500-4c12-950c-7bc9a030a16e",
+              "session_id": null,
+              "route": "/api/phase4/live-config",
+              "method": "PUT",
+              "environment": "prod",
+              "correlation_id": "db005c89-3500-4c12-950c-7bc9a030a16e",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:55.214860Z"
+          },
+          {
+            "id": "52082026-996c-4b82-8261-a69c0c4fccbd",
+            "action": "PRODUCTION_GATE_STATE_CHANGED",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "FINAL_APPROVAL",
+              "reason_text": "standard baseline",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "request_id": "7b10c152-bca5-4fe8-836e-316bbb424403",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/state",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "7b10c152-bca5-4fe8-836e-316bbb424403",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:50.393737Z"
+          },
+          {
+            "id": "e67602b1-bff8-43ad-9220-8b46b02615da",
+            "action": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_RERUN",
+              "reason_text": "rerun::all",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "request_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:45.395678Z"
+          },
+          {
+            "id": "a91b93ea-c824-4666-8a11-78c54357df08",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "release_gate_contract::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "release_gate_contract",
+              "status": "PASS",
+              "run_id": "run-088e4020-51de-45b6-91ba-95db41cd9e8f",
+              "latency_ms": 987.771,
+              "flapping": false,
+              "request_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:44.147096Z"
+          },
+          {
+            "id": "9bf5c5f1-fd40-4129-bfeb-d817ad6f1e17",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "final_release_gate::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "final_release_gate",
+              "status": "PASS",
+              "run_id": "run-088e4020-51de-45b6-91ba-95db41cd9e8f",
+              "latency_ms": 987.771,
+              "flapping": false,
+              "request_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:42.910680Z"
+          },
+          {
+            "id": "d642facc-d0e8-4574-8d2f-806f53866fc4",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "prod_env_preflight::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "prod_env_preflight",
+              "status": "PASS",
+              "run_id": "run-088e4020-51de-45b6-91ba-95db41cd9e8f",
+              "latency_ms": 987.771,
+              "flapping": false,
+              "request_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:41.666238Z"
+          },
+          {
+            "id": "76e34ac8-983a-415f-8475-14f13977fd80",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "secret_readiness::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "secret_readiness",
+              "status": "PASS",
+              "run_id": "run-088e4020-51de-45b6-91ba-95db41cd9e8f",
+              "latency_ms": 987.771,
+              "flapping": false,
+              "request_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:40.406691Z"
+          },
+          {
+            "id": "136940d7-c25b-4405-ae6a-0fb56d1fb85a",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "prod_env_resolution::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "prod_env_resolution",
+              "status": "PASS",
+              "run_id": "run-088e4020-51de-45b6-91ba-95db41cd9e8f",
+              "latency_ms": 987.771,
+              "flapping": false,
+              "request_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:39.172436Z"
+          },
+          {
+            "id": "16bba7ff-2220-4582-b2f2-4f58d5beb6fd",
+            "action": "PRODUCTION_GATE_MODE_TRANSITION",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "LIVE",
+              "next_state": "LIVE",
+              "requested_mode": "LIVE",
+              "reason_code": "MODE_TRANSITION",
+              "reason_text": "standard baseline",
+              "expiry": null,
+              "request_id": "12f4338d-ba4e-492d-abd8-e5dd432b8bf0",
+              "session_id": null,
+              "route": "/api/admin/live-trading/control-layer/execution-mode",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "12f4338d-ba4e-492d-abd8-e5dd432b8bf0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:24.321092Z"
+          },
+          {
+            "id": "258d402a-643c-41ed-882e-2887a3fd3719",
+            "action": "PRODUCTION_GATE_ACTION_ALLOWED",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "GATE_ALLOWED",
+              "reason_text": "standard baseline",
+              "expiry": null,
+              "action_type": "admin_live_trading_execution_mode",
+              "request_id": "12f4338d-ba4e-492d-abd8-e5dd432b8bf0",
+              "session_id": null,
+              "route": "/api/admin/live-trading/control-layer/execution-mode",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "12f4338d-ba4e-492d-abd8-e5dd432b8bf0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:26:20.409475Z"
+          },
+          {
+            "id": "b61805b9-aa9b-4f74-9e6a-797effa9eb56",
+            "action": "PRODUCTION_GATE_ACTION_ALLOWED",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "GATE_ALLOWED",
+              "reason_text": "phase4_live_config_enable",
+              "expiry": null,
+              "action_type": "phase4_live_config_enable",
+              "request_id": "7d98b201-5d3e-464e-ba7f-d08b298eb5bb",
+              "session_id": null,
+              "route": "/api/phase4/live-config",
+              "method": "PUT",
+              "environment": "prod",
+              "correlation_id": "7d98b201-5d3e-464e-ba7f-d08b298eb5bb",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:25:11.466360Z"
+          },
+          {
+            "id": "8a0e2217-69ef-4e25-8b65-d7c00d41b791",
+            "action": "PRODUCTION_GATE_STATE_CHANGED",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "FINAL_APPROVAL",
+              "reason_text": "standard baseline",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "request_id": "829ba5a2-6359-4ac4-b788-0cba8363a301",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/state",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "829ba5a2-6359-4ac4-b788-0cba8363a301",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:25:06.672850Z"
+          },
+          {
+            "id": "9c011d56-a683-4524-8c70-8dfca0e81d27",
+            "action": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_RERUN",
+              "reason_text": "rerun::all",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "request_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:25:01.572724Z"
+          },
+          {
+            "id": "342f9f94-d20c-4aef-96ed-fe3ba6117c39",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "release_gate_contract::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "release_gate_contract",
+              "status": "PASS",
+              "run_id": "run-af2d55b8-d763-4d62-9b96-1351ac1cb758",
+              "latency_ms": 933.07,
+              "flapping": false,
+              "request_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:25:00.319991Z"
+          },
+          {
+            "id": "ae3e333a-716c-49a7-abfd-31dc4c012727",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "final_release_gate::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "final_release_gate",
+              "status": "PASS",
+              "run_id": "run-af2d55b8-d763-4d62-9b96-1351ac1cb758",
+              "latency_ms": 933.07,
+              "flapping": false,
+              "request_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:24:59.069908Z"
+          },
+          {
+            "id": "511ef8f7-d0f4-43b0-a177-4a7fb09f6a83",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "prod_env_preflight::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "prod_env_preflight",
+              "status": "PASS",
+              "run_id": "run-af2d55b8-d763-4d62-9b96-1351ac1cb758",
+              "latency_ms": 933.07,
+              "flapping": false,
+              "request_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:24:57.837748Z"
+          },
+          {
+            "id": "5e53bf89-9ba3-4e75-84e2-1c2671b2913d",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "secret_readiness::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "secret_readiness",
+              "status": "PASS",
+              "run_id": "run-af2d55b8-d763-4d62-9b96-1351ac1cb758",
+              "latency_ms": 933.07,
+              "flapping": false,
+              "request_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:24:56.583657Z"
+          },
+          {
+            "id": "86172ccc-cea4-41d5-8985-672257eef397",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "prod_env_resolution::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "prod_env_resolution",
+              "status": "PASS",
+              "run_id": "run-af2d55b8-d763-4d62-9b96-1351ac1cb758",
+              "latency_ms": 933.07,
+              "flapping": false,
+              "request_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "4f2a9e71-868d-4cec-a11b-82b498159867",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:24:55.316525Z"
+          },
+          {
+            "id": "2c49e691-3ebb-4ba4-968d-17dcb1fb02db",
+            "action": "PRODUCTION_GATE_MODE_TRANSITION",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "LIVE",
+              "next_state": "LIVE",
+              "requested_mode": "LIVE",
+              "reason_code": "MODE_TRANSITION",
+              "reason_text": "standard baseline",
+              "expiry": null,
+              "request_id": "5667a9bf-fa4d-41fc-a58e-65136311f7cc",
+              "session_id": null,
+              "route": "/api/admin/live-trading/control-layer/execution-mode",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "5667a9bf-fa4d-41fc-a58e-65136311f7cc",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:24:40.782287Z"
+          },
+          {
+            "id": "c022e7a1-2322-4185-86ae-82dd39be39a1",
+            "action": "PRODUCTION_GATE_ACTION_ALLOWED",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "GATE_ALLOWED",
+              "reason_text": "standard baseline",
+              "expiry": null,
+              "action_type": "admin_live_trading_execution_mode",
+              "request_id": "5667a9bf-fa4d-41fc-a58e-65136311f7cc",
+              "session_id": null,
+              "route": "/api/admin/live-trading/control-layer/execution-mode",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "5667a9bf-fa4d-41fc-a58e-65136311f7cc",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:24:36.839212Z"
+          },
+          {
+            "id": "27b2f31e-1bd1-412d-854d-f28d23d43eee",
+            "action": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_RERUN",
+              "reason_text": "rerun::all",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "request_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:19:37.658768Z"
+          },
+          {
+            "id": "ca495265-855d-427d-a46f-732edac62f96",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "release_gate_contract::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "release_gate_contract",
+              "status": "PASS",
+              "run_id": "run-6da71d82-2f3c-43dd-8c7b-336b47b300c1",
+              "latency_ms": 953.331,
+              "flapping": false,
+              "request_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:19:36.425295Z"
+          },
+          {
+            "id": "f73ed5bf-dc98-4748-b244-760c9e820152",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "final_release_gate::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "final_release_gate",
+              "status": "PASS",
+              "run_id": "run-6da71d82-2f3c-43dd-8c7b-336b47b300c1",
+              "latency_ms": 953.331,
+              "flapping": false,
+              "request_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:19:35.187843Z"
+          },
+          {
+            "id": "c193de81-7601-4631-a544-f6465c7f9873",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "prod_env_preflight::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "prod_env_preflight",
+              "status": "PASS",
+              "run_id": "run-6da71d82-2f3c-43dd-8c7b-336b47b300c1",
+              "latency_ms": 953.331,
+              "flapping": false,
+              "request_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:19:33.930527Z"
+          },
+          {
+            "id": "af5f8b2a-edaa-439f-9c48-60500af853e6",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "secret_readiness::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "secret_readiness",
+              "status": "PASS",
+              "run_id": "run-6da71d82-2f3c-43dd-8c7b-336b47b300c1",
+              "latency_ms": 953.331,
+              "flapping": false,
+              "request_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:19:32.679746Z"
+          },
+          {
+            "id": "a42482eb-76b7-4f74-b7f8-1affde77fe00",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "prod_env_resolution::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "prod_env_resolution",
+              "status": "PASS",
+              "run_id": "run-6da71d82-2f3c-43dd-8c7b-336b47b300c1",
+              "latency_ms": 953.331,
+              "flapping": false,
+              "request_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "3bd2939b-2502-42c2-a39f-f24b685441c0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-02T00:19:31.434076Z"
+          },
+          {
+            "id": "de10562a-3ac5-4733-ad32-e25a7012a731",
+            "action": "PRODUCTION_GATE_ACTION_BLOCKED",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "NO_GO",
+              "reason_code": "GATE_BLOCKED",
+              "reason_text": "direction retest",
+              "expiry": null,
+              "action_type": "admin_live_trading_execution_mode",
+              "blocked_reason_codes": [
+                "stale_or_running_checks"
+              ],
+              "request_id": "2b3a3cce-7047-4e25-be70-2627a2ad4e71",
+              "session_id": null,
+              "route": "/api/admin/live-trading/control-layer/execution-mode",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "2b3a3cce-7047-4e25-be70-2627a2ad4e71",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:31:53.151152Z"
+          },
+          {
+            "id": "db6abdd8-9b48-4f15-a651-154403013bd2",
+            "action": "PRODUCTION_GATE_MODE_TRANSITION",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "SIM",
+              "next_state": "LIVE",
+              "requested_mode": "LIVE",
+              "reason_code": "MODE_TRANSITION",
+              "reason_text": "futures 10 retest",
+              "expiry": null,
+              "request_id": "28340d89-188e-4717-b57a-2725ad5c3ce0",
+              "session_id": null,
+              "route": "/api/admin/live-trading/control-layer/execution-mode",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "28340d89-188e-4717-b57a-2725ad5c3ce0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:14:01.756019Z"
+          },
+          {
+            "id": "e891df82-b5c7-4d77-8d3f-9128f9e55bf4",
+            "action": "PRODUCTION_GATE_ACTION_ALLOWED",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "GATE_ALLOWED",
+              "reason_text": "futures 10 retest",
+              "expiry": null,
+              "action_type": "admin_live_trading_execution_mode",
+              "request_id": "28340d89-188e-4717-b57a-2725ad5c3ce0",
+              "session_id": null,
+              "route": "/api/admin/live-trading/control-layer/execution-mode",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "28340d89-188e-4717-b57a-2725ad5c3ce0",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:13:57.693289Z"
+          },
+          {
+            "id": "c0bcbfd0-1ee7-442d-a69e-1af66c05cc0a",
+            "action": "PRODUCTION_GATE_ACTION_ALLOWED",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "GO",
+              "next_state": "GO",
+              "reason_code": "GATE_ALLOWED",
+              "reason_text": "phase4_live_config_enable",
+              "expiry": null,
+              "action_type": "phase4_live_config_enable",
+              "request_id": "80267cbf-87af-48cf-b490-aa4dc6893392",
+              "session_id": null,
+              "route": "/api/phase4/live-config",
+              "method": "PUT",
+              "environment": "prod",
+              "correlation_id": "80267cbf-87af-48cf-b490-aa4dc6893392",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:13:51.911072Z"
+          },
+          {
+            "id": "15df5d40-adb1-4c14-890e-acec36eeb217",
+            "action": "PRODUCTION_GATE_STATE_CHANGED",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "GO",
+              "reason_code": "FINAL_APPROVAL",
+              "reason_text": "permission drift cleaned",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "request_id": "4816bd0f-633b-40ac-8d2d-0613b9ed9c86",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/state",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "4816bd0f-633b-40ac-8d2d-0613b9ed9c86",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:13:41.476376Z"
+          },
+          {
+            "id": "b3444102-e83f-41d9-b492-2898952e2119",
+            "action": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "NO_GO",
+              "reason_code": "CHECK_RERUN",
+              "reason_text": "rerun::all",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "request_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:13:34.491429Z"
+          },
+          {
+            "id": "b3d35e91-6257-4163-a277-4bc9f76e5cb1",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "NO_GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "release_gate_contract::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "release_gate_contract",
+              "status": "PASS",
+              "run_id": "run-ca335566-d9be-4c07-b85a-751e4da3b242",
+              "latency_ms": 1332.509,
+              "flapping": false,
+              "request_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:13:33.225573Z"
+          },
+          {
+            "id": "67540ff2-df8a-4f96-8097-914ca46c794e",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "NO_GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "final_release_gate::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "final_release_gate",
+              "status": "PASS",
+              "run_id": "run-ca335566-d9be-4c07-b85a-751e4da3b242",
+              "latency_ms": 1332.509,
+              "flapping": false,
+              "request_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:13:31.990720Z"
+          },
+          {
+            "id": "0084b330-5faa-4183-8a45-eeb8bbe0cac0",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "NO_GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "prod_env_preflight::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "prod_env_preflight",
+              "status": "PASS",
+              "run_id": "run-ca335566-d9be-4c07-b85a-751e4da3b242",
+              "latency_ms": 1332.509,
+              "flapping": false,
+              "request_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:13:30.763219Z"
+          },
+          {
+            "id": "62223638-fce9-434a-9a86-9aa4d0d8702f",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "NO_GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "secret_readiness::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "secret_readiness",
+              "status": "PASS",
+              "run_id": "run-ca335566-d9be-4c07-b85a-751e4da3b242",
+              "latency_ms": 1332.509,
+              "flapping": false,
+              "request_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:13:29.530102Z"
+          },
+          {
+            "id": "2c31adee-5d7a-42b3-8c6f-8c0e9b7c4074",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "NO_GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "prod_env_resolution::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "prod_env_resolution",
+              "status": "PASS",
+              "run_id": "run-ca335566-d9be-4c07-b85a-751e4da3b242",
+              "latency_ms": 1332.509,
+              "flapping": false,
+              "request_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "c30b3c5f-8753-464a-bd93-f970989c8821",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:13:28.274952Z"
+          },
+          {
+            "id": "b4a5d05d-9684-4bcd-b96e-34b2e58a2f07",
+            "action": "PRODUCTION_GATE_CHECK_RERUN_ALL",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "NO_GO",
+              "reason_code": "CHECK_RERUN",
+              "reason_text": "rerun::all",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "request_id": "3fc376bd-2993-409a-982a-bf68c594414c",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "3fc376bd-2993-409a-982a-bf68c594414c",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:12:11.181619Z"
+          },
+          {
+            "id": "14a29aee-2fb3-42c8-adf5-4d67ff047103",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "warning",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "NO_GO",
+              "reason_code": "PERMISSION_DRIFT_ALERT",
+              "reason_text": "release_gate_contract::FAIL",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "release_gate_contract",
+              "status": "FAIL",
+              "run_id": "run-47404baa-c63d-4b79-b886-5526ce7737b3",
+              "latency_ms": 939.517,
+              "flapping": false,
+              "request_id": "3fc376bd-2993-409a-982a-bf68c594414c",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "3fc376bd-2993-409a-982a-bf68c594414c",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:12:09.951946Z"
+          },
+          {
+            "id": "82d7f595-719f-4c0a-b5ac-e6cc2cc4f945",
+            "action": "PRODUCTION_GATE_CHECK_EVENT",
+            "severity": "info",
+            "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+            "actor_role": "super_admin",
+            "details": {
+              "previous_state": "NO_GO",
+              "next_state": "NO_GO",
+              "reason_code": "CHECK_OK",
+              "reason_text": "final_release_gate::PASS",
+              "expiry": "2026-04-01T22:51:04.252073+00:00",
+              "check_key": "final_release_gate",
+              "status": "PASS",
+              "run_id": "run-47404baa-c63d-4b79-b886-5526ce7737b3",
+              "latency_ms": 939.517,
+              "flapping": false,
+              "request_id": "3fc376bd-2993-409a-982a-bf68c594414c",
+              "session_id": null,
+              "route": "/api/phase4/admin/production-gate/checks/rerun",
+              "method": "POST",
+              "environment": "prod",
+              "correlation_id": "3fc376bd-2993-409a-982a-bf68c594414c",
+              "is_test_event": false
+            },
+            "created_at": "2026-04-01T23:12:08.713291Z"
+          }
+        ]
+      }
+    },
+    "/api/admin/live-trading/control-layer/state": {
+      "status_code": 200,
+      "payload": {
+        "server_clock": "2026-04-02T00:27:40.837566+00:00",
+        "execution_mode": "LIVE",
+        "execution_mode_snapshots": [
+          {
+            "mode": "LIVE",
+            "requested_mode": "LIVE",
+            "compatibility_alias_used": false,
+            "previous_mode": "LIVE",
+            "reason": "standard baseline",
+            "captured_at": "2026-04-02T00:24:38.425661+00:00",
+            "system_health": {
+              "kill_switch_active": false,
+              "fallback_active": false,
+              "live_mode_enabled": true,
+              "safe_mode_enabled": false,
+              "trading_enabled": true
+            },
+            "critical_alerts": {
+              "status": "snapshot_only",
+              "items": []
+            }
+          },
+          {
+            "mode": "LIVE",
+            "requested_mode": "LIVE",
+            "compatibility_alias_used": false,
+            "previous_mode": "LIVE",
+            "reason": "standard baseline",
+            "captured_at": "2026-04-02T00:26:21.965361+00:00",
+            "system_health": {
+              "kill_switch_active": false,
+              "fallback_active": false,
+              "live_mode_enabled": true,
+              "safe_mode_enabled": false,
+              "trading_enabled": true
+            },
+            "critical_alerts": {
+              "status": "snapshot_only",
+              "items": []
+            }
+          }
+        ],
+        "latency_thresholds": {
+          "scan_latency_ms": 1500,
+          "decision_latency_ms": 900,
+          "execution_latency_ms": 1600
+        },
+        "kill_switch": {
+          "active": false,
+          "reasons": []
+        },
+        "fallback": {
+          "active": false
+        },
+        "risk_override": {
+          "active": false
+        },
+        "retry_queue_count": 0,
+        "failed_orders_count": 0,
+        "open_positions_count": 0,
+        "scanner_symbol_universe": []
+      }
+    },
+    "/api/ready": {
+      "status_code": 200,
+      "payload": {
+        "status": "ready",
+        "service": "backend-api",
+        "checks": {
+          "database": {
+            "status": "ready"
+          },
+          "redis": {
+            "status": "ready"
+          },
+          "preview_smoke_gate": {
+            "status": "skipped",
+            "reason": "disabled_by_flag"
+          },
+          "execution_queue": {
+            "status": "ready",
+            "queue_size": 25,
+            "critical_limit": 60,
+            "strict": false
+          },
+          "ready_override": {
+            "status": "ready"
+          }
+        },
+        "startup": {
+          "database_url_valid": true,
+          "migration_ok": true,
+          "database_ready": true,
+          "seed_admin_ok": false,
+          "state_rebuild_ok": true,
+          "pipeline_runtime_ok": false,
+          "background_loops_started": false,
+          "preview_smoke_gate": {
+            "status": "pending",
+            "mode": "deploy_http_gate",
+            "checked_at": "2026-04-02T00:24:28.073658+00:00"
+          },
+          "last_error": ""
+        },
+        "timestamp": "2026-04-02T00:27:43.038796+00:00"
+      }
+    }
+  }
+}

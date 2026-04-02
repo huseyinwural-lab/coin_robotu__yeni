@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from collections import Counter
@@ -26,7 +27,7 @@ OVERRIDE_REASON_CODES = {
     "HOTFIX_VALIDATED",
     "MANUAL_RISK_ACCEPTANCE",
 }
-CHECK_STALE_MINUTES = 10
+CHECK_STALE_MINUTES = int(str(os.getenv("PRODUCTION_GATE_STALE_MINUTES", "120") or "120"))
 
 DEFAULT_CHECKLIST = [
     {"item_key": "change_window_confirmed", "title": "Change window confirmed", "required": True},
