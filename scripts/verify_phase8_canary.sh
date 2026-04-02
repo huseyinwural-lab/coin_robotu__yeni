@@ -300,6 +300,7 @@ validate_exchange_ready() {
       log "WARN: venue assignment reason detected, admin repair deneniyor"
       repair_user_venue_assignment "${EXCHANGE_ENVIRONMENT}" "${EXCHANGE_MARKET_TYPE}"
       code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
+      market_disabled="$(has_reason_code "/tmp/faz8_exchange_validate.json" "market_disabled")"
     fi
     if [[ "${code}" != "200" && "${market_disabled}" == "true" ]]; then
       log "WARN: market_disabled detected, allowed-market enable deneniyor"
