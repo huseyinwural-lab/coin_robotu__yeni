@@ -1,3 +1,29 @@
+## 2026-04-02 — Admin User Approvals Sadeleştirme (Tek Tık Kabul/Reddet)
+
+### Yapılan geliştirme
+- `/app/frontend/src/pages/AdminUserApprovalsPage.jsx` tamamen sadeleştirildi.
+- Risk/preset/slider, workflow assign-escalate-start-complete, decision support/detail drawer ve bulk reject/stale aksiyonları kaldırıldı.
+- Sayfa artık sadece:
+  - arama + sıralama + yenile
+  - bekleyen talep tablosu
+  - satır bazlı `Kabul` / `Reddet`
+  akışını içeriyor.
+- Onay/Reddet çağrıları legacy basit moda çekildi:
+  - `POST /api/auth/admin/user-approval-requests/{userId}/approve` body=`null`
+  - `POST /api/auth/admin/user-approval-requests/{userId}/reject` body=`null`
+
+### Ek düzeltme (test sonucu)
+- `AdminLoginPage.jsx` admin yönlendirmeleri düzeltildi:
+  - `/user/strategies` -> `/admin/dashboard`
+  - güncellenen noktalar: effect redirect, login success redirect, MFA verify success redirect.
+
+### Test durumu
+- Frontend lint: PASS
+- Frontend test ajanı doğrulaması: sadeleştirme contract PASS
+  - gerekli test-id öğeleri mevcut
+  - eski karmaşık blokların kaldırıldığı doğrulandı
+- Preview browser smoke: **infra bloklu** (`/api/auth/login/admin` -> `net::ERR_ABORTED`, CDN/auth timeout dalgalanması)
+
 ## 2026-04-02 — Live Gate Wizard (Kilitli Sıralı Akış + Otomatik Blokaj Kaldırma)
 
 ### Geliştirme

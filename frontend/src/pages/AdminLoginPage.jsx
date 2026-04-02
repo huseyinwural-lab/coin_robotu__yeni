@@ -57,7 +57,7 @@ export const AdminLoginPage = () => {
     }
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
     if (adminRoles.has(user.role)) {
-      navigate("/user/strategies", { replace: true });
+      navigate("/admin/dashboard", { replace: true });
       return;
     }
     setForm((prev) => ({ ...prev, email: user?.email || prev.email }));
@@ -106,7 +106,7 @@ export const AdminLoginPage = () => {
         return;
       }
       toast.success("Admin girişi başarılı");
-      navigate("/user/strategies", { replace: true });
+      navigate("/admin/dashboard", { replace: true });
     } catch (error) {
       toast.error(getErrorMessage(error, "Admin girişi başarısız"));
     } finally {
@@ -132,7 +132,7 @@ export const AdminLoginPage = () => {
       } else {
         toast.success("MFA doğrulandı");
       }
-      navigate("/user/strategies", { replace: true });
+      navigate("/admin/dashboard", { replace: true });
     } catch (error) {
       toast.error(getErrorMessage(error, "MFA doğrulaması başarısız"));
     } finally {
