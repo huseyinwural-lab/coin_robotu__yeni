@@ -55,11 +55,7 @@ from services.venue_service import check_user_venue_access, ensure_user_venue_as
 BINANCE_FUTURES_LIVE_REST = "https://fapi.binance.com"
 BINANCE_FUTURES_LIVE_WS = "wss://stream.binancefuture.com/ws"
 BINANCE_SPOT_LIVE_REST = "https://api.binance.com"
-BINANCE_FUTURES_LIVE_REST = "https://fapi.binance.com"
-BINANCE_SPOT_LIVE_REST = "https://api.binance.com"
 
-BINANCE_SPOT_LIVE_BASE_URL = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
-BINANCE_FUTURES_LIVE_BASE_URL = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
 BINANCE_SPOT_LIVE_BASE_URL = os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
 BINANCE_FUTURES_LIVE_BASE_URL = os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
 DEFAULT_TEST_SYMBOL = "BTCUSDT"
@@ -114,37 +110,46 @@ class BinanceFuturesLiveAdapter:
             return fallback
 
     @staticmethod
+    def _normalize_base_url(value: str | None, default: str) -> str:
+        raw = str(value or default).strip().strip('"').strip("'")
+        return raw.rstrip("/") if raw else default
+
+    @staticmethod
     def _futures_rest(environment: str = "live") -> str:
         normalized = str(environment or "live").strip().lower()
-        if normalized == "live":
-            return str(
-                os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
-                or os.environ.get("BINANCE_FUTURES_BASE_URL")
-                or BINANCE_FUTURES_LIVE_BASE_URL
-                or BINANCE_FUTURES_LIVE_REST
-            )
-        return str(
+        chosen = (
             os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
             or os.environ.get("BINANCE_FUTURES_BASE_URL")
             or BINANCE_FUTURES_LIVE_BASE_URL
             or BINANCE_FUTURES_LIVE_REST
         )
+        if normalized == "live":
+            return BinanceFuturesLiveAdapter._normalize_base_url(chosen, BINANCE_FUTURES_LIVE_REST)
+        return BinanceFuturesLiveAdapter._normalize_base_url(
+            os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
+            or os.environ.get("BINANCE_FUTURES_BASE_URL")
+            or BINANCE_FUTURES_LIVE_BASE_URL
+            or BINANCE_FUTURES_LIVE_REST,
+            BINANCE_FUTURES_LIVE_REST,
+        )
 
     @staticmethod
     def _spot_rest(environment: str = "live") -> str:
         normalized = str(environment or "live").strip().lower()
-        if normalized == "live":
-            return str(
-                os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
-                or os.environ.get("BINANCE_SPOT_BASE_URL")
-                or BINANCE_SPOT_LIVE_BASE_URL
-                or BINANCE_SPOT_LIVE_REST
-            )
-        return str(
+        chosen = (
             os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
             or os.environ.get("BINANCE_SPOT_BASE_URL")
             or BINANCE_SPOT_LIVE_BASE_URL
             or BINANCE_SPOT_LIVE_REST
+        )
+        if normalized == "live":
+            return BinanceFuturesLiveAdapter._normalize_base_url(chosen, BINANCE_SPOT_LIVE_REST)
+        return BinanceFuturesLiveAdapter._normalize_base_url(
+            os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
+            or os.environ.get("BINANCE_SPOT_BASE_URL")
+            or BINANCE_SPOT_LIVE_BASE_URL
+            or BINANCE_SPOT_LIVE_REST,
+            BINANCE_SPOT_LIVE_REST,
         )
 
     @staticmethod
@@ -175,6 +180,11 @@ class BinanceFuturesLiveAdapter:
         if token:
             headers["X-Proxy-Token"] = token
         return headers
+
+    @classmethod
+    def _public_headers(cls, *, environment: str, market: str) -> dict:
+        token = cls._proxy_token(environment, market)
+        return {"X-Proxy-Token": token} if token else {}
 
     def ping(self) -> dict:
         return self.ping_with_environment("live")
@@ -368,14 +378,40 @@ class BinanceFuturesLiveAdapter:
         payload = response.json()
         return float(payload.get("price") or 0)
 
-    def book_ticker(self, symbol: str) -> dict:
-        response = httpx.get(
-            f"{BINANCE_FUTURES_LIVE_REST}/fapi/v1/ticker/bookTicker",
-            params={"symbol": symbol},
-            timeout=self._timeout("market_data", 8),
-        )
-        response.raise_for_status()
-        payload = response.json()
+    def book_ticker(self, symbol: str, *, environment: str = "live") -> dict:
+        payload = None
+        errors: list[str] = []
+
+        futures_url = f"{self._futures_rest(environment)}/fapi/v1/ticker/bookTicker"
+        try:
+            response = httpx.get(
+                futures_url,
+                params={"symbol": symbol},
+                headers=self._public_headers(environment=environment, market="futures"),
+                timeout=self._timeout("market_data", 8),
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except Exception as exc:
+            errors.append(f"futures:{exc}")
+
+        if payload is None:
+            spot_url = f"{self._spot_rest(environment)}/api/v3/ticker/bookTicker"
+            try:
+                response = httpx.get(
+                    spot_url,
+                    params={"symbol": symbol},
+                    headers=self._public_headers(environment=environment, market="spot"),
+                    timeout=self._timeout("market_data", 8),
+                )
+                response.raise_for_status()
+                payload = response.json()
+            except Exception as exc:
+                errors.append(f"spot:{exc}")
+
+        if payload is None:
+            raise RuntimeError("book_ticker_unavailable: " + " | ".join(errors))
+
         bid = float(payload.get("bidPrice") or 0)
         ask = float(payload.get("askPrice") or 0)
         mid = round((bid + ask) / 2, 6) if bid > 0 and ask > 0 else 0
@@ -1301,7 +1337,27 @@ def validate_exchange_credentials_for_user(
 
 
 def get_market_ticker(symbol: str = "BTCUSDT") -> dict:
-    snapshot = adapter.book_ticker(symbol)
+    try:
+        snapshot = adapter.book_ticker(symbol)
+    except Exception:
+        cached = {}
+        if redis_client:
+            try:
+                raw = redis_client.get(f"market:ticker:{symbol}")
+                if raw:
+                    cached = json.loads(raw)
+            except Exception:
+                cached = {}
+        mid = float(cached.get("mid_price") or cached.get("last_price") or 0)
+        bid = float(cached.get("bid") or cached.get("bid_price") or 0)
+        ask = float(cached.get("ask") or cached.get("ask_price") or 0)
+        snapshot = {
+            "symbol": symbol,
+            "bid": bid,
+            "ask": ask,
+            "mid_price": mid,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
     return {
         "exchange": "binance",
         "environment": "live",
