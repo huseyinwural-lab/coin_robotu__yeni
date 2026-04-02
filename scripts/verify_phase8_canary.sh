@@ -274,6 +274,25 @@ PY
   fi
 }
 
+fetch_proxy_health() {
+  local code
+  code="$(request_json GET "${BASE_URL}/api/runtime/exchange/proxy-health" "" "${ADMIN_TOKEN}" "/tmp/faz8_proxy_health.json")"
+  if [[ "${code}" != "200" ]]; then
+    log "WARN: proxy-health okunamadı http=${code}"
+    return
+  fi
+
+  python - <<PY
+import json
+from pathlib import Path
+data=json.loads(Path('/tmp/faz8_proxy_health.json').read_text(encoding='utf-8'))
+result=(data or {}).get('result') or {}
+spot=(result.get('spot') or {}) if isinstance(result, dict) else {}
+futures=(result.get('futures') or {}) if isinstance(result, dict) else {}
+print(f"PROXY_HEALTH spot_token_set={spot.get('proxy_token_set')} futures_token_set={futures.get('proxy_token_set')} spot_base_url_set={spot.get('base_url_set')} futures_base_url_set={futures.get('base_url_set')} token_mismatch_spot={spot.get('proxy_token_mismatch')} token_mismatch_futures={futures.get('proxy_token_mismatch')}")
+PY
+}
+
 validate_exchange_ready() {
   local code
   code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
@@ -317,6 +336,14 @@ validate_exchange_ready() {
         repair_user_venue_assignment "${EXCHANGE_ENVIRONMENT}" "${EXCHANGE_MARKET_TYPE}"
         ensure_allowed_market_enabled
         code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
+      fi
+
+      if [[ "${code}" != "200" ]]; then
+        reason_451="$(has_reason_code "/tmp/faz8_exchange_validate.json" "exchange_error_451")"
+        if [[ "${reason_451}" == "true" ]]; then
+          log "WARN: exchange_error_451 devam ediyor, proxy-health okunuyor"
+          fetch_proxy_health
+        fi
       fi
     fi
   fi
