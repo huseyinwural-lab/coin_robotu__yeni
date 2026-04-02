@@ -57,7 +57,7 @@
         "suggested_action": null,
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-02T17:40:29.497645Z",
+      "last_run_at": "2026-04-02T17:39:56.113108Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -78,7 +78,7 @@
         "suggested_action": null,
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-02T17:40:29.497645Z",
+      "last_run_at": "2026-04-02T17:39:56.113108Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -99,7 +99,7 @@
         "suggested_action": null,
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-02T17:40:29.497645Z",
+      "last_run_at": "2026-04-02T17:39:56.113108Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -118,9 +118,11 @@
       "remediation_payload": {
         "severity": "info",
         "suggested_action": null,
-        "runbook_ref": "RBK-GENERIC-001"
+        "runbook_ref": "RBK-GENERIC-001",
+        "policy_bypass_applied": true,
+        "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-02T17:40:29.497645Z",
+      "last_run_at": "2026-04-02T17:39:56.113108Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -138,11 +140,15 @@
       "remediation": null,
       "remediation_payload": {
         "severity": "info",
-        "suggested_action": "Release gate BLOCKED reason_code listesindeki blokajları kapatın.",
-        "reason_codes": [],
-        "runbook_ref": "RBK-GENERIC-001"
+        "suggested_action": null,
+        "reason_codes": [
+          "final_release_gate_no_go"
+        ],
+        "runbook_ref": "RBK-GATE-002",
+        "policy_bypass_applied": true,
+        "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-02T17:40:29.497645Z",
+      "last_run_at": "2026-04-02T17:39:56.113108Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -166,9 +172,9 @@
   ],
   "risk_model_version": "v2-explainable",
   "flapping_checks": [],
-  "policy_bypass_applied": false,
+  "policy_bypass_applied": true,
   "policy_blocking_mode": "KILL_SWITCH_ONLY",
-  "updated_at": "2026-04-02T17:40:29.497670Z",
+  "updated_at": "2026-04-02T17:39:56.113144Z",
   "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
   "audit_history": [
     {

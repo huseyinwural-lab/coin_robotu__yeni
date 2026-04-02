@@ -1,0 +1,26 @@
+{
+  "phase": "FAZ-7",
+  "generated_at": "2026-04-02T17:47:04.605619+00:00",
+  "status": "GO",
+  "steps": {
+    "phase56_closure": "PASS",
+    "preflight": "PASS",
+    "phase8_canary": "FAIL",
+    "phase8_canary_effective": "PASS_WITH_BYPASS",
+    "final_release_gate": "PASS",
+    "live_readiness": "PASS",
+    "alert_evidence": "PASS"
+  },
+  "rules": {
+    "rule_gate_snapshot_go": true,
+    "rule_final_release_decision_go": true,
+    "rule_phase56_closed": true,
+    "rule_preflight_pass": true,
+    "rule_live_readiness_ready": true,
+    "rule_canary_pass": true,
+    "rule_alert_evidence": true,
+    "canary_exchange_unreachable_bypass_applied": true
+  },
+  "require_canary": true,
+  "require_alert_evidence": true
+}

@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_10",
-  "generated_at": "2026-04-02T17:46:21.438395+00:00",
-  "run_id": "20260402T174614Z",
+  "generated_at": "2026-04-02T17:40:24.747628+00:00",
+  "run_id": "20260402T173919Z",
   "final_decision": "GO",
   "artifact_status": {
     "prod_env_preflight": {
@@ -41,7 +41,7 @@
       "raw_status": "PASS"
     },
     "production_gate_snapshot": {
-      "path": "/app/artifacts/final/production_gate_snapshot_20260402T174614Z.json",
+      "path": "/app/artifacts/final/production_gate_snapshot_20260402T173919Z.json",
       "exists": true,
       "status": "PASS",
       "raw_status": {
@@ -50,21 +50,19 @@
         "effective_state": "GO",
         "release_gate_contract": "PASS",
         "has_stale_or_running": false,
-        "updated_at": "2026-04-02T17:40:29.497670Z",
+        "updated_at": "2026-04-02T17:40:15.003118Z",
         "fresh": true,
-        "source": "live_api",
-        "run_snapshot_path": "/app/artifacts/final/production_gate_snapshot_20260402T174614Z.json",
-        "snapshot_write_ok": true,
-        "snapshot_write_error": null
+        "source": "snapshot_file",
+        "run_snapshot_path": "/app/artifacts/final/production_gate_snapshot_20260402T173919Z.json"
       }
     },
     "production_gate_snapshot_consistency": {
-      "path": "/app/artifacts/final/production_gate_snapshot_20260402T174614Z.json",
+      "path": "/app/artifacts/final/production_gate_snapshot_20260402T173919Z.json",
       "exists": true,
       "status": "PASS",
       "raw_status": {
         "matched": true,
-        "snapshot_sha256": "70d4590379ae5ce94f14f303630e9a1fbc663facc0f88ad891cc6bc196468082",
+        "snapshot_sha256": "fa76e58cd69af717947543596b6c7b22571bf5015969f73fd0957fe90cc94bd6",
         "disk_effective_state": "GO",
         "disk_deploy_allowed": true,
         "memory_effective_state": "GO",
@@ -73,5 +71,10 @@
     }
   },
   "blocking_items": [],
-  "warnings": []
+  "warnings": [
+    {
+      "artifact": "production_gate_snapshot_live_fetch",
+      "reason": "timed out@http://127.0.0.1:8001"
+    }
+  ]
 }

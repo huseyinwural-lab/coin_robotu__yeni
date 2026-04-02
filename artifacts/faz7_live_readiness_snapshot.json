@@ -1,0 +1,10 @@
+{
+  "required_venues": [
+    "binance"
+  ],
+  "venue_policy": "binance_only",
+  "go_live_allowed": true,
+  "final_status": "READY",
+  "execution_readiness_http": 200,
+  "venue_readiness_http": 200
+}
