@@ -67,6 +67,32 @@ def _trace_timeline(db: Session, user_id: str, symbol: str, limit: int = 20) -> 
     return items
 
 
+def _to_float(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_strategy_contribution(item: dict) -> dict:
+    strategy_code = str(item.get("strategy_code") or item.get("strategy_id") or "unknown_strategy")
+    raw_signal = str(item.get("raw_signal") or item.get("signal") or item.get("direction") or "none").lower()
+    normalized_score = _to_float(item.get("normalized_score"), _to_float(item.get("score"), 0.0))
+    weight = _to_float(item.get("weight"), 1.0)
+    contribution_score = _to_float(item.get("contribution_score"), normalized_score * weight)
+
+    return {
+        "strategy_id": str(item.get("strategy_id") or strategy_code),
+        "family": str(item.get("family") or "manual_fallback"),
+        "direction": str(item.get("direction") or raw_signal).lower(),
+        "raw_signal": raw_signal,
+        "normalized_score": normalized_score,
+        "weight": weight,
+        "contribution_score": contribution_score,
+        "status": str(item.get("status") or "accepted").lower(),
+    }
+
+
 def _resolve_block_category(*, payload: dict, blocked_reason: str | None, risk_block: str | None, cooldown_seconds: int) -> str | None:
     reason_codes = {str(item or "").strip().lower() for item in (payload.get("reason_codes") or []) if str(item or "").strip()}
     blocked_key = str(blocked_reason or "").strip().lower()
@@ -116,8 +142,8 @@ def _resolve_block_category(*, payload: dict, blocked_reason: str | None, risk_b
 def _row_to_decision_card(db: Session, row: UserScannerResult, quality_lookup: dict[str, dict], recommendation_lookup: dict[str, list[dict]]) -> dict:
     payload = row.payload or {}
     decision = _normalize_decision(payload.get("final_decision") or ("LONG" if row.signal == "long" else "SHORT" if row.signal == "short" else "NO_TRADE"))
-    source_strategies = payload.get("source_strategies") or []
-    top_contributors = payload.get("top_contributors") or source_strategies[:3]
+    source_strategies = [_normalize_strategy_contribution(item) for item in (payload.get("source_strategies") or [])]
+    top_contributors = [_normalize_strategy_contribution(item) for item in (payload.get("top_contributors") or source_strategies[:3])]
     blocked_reason = payload.get("blocked_reason_current")
     dominant_strategy = str(payload.get("strategy_code") or row.strategy_code or "")
     quality = quality_lookup.get(dominant_strategy, {})
@@ -240,7 +266,7 @@ def get_user_symbol_explainability(db: Session, user_id: str, symbol: str) -> di
         "short_score": short_score,
         "winning_side": winning_side,
         "decision_confidence": float(payload.get("decision_confidence") or 0),
-        "source_strategies": payload.get("source_strategies") or [],
+        "source_strategies": [_normalize_strategy_contribution(item) for item in (payload.get("source_strategies") or [])],
         "family_scores": payload.get("family_scores") or {},
         "blocked_reason_current": blocked_reason,
         "blocked_reason_timeline": timeline,
