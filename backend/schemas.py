@@ -2201,7 +2201,7 @@ class UserPortfolioMapResponse(BaseModel):
 class UserPortfolioSnapshotResponse(BaseModel):
     current_capital: float
     available_balance: float
-    execution_mode: str = "mocked"
+    execution_mode: str = "live"
     open_notional: float
     open_unrealized_pnl: float
     closed_pnl: float
@@ -2916,7 +2916,7 @@ class ExecutionIntentPreviewResponse(BaseModel):
     applied_leverage: int | None = None
     leverage_policy_mode: str | None = None
     leverage_clamp_reasons: list[str] = Field(default_factory=list)
-    execution_mode: str = "mocked"
+    execution_mode: str = "live"
     policy_decision: dict = Field(default_factory=dict)
     policy_trace: dict = Field(default_factory=dict)
     pipeline_stage_results: list[dict] = Field(default_factory=list)
@@ -2947,7 +2947,7 @@ class ExecutionIntentSubmitResponse(BaseModel):
     intent_status: str
     reason_codes: list[str]
     queue_state: str
-    execution_mode: str = "mocked"
+    execution_mode: str = "live"
     policy_decision: dict = Field(default_factory=dict)
     pipeline_trace: list[dict] = Field(default_factory=list)
     explain: list[str] = Field(default_factory=list, min_length=1)
@@ -2973,7 +2973,7 @@ class OrderValidationViolation(BaseModel):
 class OrderValidationResponse(BaseModel):
     valid: bool
     violations: list[OrderValidationViolation] = Field(default_factory=list)
-    execution_mode: str = "mocked"
+    execution_mode: str = "live"
     checks: dict = Field(default_factory=dict)
     explain: list[str] = Field(default_factory=list, min_length=1)
 
@@ -3070,7 +3070,7 @@ class PositionStateResponse(BaseModel):
     strategy_id: str | None
     cluster_id: str | None
     status: str
-    execution_mode: str = "mocked"
+    execution_mode: str = "live"
     recommended_action: str | None = None
     risk_reduction_score: float | None = None
     hedge_suggestion: dict = Field(default_factory=dict)
@@ -4750,7 +4750,7 @@ class AdminExecutionQueueDecisionResponse(BaseModel):
     intent_id: str
     status: str
     admin_note: str
-    execution_mode: str = "mocked"
+    execution_mode: str = "live"
     detail_version: str | None = None
 
 

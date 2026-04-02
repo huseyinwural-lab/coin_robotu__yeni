@@ -76,6 +76,7 @@ def _build_preview_response(intent, validation: dict) -> ExecutionIntentPreviewR
         decision_trace=validation.get("decision_trace") or {},
         standardized_reject=validation.get("standardized_reject"),
         rollout_mode=str(validation.get("rollout_mode") or "shadow"),
+        execution_mode="live",
     )
 
 
