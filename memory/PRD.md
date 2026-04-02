@@ -1,3 +1,19 @@
+## 2026-04-02 — READ-ONLY API DOĞRULAMA (KAPANIŞ KONTROLÜ)
+
+### Kapsam
+- Kullanıcı onayıyla sadece read-only doğrulama yapıldı; **kod/dependency değişikliği yok**.
+
+### Doğrulanan endpointler
+- `GET /api/health` → **200** (`status=ok`, `service=backend-api`)
+- `GET /api/ready` → **200** (`status=ready`, `service=backend-api`)
+- `POST /api/auth/login` (admin) → **200**
+- `GET /api/admin/execution-readiness` (Bearer + `X-Session-Device`) → **200**, `go_live_allowed=true`, `mode=LIVE`
+- `GET /api/phase4/admin/production-gate` (Bearer + `X-Session-Device`) → **200**, `configured_state=GO`, `effective_state=GO`, `deploy_allowed=true`
+
+### Routing notu
+- Preview ingress kuralı gereği backend doğrulamaları `/api/*` üzerinden yapıldı.
+- Backend root aliasları lokalde ayrıca doğrulandı: `http://127.0.0.1:8001/health` ve `/ready` → **200**.
+
 ## 2026-04-02 — FINAL BASELINE (OVERRIDE’SIZ GO/PASS + STANDART OPERASYON)
 
 ### Uygulanan standartlar
