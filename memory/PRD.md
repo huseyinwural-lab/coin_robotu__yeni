@@ -1,3 +1,32 @@
+## 2026-04-02 — Live Gate Wizard (Kilitli Sıralı Akış + Otomatik Blokaj Kaldırma)
+
+### Geliştirme
+- `AdminLiveGatePage` kilitli wizard moda geçirildi.
+- Her adım artık sıralı açılıyor:
+  - Önceki adım `PASS` veya manuel `Tamamlandı İşaretle` olmadan sonraki adım kilitli.
+  - Kilitli adımda `Lock` uyarısı gösteriliyor.
+- Yeni kontrol aksiyonları:
+  - `Blokajları Otomatik Kaldır` (tek tık):
+    1. Production gate checks rerun
+    2. Gerekirse gate state GO
+    3. Live config: `kill_switch_enabled=false`, `trading_enabled=true`
+    4. Allowed market auto-enable: `binance/futures/live` + `binance/spot/live`
+  - `Tamamlandı İşaretle` / `İşareti Kaldır` (adım bazlı)
+- Wizard ilerleme metni eklendi: `X/10`.
+
+### Teknik
+- Manual completion state localStorage ile saklanıyor: `live_gate_wizard_completions_v1`.
+- Yeni test-id’ler eklendi:
+  - `admin-live-gate-auto-unblock-button`
+  - `admin-live-gate-progress-text`
+  - `admin-live-gate-step-complete-button-{id}`
+  - `admin-live-gate-step-reset-button-{id}`
+  - `admin-live-gate-step-locked-{id}`
+
+### Test
+- Frontend lint: PASS
+- Frontend testing agent code-review doğrulaması: wizard davranışı implementasyon seviyesinde PASS, ancak browser automation bu turda auth-flow kaynaklı blok raporladı.
+
 ## 2026-04-02 — Live Gate (Tek Ekran Sıralı Canlıya Alma Akışı)
 
 ### Yapılan geliştirme
