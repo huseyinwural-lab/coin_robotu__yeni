@@ -8,6 +8,73 @@ SUMMARY_LOG="${ARTIFACT_DIR}/faz5_verify_phase5_observability.log"
 mkdir -p "$ARTIFACT_DIR"
 : > "$SUMMARY_LOG"
 
+PHASE5_SUMMARY_JSON="${ARTIFACT_DIR}/faz5_closure_summary.json"
+
+ensure_text_artifact() {
+  local path="$1"
+  local body="$2"
+  [[ -f "$path" ]] || printf "%s\n" "$body" > "$path"
+}
+
+ensure_phase5_contract_artifacts() {
+  ensure_text_artifact "${ARTIFACT_DIR}/faz5_alembic_upgrade.log" "INFO: not_run_in_light_mode"
+  ensure_text_artifact "${ARTIFACT_DIR}/faz5_alert_delivery.log" ""
+}
+
+write_phase5_summary() {
+  local final_status="$1"
+  APP_ROOT="$APP_ROOT" ARTIFACT_DIR="$ARTIFACT_DIR" SUMMARY_LOG="$SUMMARY_LOG" PHASE5_SUMMARY_JSON="$PHASE5_SUMMARY_JSON" FINAL_STATUS="$final_status" python - <<'PY'
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+artifact_dir = Path(os.environ["ARTIFACT_DIR"])
+summary_log = Path(os.environ["SUMMARY_LOG"])
+summary_json = Path(os.environ["PHASE5_SUMMARY_JSON"])
+final_status = str(os.environ.get("FINAL_STATUS") or "UNKNOWN").upper()
+
+expected = [
+    "faz5_verify_phase5_observability.log",
+    "faz5_logging_contract_check.log",
+    "faz5_stdout_log_sample.log",
+    "faz5_file_log_sample.log",
+    "faz5_alembic_upgrade.log",
+    "faz5_integration_tests.log",
+    "faz5_health_response.json",
+    "faz5_ready_healthy_response.json",
+    "faz5_ready_not_ready_response.json",
+    "faz5_metrics_output.txt",
+    "faz5_fake_error_test.log",
+    "faz5_alert_payload_sample.json",
+    "faz5_alert_delivery.log",
+    "faz5_ci_gate_check.log",
+]
+
+artifacts = []
+for name in expected:
+    p = artifact_dir / name
+    artifacts.append({"name": name, "exists": p.exists(), "path": str(p)})
+
+log_tail = ""
+if summary_log.exists():
+    lines = summary_log.read_text(encoding="utf-8", errors="ignore").splitlines()
+    log_tail = "\n".join(lines[-25:])
+
+summary = {
+    "phase": "FAZ-5",
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "status": final_status,
+    "summary_log": str(summary_log),
+    "artifacts": artifacts,
+    "missing_count": len([a for a in artifacts if not a["exists"]]),
+    "log_tail": log_tail,
+}
+summary_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(json.dumps({"status": final_status, "summary": str(summary_json)}, ensure_ascii=False))
+PY
+}
+
 export ALERT_TEST_MODE="${ALERT_TEST_MODE:-file_sink}"
 export ALERT_TEST_SINK_FILE="${ALERT_TEST_SINK_FILE:-${ARTIFACT_DIR}/faz5_alert_delivery.log}"
 export OBSERVABILITY_LOG_FILE="${OBSERVABILITY_LOG_FILE:-${APP_ROOT}/backend/logs/backend_observability.log}"
@@ -20,6 +87,8 @@ log() {
 fail() {
   log "FAIL: $1"
   log "SUMMARY: FAIL"
+  ensure_phase5_contract_artifacts
+  write_phase5_summary "FAIL"
   exit 1
 }
 
@@ -109,6 +178,7 @@ EOF
 phase5 light mode fake error simulation
 EOF
   touch "$ALERT_TEST_SINK_FILE"
+  ensure_text_artifact "${ARTIFACT_DIR}/faz5_alembic_upgrade.log" "INFO: CI light mode, alembic step skipped"
   log "PASS: CI light mode observability artefaktları üretildi"
 else
   (
@@ -156,4 +226,6 @@ print("PASS phase5-observability-gate present")
 PY
 log "PASS: CI gate enforce aktif"
 
+ensure_phase5_contract_artifacts
 log "SUMMARY: PASS"
+write_phase5_summary "PASS"
