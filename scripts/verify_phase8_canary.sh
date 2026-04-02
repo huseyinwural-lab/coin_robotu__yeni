@@ -145,6 +145,13 @@ set_exchange_keys() {
   log "PASS: exchange settings güncellendi"
 }
 
+validate_exchange_ready() {
+  local code
+  code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=futures&environment=live" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
+  [[ "${code}" == "200" ]] || fail_with_body "Exchange validate başarısız http=${code}" "/tmp/faz8_exchange_validate.json"
+  log "PASS: exchange validate"
+}
+
 load_live_config() {
   local code
   code="$(request_json GET "${BASE_URL}/api/phase4/live-config" "" "${ADMIN_TOKEN}" "/tmp/faz8_live_config_get.json")"
@@ -224,6 +231,8 @@ body=json.load(open('/tmp/faz8_test_order_resp.json', encoding='utf-8'))
 text=str(body)
 expected='${expected_reason}'
 if expected not in text:
+    if 'Permission check başarısız' in text or 'API key doğrulamasını geçmelisiniz' in text:
+        raise SystemExit(f"Canary reject testi önkoşul hatası: API key/permission doğrulaması başarısız. body={text}")
     raise SystemExit(f"Expected reject reason not found: {expected} body={text}")
 print('REJECT_REASON_OK', expected)
 PY
@@ -242,6 +251,7 @@ log "T-8.1 canary config runtime"
 login_admin
 ensure_user_login
 set_exchange_keys
+validate_exchange_ready
 load_live_config
 update_live_config_canary '["BTCUSDT"]' '50' '1' '["BTCUSDT"]'
 fetch_canary_status
