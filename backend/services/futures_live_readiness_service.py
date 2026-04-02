@@ -287,6 +287,8 @@ def get_futures_live_readiness(db: Session, cache, user_id: str, refresh: bool =
         "degraded": validator.get("degraded", True),
         "data_freshness": validator.get("data_freshness") or {},
         "execution_mode": validator.get("execution_mode"),
+        "required_venues": validator.get("required_venues") or ["binance"],
+        "venue_policy": validator.get("venue_policy") or "binance_only",
         "position_sync_state": position_sync.get("position_sync_state", "UNVERIFIED"),
         "order_reconciliation_state": order_reconciliation.get("order_reconciliation_state", "UNVERIFIED"),
         "balance_integrity_state": balance_integrity.get("balance_integrity_state", "UNVERIFIED"),

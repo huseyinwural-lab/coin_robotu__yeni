@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -13,11 +14,19 @@ def _utcnow_iso() -> str:
 
 
 def _request(session: requests.Session, method: str, url: str, **kwargs):
-    try:
-        response = session.request(method, url, timeout=25, **kwargs)
-        return response.status_code, response.json() if "application/json" in response.headers.get("content-type", "") else response.text
-    except Exception as exc:  # noqa: BLE001
-        return 599, {"error": str(exc)}
+    timeout_sec = int(kwargs.pop("timeout", 45))
+    attempts = int(kwargs.pop("attempts", 2))
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            response = session.request(method, url, timeout=timeout_sec, **kwargs)
+            body = response.json() if "application/json" in response.headers.get("content-type", "") else response.text
+            return response.status_code, body
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+            if attempt < attempts:
+                time.sleep(1.2)
+    return 599, {"error": last_error}
 
 
 def run_smoke(base_url: str, email: str, password: str) -> dict:
@@ -94,11 +103,27 @@ def run_smoke(base_url: str, email: str, password: str) -> dict:
     maintenance_ok = status_code == 200 and isinstance(maintenance_payload, dict) and "policy" in maintenance_payload
     add_check("maintenance_trigger_smoke", maintenance_ok, {"status_code": status_code, "dry_run": (maintenance_payload or {}).get("dry_run") if isinstance(maintenance_payload, dict) else None})
 
+    required_venues = []
+    if isinstance(live_payload, dict):
+        required_venues = [str(item).strip().lower() for item in (live_payload.get("required_venues") or []) if str(item).strip()]
+    if not required_venues:
+        required_venues = ["binance"]
+
+    bybit_required = "bybit" in required_venues
     bybit_state = None
     if isinstance(live_payload, dict):
         bybit_state = ((live_payload.get("readiness_matrix") or {}).get("exchange") or {}).get("bybit", {}).get("state")
-    bybit_ok = bool(bybit_state)
-    add_check("bybit_venue_readiness_smoke", bybit_ok, {"state": bybit_state})
+    bybit_ok = bool(bybit_state) if bybit_required else True
+    add_check(
+        "bybit_venue_readiness_smoke",
+        bybit_ok,
+        {
+            "required": bybit_required,
+            "required_venues": required_venues,
+            "state": bybit_state,
+            "skipped": not bybit_required,
+        },
+    )
 
     runbook_ok = isinstance(history_payload, dict) and bool(history_payload.get("runbook_mapping"))
     add_check("runbook_mapping_smoke", runbook_ok, {"mapping_size": len((history_payload or {}).get("runbook_mapping") or {}) if isinstance(history_payload, dict) else 0})

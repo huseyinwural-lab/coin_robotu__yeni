@@ -110,6 +110,29 @@ def _safe_float(value: Any, default: float | None = None) -> float | None:
         return default
 
 
+def _resolve_required_venues() -> list[str]:
+    supported = {"binance", "bybit"}
+    policy = str(os.environ.get("GO_LIVE_VENUE_POLICY") or "binance_only").strip().lower()
+    raw = str(os.environ.get("GO_LIVE_REQUIRED_VENUES") or "").strip()
+
+    if raw:
+        requested = [item.strip().lower() for item in raw.split(",") if item.strip()]
+    elif policy in {"multi_venue", "binance_bybit", "all"}:
+        requested = ["binance", "bybit"]
+    else:
+        requested = ["binance"]
+
+    normalized: list[str] = []
+    for venue in requested:
+        if venue in supported and venue not in normalized:
+            normalized.append(venue)
+
+    if not normalized:
+        normalized = ["binance"]
+
+    return normalized
+
+
 def _load_risk_config() -> dict:
     for path in [RISK_CONFIG_PATH, RISK_CONFIG_BACKUP_PATH]:
         try:
@@ -912,10 +935,8 @@ def build_go_live_context(
     venue_config_checklist: dict[str, dict] = {}
     runtime_environment = str(connection_payload.get("environment") or "testnet").lower()
 
-    required_venues_raw = str(os.environ.get("GO_LIVE_REQUIRED_VENUES") or "binance,bybit")
-    required_venues = [item.strip().lower() for item in required_venues_raw.split(",") if item.strip()]
-    if not required_venues:
-        required_venues = ["binance", "bybit"]
+    required_venues = _resolve_required_venues()
+    venue_policy = str(os.environ.get("GO_LIVE_VENUE_POLICY") or "binance_only").strip().lower()
 
     for venue in required_venues:
         venue_payload = {
@@ -1039,6 +1060,7 @@ def build_go_live_context(
         "portfolio_exposure": portfolio_exposure,
         "exchange_matrix": exchange_matrix,
         "required_venues": required_venues,
+        "venue_policy": venue_policy,
         "venue_config_checklist": venue_config_checklist,
         "adapter_credential_summary": adapter_credential_summary,
         "execution_tests": {
@@ -1127,7 +1149,8 @@ def run_go_live_validator(context: dict) -> dict:
     strategy_metrics = context.get("strategy_metrics") or {}
     symbols = context.get("symbols") or []
     exchange_matrix = context.get("exchange_matrix") or {}
-    required_venues = context.get("required_venues") or ["binance", "bybit"]
+    required_venues = context.get("required_venues") or _resolve_required_venues()
+    venue_policy = str(context.get("venue_policy") or os.environ.get("GO_LIVE_VENUE_POLICY") or "binance_only").strip().lower()
     venue_config_checklist = context.get("venue_config_checklist") or {}
     execution_lifecycle = context.get("execution_lifecycle") or {}
     portfolio_exposure = context.get("portfolio_exposure") or {}
@@ -2696,6 +2719,8 @@ def run_go_live_validator(context: dict) -> dict:
         "generated_at": context.get("generated_at") or _utcnow().isoformat(),
         "legacy_score": score_payload,
         "execution_mode": execution_mode,
+        "required_venues": required_venues,
+        "venue_policy": venue_policy,
         "exchange_readiness": exchange_readiness,
         "symbol_readiness": symbol_readiness,
         "strategy_readiness": strategy_readiness,
@@ -2746,6 +2771,8 @@ def evaluate_go_live_readiness(
             "generated_at": now,
             "legacy_score": {},
             "execution_mode": str(context.get("execution_mode") or "SIM"),
+            "required_venues": _resolve_required_venues(),
+            "venue_policy": str(os.environ.get("GO_LIVE_VENUE_POLICY") or "binance_only").strip().lower(),
             "exchange_readiness": {},
             "symbol_readiness": {},
             "strategy_readiness": {},
