@@ -1,14 +1,22 @@
 {
   "phase": "FAZ_D0_TASK_1",
-  "status": "PASS",
-  "generated_at": "2026-04-02T15:22:27.039594+00:00",
+  "status": "FAIL",
+  "generated_at": "2026-04-02T16:05:24.039506+00:00",
+  "source_policy": {
+    "runtime_env": "unknown",
+    "is_production_runtime": false,
+    "strict_source_enabled": false,
+    "required_source": "process_env_or_repo"
+  },
   "checks": [
     {
       "key": "DATABASE_URL",
       "is_set": true,
       "contains_localhost": false,
       "contains_container_local": false,
-      "resolved_source": "process_env",
+      "resolved_source": "backend/.env",
+      "source_policy": "process_env_or_repo",
+      "source_policy_violation": false,
       "value_preview": "postgresql+psycopg2://postgres.wpaejjyirhblphihxnli:iY9yPPYAe4dL...",
       "status": "PASS"
     },
@@ -17,7 +25,9 @@
       "is_set": true,
       "contains_localhost": false,
       "contains_container_local": false,
-      "resolved_source": "process_env",
+      "resolved_source": "backend/.env",
+      "source_policy": "process_env_or_repo",
+      "source_policy_violation": false,
       "value_preview": "redis://10.79.135.95:6379/0",
       "status": "PASS"
     },
@@ -27,6 +37,8 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "frontend/.env",
+      "source_policy": "process_env_or_repo",
+      "source_policy_violation": false,
       "value_preview": "https://trade-trace-engine.preview.emergentagent.com",
       "status": "PASS"
     },
@@ -37,7 +49,7 @@
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
       "value_preview": "redis://10.79.135.95:6379",
-      "status": "PASS",
+      "status": "FAIL",
       "detail": "Redis ping başarılı olmalı"
     },
     {
@@ -46,8 +58,8 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "{\"appendonly\": \"skipped\", \"save\": \"skipped\"}",
-      "status": "PASS",
+      "value_preview": "{\"appendonly\": null, \"save\": null}",
+      "status": "FAIL",
       "detail": "Redis AOF veya RDB aktif olmalı"
     },
     {
@@ -56,8 +68,8 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "1000",
-      "status": "PASS",
+      "value_preview": "None",
+      "status": "FAIL",
       "detail": "Redis maxclients >= 1000 olmalı"
     },
     {
@@ -66,22 +78,23 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "{\"timeout\": 60, \"policy\": \"allkeys-lru\"}",
-      "status": "PASS",
+      "value_preview": "{\"timeout\": null, \"policy\": null}",
+      "status": "FAIL",
       "detail": "Redis timeout>0 ve eviction policy noeviction dışı olmalı"
     }
   ],
   "redis_runtime": {
-    "reachable": true,
-    "appendonly": "skipped",
-    "save_rules": "skipped",
-    "maxclients": 1000,
-    "timeout": 60,
-    "maxmemory_policy": "allkeys-lru",
-    "error": "runtime_checks_disabled_or_redis_module_missing"
+    "reachable": false,
+    "appendonly": null,
+    "save_rules": null,
+    "maxclients": null,
+    "timeout": null,
+    "maxmemory_policy": null,
+    "error": "Timeout connecting to server"
   },
   "notes": [
     "Production runtime değerlerinde localhost/container-local host kalmamalı.",
+    "strict_source_enabled=true iken env kaynakları process_env dışına düşemez.",
     "Bu rapor sadece çözümlenen env değerlerine göre deterministik kontrol üretir."
   ]
 }

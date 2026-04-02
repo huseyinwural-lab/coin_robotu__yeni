@@ -57,6 +57,20 @@ runtime_checks_enabled = str(proc_env.get('ENABLE_RUNTIME_PREFLIGHT_CHECKS', run
 strict_env_checks_default = 'false' if ci_mode else 'true'
 strict_env_checks_enabled = str(proc_env.get('STRICT_PREFLIGHT_ENV_CHECKS', strict_env_checks_default)).strip().lower() in {'1', 'true', 'yes'}
 
+
+def runtime_env() -> str:
+    return str(
+        proc_env.get('APP_ENV')
+        or proc_env.get('ENVIRONMENT')
+        or proc_env.get('RUNTIME_ENV')
+        or ''
+    ).strip().lower()
+
+
+is_production_runtime = runtime_env() in {'prod', 'production'}
+strict_source_default = 'true' if is_production_runtime else 'false'
+strict_source_enabled = str(proc_env.get('STRICT_ENV_SOURCE_POLICY', strict_source_default)).strip().lower() in {'1', 'true', 'yes'}
+
 database_url = resolve_value('DATABASE_URL', proc_env, backend_env)
 redis_url = resolve_value('REDIS_URL', proc_env, backend_env)
 react_backend_url = resolve_value('REACT_APP_BACKEND_URL', proc_env, frontend_env)
@@ -114,6 +128,8 @@ for key, value in targets.items():
             parsed_host = ""
     host_to_check = parsed_host or ((value or '').split('@')[-1].split('/')[0])
     has_container_local = bool(container_local_pattern.search(host_to_check)) if value else False
+    resolved_source = 'process_env' if proc_env.get(key) else ('backend/.env' if key in backend_env else ('frontend/.env' if key in frontend_env else 'missing'))
+    source_violation = bool(value) and strict_source_enabled and resolved_source != 'process_env'
     strict_ok = is_set and (not has_localhost) and (not has_container_local)
     checks.append(
         {
@@ -121,9 +137,11 @@ for key, value in targets.items():
             'is_set': is_set,
             'contains_localhost': has_localhost,
             'contains_container_local': has_container_local,
-            'resolved_source': 'process_env' if proc_env.get(key) else ('backend/.env' if key in backend_env else ('frontend/.env' if key in frontend_env else 'missing')),
+            'resolved_source': resolved_source,
+            'source_policy': 'process_env_only' if strict_source_enabled else 'process_env_or_repo',
+            'source_policy_violation': source_violation,
             'value_preview': (value[:64] + '...') if value and len(value) > 64 else value,
-            'status': 'PASS' if (strict_ok or (not strict_env_checks_enabled)) else 'FAIL',
+            'status': 'PASS' if ((strict_ok and not source_violation) or (not strict_env_checks_enabled)) else 'FAIL',
         }
     )
 
@@ -187,10 +205,17 @@ report = {
     'phase': 'FAZ_D0_TASK_1',
     'status': status,
     'generated_at': datetime.now(timezone.utc).isoformat(),
+    'source_policy': {
+        'runtime_env': runtime_env() or 'unknown',
+        'is_production_runtime': is_production_runtime,
+        'strict_source_enabled': strict_source_enabled,
+        'required_source': 'process_env' if strict_source_enabled else 'process_env_or_repo',
+    },
     'checks': checks,
     'redis_runtime': redis_runtime,
     'notes': [
         'Production runtime değerlerinde localhost/container-local host kalmamalı.',
+        'strict_source_enabled=true iken env kaynakları process_env dışına düşemez.',
         'Bu rapor sadece çözümlenen env değerlerine göre deterministik kontrol üretir.',
     ],
 }

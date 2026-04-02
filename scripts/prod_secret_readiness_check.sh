@@ -57,6 +57,20 @@ strict_secret_checks_default = 'false' if ci_mode else 'true'
 strict_secret_checks_enabled = str(process_env.get('STRICT_SECRET_READINESS_CHECKS', strict_secret_checks_default)).strip().lower() in {'1', 'true', 'yes'}
 
 
+def _runtime_env() -> str:
+    return str(
+        process_env.get('APP_ENV')
+        or process_env.get('ENVIRONMENT')
+        or process_env.get('RUNTIME_ENV')
+        or ''
+    ).strip().lower()
+
+
+is_production_runtime = _runtime_env() in {'prod', 'production'}
+strict_source_default = 'true' if is_production_runtime else 'false'
+strict_source_enabled = str(process_env.get('STRICT_SECRET_SOURCE_POLICY', strict_source_default)).strip().lower() in {'1', 'true', 'yes'}
+
+
 def resolve(key: str) -> tuple[str, str]:
     if key in process_env and str(process_env.get(key) or '').strip():
         return str(process_env[key]).strip(), 'process_env(platform_runtime)'
@@ -70,12 +84,19 @@ def resolve(key: str) -> tuple[str, str]:
 required_results = []
 for key in required_keys:
     value, source = resolve(key)
+    source_allowed = (not strict_source_enabled) or source.startswith('process_env(')
+    key_present = bool(value)
+    key_ok = key_present and source_allowed
+    if not strict_secret_checks_enabled:
+        key_ok = True
     required_results.append(
         {
             'key': key,
-            'is_set': bool(value),
+            'is_set': key_present,
             'source': source,
-            'status': 'PASS' if (bool(value) or not strict_secret_checks_enabled) else 'FAIL',
+            'source_policy': 'platform_runtime_only' if strict_source_enabled else 'platform_or_repo',
+            'source_policy_violation': bool(key_present and not source_allowed),
+            'status': 'PASS' if key_ok else 'FAIL',
         }
     )
 
@@ -106,12 +127,19 @@ report = {
     'phase': 'FAZ_D0_TASK_2',
     'status': status,
     'generated_at': datetime.now(timezone.utc).isoformat(),
+    'source_policy': {
+        'runtime_env': _runtime_env() or 'unknown',
+        'is_production_runtime': is_production_runtime,
+        'strict_secret_checks_enabled': strict_secret_checks_enabled,
+        'strict_source_enabled': strict_source_enabled,
+        'required_source': 'process_env(platform_runtime)' if strict_source_enabled else 'process_env_or_repo',
+    },
     'required_secret_checks': required_results,
     'optional_secret_checks': optional_results,
     'repo_secret_presence': repo_secret_hits,
     'notes': [
         'process_env(platform_runtime) kaynağı secret manager injection göstergesi olarak değerlendirildi.',
-        'repo_file kaynağı production için risk kabul edilir; gerçek değerlerin platform secret manager üzerinden yönetilmesi gerekir.',
+        'repo_file kaynağı production için risk kabul edilir; strict_source_enabled=true iken required secretlar repo dosyasından çözümlenemez.',
     ],
 }
 
