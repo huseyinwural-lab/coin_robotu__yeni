@@ -562,6 +562,8 @@ def update_user_status(
 @router.post("/{user_id}/repair-venue-assignment", response_model=UserVenueRepairResponse)
 def repair_user_venue_assignment(
     user_id: str,
+    market_type: str = Query(default="futures"),
+    environment: str = Query(default="testnet"),
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -575,8 +577,8 @@ def repair_user_venue_assignment(
         db,
         user_id=target.id,
         exchange_code="binance",
-        market_type="futures",
-        environment="testnet",
+        market_type=market_type,
+        environment=environment,
         commit=True,
     )
     create_audit_log(
@@ -587,7 +589,13 @@ def repair_user_venue_assignment(
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         severity="warning",
-        details={"user_id": target.id, "exchange_code": row.exchange_code, "assignment_changed": changed},
+        details={
+            "user_id": target.id,
+            "exchange_code": row.exchange_code,
+            "market_type": market_type,
+            "environment": environment,
+            "assignment_changed": changed,
+        },
     )
     return UserVenueRepairResponse(
         user_id=target.id,

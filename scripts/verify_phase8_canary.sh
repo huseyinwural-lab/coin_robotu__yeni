@@ -160,6 +160,17 @@ PY
   fi
   USER_TOKEN="$(extract_token /tmp/faz8_user_login.json)"
   [[ -n "${USER_TOKEN}" ]] || fail "User token alınamadı"
+
+  local me_code
+  me_code="$(request_json GET "${BASE_URL}/api/auth/me" "" "${USER_TOKEN}" "/tmp/faz8_user_me.json")"
+  [[ "${me_code}" == "200" ]] || fail "User profile (/api/auth/me) alınamadı http=${me_code}"
+  USER_ID="$(python - <<PY
+import json
+data=json.load(open('/tmp/faz8_user_me.json', encoding='utf-8'))
+print(str(data.get('id') or '').strip())
+PY
+)"
+  [[ -n "${USER_ID}" ]] || fail "User id alınamadı"
   log "PASS: user login"
 }
 
@@ -194,6 +205,16 @@ print('true' if '${reason}' in [str(c) for c in codes] else 'false')
 PY
 }
 
+repair_user_venue_assignment() {
+  local env="$1"
+  local market="$2"
+  [[ -n "${USER_ID:-}" ]] || fail "repair için USER_ID yok"
+  local code
+  code="$(request_json POST "${BASE_URL}/api/admin/users/${USER_ID}/repair-venue-assignment?environment=${env}&market_type=${market}" "{}" "${ADMIN_TOKEN}" "/tmp/faz8_repair_venue.json")"
+  [[ "${code}" == "200" ]] || fail_with_body "Venue assignment repair başarısız http=${code}" "/tmp/faz8_repair_venue.json"
+  log "PASS: venue assignment repaired env=${env} market=${market}"
+}
+
 validate_exchange_ready() {
   local code
   code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
@@ -206,6 +227,18 @@ validate_exchange_ready() {
       EXCHANGE_MODE="live"
       EXCHANGE_ENVIRONMENT="live"
       set_exchange_keys
+      code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
+    fi
+  fi
+
+  if [[ "${code}" != "200" ]]; then
+    local live_not_allowed assignment_required testnet_not_allowed
+    live_not_allowed="$(has_reason_code "/tmp/faz8_exchange_validate.json" "live_not_allowed")"
+    assignment_required="$(has_reason_code "/tmp/faz8_exchange_validate.json" "assignment_required")"
+    testnet_not_allowed="$(has_reason_code "/tmp/faz8_exchange_validate.json" "testnet_not_allowed")"
+    if [[ "${live_not_allowed}" == "true" || "${assignment_required}" == "true" || "${testnet_not_allowed}" == "true" ]]; then
+      log "WARN: venue assignment reason detected, admin repair deneniyor"
+      repair_user_venue_assignment "${EXCHANGE_ENVIRONMENT}" "${EXCHANGE_MARKET_TYPE}"
       code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
     fi
   fi
