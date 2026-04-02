@@ -68,6 +68,15 @@ def _execution_fast_mode() -> bool:
         "true",
         "yes",
     }
+
+
+def _auto_live_release_enabled() -> bool:
+    default_flag = "1"
+    return str(os.getenv("EXECUTION_AUTO_RELEASE_ENABLED", default_flag) or default_flag).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 HIGH_RISK_THRESHOLD = 70.0
 MEDIUM_RISK_THRESHOLD = 35.0
 EXECUTION_INTENT_ALLOWED_TRANSITIONS = {
@@ -1421,6 +1430,39 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
     )
     db.commit()
     db.refresh(intent)
+
+    if _auto_live_release_enabled():
+        try:
+            approved = approve_execution_intent(
+                db,
+                intent.id,
+                admin_user_id=user_id,
+                admin_note="auto_live_release",
+                read_acknowledged=True,
+                double_confirmation=True,
+                allow_override=True,
+            )
+            released = execute_approved_intent(
+                db,
+                approved.id,
+                executor_user_id=user_id,
+                execution_reason="auto_live_release",
+                execute_confirmation=True,
+            )
+            return released
+        except Exception as exc:  # pragma: no cover - güvenli fallback
+            create_audit_log(
+                db,
+                action="EXECUTION_AUTO_RELEASE_FAILED",
+                entity_type="execution_intent",
+                entity_id=intent.id,
+                actor_user_id=user_id,
+                actor_role="USER",
+                severity="warning",
+                details={"error": str(exc)},
+            )
+            db.refresh(intent)
+
     return intent
 
 

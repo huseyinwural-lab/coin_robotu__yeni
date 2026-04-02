@@ -172,17 +172,19 @@ def _submit_trade_with_guard(
     )
     submit_pipeline = (intent.normalized_order_payload or {}).get("submit_execution_pipeline") or {}
     submit_soft_reject = submit_pipeline.get("standardized_reject") or {}
+    response_intent_status = "RELEASED" if str(intent.status or "").upper() == "RELEASED" else "QUEUED_FOR_APPROVAL"
+    response_execution_mode = str(readiness.get("mode") or "LIVE").lower()
     return ExecutionIntentSubmitResponse(
         intent_id=intent.id,
-        intent_status="QUEUED_FOR_APPROVAL",
+        intent_status=response_intent_status,
         reason_codes=[str(submit_soft_reject.get("reason_code"))] if submit_soft_reject.get("reason_code") else [],
         queue_state=intent.status,
-        execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+        execution_mode=response_execution_mode,
         policy_decision=submit_pipeline,
         pipeline_trace=submit_pipeline.get("stage_results") or [],
         explain=build_trade_explain(
             validation=precheck,
-            execution_mode=str(readiness.get("mode") or "MOCKED").lower(),
+            execution_mode=response_execution_mode,
             signal_score=None,
         ),
     )

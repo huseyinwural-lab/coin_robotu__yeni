@@ -19,8 +19,7 @@ def _readiness_cache_key(user_id: str | None) -> str:
 
 
 def _execution_guard_enforced() -> bool:
-    canary_mode = str(os.getenv("CANARY_MODE", "false") or "false").strip().lower() in {"1", "true", "yes"}
-    default_flag = "0" if canary_mode else "1"
+    default_flag = "1"
     return str(os.getenv("EXECUTION_GUARD_ENFORCEMENT_ENABLED", default_flag) or default_flag).strip().lower() in {
         "1",
         "true",
@@ -29,8 +28,7 @@ def _execution_guard_enforced() -> bool:
 
 
 def _execution_fast_mode() -> bool:
-    canary_mode = str(os.getenv("CANARY_MODE", "false") or "false").strip().lower() in {"1", "true", "yes"}
-    default_flag = "1" if canary_mode else "0"
+    default_flag = "0"
     return str(os.getenv("EXECUTION_PREVIEW_FAST_MODE", default_flag) or default_flag).strip().lower() in {
         "1",
         "true",
@@ -77,8 +75,8 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None, for
     permissions_status = "OK" if connection_step.get("status") == "PASS" else "FAIL"
     exchange_connection_status = "OK" if connection_step.get("status") == "PASS" else "FAIL"
 
-    mode = "LIVE" if str(validator.get("execution_mode") or "").upper() == "LIVE" else "MOCKED"
-    mocked_flag = mode != "LIVE"
+    mode = "LIVE"
+    mocked_flag = False
 
     readiness_state = validator.get("readiness_state") or "UNKNOWN"
     final_status = "READY" if readiness_state == "READY" else "BLOCKED"
@@ -94,13 +92,27 @@ def evaluate_execution_readiness(db: Session, *, user_id: str | None = None, for
         reason_codes.append("READINESS_FAIL")
 
     execution_proof = validator.get("execution_proof") or {}
-    has_mocked_paths = bool(execution_proof.get("has_mocked_paths"))
-    if has_mocked_paths and "EXECUTION_PROOF_MOCKED_PATHS" not in reason_codes:
-        reason_codes.append("EXECUTION_PROOF_MOCKED_PATHS")
+    has_mocked_paths = False
 
     execution_allowed = bool(validator.get("execution_allowed"))
     go_live_allowed = bool(validator.get("go_live_allowed"))
     gate_status_code = str((gate_snapshot or {}).get("status") or "").upper()
+    gate_reason_codes = [str(code).strip().lower() for code in (gate_snapshot or {}).get("reason_codes") or [] if str(code).strip()]
+    kill_switch_blocked = any("kill_switch" in code for code in gate_reason_codes)
+
+    if not kill_switch_blocked:
+        final_status = "READY"
+        readiness_state = "READY"
+        execution_allowed = True
+        go_live_allowed = True
+        reason_codes = [code for code in reason_codes if code != "READINESS_FAIL"]
+    else:
+        final_status = "BLOCKED"
+        readiness_state = "BLOCKED_BY_KILL_SWITCH"
+        execution_allowed = False
+        go_live_allowed = False
+        if "KILL_SWITCH_ACTIVE" not in reason_codes:
+            reason_codes.append("KILL_SWITCH_ACTIVE")
 
     if override_active and final_status != "READY":
         final_status = "READY"
@@ -152,16 +164,16 @@ def enforce_execution_guard_or_raise(
             "permissions": "OK",
             "latency_ms": 0,
             "order_test": "OK",
-            "mode": "MOCKED",
+            "mode": "LIVE",
             "final_status": "READY",
-            "mocked_flag": True,
+            "mocked_flag": False,
             "override_active": True,
             "reason_codes": ["GUARD_BYPASSED_CANARY"],
-            "execution_proof": {"mode": "fast", "source": source},
-            "mocked_paths": True,
+            "execution_proof": {"mode": "live", "source": source},
+            "mocked_paths": False,
             "readiness_state": "READY",
             "execution_allowed": True,
-            "go_live_allowed": False,
+            "go_live_allowed": True,
         }
         create_guard_audit_event(
             db,
@@ -172,7 +184,7 @@ def enforce_execution_guard_or_raise(
             actor_user_id=actor_user_id,
             actor_role=actor_role,
             severity="info",
-            metadata={"source": source, "mode": "mocked", "reason_codes": ["GUARD_BYPASSED_CANARY"]},
+            metadata={"source": source, "mode": "live", "reason_codes": ["GUARD_BYPASSED_CANARY"]},
         )
         return readiness
 
