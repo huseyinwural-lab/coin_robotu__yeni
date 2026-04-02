@@ -102,6 +102,7 @@ import AdminUnifiedControlRoomPage from "@/pages/AdminUnifiedControlRoomPage";
 import { AdminActionAuditPage } from "@/pages/AdminActionAuditPage";
 import { PipelineOperationsPage } from "@/pages/PipelineOperationsPage";
 import { MfaSettingsPage } from "@/pages/MfaSettingsPage";
+import { AdminLiveGatePage } from "@/pages/AdminLiveGatePage";
 
 const HomeRedirect = () => {
   const { user } = useAuth();
@@ -151,6 +152,7 @@ function App() {
             }
           >
             <Route path="dashboard" element={<AdminDashboardPage />} />
+            <Route path="live-gate" element={<AdminLiveGatePage />} />
             <Route path="live-trading-dashboard" element={<AdminLiveTradingDashboardPage />} />
             <Route path="cross-dashboard-consistency" element={<AdminCrossDashboardConsistencyPage />} />
             <Route path="users" element={<Navigate to="/admin/users/customers" replace />} />
