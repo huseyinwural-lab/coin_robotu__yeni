@@ -558,7 +558,193 @@ jobs:
             artifacts/faz5_alert_payload_sample.json
             artifacts/faz5_alert_delivery.log
             artifacts/faz5_ci_gate_check.log
+            artifacts/faz5_closure_summary.json
+            artifacts/faz5_evidence_bundle.json
             backend/logs/backend_observability.log
+
+  phase6-security-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    env:
+      DATABASE_URL: postgresql+psycopg2://trader:trader@localhost:5432/trading_platform
+      REDIS_URL: redis://localhost:6379/0
+      JWT_SECRET: ${{ secrets.JWT_SECRET || vars.JWT_SECRET }}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRE_MINUTES: 720
+      EXCHANGE_CREDENTIALS_ENCRYPTION_KEY: ${{ secrets.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY || vars.EXCHANGE_CREDENTIALS_ENCRYPTION_KEY }}
+      CORS_ORIGINS: http://localhost:3000
+      ADMIN_BOOTSTRAP_EMAIL: ${{ secrets.ADMIN_BOOTSTRAP_EMAIL || vars.ADMIN_BOOTSTRAP_EMAIL }}
+      ADMIN_BOOTSTRAP_PASSWORD: ${{ secrets.ADMIN_BOOTSTRAP_PASSWORD || vars.ADMIN_BOOTSTRAP_PASSWORD }}
+      TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL || vars.TEST_ADMIN_EMAIL }}
+      TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD || vars.TEST_ADMIN_PASSWORD }}
+      REACT_APP_BACKEND_URL: http://127.0.0.1:8001
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: trader
+          POSTGRES_PASSWORD: trader
+          POSTGRES_DB: trading_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U trader -d trading_platform"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=8
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare CI security env fallback
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import base64
+          import os
+          import secrets
+
+          def emit(key: str, value: str) -> None:
+              print(f"{key}={value}")
+
+          jwt_secret = os.getenv("JWT_SECRET") or secrets.token_urlsafe(48)
+          if len(jwt_secret) < 32:
+              jwt_secret = jwt_secret + secrets.token_urlsafe(32)
+
+          exchange_key = os.getenv("EXCHANGE_CREDENTIALS_ENCRYPTION_KEY")
+          if not exchange_key:
+              exchange_key = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+
+          admin_bootstrap_email = os.getenv("ADMIN_BOOTSTRAP_EMAIL") or f"ci-admin-{os.getenv('GITHUB_RUN_ID', '0')}@example.local"
+          admin_bootstrap_password = os.getenv("ADMIN_BOOTSTRAP_PASSWORD") or secrets.token_urlsafe(24)
+          test_admin_email = os.getenv("TEST_ADMIN_EMAIL") or admin_bootstrap_email
+          test_admin_password = os.getenv("TEST_ADMIN_PASSWORD") or admin_bootstrap_password
+
+          emit("JWT_SECRET", jwt_secret)
+          emit("EXCHANGE_CREDENTIALS_ENCRYPTION_KEY", exchange_key)
+          emit("ADMIN_BOOTSTRAP_EMAIL", admin_bootstrap_email)
+          emit("ADMIN_BOOTSTRAP_PASSWORD", admin_bootstrap_password)
+          emit("TEST_ADMIN_EMAIL", test_admin_email)
+          emit("TEST_ADMIN_PASSWORD", test_admin_password)
+          PY
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Bootstrap DB + seed admin + start backend
+        run: |
+          cd backend
+          export JWT_SECRET="${JWT_SECRET:-phase6-ci-jwt-secret-ultra-strong-2026-03-20-abcdef}"
+          export EXCHANGE_CREDENTIALS_ENCRYPTION_KEY="${EXCHANGE_CREDENTIALS_ENCRYPTION_KEY:-phase6-ci-exchange-key-32-bytes-minimum-20260320}"
+          export TEST_ADMIN_EMAIL="${TEST_ADMIN_EMAIL:-canary.admin@platform.local}"
+          export TEST_ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-CanaryAdmin123!}"
+          export ADMIN_BOOTSTRAP_EMAIL="${ADMIN_BOOTSTRAP_EMAIL:-$TEST_ADMIN_EMAIL}"
+          export ADMIN_BOOTSTRAP_PASSWORD="${ADMIN_BOOTSTRAP_PASSWORD:-$TEST_ADMIN_PASSWORD}"
+
+          alembic upgrade head
+
+          python - <<'PY'
+          import os
+          from datetime import datetime, timezone
+
+          from core.security import hash_password
+          from db import SessionLocal
+          from models import User, UserRole
+
+          email = os.getenv("TEST_ADMIN_EMAIL", "canary.admin@platform.local")
+          password = os.getenv("TEST_ADMIN_PASSWORD", "CanaryAdmin123!")
+
+          db = SessionLocal()
+          try:
+              user = db.query(User).filter(User.email == email).one_or_none()
+              if user is None:
+                  user = User(
+                      email=email,
+                      password_hash=hash_password(password),
+                      role=UserRole.ADMIN,
+                      is_active=True,
+                      approval_status="approved",
+                      approved_at=datetime.now(timezone.utc),
+                  )
+                  db.add(user)
+              else:
+                  user.password_hash = hash_password(password)
+                  user.role = UserRole.ADMIN
+                  user.is_active = True
+                  user.approval_status = "approved"
+                  user.approved_at = datetime.now(timezone.utc)
+              db.commit()
+          finally:
+              db.close()
+
+          print("PHASE6_ADMIN_BOOTSTRAP_READY")
+          PY
+
+          nohup uvicorn server:app --host 0.0.0.0 --port 8001 > /tmp/phase6_backend.log 2>&1 &
+          BACKEND_PID=$!
+          echo "Backend PID: ${BACKEND_PID}"
+
+          READY=0
+          for i in $(seq 1 180); do
+            if ! kill -0 "${BACKEND_PID}" 2>/dev/null; then
+              echo "Backend process exited early"
+              cat /tmp/phase6_backend.log || true
+              exit 1
+            fi
+
+            code_live=$(curl -s -o /tmp/phase6_health_live.json -w '%{http_code}' http://127.0.0.1:8001/api/health/live || true)
+            code_ready=$(curl -s -o /tmp/phase6_health_ready.json -w '%{http_code}' http://127.0.0.1:8001/api/health/ready || true)
+            if [[ "$code_live" == "200" && "$code_ready" == "200" ]]; then
+              READY=1
+              echo "Backend ready at attempt ${i}"
+              break
+            fi
+
+            sleep 2
+          done
+
+          if [[ "$READY" != "1" ]]; then
+            echo "Backend failed to become ready in time"
+            echo "live=${code_live} ready=${code_ready}"
+            cat /tmp/phase6_backend.log || true
+            exit 1
+          fi
+
+      - name: Run phase6 security verifier
+        run: bash scripts/verify_phase6_security.sh
+
+      - name: Upload phase6 security artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase6-security-artifacts
+          path: |
+            artifacts/faz6_security_summary.log
+            artifacts/faz6_jwt_rotation_proof.log
+            artifacts/faz6_admin_credential_scan.log
+            artifacts/faz6_rate_limit_test.log
+            artifacts/faz6_api_key_encryption_proof.log
+            artifacts/faz6_dump_backup_scan.log
+            artifacts/faz6_secret_scan_report.log
+            artifacts/faz6_secret_scan_report.json
+            artifacts/faz6_security_closure_summary.json
+            artifacts/faz6_security_evidence_bundle.json
+            /tmp/phase6_backend.log
 
   backup-restore-s3-gate:
     if: github.event_name == 'pull_request'

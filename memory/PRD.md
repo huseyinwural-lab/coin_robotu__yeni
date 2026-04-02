@@ -27,6 +27,21 @@
   - `faz6_secret_scan_report.log`
   - `faz6_secret_scan_report.json`
 
+### CI Workflow Tamamlama (Yeni)
+- `/.github/workflows/deploy-gate.yml` güncellendi:
+  - `phase5-observability-gate` upload listesine eklendi:
+    - `artifacts/faz5_closure_summary.json`
+    - `artifacts/faz5_evidence_bundle.json`
+  - Yeni job eklendi: `phase6-security-gate`
+    - backend bootstrap + admin seed + health ready bekleme
+    - `scripts/verify_phase6_security.sh` çalıştırma
+    - Faz-6 güvenlik artefactlerini eksiksiz upload etme
+
+### Tek Komut Kapanış Kontrolü
+- Yeni script: `/app/scripts/verify_phase5_phase6_closure.sh`
+- Üretilen çıktı: `/app/artifacts/phase5_phase6_closure_check.json`
+- Son durum: `overall_status=PASS`
+
 ## 2026-04-02 — Admin User Approvals Sadeleştirme (Tek Tık Kabul/Reddet)
 
 ### Yapılan geliştirme
