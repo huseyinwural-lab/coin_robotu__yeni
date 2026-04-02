@@ -168,6 +168,10 @@ STARTUP_RUNTIME_STATE = {
     "preview_smoke_gate": {"status": "pending"},
     "last_error": None,
 }
+READY_QUEUE_PRESSURE_STATE = {
+    "first_exceeded_at": None,
+    "consecutive_hits": 0,
+}
 # Contract-test compatibility: some tests monkeypatch `server.engine` directly.
 ENGINE_COMPAT = engine
 
@@ -302,17 +306,65 @@ def readiness_check():
                 "true",
                 "yes",
             }
+            queue_grace_seconds = max(
+                float(os.getenv("READY_EXECUTION_QUEUE_GRACE_SECONDS", "90") or "90"),
+                0.0,
+            )
+            queue_hard_factor = max(
+                float(os.getenv("READY_EXECUTION_QUEUE_HARD_FACTOR", "2.0") or "2.0"),
+                1.0,
+            )
+            queue_sustained_hits = max(
+                int(os.getenv("READY_EXECUTION_QUEUE_SUSTAINED_HITS", "5") or "5"),
+                1,
+            )
+            queue_hard_limit = max(int(queue_limit * queue_hard_factor), queue_limit + 1)
+
+            pressure_first_seen_at = READY_QUEUE_PRESSURE_STATE.get("first_exceeded_at")
+            pressure_elapsed_seconds = 0.0
+            pressure_blocked = False
+
             if queue_size > queue_limit:
-                if queue_strict:
+                now_ts = datetime.now(timezone.utc)
+                if pressure_first_seen_at is None:
+                    READY_QUEUE_PRESSURE_STATE["first_exceeded_at"] = now_ts
+                    READY_QUEUE_PRESSURE_STATE["consecutive_hits"] = 1
+                    pressure_first_seen_at = now_ts
+                else:
+                    READY_QUEUE_PRESSURE_STATE["consecutive_hits"] = int(
+                        READY_QUEUE_PRESSURE_STATE.get("consecutive_hits", 0)
+                    ) + 1
+
+                if pressure_first_seen_at is not None:
+                    pressure_elapsed_seconds = max(
+                        (now_ts - pressure_first_seen_at).total_seconds(),
+                        0.0,
+                    )
+
+                pressure_blocked = bool(queue_strict) and (
+                    queue_size > queue_hard_limit
+                    or READY_QUEUE_PRESSURE_STATE["consecutive_hits"] >= queue_sustained_hits
+                    or pressure_elapsed_seconds >= queue_grace_seconds
+                )
+
+                if pressure_blocked:
                     ready = False
+
                 checks["execution_queue"] = {
-                    "status": "not_ready" if queue_strict else "warning",
+                    "status": "not_ready" if pressure_blocked else "warning",
                     "queue_size": queue_size,
                     "critical_limit": queue_limit,
-                    "reason": "queue_pressure",
+                    "hard_limit": queue_hard_limit,
+                    "reason": "queue_pressure" if pressure_blocked else "queue_pressure_transient",
                     "strict": queue_strict,
+                    "grace_seconds": queue_grace_seconds,
+                    "elapsed_seconds": round(pressure_elapsed_seconds, 2),
+                    "consecutive_hits": int(READY_QUEUE_PRESSURE_STATE.get("consecutive_hits", 0)),
+                    "sustained_hits_limit": queue_sustained_hits,
                 }
             else:
+                READY_QUEUE_PRESSURE_STATE["first_exceeded_at"] = None
+                READY_QUEUE_PRESSURE_STATE["consecutive_hits"] = 0
                 checks["execution_queue"] = {
                     "status": "ready",
                     "queue_size": queue_size,

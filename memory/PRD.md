@@ -1,3 +1,24 @@
+## 2026-04-02 — READY 503 DALGALANMA DÜZELTMESİ (WS 451 / QUEUE PRESSURE)
+
+### Problem
+- `health=200` iken `ready=503` dalgalanması gözlendi.
+- Loglarda market data websocket tarafında `HTTP 451` reconnect döngüsü ve buna bağlı geçici queue pressure görüldü.
+
+### Uygulanan düzeltme
+- `/app/backend/server.py` readiness kontrolüne execution queue için **transient-pressure toleransı (hysteresis)** eklendi.
+- Artık queue baskısı kısa süreli ise `warning` döner; sadece aşağıdaki koşullarda `not_ready` olur:
+  - `queue_size > hard_limit` (varsayılan: `critical_limit * 2.0`)
+  - veya `consecutive_hits >= sustained_hits_limit` (varsayılan: `5`)
+  - veya `elapsed_seconds >= grace_seconds` (varsayılan: `90s`)
+- Yeni env parametreleri (opsiyonel):
+  - `READY_EXECUTION_QUEUE_GRACE_SECONDS` (default `90`)
+  - `READY_EXECUTION_QUEUE_HARD_FACTOR` (default `2.0`)
+  - `READY_EXECUTION_QUEUE_SUSTAINED_HITS` (default `5`)
+
+### Doğrulama
+- Lokal doğrulama: `GET /api/ready` ardışık isteklerde **200** stabil.
+- Admin login doğrulaması: `canary.admin@platform.local` ile login **200**, token üretimi başarılı.
+
 ## 2026-04-02 — ADMIN İLK KURULUM KILAVUZ SCRIPTİ (RUNBOOK)
 
 ### Eklenenler
