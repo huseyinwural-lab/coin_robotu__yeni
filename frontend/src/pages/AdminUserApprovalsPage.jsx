@@ -31,17 +31,6 @@ const REJECT_TEMPLATES = [
   "api_validity_failed",
   "insufficient_balance",
 ];
-const FOUNDATION_DRIVEN_FIELDS = new Set([
-  "api_key_validity",
-  "balance_usd",
-  "risk_score",
-  "aml_flag",
-  "aml_reason",
-  "country_code",
-  "leverage_permission",
-  "futures_capability",
-  "spot_capability",
-]);
 
 const buildWorkflowMap = (items) => {
   const next = {};
@@ -313,60 +302,15 @@ export const AdminUserApprovalsPage = () => {
 
   const handleSingleApprove = async (userId) => {
     if (!requireApproveReason()) return;
-    let context = contexts[userId] || (await loadContext(userId));
+    const context = contexts[userId] || (await loadContext(userId));
     if (!context) return;
 
-    const foundationPayload = {
-      risk_score: Number(quickRiskScore),
-      aml_flag: context.aml_flag || "clear",
-      aml_reason: context.aml_reason || null,
-      api_key_validity: context.api_key_validity || "unknown",
-      balance_usd: Number(context.balance_usd || 0),
-      country_code: context.region_compliance === "restricted" ? "BLOCKED" : null,
-      leverage_permission: Boolean(context.leverage_permission),
-      futures_capability: Boolean(context.futures_capability),
-      spot_capability: Boolean(context.spot_capability),
-    };
-
     try {
-      const missingBefore = context.missing_data_fields || [];
-      const hasFoundationGaps = missingBefore.some((field) => FOUNDATION_DRIVEN_FIELDS.has(String(field || "").trim()));
-      if (hasFoundationGaps) {
-        await apiClient.post(`/admin/onboarding/${userId}/risk-foundation`, foundationPayload);
-        context = (await loadContext(userId)) || context;
-      }
-
-      if (context.approval_disabled) {
-        const missing = (context.missing_data_fields || []).join(", ");
-        const preApprove = window.confirm(
-          `Eksik veri var (${missing || "-"}). Ön onay verilsin mi? Kullanıcı veri girişini sonradan tamamlayacak.`,
-        );
-        if (!preApprove) {
-          toast.error(`Approval blocked. Missing: ${missing || "-"}`);
-          return;
-        }
-
-        await apiClient.post(`/auth/admin/user-approval-requests/${userId}/approve`, null);
-        toast.success("Kullanıcı ön onaylandı. Eksik verileri sonradan tamamlayabilir.");
-        await loadRequests();
-        setContexts((prev) => {
-          const next = { ...prev };
-          delete next[userId];
-          return next;
-        });
-        return;
-      }
-
-      const confirmed = window.confirm("Auto-approve kararı uygulansın mı? (double confirm)");
+      const confirmed = window.confirm("Kullanıcı direkt onaylansın mı? (double confirm)");
       if (!confirmed) return;
 
-      await apiClient.post(`/admin/onboarding/${userId}/decision/auto-approve`, {
-        decision: "approve",
-        reason: approveReason.trim(),
-        explanation: riskExplanation.trim() || approveReason.trim(),
-        confirm_token: "CONFIRM",
-      });
-      toast.success("Kullanıcı approve edildi");
+      await apiClient.post(`/auth/admin/user-approval-requests/${userId}/approve`, null);
+      toast.success("Kullanıcı direkt onaylandı");
       await loadRequests();
       setContexts((prev) => {
         const next = { ...prev };
@@ -997,51 +941,51 @@ export const AdminUserApprovalsPage = () => {
       </Sheet>
 
       <Sheet open={Boolean(activeDetailUserId)} onOpenChange={(open) => !open && setActiveDetailUserId(null)}>
-        <SheetContent className="overflow-y-auto" side="right" data-testid="admin-approval-detail-drawer">
+        <SheetContent className="overflow-y-auto text-slate-100" side="right" data-testid="admin-approval-detail-drawer">
           <SheetHeader data-testid="admin-approval-detail-header">
-            <SheetTitle data-testid="admin-approval-detail-title">User Deep View</SheetTitle>
-            <SheetDescription data-testid="admin-approval-detail-description">user_id: {activeDetailUserId || "-"}</SheetDescription>
+            <SheetTitle className="text-slate-100" data-testid="admin-approval-detail-title">User Deep View</SheetTitle>
+            <SheetDescription className="text-slate-300" data-testid="admin-approval-detail-description">user_id: {activeDetailUserId || "-"}</SheetDescription>
           </SheetHeader>
 
           <div className="mt-6 space-y-4" data-testid="admin-approval-detail-content">
-            <div className="rounded border border-black/20 bg-white p-3" data-testid="admin-approval-detail-kyc-aml-card">
-              <p className="text-xs uppercase text-black/60" data-testid="admin-approval-detail-kyc-aml-title">KYC / AML</p>
-              <p data-testid="admin-approval-detail-kyc-status">KYC: {activeDetailContext?.kyc_status || "-"}</p>
-              <p data-testid="admin-approval-detail-aml-flag">AML: {activeDetailContext?.aml_flag || "-"}</p>
-              <p data-testid="admin-approval-detail-aml-reason">AML reason: {activeDetailContext?.aml_reason || "-"}</p>
+            <div className="rounded border border-slate-200 bg-white p-3 text-slate-900" data-testid="admin-approval-detail-kyc-aml-card">
+              <p className="text-xs uppercase text-slate-500" data-testid="admin-approval-detail-kyc-aml-title">KYC / AML</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-kyc-status">KYC: {activeDetailContext?.kyc_status || "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-aml-flag">AML: {activeDetailContext?.aml_flag || "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-aml-reason">AML reason: {activeDetailContext?.aml_reason || "-"}</p>
             </div>
 
-            <div className="rounded border border-black/20 bg-white p-3" data-testid="admin-approval-detail-risk-api-balance-card">
-              <p className="text-xs uppercase text-black/60" data-testid="admin-approval-detail-risk-api-balance-title">Risk / API / Balance</p>
-              <p data-testid="admin-approval-detail-risk-score">Risk score: {activeDetailContext?.risk_score ?? "-"}</p>
-              <p data-testid="admin-approval-detail-api-status">API validity: {activeDetailContext?.api_preview?.status || activeDetailContext?.api_key_validity || "-"}</p>
-              <p data-testid="admin-approval-detail-balance">Balance: {activeDetailContext?.balance_usd ?? "-"}</p>
-              <p data-testid="admin-approval-detail-api-last-updated">Last updated: {formatDateTime(activeDetailContext?.profile_last_updated_at)}</p>
+            <div className="rounded border border-slate-200 bg-white p-3 text-slate-900" data-testid="admin-approval-detail-risk-api-balance-card">
+              <p className="text-xs uppercase text-slate-500" data-testid="admin-approval-detail-risk-api-balance-title">Risk / API / Balance</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-risk-score">Risk score: {activeDetailContext?.risk_score ?? "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-api-status">API validity: {activeDetailContext?.api_preview?.status || activeDetailContext?.api_key_validity || "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-balance">Balance: {activeDetailContext?.balance_usd ?? "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-api-last-updated">Last updated: {formatDateTime(activeDetailContext?.profile_last_updated_at)}</p>
             </div>
 
-            <div className="rounded border border-black/20 bg-white p-3" data-testid="admin-approval-detail-workflow-card">
-              <p className="text-xs uppercase text-black/60" data-testid="admin-approval-detail-workflow-title">Workflow</p>
-              <p data-testid="admin-approval-detail-workflow-step">Step: {activeDetailContext?.workflow_case?.current_step || "-"}</p>
-              <p data-testid="admin-approval-detail-workflow-status">Status: {activeDetailContext?.workflow_case?.workflow_status || "-"}</p>
-              <p data-testid="admin-approval-detail-workflow-assigned">Assigned: {activeDetailContext?.workflow_case?.assigned_to || "-"}</p>
-              <p data-testid="admin-approval-detail-workflow-escalation-count">Escalation count: {activeDetailContext?.workflow_case?.escalation_count ?? "-"}</p>
+            <div className="rounded border border-slate-200 bg-white p-3 text-slate-900" data-testid="admin-approval-detail-workflow-card">
+              <p className="text-xs uppercase text-slate-500" data-testid="admin-approval-detail-workflow-title">Workflow</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-workflow-step">Step: {activeDetailContext?.workflow_case?.current_step || "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-workflow-status">Status: {activeDetailContext?.workflow_case?.workflow_status || "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-workflow-assigned">Assigned: {activeDetailContext?.workflow_case?.assigned_to || "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-workflow-escalation-count">Escalation count: {activeDetailContext?.workflow_case?.escalation_count ?? "-"}</p>
             </div>
 
-            <div className="rounded border border-black/20 bg-white p-3" data-testid="admin-approval-detail-last-decision-card">
-              <p className="text-xs uppercase text-black/60" data-testid="admin-approval-detail-last-decision-title">Last Decision Attempt</p>
-              <p data-testid="admin-approval-detail-last-decision-value">Decision: {activeDetailContext?.last_decision_attempt?.decision || "-"}</p>
-              <p data-testid="admin-approval-detail-last-decision-reason">Reason: {activeDetailContext?.last_decision_attempt?.reason || "-"}</p>
-              <p data-testid="admin-approval-detail-last-decision-created-at">At: {formatDateTime(activeDetailContext?.last_decision_attempt?.created_at)}</p>
+            <div className="rounded border border-slate-200 bg-white p-3 text-slate-900" data-testid="admin-approval-detail-last-decision-card">
+              <p className="text-xs uppercase text-slate-500" data-testid="admin-approval-detail-last-decision-title">Last Decision Attempt</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-last-decision-value">Decision: {activeDetailContext?.last_decision_attempt?.decision || "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-last-decision-reason">Reason: {activeDetailContext?.last_decision_attempt?.reason || "-"}</p>
+              <p className="text-slate-900" data-testid="admin-approval-detail-last-decision-created-at">At: {formatDateTime(activeDetailContext?.last_decision_attempt?.created_at)}</p>
             </div>
 
-            <div className="rounded border border-black/20 bg-white p-3" data-testid="admin-approval-detail-events-card">
-              <p className="text-xs uppercase text-black/60" data-testid="admin-approval-detail-events-title">Last 5 Events</p>
+            <div className="rounded border border-slate-200 bg-white p-3 text-slate-900" data-testid="admin-approval-detail-events-card">
+              <p className="text-xs uppercase text-slate-500" data-testid="admin-approval-detail-events-title">Last 5 Events</p>
               <div className="mt-2 space-y-2" data-testid="admin-approval-detail-events-list">
                 {(activeDetailContext?.last_events || []).map((eventItem, index) => (
-                  <div key={`${eventItem?.event_type || "event"}-${index}`} className="rounded border border-black/10 p-2 text-xs" data-testid={`admin-approval-detail-event-${index}`}>
-                    <p data-testid={`admin-approval-detail-event-type-${index}`}>{eventItem?.event_type || "-"}</p>
-                    <p data-testid={`admin-approval-detail-event-note-${index}`}>{eventItem?.note || "-"}</p>
-                    <p data-testid={`admin-approval-detail-event-created-at-${index}`}>{formatDateTime(eventItem?.created_at)}</p>
+                  <div key={`${eventItem?.event_type || "event"}-${index}`} className="rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-900" data-testid={`admin-approval-detail-event-${index}`}>
+                    <p className="text-slate-900" data-testid={`admin-approval-detail-event-type-${index}`}>{eventItem?.event_type || "-"}</p>
+                    <p className="text-slate-900" data-testid={`admin-approval-detail-event-note-${index}`}>{eventItem?.note || "-"}</p>
+                    <p className="text-slate-900" data-testid={`admin-approval-detail-event-created-at-${index}`}>{formatDateTime(eventItem?.created_at)}</p>
                   </div>
                 ))}
               </div>
