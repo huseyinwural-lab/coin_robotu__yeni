@@ -260,10 +260,12 @@ function App() {
             <Route path="scanner" element={<UserScannerPage />} />
             <Route path="indicator-screener" element={<Navigate to="/user/scanner?section=screener" replace />} />
             <Route path="signals" element={<UserSignalsPage />} />
+            <Route path="signal" element={<Navigate to="/user/signals" replace />} />
             <Route path="symbol/:symbol" element={<UserSymbolDecisionDetailPage />} />
             <Route path="reports" element={<Navigate to="/user/portfolio?tab=reports" replace />} />
             <Route path="execute" element={<ExecuteToTradeRedirect />} />
             <Route path="trade" element={<UserTradePage />} />
+            <Route path="trade-entry" element={<Navigate to="/user/trade" replace />} />
             <Route path="chart" element={<UserChartPage />} />
             <Route path="bot-profiles" element={<BotProfilesPage />} />
             <Route path="bots" element={<Navigate to="/user/bot-profiles" replace />} />
