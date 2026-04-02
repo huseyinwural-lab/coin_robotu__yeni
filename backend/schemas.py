@@ -5034,7 +5034,7 @@ class VenueHealthSummaryResponse(BaseModel):
 
 class ExchangeSettingsUpdateRequest(BaseModel):
     exchange: str = "binance"
-    mode: str = "testnet"
+    mode: str = "live"
     api_key: str
     api_secret: str
 
@@ -5055,7 +5055,7 @@ class AdminExchangeCredentialCreateRequest(BaseModel):
     exchange: str = "binance"
     market_type: str = "spot"
     purpose: str = "market_data"
-    environment: str = "testnet"
+    environment: str = "live"
     api_key: str
     api_secret: str
     passphrase: str | None = None
@@ -5119,11 +5119,11 @@ class AdminExchangeCredentialResponse(BaseModel):
 class CredentialAssignmentRuleUpsertRequest(BaseModel):
     exchange: str = "binance"
     market_type: str = "spot"
-    environment: str = "testnet"
+    environment: str = "live"
     tenant_id: str | None = None
     user_id: str | None = None
     preferred_source: str = "user"
-    fallback_enabled: bool = True
+    fallback_enabled: bool = False
 
 
 class CredentialAssignmentRuleResponse(BaseModel):

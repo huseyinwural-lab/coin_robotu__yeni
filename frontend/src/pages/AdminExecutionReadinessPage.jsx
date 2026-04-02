@@ -71,7 +71,6 @@ export const AdminExecutionReadinessPage = () => {
   const previousFailCountRef = useRef(0);
 
   const expectedPhrase = useMemo(() => {
-    if (targetMode === "TESTNET") return "SWITCH TO TESTNET";
     if (targetMode === "SIM") return "SWITCH TO SIM";
     if (targetMode === "PAPER") return "SWITCH TO PAPER";
     if (targetMode === "MOCK") return "SWITCH TO MOCK";
@@ -126,7 +125,7 @@ export const AdminExecutionReadinessPage = () => {
         apiClient.get("/execution-safety/recovery/reconciliation-summary?limit=600"),
         apiClient.get("/execution-safety/recovery/gate-trends?days=14"),
         apiClient.get("/execution-safety/recovery/intervention-audit?limit=120"),
-        apiClient.get("/execution-safety/acceptance/testnet/latest"),
+        Promise.resolve({ data: null }),
         apiClient.get(`/execution-safety/gate/explain?force_refresh=${refreshChecks ? "true" : "false"}&include_trend=true&window=${analyticsWindow}`),
         apiClient.get(`/execution-safety/analytics/gate-failures?window=${analyticsWindow}`),
         apiClient.get(`/execution-safety/analytics/blockers?window=${analyticsWindow}`),
@@ -233,11 +232,9 @@ export const AdminExecutionReadinessPage = () => {
 
   const handleRunAcceptance = useCallback(
     async () => {
-      await runAction(async () => {
-        await apiClient.post("/execution-safety/acceptance/testnet/run?symbol=BTCUSDT&qty=0.001");
-      }, "Testnet acceptance run tamamlandı");
+      toast.info("Acceptance run devre dışı: platform artık yalnızca live akışı kullanıyor.");
     },
-    [runAction]
+    []
   );
 
   const handleStateUpdate = useCallback(
@@ -659,7 +656,7 @@ export const AdminExecutionReadinessPage = () => {
             <Button variant="outline" onClick={() => setNewFailPulse(false)} data-testid="admin-production-gate-clear-fail-pulse-button">Yeni FAIL işaretini temizle</Button>
             <Button variant="outline" onClick={handleExportJson} data-testid="admin-production-gate-export-json-button">JSON Export</Button>
             <Button variant="outline" onClick={handleIncidentPackageExport} data-testid="admin-production-gate-export-incident-package-button">Incident Paketi Export</Button>
-            <Button variant="outline" onClick={handleRunAcceptance} data-testid="admin-production-gate-run-testnet-acceptance-button">Testnet Acceptance Run</Button>
+            <Button variant="outline" onClick={handleRunAcceptance} data-testid="admin-production-gate-run-testnet-acceptance-button">Acceptance Run (Disabled)</Button>
             <Button onClick={() => handleRerun()} disabled={actionLoading} data-testid="admin-production-gate-rerun-all-button">Tüm Checkleri Rerun</Button>
           </div>
         </div>
@@ -915,7 +912,7 @@ export const AdminExecutionReadinessPage = () => {
         </article>
 
         <article className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="execution-safety-acceptance-card">
-          <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-acceptance-title">Testnet Acceptance</h3>
+          <h3 className="text-sm font-semibold text-slate-100" data-testid="execution-safety-acceptance-title">Acceptance (Legacy Disabled)</h3>
           <p className="mt-2 text-xs text-slate-300" data-testid="execution-safety-acceptance-latest-id">latest_run: {acceptanceLatest?.payload?.acceptance_run_id || acceptanceLatest?.artifact_id || "-"}</p>
           <p className="text-xs text-slate-300" data-testid="execution-safety-acceptance-latest-proof-type">proof_type: {acceptanceLatest?.payload?.proof_type || "-"}</p>
           <p className="text-xs text-slate-300" data-testid="execution-safety-acceptance-latest-created-at">created_at: {acceptanceLatest?.created_at || "-"}</p>
@@ -1723,13 +1720,12 @@ export const AdminExecutionReadinessPage = () => {
         <DialogContent data-testid="admin-production-gate-mode-modal">
           <DialogHeader>
             <DialogTitle data-testid="admin-production-gate-mode-modal-title">Mode Change Confirmation</DialogTitle>
-            <DialogDescription data-testid="admin-production-gate-mode-modal-description">SIM/TESTNET → LIVE geçişinde Gate hard-block aktifse işlem reddedilir.</DialogDescription>
+            <DialogDescription data-testid="admin-production-gate-mode-modal-description">SIM/PAPER/MOCK → LIVE geçişinde Gate hard-block aktifse işlem reddedilir.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2" data-testid="admin-production-gate-mode-modal-form">
             <label className="text-xs text-slate-300" data-testid="admin-production-gate-mode-target-label">target_mode</label>
-            <select className="w-full rounded border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-white" value={targetMode} onChange={(event) => { setTargetMode(event.target.value); setConfirmationPhrase(event.target.value === "LIVE" ? "SWITCH TO LIVE" : event.target.value === "TESTNET" ? "SWITCH TO TESTNET" : event.target.value === "SIM" ? "SWITCH TO SIM" : event.target.value === "PAPER" ? "SWITCH TO PAPER" : "SWITCH TO MOCK"); }} data-testid="admin-production-gate-mode-target-select">
+            <select className="w-full rounded border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-white" value={targetMode} onChange={(event) => { setTargetMode(event.target.value); setConfirmationPhrase(event.target.value === "LIVE" ? "SWITCH TO LIVE" : event.target.value === "SIM" ? "SWITCH TO SIM" : event.target.value === "PAPER" ? "SWITCH TO PAPER" : "SWITCH TO MOCK"); }} data-testid="admin-production-gate-mode-target-select">
               <option value="LIVE">LIVE</option>
-              <option value="TESTNET">TESTNET</option>
               <option value="SIM">SIM</option>
               <option value="PAPER">PAPER (legacy)</option>
               <option value="MOCK">MOCK (legacy)</option>

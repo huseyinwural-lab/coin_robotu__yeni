@@ -9,7 +9,7 @@ import { apiClient } from "@/lib/api";
 
 const initialForm = {
   exchange: "binance",
-  mode: "testnet",
+  mode: "live",
   api_key: "",
   api_secret: "",
 };
@@ -18,7 +18,7 @@ const initialConnectionForm = {
   account_label: "",
   exchange: "binance",
   market_type: "spot",
-  environment: "testnet",
+  environment: "live",
   api_key: "",
   api_secret: "",
   is_default: false,
@@ -27,7 +27,7 @@ const initialConnectionForm = {
 const fallbackVenue = {
   exchange: "binance",
   market_type: "futures",
-  environment: "testnet",
+  environment: "live",
 };
 
 const USER_EXCHANGE_SYMBOL_STORAGE_KEY = "user-exchange-selected-symbol-v1";
@@ -117,8 +117,8 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
           .filter((item) => item.exchange === selectedVenue.exchange && item.market_type === selectedVenue.market_type)
           .map((item) => item.environment),
       ),
-    ];
-    return list.length ? list : [fallbackVenue.environment];
+    ].filter((env) => String(env || "").toLowerCase() === "live");
+    return list.length ? list : ["live"];
   }, [selectedVenue.exchange, selectedVenue.market_type, venueOptions]);
 
   const connectionHealthOverview = useMemo(() => {
@@ -537,7 +537,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
       ...initialConnectionForm,
       exchange: selectedVenue.exchange || "binance",
       market_type: selectedVenue.market_type || "spot",
-      environment: selectedVenue.environment || "testnet",
+      environment: selectedVenue.environment || "live",
     }));
   };
 
@@ -762,10 +762,10 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
   };
 
   const runFirstTestOrder = async () => {
-    const venueEligible = selectedVenue.exchange === "binance" && selectedVenue.environment === "testnet";
+    const venueEligible = selectedVenue.exchange === "binance" && selectedVenue.environment === "live";
     if (!venueEligible) {
-      setTestOrderBanner("unsupported_venue_for_test_order: İlk kontrollü test emri sadece binance/testnet için açık.");
-      toast.error("İlk kontrollü test emri yalnızca binance/testnet için desteklenir");
+      setTestOrderBanner("unsupported_venue_for_test_order: İlk kontrollü test emri yalnızca binance/live için açık.");
+      toast.error("İlk kontrollü test emri yalnızca binance/live için desteklenir");
       return;
     }
 
@@ -894,7 +894,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
     return { state: "pending", tone: "blue", reason: "Profil ve validation durumu bekleniyor." };
   }, [isTesting, isValidating, testOrderResult?.final_status, selectedConnectionProfile, readiness, validateResult]);
 
-  const testOrderEligible = selectedVenue.exchange === "binance" && selectedVenue.environment === "testnet";
+  const testOrderEligible = selectedVenue.exchange === "binance" && selectedVenue.environment === "live";
 
   return (
     <section className="space-y-4" data-testid="user-exchange-settings-page">
@@ -1032,7 +1032,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
                   aria-label="Account Label"
                   aria-describedby="user-connection-profile-account-label-helper user-connection-profile-account-label-error"
                 />
-                <p className="form-helper-text" id="user-connection-profile-account-label-helper" data-testid="user-connection-profile-account-label-helper">Bağlantıyı ayırt eden kısa ad. Örn: main-futures-testnet</p>
+                <p className="form-helper-text" id="user-connection-profile-account-label-helper" data-testid="user-connection-profile-account-label-helper">Bağlantıyı ayırt eden kısa ad. Örn: main-futures-live</p>
                 {connectionErrors.account_label && <p className="form-error-text" id="user-connection-profile-account-label-error" data-testid="user-connection-profile-account-label-error">{connectionErrors.account_label}</p>}
               </div>
               <div className="form-group" data-testid="user-connection-profile-exchange-group">
@@ -1079,10 +1079,9 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
                   aria-label="Environment"
                   aria-describedby="user-connection-profile-environment-helper"
                 >
-                  <option value="testnet">testnet</option>
                   <option value="live">live</option>
                 </select>
-                <p className="form-helper-text" id="user-connection-profile-environment-helper" data-testid="user-connection-profile-environment-helper">Canlı veya test ortamı.</p>
+                <p className="form-helper-text" id="user-connection-profile-environment-helper" data-testid="user-connection-profile-environment-helper">Canlı ortam.</p>
               </div>
               <div className="form-group" data-testid="user-connection-profile-api-key-group">
                 <label className="form-label" htmlFor="user-connection-profile-api-key-input" data-testid="user-connection-profile-api-key-label">API Key</label>
@@ -1251,7 +1250,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
                   <option key={item} value={item}>{item}</option>
                 ))}
               </select>
-              <p className="form-helper-text" id="user-risk-venue-environment-helper" data-testid="user-risk-venue-environment-helper">Testnet veya live ortamı.</p>
+              <p className="form-helper-text" id="user-risk-venue-environment-helper" data-testid="user-risk-venue-environment-helper">Sadece live ortamı.</p>
             </div>
             <p className="md:col-span-3 text-xs text-slate-400" data-testid="user-risk-selected-venue-summary">Seçili venue: {selectedVenue.exchange} / {selectedVenue.market_type} / {selectedVenue.environment}</p>
             {venueOptions.length === 0 && (
@@ -1609,14 +1608,14 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
           <p data-testid="user-readiness-has-api-secret">Secret mevcut: {String(readiness?.has_api_secret ?? false)}</p>
           <p data-testid="user-readiness-validation-success">Validation başarılı: {String(readiness?.validation_success ?? false)}</p>
           <p data-testid="user-readiness-can-trade">can_trade=true: {String(readiness?.can_trade ?? false)}</p>
-          <p data-testid="user-readiness-testnet-env">testnet environment: {String(readiness?.is_testnet_environment ?? false)}</p>
+          <p data-testid="user-readiness-testnet-env">live environment: {String(!(readiness?.is_testnet_environment ?? false))}</p>
           <p data-testid="user-readiness-validation-stale">snapshot stale: {String(readiness?.is_validation_stale ?? true)}</p>
         </div>
       </div>
 
       {readiness?.readiness_status === "awaiting_valid_key" && (
         <div className="border border-blue-700 bg-blue-950/20 p-4 text-sm text-blue-200" data-testid="user-readiness-awaiting-valid-key-banner">
-          awaiting valid key — Binance Testnet API key ve secret doğrulanmadan gerçek test-order çalıştırılamaz.
+          awaiting valid key — Binance live API key ve secret doğrulanmadan gerçek test-order çalıştırılamaz.
         </div>
       )}
 
@@ -1651,7 +1650,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
               <option key={item} value={item}>{item}</option>
             ))}
           </select>
-          <p className="form-helper-text" data-testid="user-exchange-settings-environment-helper">Canlı veya testnet hedef ortamı.</p>
+          <p className="form-helper-text" data-testid="user-exchange-settings-environment-helper">Canlı hedef ortamı.</p>
         </div>
         <div className="form-group" data-testid="user-exchange-settings-api-key-group">
           <label className="form-label" htmlFor="user-exchange-settings-api-key-input" data-testid="user-exchange-settings-api-key-label">API Key</label>
@@ -1685,7 +1684,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
 
         {!testOrderEligible && (
           <p className="mt-2 text-xs text-yellow-300" data-testid="user-test-order-venue-constraint-text">
-            Test order şu an yalnızca binance/testnet kombinasyonu için destekleniyor.
+            Test order şu an yalnızca binance/live kombinasyonu için destekleniyor.
           </p>
         )}
 

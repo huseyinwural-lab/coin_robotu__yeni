@@ -15,7 +15,7 @@ const defaultForm = {
   exchange_connection_id: "",
   account_label: "",
   exchange: "binance",
-  environment: "testnet",
+  environment: "live",
   market_type: "spot",
   symbol: "",
   side: "buy",
@@ -155,7 +155,7 @@ export const UserExecutePage = () => {
       const side = searchParams.get("side") || "buy";
       const marketType = searchParams.get("market_type") || "spot";
       const exchange = searchParams.get("exchange") || defaultConnection?.exchange || "binance";
-      const environment = searchParams.get("environment") || defaultConnection?.environment || "testnet";
+      const environment = searchParams.get("environment") || defaultConnection?.environment || "live";
       const preset = searchParams.get("preset") || "";
       const bridgeContextEncoded = searchParams.get("bridge_context");
       if (bridgeContextEncoded) {

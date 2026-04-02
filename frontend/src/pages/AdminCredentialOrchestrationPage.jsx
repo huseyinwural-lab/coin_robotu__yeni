@@ -17,7 +17,7 @@ import { apiClient } from "@/lib/api";
 const EXCHANGES = ["binance", "bybit", "okx"];
 const MARKET_TYPES = ["spot", "usdt_perp", "coin_perp"];
 const PURPOSES = ["market_data", "execution", "fallback"];
-const ENVIRONMENTS = ["testnet", "live"];
+const ENVIRONMENTS = ["live"];
 const SCOPE_TYPES = ["global", "tenant", "group"];
 const PROBE_STATES = [
   "ready",
@@ -49,7 +49,7 @@ export const AdminCredentialOrchestrationPage = () => {
   const [filters, setFilters] = useState({
     exchange: "binance",
     market_type: "spot",
-    environment: "testnet",
+    environment: "live",
     purpose: "all",
   });
   const [credentials, setCredentials] = useState([]);
@@ -68,7 +68,7 @@ export const AdminCredentialOrchestrationPage = () => {
     exchange: "binance",
     market_type: "spot",
     purpose: "market_data",
-    environment: "testnet",
+    environment: "live",
     api_key: "",
     api_secret: "",
     passphrase: "",
@@ -79,7 +79,7 @@ export const AdminCredentialOrchestrationPage = () => {
   const [ruleForm, setRuleForm] = useState({
     exchange: "binance",
     market_type: "spot",
-    environment: "testnet",
+    environment: "live",
     tenant_id: "",
     user_id: "",
     preferred_source: "user",

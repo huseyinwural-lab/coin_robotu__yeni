@@ -563,7 +563,7 @@ def update_user_status(
 def repair_user_venue_assignment(
     user_id: str,
     market_type: str = Query(default="futures"),
-    environment: str = Query(default="testnet"),
+    environment: str = Query(default="live"),
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -624,7 +624,7 @@ def repair_all_user_venue_assignments(
             user_id=target.id,
             exchange_code="binance",
             market_type="futures",
-            environment="testnet",
+            environment="live",
             commit=False,
         )
         if changed:
@@ -662,7 +662,7 @@ def _evaluate_futures_live_path(db: Session, user: User) -> FuturesLivePathCheck
 
     assignment_present = assignment is not None
     futures_assignment_ok = bool(assignment and assignment.futures_allowed)
-    environment_assignment_ok = bool(assignment and (assignment.testnet_allowed or assignment.live_allowed))
+    environment_assignment_ok = bool(assignment and assignment.live_allowed)
     trade_ready_connection_count = 0
     for row in futures_connections:
         snapshot = row.readiness_snapshot or {}

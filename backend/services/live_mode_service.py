@@ -652,15 +652,15 @@ def decrypt_secret(raw_encrypted: str) -> str:
 
 
 def resolve_runtime_credentials(api_key: str | None, api_secret: str | None) -> tuple[str | None, str | None, str]:
-    key = (api_key or "").strip() or os.environ.get("BINANCE_TESTNET_API_KEY")
-    secret = (api_secret or "").strip() or os.environ.get("BINANCE_TESTNET_API_SECRET")
+    key = (api_key or "").strip() or os.environ.get("BINANCE_LIVE_API_KEY") or os.environ.get("BINANCE_API_KEY")
+    secret = (api_secret or "").strip() or os.environ.get("BINANCE_LIVE_API_SECRET") or os.environ.get("BINANCE_API_SECRET")
     source = "request" if (api_key or "").strip() or (api_secret or "").strip() else "environment"
     return key, secret, source
 
 
 def _enforce_controlled_limits(config: LiveActivationConfig):
     config.exchange = "binance"
-    config.market_type = "futures_testnet"
+    config.market_type = "futures"
 
     if config.safe_mode_enabled:
         config.max_position_pct = min(config.max_position_pct, MAX_SAFE_POSITION_PCT)

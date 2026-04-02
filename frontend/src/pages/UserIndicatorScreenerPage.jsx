@@ -551,7 +551,7 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
     const encodedBridge = encodeURIComponent(JSON.stringify(bridgePayload));
     toast.success(`${row.symbol} (${row.market_type}) Execute ekranına aktarılıyor`);
     navigate(
-      `/user/execute?symbol=${encodeURIComponent(row.symbol)}&market_type=${encodeURIComponent(row.market_type)}&side=${encodeURIComponent(side)}&source=indicator-screener&exchange=${encodeURIComponent(row.exchange || filters.exchange)}&environment=testnet&bridge_context=${encodedBridge}`,
+      `/user/execute?symbol=${encodeURIComponent(row.symbol)}&market_type=${encodeURIComponent(row.market_type)}&side=${encodeURIComponent(side)}&source=indicator-screener&exchange=${encodeURIComponent(row.exchange || filters.exchange)}&environment=live&bridge_context=${encodedBridge}`,
     );
   };
 

@@ -28,7 +28,6 @@ const MetricCard = ({ title, value, testId }) => (
 
 const MODE_PHRASES = {
   LIVE: "SWITCH TO LIVE",
-  TESTNET: "SWITCH TO TESTNET",
   SIM: "SWITCH TO SIM",
   PAPER: "SWITCH TO PAPER",
   MOCK: "SWITCH TO MOCK",
@@ -416,7 +415,7 @@ export const AdminLiveTradingDashboardPage = () => {
           <p className="text-xs text-slate-300" data-testid="live-control-execution-mode-current">current_mode: {controlState?.execution_mode || "-"}</p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="live-control-execution-mode-actions">
-          {(["LIVE", "TESTNET", "SIM"]).map((mode) => (
+          {(["LIVE", "SIM"]).map((mode) => (
             <Button
               key={mode}
               onClick={() =>
