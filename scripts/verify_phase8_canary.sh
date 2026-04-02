@@ -166,7 +166,6 @@ cfg.update({
   'canary_max_capital_usdt': float('${max_capital}'),
   'canary_max_positions': int('${max_positions}'),
   'symbol_whitelist': json.loads('${symbol_whitelist_json}'),
-  'trading_enabled': True,
   'kill_switch_enabled': False,
 })
 open('/tmp/faz8_live_config_put.json','w',encoding='utf-8').write(json.dumps(cfg))

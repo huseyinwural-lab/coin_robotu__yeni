@@ -3,6 +3,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from core.users.user_exchange_connector import credential_fingerprint, mask_secret
@@ -167,41 +168,57 @@ def update_live_config(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    config = get_or_create_live_config(db)
+    for attempt in range(1, 3):
+        try:
+            config = get_or_create_live_config(db)
 
-    enabling_live_mode = (not bool(config.live_mode_enabled)) and bool(payload.live_mode_enabled)
-    enabling_trading = (not bool(config.trading_enabled)) and bool(payload.trading_enabled)
+            enabling_live_mode = (not bool(config.live_mode_enabled)) and bool(payload.live_mode_enabled)
 
-    # Production gate sadece DISABLED -> ENABLED geçişlerinde zorunlu olsun.
-    # Canary/limit güncellemelerinde aynı check'i her PUT'ta tekrar çalıştırmak,
-    # CI'da gereksiz uzun gate refresh + transient 5xx dalgalanması oluşturuyordu.
-    if enabling_live_mode or enabling_trading:
-        enforce_production_gate_or_raise(
-            db,
-            actor_user_id=current_admin.id,
-            actor_role=current_admin.role.value,
-            action_type="phase4_live_config_enable",
-            reason_text="phase4_live_config_enable",
-        )
+            # Production gate sadece DISABLED -> ENABLED geçişlerinde zorunlu olsun.
+            # Canary/limit güncellemelerinde aynı check'i her PUT'ta tekrar çalıştırmak,
+            # CI'da gereksiz uzun gate refresh + transient 5xx dalgalanması oluşturuyordu.
+            if enabling_live_mode:
+                enforce_production_gate_or_raise(
+                    db,
+                    actor_user_id=current_admin.id,
+                    actor_role=current_admin.role.value,
+                    action_type="phase4_live_config_enable",
+                    reason_text="phase4_live_config_enable",
+                )
 
-    updated = apply_config_update(db, config, payload.model_dump())
-    create_audit_log(
-        db,
-        action="phase4_live_config_updated",
-        entity_type="live_activation_config",
-        entity_id=updated.id,
-        actor_user_id=current_admin.id,
-        actor_role=current_admin.role.value,
-        details={
-            "symbol_whitelist": updated.symbol_whitelist,
-            "max_position_pct": updated.max_position_pct,
-            "canary_enabled": bool(updated.canary_enabled),
-            "canary_symbols": list(updated.canary_symbols or []),
-            "canary_max_capital_usdt": float(updated.canary_max_capital_usdt or 0),
-            "canary_max_positions": int(updated.canary_max_positions or 0),
-        },
-    )
-    return updated
+            updated = apply_config_update(db, config, payload.model_dump())
+            try:
+                create_audit_log(
+                    db,
+                    action="phase4_live_config_updated",
+                    entity_type="live_activation_config",
+                    entity_id=updated.id,
+                    actor_user_id=current_admin.id,
+                    actor_role=current_admin.role.value,
+                    details={
+                        "symbol_whitelist": updated.symbol_whitelist,
+                        "max_position_pct": updated.max_position_pct,
+                        "canary_enabled": bool(updated.canary_enabled),
+                        "canary_symbols": list(updated.canary_symbols or []),
+                        "canary_max_capital_usdt": float(updated.canary_max_capital_usdt or 0),
+                        "canary_max_positions": int(updated.canary_max_positions or 0),
+                    },
+                )
+            except Exception as audit_exc:
+                logger.warning(
+                    "phase4_live_config_audit_nonblocking_failed",
+                    extra={"error": str(audit_exc), "attempt": attempt},
+                )
+            return updated
+        except OperationalError as exc:
+            db.rollback()
+            db.close()
+            if attempt >= 2:
+                logger.exception("phase4_live_config_operational_error", extra={"attempt": attempt})
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="live_config_temporarily_unavailable",
+                ) from exc
 
 
 @router.get("/readiness-check", response_model=LiveReadinessResponse)
