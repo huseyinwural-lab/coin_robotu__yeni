@@ -10,6 +10,7 @@ mkdir -p "${ARTIFACT_DIR}"
 python - <<'PY'
 import json
 import os
+import hashlib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -19,6 +20,7 @@ from pathlib import Path
 root = Path('/app')
 artifacts = root / 'artifacts'
 report_path = artifacts / 'final_release_gate_report.json'
+run_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
 
 required_artifacts = {
     'prod_env_preflight': artifacts / 'prod_preflight_check.json',
@@ -184,9 +186,11 @@ for name, path in required_artifacts.items():
         blocking_items.append({'artifact': name, 'reason': 'missing_artifact'})
     results[name] = entry
 
-production_gate_snapshot_path = artifacts / 'final' / 'production_gate_snapshot.json'
+production_gate_snapshot_dir = artifacts / 'final'
+production_gate_snapshot_path = production_gate_snapshot_dir / 'production_gate_snapshot.json'
+run_snapshot_path = production_gate_snapshot_dir / f'production_gate_snapshot_{run_id}.json'
 pg_entry = {
-    'path': str(production_gate_snapshot_path),
+    'path': str(run_snapshot_path),
     'exists': production_gate_snapshot_path.exists() or bool(live_snapshot_payload),
     'status': 'SKIPPED',
     'raw_status': None,
@@ -196,9 +200,11 @@ if live_snapshot_payload is not None:
     payload = dict(live_snapshot_payload)
     snapshot_write_ok = True
     snapshot_write_error = None
+    snapshot_serialized = json.dumps(payload, ensure_ascii=False, indent=2) + '\n'
     try:
-        production_gate_snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-        production_gate_snapshot_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        production_gate_snapshot_dir.mkdir(parents=True, exist_ok=True)
+        run_snapshot_path.write_text(snapshot_serialized, encoding='utf-8')
+        production_gate_snapshot_path.write_text(snapshot_serialized, encoding='utf-8')
     except Exception as exc:  # noqa: BLE001
         snapshot_write_ok = False
         snapshot_write_error = str(exc)
@@ -214,6 +220,7 @@ if live_snapshot_payload is not None:
         'updated_at': updated_at_raw,
         'fresh': is_fresh,
         'source': 'live_api',
+        'run_snapshot_path': str(run_snapshot_path),
         'snapshot_write_ok': snapshot_write_ok,
         'snapshot_write_error': snapshot_write_error,
     }
@@ -222,7 +229,13 @@ if live_snapshot_payload is not None:
         blocking_items.append({'artifact': 'production_gate_snapshot', 'reason': f'deploy_allowed={deploy_allowed},effective_state={effective_state},source=live_api,snapshot_write_ok={snapshot_write_ok}'})
 elif production_gate_snapshot_path.exists():
     try:
-        payload = json.loads(production_gate_snapshot_path.read_text(encoding='utf-8'))
+        payload_raw = production_gate_snapshot_path.read_text(encoding='utf-8')
+        payload = json.loads(payload_raw)
+        try:
+            production_gate_snapshot_dir.mkdir(parents=True, exist_ok=True)
+            run_snapshot_path.write_text(payload_raw if payload_raw.endswith('\n') else payload_raw + '\n', encoding='utf-8')
+        except Exception:
+            pass
         deploy_allowed = bool(payload.get('deploy_allowed'))
         effective_state = str(payload.get('effective_state') or '').upper()
         updated_at_raw = str(payload.get('updated_at') or '').strip()
@@ -243,6 +256,7 @@ elif production_gate_snapshot_path.exists():
             'updated_at': updated_at_raw,
             'fresh': is_fresh,
             'source': 'snapshot_file',
+            'run_snapshot_path': str(run_snapshot_path),
         }
         pg_entry['status'] = 'PASS' if pass_state else 'FAIL'
         if not pass_state:
@@ -262,23 +276,26 @@ results['production_gate_snapshot'] = pg_entry
 # Hard consistency lock:
 # final_decision GO üretilecekse snapshot dosyası ile aynı gate durumunu taşımalı.
 consistency_entry = {
-    'path': str(production_gate_snapshot_path),
-    'exists': production_gate_snapshot_path.exists(),
+    'path': str(run_snapshot_path),
+    'exists': run_snapshot_path.exists(),
     'status': 'SKIPPED',
     'raw_status': None,
 }
 try:
-    if production_gate_snapshot_path.exists() and isinstance((results.get('production_gate_snapshot') or {}).get('raw_status'), dict):
-        disk_payload = json.loads(production_gate_snapshot_path.read_text(encoding='utf-8'))
+    if run_snapshot_path.exists() and isinstance((results.get('production_gate_snapshot') or {}).get('raw_status'), dict):
+        disk_raw = run_snapshot_path.read_text(encoding='utf-8')
+        disk_payload = json.loads(disk_raw)
         memory_payload = (results.get('production_gate_snapshot') or {}).get('raw_status') or {}
         disk_effective_state = str(disk_payload.get('effective_state') or '').upper()
         disk_deploy_allowed = bool(disk_payload.get('deploy_allowed'))
         mem_effective_state = str(memory_payload.get('effective_state') or '').upper()
         mem_deploy_allowed = bool(memory_payload.get('deploy_allowed'))
+        snapshot_sha256 = hashlib.sha256(disk_raw.encode('utf-8')).hexdigest()
         matched = (disk_effective_state == mem_effective_state) and (disk_deploy_allowed == mem_deploy_allowed)
         consistency_entry['status'] = 'PASS' if matched else 'FAIL'
         consistency_entry['raw_status'] = {
             'matched': matched,
+            'snapshot_sha256': snapshot_sha256,
             'disk_effective_state': disk_effective_state,
             'disk_deploy_allowed': disk_deploy_allowed,
             'memory_effective_state': mem_effective_state,
@@ -302,6 +319,7 @@ final_decision = 'GO' if not blocking_items else 'NO_GO'
 report = {
     'phase': 'FAZ_D0_TASK_10',
     'generated_at': datetime.now(timezone.utc).isoformat(),
+    'run_id': run_id,
     'final_decision': final_decision,
     'artifact_status': results,
     'blocking_items': blocking_items,
@@ -309,6 +327,8 @@ report = {
 }
 
 report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+run_report_path = artifacts / f'final_release_gate_report_{run_id}.json'
+run_report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 print(json.dumps({'final_decision': final_decision, 'blocking_count': len(blocking_items)}, ensure_ascii=False))
 raise SystemExit(0 if final_decision == 'GO' else 1)
 PY
