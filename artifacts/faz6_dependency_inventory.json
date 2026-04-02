@@ -1,0 +1,27 @@
+{
+  "phase": "FAZ-6",
+  "generated_at": "2026-04-02T16:55:12.205487+00:00",
+  "backend_dependency_count": 160,
+  "frontend_dependency_count": 56,
+  "heavy_backend_dependencies": [
+    "google-genai",
+    "google-generativeai",
+    "huggingface_hub",
+    "numpy",
+    "openai",
+    "pandas",
+    "pyiceberg",
+    "tokenizers"
+  ],
+  "heavy_frontend_dependencies": [
+    "@xyflow/react",
+    "framer-motion",
+    "lightweight-charts",
+    "react-scripts",
+    "recharts"
+  ],
+  "notes": [
+    "Bu envanter build optimizasyonuna giriş için referanstır.",
+    "Ağır paketler runtime ihtiyacına göre opsiyonel katmanlara ayrılabilir."
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "phase": "FAZ-5",
-  "generated_at": "2026-04-02T16:37:16.760893+00:00",
+  "generated_at": "2026-04-02T16:53:32.110714+00:00",
   "status": "PASS",
   "summary_log": "/app/artifacts/faz5_verify_phase5_observability.log",
   "artifacts": [
@@ -23,6 +23,11 @@
       "name": "faz5_file_log_sample.log",
       "exists": true,
       "path": "/app/artifacts/faz5_file_log_sample.log"
+    },
+    {
+      "name": "faz5_secret_masking_proof.json",
+      "exists": true,
+      "path": "/app/artifacts/faz5_secret_masking_proof.json"
     },
     {
       "name": "faz5_alembic_upgrade.log",

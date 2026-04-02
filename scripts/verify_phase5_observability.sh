@@ -9,6 +9,7 @@ mkdir -p "$ARTIFACT_DIR"
 : > "$SUMMARY_LOG"
 
 PHASE5_SUMMARY_JSON="${ARTIFACT_DIR}/faz5_closure_summary.json"
+PHASE5_EVIDENCE_JSON="${ARTIFACT_DIR}/faz5_evidence_bundle.json"
 
 ensure_text_artifact() {
   local path="$1"
@@ -19,6 +20,80 @@ ensure_text_artifact() {
 ensure_phase5_contract_artifacts() {
   ensure_text_artifact "${ARTIFACT_DIR}/faz5_alembic_upgrade.log" "INFO: not_run_in_light_mode"
   ensure_text_artifact "${ARTIFACT_DIR}/faz5_alert_delivery.log" ""
+  if [[ ! -f "${ARTIFACT_DIR}/faz5_secret_masking_proof.json" ]]; then
+    cat > "${ARTIFACT_DIR}/faz5_secret_masking_proof.json" <<'EOF'
+{
+  "status": "PENDING",
+  "reason": "masking proof not generated yet"
+}
+EOF
+  fi
+}
+
+write_phase5_evidence_bundle() {
+  local final_status="$1"
+  APP_ROOT="$APP_ROOT" ARTIFACT_DIR="$ARTIFACT_DIR" PHASE5_EVIDENCE_JSON="$PHASE5_EVIDENCE_JSON" FINAL_STATUS="$final_status" python - <<'PY'
+import hashlib
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+artifact_dir = Path(os.environ["ARTIFACT_DIR"])
+app_root = Path(os.environ["APP_ROOT"])
+target = Path(os.environ["PHASE5_EVIDENCE_JSON"])
+final_status = str(os.environ.get("FINAL_STATUS") or "UNKNOWN").upper()
+
+expected = [
+    "artifacts/faz5_verify_phase5_observability.log",
+    "artifacts/faz5_logging_contract_check.log",
+    "artifacts/faz5_stdout_log_sample.log",
+    "artifacts/faz5_file_log_sample.log",
+    "artifacts/faz5_secret_masking_proof.json",
+    "artifacts/faz5_alembic_upgrade.log",
+    "artifacts/faz5_integration_tests.log",
+    "artifacts/faz5_health_response.json",
+    "artifacts/faz5_ready_healthy_response.json",
+    "artifacts/faz5_ready_not_ready_response.json",
+    "artifacts/faz5_metrics_output.txt",
+    "artifacts/faz5_fake_error_test.log",
+    "artifacts/faz5_alert_payload_sample.json",
+    "artifacts/faz5_alert_delivery.log",
+    "artifacts/faz5_ci_gate_check.log",
+    "backend/logs/backend_observability.log",
+]
+
+files = []
+for rel in expected:
+    p = app_root / rel
+    info = {
+        "path": str(p),
+        "relative_path": rel,
+        "exists": p.exists(),
+    }
+    if p.exists() and p.is_file():
+        raw = p.read_bytes()
+        info.update(
+            {
+                "size_bytes": len(raw),
+                "sha256": hashlib.sha256(raw).hexdigest(),
+                "updated_at": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat(),
+            }
+        )
+    files.append(info)
+
+missing = [row for row in files if not row.get("exists")]
+bundle = {
+    "phase": "FAZ-5",
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "status": final_status,
+    "files": files,
+    "missing_count": len(missing),
+    "missing_files": [row["relative_path"] for row in missing],
+}
+target.write_text(json.dumps(bundle, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(json.dumps({"status": final_status, "evidence": str(target), "missing_count": len(missing)}, ensure_ascii=False))
+PY
 }
 
 write_phase5_summary() {
@@ -39,6 +114,7 @@ expected = [
     "faz5_logging_contract_check.log",
     "faz5_stdout_log_sample.log",
     "faz5_file_log_sample.log",
+    "faz5_secret_masking_proof.json",
     "faz5_alembic_upgrade.log",
     "faz5_integration_tests.log",
     "faz5_health_response.json",
@@ -88,6 +164,7 @@ fail() {
   log "FAIL: $1"
   log "SUMMARY: FAIL"
   ensure_phase5_contract_artifacts
+  write_phase5_evidence_bundle "FAIL"
   write_phase5_summary "FAIL"
   exit 1
 }
@@ -146,6 +223,33 @@ fi
 if grep -q "SuperSecretPassword!" "${ARTIFACT_DIR}/faz5_file_log_sample.log"; then
   fail "Masking başarısız: ham password file log'da bulundu"
 fi
+
+APP_ROOT="$APP_ROOT" ARTIFACT_DIR="$ARTIFACT_DIR" python - <<'PY' > "${ARTIFACT_DIR}/faz5_secret_masking_proof.json"
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+artifact_dir = Path(os.environ["ARTIFACT_DIR"])
+sample_path = artifact_dir / "faz5_file_log_sample.log"
+content = sample_path.read_text(encoding="utf-8", errors="ignore") if sample_path.exists() else ""
+
+proof = {
+    "phase": "FAZ-5",
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "status": "PASS",
+    "sample_file": str(sample_path),
+    "contains_raw_api_key": "SG.very-sensitive-key-for-mask-check" in content,
+    "contains_raw_password": "SuperSecretPassword!" in content,
+    "contains_masked_api_key": "SG.***" in content,
+    "contains_masked_password": "Sup***" in content,
+}
+
+if proof["contains_raw_api_key"] or proof["contains_raw_password"]:
+    proof["status"] = "FAIL"
+
+print(json.dumps(proof, ensure_ascii=False, indent=2))
+PY
 log "PASS: stdout+file log üretimi ve masking doğrulandı"
 
 log "T-5.2/T-5.3/T-5.4/T-5.6 entegrasyon testleri"
@@ -228,4 +332,5 @@ log "PASS: CI gate enforce aktif"
 
 ensure_phase5_contract_artifacts
 log "SUMMARY: PASS"
+write_phase5_evidence_bundle "PASS"
 write_phase5_summary "PASS"

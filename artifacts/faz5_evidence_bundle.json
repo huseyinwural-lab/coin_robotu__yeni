@@ -1,0 +1,137 @@
+{
+  "phase": "FAZ-5",
+  "generated_at": "2026-04-02T16:53:32.070892+00:00",
+  "status": "PASS",
+  "files": [
+    {
+      "path": "/app/artifacts/faz5_verify_phase5_observability.log",
+      "relative_path": "artifacts/faz5_verify_phase5_observability.log",
+      "exists": true,
+      "size_bytes": 592,
+      "sha256": "ab47f6301b2d44d09c87a8983195f1f685f60c523fa54963f63059a2d88e8765",
+      "updated_at": "2026-04-02T16:53:31.295070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_logging_contract_check.log",
+      "relative_path": "artifacts/faz5_logging_contract_check.log",
+      "exists": true,
+      "size_bytes": 29,
+      "sha256": "4c220aa6e5bb9f6e797da4fbb551f4b18022cbefab0aa58ea9faa7481e9b2051",
+      "updated_at": "2026-04-02T16:53:31.119070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_stdout_log_sample.log",
+      "relative_path": "artifacts/faz5_stdout_log_sample.log",
+      "exists": true,
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "updated_at": "2026-04-02T16:53:31.131070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_file_log_sample.log",
+      "relative_path": "artifacts/faz5_file_log_sample.log",
+      "exists": true,
+      "size_bytes": 10511,
+      "sha256": "a925325ec6a9d1d23610c997eb1f1e808d64af2a55add26c30f7e44d3e83780c",
+      "updated_at": "2026-04-02T16:53:31.173070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_secret_masking_proof.json",
+      "relative_path": "artifacts/faz5_secret_masking_proof.json",
+      "exists": true,
+      "size_bytes": 295,
+      "sha256": "aead17ac7f54af17db5b7b577e3bfa68b262e4f6778ef1f21bd34b4997d862fb",
+      "updated_at": "2026-04-02T16:53:31.205070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_alembic_upgrade.log",
+      "relative_path": "artifacts/faz5_alembic_upgrade.log",
+      "exists": true,
+      "size_bytes": 42,
+      "sha256": "2b829eba354e9296f2a762cf5727815c0898e5a7c5571c99a86a88dbf4071e4c",
+      "updated_at": "2026-04-02T16:37:16.683059+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_integration_tests.log",
+      "relative_path": "artifacts/faz5_integration_tests.log",
+      "exists": true,
+      "size_bytes": 106,
+      "sha256": "e9559234455c6ab7f82751ebf100a68b1afa45f03803db4f1d49d9ee05e54e42",
+      "updated_at": "2026-04-02T16:53:31.216070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_health_response.json",
+      "relative_path": "artifacts/faz5_health_response.json",
+      "exists": true,
+      "size_bytes": 16,
+      "sha256": "6489d6d7a33c5d40e18fc61eeb6c34c341279ee61816394dde5189aa4ad8fae5",
+      "updated_at": "2026-04-02T16:53:31.222070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_ready_healthy_response.json",
+      "relative_path": "artifacts/faz5_ready_healthy_response.json",
+      "exists": true,
+      "size_bytes": 19,
+      "sha256": "682c055ddf7d0afe32b7b2646e1635ab3c83f65884a37aecdc8549e7031a3417",
+      "updated_at": "2026-04-02T16:53:31.225070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_ready_not_ready_response.json",
+      "relative_path": "artifacts/faz5_ready_not_ready_response.json",
+      "exists": true,
+      "size_bytes": 23,
+      "sha256": "cc5728cf9b8ae00c7d84b6cf5787529db88988f2cc69c9a2a99c0f4b472e7c72",
+      "updated_at": "2026-04-02T16:53:31.227070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_metrics_output.txt",
+      "relative_path": "artifacts/faz5_metrics_output.txt",
+      "exists": true,
+      "size_bytes": 91,
+      "sha256": "95c73213b0e91165f5166b276b88e933742d00bb2f927203ffd97e57e64a0d76",
+      "updated_at": "2026-04-02T16:53:31.219070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_fake_error_test.log",
+      "relative_path": "artifacts/faz5_fake_error_test.log",
+      "exists": true,
+      "size_bytes": 40,
+      "sha256": "45abf794335d4bdf2289f36d16ba8990b7ac1d55ddaee1a148558db558fd739d",
+      "updated_at": "2026-04-02T16:53:31.231070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_alert_payload_sample.json",
+      "relative_path": "artifacts/faz5_alert_payload_sample.json",
+      "exists": true,
+      "size_bytes": 53,
+      "sha256": "85d348cc3fd14fefb631595579ac1fb870c8533047dfaadcaba991a1cb7722fd",
+      "updated_at": "2026-04-02T16:53:31.229070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_alert_delivery.log",
+      "relative_path": "artifacts/faz5_alert_delivery.log",
+      "exists": true,
+      "size_bytes": 15250,
+      "sha256": "eb73247944f6a47b1fe7264771e7189632f730d493bfb07a8bf6e20861b0ba2c",
+      "updated_at": "2026-04-02T16:53:31.234070+00:00"
+    },
+    {
+      "path": "/app/artifacts/faz5_ci_gate_check.log",
+      "relative_path": "artifacts/faz5_ci_gate_check.log",
+      "exists": true,
+      "size_bytes": 39,
+      "sha256": "c907ea0c0ff1fc4481e23b7dd19faba939fbef1c71d950343775d670bbc80114",
+      "updated_at": "2026-04-02T16:53:31.285070+00:00"
+    },
+    {
+      "path": "/app/backend/logs/backend_observability.log",
+      "relative_path": "backend/logs/backend_observability.log",
+      "exists": true,
+      "size_bytes": 126675424,
+      "sha256": "22703be7a19b585313d9617efb2986fd04aa5963c1e7e9f667039cc31a5b4083",
+      "updated_at": "2026-04-02T16:53:31.166070+00:00"
+    }
+  ],
+  "missing_count": 0,
+  "missing_files": []
+}

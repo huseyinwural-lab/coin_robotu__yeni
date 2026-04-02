@@ -1,0 +1,48 @@
+{
+  "phase": "FAZ-6",
+  "generated_at": "2026-04-02T16:55:12.270399+00:00",
+  "status": "PASS",
+  "summary_log": "/app/artifacts/faz6_dependency_optimization.log",
+  "inventory_json": "/app/artifacts/faz6_dependency_inventory.json",
+  "docker_check_log": "/app/artifacts/faz6_docker_optimization_check.log",
+  "files": [
+    {
+      "relative_path": "artifacts/faz6_dependency_optimization.log",
+      "exists": true,
+      "path": "/app/artifacts/faz6_dependency_optimization.log"
+    },
+    {
+      "relative_path": "artifacts/faz6_dependency_inventory.json",
+      "exists": true,
+      "path": "/app/artifacts/faz6_dependency_inventory.json"
+    },
+    {
+      "relative_path": "artifacts/faz6_docker_optimization_check.log",
+      "exists": true,
+      "path": "/app/artifacts/faz6_docker_optimization_check.log"
+    },
+    {
+      "relative_path": "backend/.dockerignore",
+      "exists": true,
+      "path": "/app/backend/.dockerignore"
+    },
+    {
+      "relative_path": "frontend/.dockerignore",
+      "exists": true,
+      "path": "/app/frontend/.dockerignore"
+    },
+    {
+      "relative_path": "backend/Dockerfile",
+      "exists": true,
+      "path": "/app/backend/Dockerfile"
+    },
+    {
+      "relative_path": "frontend/Dockerfile",
+      "exists": true,
+      "path": "/app/frontend/Dockerfile"
+    }
+  ],
+  "missing_count": 0,
+  "missing_files": [],
+  "log_tail": "T-6.1 dependency envanteri\nPASS: dependency envanteri üretildi\nT-6.2 docker build optimizasyon kontrolü\nPASS: docker optimization kontrolleri geçti\nSUMMARY: PASS"
+}
