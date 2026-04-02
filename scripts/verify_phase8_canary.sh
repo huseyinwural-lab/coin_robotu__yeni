@@ -307,6 +307,18 @@ validate_exchange_ready() {
       ensure_allowed_market_enabled
       code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
     fi
+
+    if [[ "${code}" != "200" ]]; then
+      local reason_451
+      reason_451="$(has_reason_code "/tmp/faz8_exchange_validate.json" "exchange_error_451")"
+      if [[ "${reason_451}" == "true" && "${EXCHANGE_ENVIRONMENT}" == "live" && "${EXCHANGE_MARKET_TYPE}" == "futures" ]]; then
+        log "WARN: futures live 451 alındı, spot live fallback deneniyor"
+        EXCHANGE_MARKET_TYPE="spot"
+        repair_user_venue_assignment "${EXCHANGE_ENVIRONMENT}" "${EXCHANGE_MARKET_TYPE}"
+        ensure_allowed_market_enabled
+        code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
+      fi
+    fi
   fi
 
   [[ "${code}" == "200" ]] || fail_with_body "Exchange validate başarısız http=${code}" "/tmp/faz8_exchange_validate.json"
