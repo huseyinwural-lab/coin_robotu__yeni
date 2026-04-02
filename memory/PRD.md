@@ -1,3 +1,30 @@
+## 2026-04-02 — Live Gate (Tek Ekran Sıralı Canlıya Alma Akışı)
+
+### Yapılan geliştirme
+- Admin CORE menüsüne yeni `Live Gate` girişi eklendi:
+  - Sidebar test id: `nav-admin-live-gate-link`
+  - Route: `/admin/live-gate`
+- Yeni sayfa: `/app/frontend/src/pages/AdminLiveGatePage.jsx`
+  - Canlıya alma prosedürü tek alanda 10 adım halinde sıralandı.
+  - Her adım için durum badge’i (PASS/FAIL/BEKLİYOR), açıklama ve ilgili ekrana yönlendirme linki eklendi.
+  - Aksiyonlar: `Yenile` + `Gate Checks Rerun`.
+
+### 10 adım akış (UI)
+1. Key Girişi
+2. Key Doğrulama & Permission
+3. Venue & Allowed Market
+4. Kill Switch
+5. Risk Policy
+6. Strategy Template
+7. Bot Oluştur & Başlat
+8. Production Gate Rerun
+9. Mode Transition LIVE
+10. Canlı Akış İzleme (proxy health dahil)
+
+### Test
+- Frontend uzman test ajanı doğruladı: **PASS (6/6)**
+  - Route, menü, test-id’ler, 10 adım kartı ve bağlantılar doğrulandı.
+
 ## 2026-04-02 — FAZ-8 Canary Script 422 User Approval Fix
 
 ### Problem
