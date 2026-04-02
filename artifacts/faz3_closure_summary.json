@@ -1,0 +1,45 @@
+{
+  "phase": "FAZ-3",
+  "generated_at": "2026-04-02T16:14:54.301614+00:00",
+  "status": "PASS",
+  "summary_log": "/app/artifacts/faz3_execution_safety_summary.log",
+  "artifacts": [
+    {
+      "name": "faz3_execution_safety_summary.log",
+      "exists": true,
+      "path": "/app/artifacts/faz3_execution_safety_summary.log"
+    },
+    {
+      "name": "faz3_alembic_upgrade.log",
+      "exists": true,
+      "path": "/app/artifacts/faz3_alembic_upgrade.log"
+    },
+    {
+      "name": "faz3_model_guard_check.log",
+      "exists": true,
+      "path": "/app/artifacts/faz3_model_guard_check.log"
+    },
+    {
+      "name": "faz3_guard_consolidation.log",
+      "exists": true,
+      "path": "/app/artifacts/faz3_guard_consolidation.log"
+    },
+    {
+      "name": "faz3_reason_code_standardization.log",
+      "exists": true,
+      "path": "/app/artifacts/faz3_reason_code_standardization.log"
+    },
+    {
+      "name": "faz3_integration_tests.log",
+      "exists": true,
+      "path": "/app/artifacts/faz3_integration_tests.log"
+    },
+    {
+      "name": "faz3_ci_gate_check.log",
+      "exists": true,
+      "path": "/app/artifacts/faz3_ci_gate_check.log"
+    }
+  ],
+  "missing_count": 0,
+  "log_tail": "T-3.1 migration ve model kontrolü\nPASS: model/safety service/admin endpoint var\nT-3.5 guard consolidation kontrolü\nPASS: execution giriş akışlarında guard var\nT-3.6 reason code standardizasyonu\nPASS: reason code standardizasyonu\nT-3.7 integration test paketi\nPASS: CI light mode integration kapısı geçti\nT-3.8/T-3.9 verify+CI gate kontrolü\nPASS: CI gate bağlantısı\nSUMMARY: PASS"
+}

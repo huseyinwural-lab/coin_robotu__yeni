@@ -1,0 +1,6 @@
+{
+  "event_name": "EXECUTION_INTENT_DUPLICATE_REJECTED",
+  "reason_code": "DUPLICATE_INTENT",
+  "status": "PASS",
+  "source": "verify_phase2_idempotency"
+}

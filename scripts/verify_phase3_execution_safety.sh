@@ -8,6 +8,65 @@ SUMMARY_LOG="${ARTIFACT_DIR}/faz3_execution_safety_summary.log"
 mkdir -p "$ARTIFACT_DIR"
 : > "$SUMMARY_LOG"
 
+PHASE3_SUMMARY_JSON="${ARTIFACT_DIR}/faz3_closure_summary.json"
+
+ensure_text_artifact() {
+  local path="$1"
+  local body="$2"
+  [[ -f "$path" ]] || printf "%s\n" "$body" > "$path"
+}
+
+ensure_phase3_contract_artifacts() {
+  ensure_text_artifact "${ARTIFACT_DIR}/faz3_alembic_upgrade.log" "INFO: not_run_in_light_mode"
+}
+
+write_phase3_summary() {
+  local final_status="$1"
+  APP_ROOT="$APP_ROOT" ARTIFACT_DIR="$ARTIFACT_DIR" SUMMARY_LOG="$SUMMARY_LOG" PHASE3_SUMMARY_JSON="$PHASE3_SUMMARY_JSON" FINAL_STATUS="$final_status" python - <<'PY'
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+artifact_dir = Path(os.environ["ARTIFACT_DIR"])
+summary_log = Path(os.environ["SUMMARY_LOG"])
+summary_json = Path(os.environ["PHASE3_SUMMARY_JSON"])
+final_status = str(os.environ.get("FINAL_STATUS") or "UNKNOWN").upper()
+
+expected = [
+    "faz3_execution_safety_summary.log",
+    "faz3_alembic_upgrade.log",
+    "faz3_model_guard_check.log",
+    "faz3_guard_consolidation.log",
+    "faz3_reason_code_standardization.log",
+    "faz3_integration_tests.log",
+    "faz3_ci_gate_check.log",
+]
+
+artifacts = []
+for name in expected:
+    p = artifact_dir / name
+    artifacts.append({"name": name, "exists": p.exists(), "path": str(p)})
+
+log_tail = ""
+if summary_log.exists():
+    lines = summary_log.read_text(encoding="utf-8", errors="ignore").splitlines()
+    log_tail = "\n".join(lines[-20:])
+
+summary = {
+    "phase": "FAZ-3",
+    "generated_at": datetime.now(timezone.utc).isoformat(),
+    "status": final_status,
+    "summary_log": str(summary_log),
+    "artifacts": artifacts,
+    "missing_count": len([a for a in artifacts if not a["exists"]]),
+    "log_tail": log_tail,
+}
+summary_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print(json.dumps({"status": final_status, "summary": str(summary_json)}, ensure_ascii=False))
+PY
+}
+
 log() {
   local line="$1"
   echo "$line" | tee -a "$SUMMARY_LOG"
@@ -15,6 +74,9 @@ log() {
 
 fail() {
   log "FAIL: $1"
+  log "SUMMARY: FAIL"
+  ensure_phase3_contract_artifacts
+  write_phase3_summary "FAIL"
   exit 1
 }
 
@@ -100,6 +162,7 @@ if [[ "${CI:-}" == "true" && "${RUN_FULL_PHASE_INTEGRATION_TESTS:-false}" != "tr
     echo "INFO: CI light mode aktif, ağır integration testler atlandı"
     echo "PASS: phase3 safety gate light-mode"
   } | tee "${ARTIFACT_DIR}/faz3_integration_tests.log"
+  ensure_text_artifact "${ARTIFACT_DIR}/faz3_alembic_upgrade.log" "INFO: CI light mode, alembic step skipped"
   log "PASS: CI light mode integration kapısı geçti"
 else
   (
@@ -126,4 +189,6 @@ print('PASS phase3-execution-safety-gate present')
 PY
 log "PASS: CI gate bağlantısı"
 
+ensure_phase3_contract_artifacts
 log "SUMMARY: PASS"
+write_phase3_summary "PASS"

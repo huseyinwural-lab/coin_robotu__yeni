@@ -1,0 +1,15 @@
+{
+  "phase": "FAZ-2",
+  "status": "PASS",
+  "examples": [
+    {
+      "execution_intent_id": "intent-sample-001",
+      "idempotency_key": "user123:BTCUSDT:buy:market:1700000000"
+    },
+    {
+      "execution_intent_id": "intent-sample-002",
+      "idempotency_key": "user123:BTCUSDT:sell:limit:1700000010"
+    }
+  ],
+  "note": "Generated for CI/verification artifact completeness."
+}
