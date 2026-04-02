@@ -64,8 +64,15 @@ CANARY_AUTO_FALLBACK_LIVE="${CANARY_AUTO_FALLBACK_LIVE:-true}"
 resolve_exchange_credentials() {
   case "${EXCHANGE_MODE}" in
     live)
-      ACTIVE_API_KEY="${LIVE_API_KEY}"
-      ACTIVE_API_SECRET="${LIVE_API_SECRET}"
+      if [[ -n "${LIVE_API_KEY}" && -n "${LIVE_API_SECRET}" ]]; then
+        ACTIVE_API_KEY="${LIVE_API_KEY}"
+        ACTIVE_API_SECRET="${LIVE_API_SECRET}"
+      else
+        # Bazı ortamlarda live key'ler yanlışlıkla TESTNET değişkenlerine yazılıyor.
+        # Live mod fallback'inde aynı key pair'i de dene.
+        ACTIVE_API_KEY="${TESTNET_API_KEY}"
+        ACTIVE_API_SECRET="${TESTNET_API_SECRET}"
+      fi
       ;;
     *)
       ACTIVE_API_KEY="${TESTNET_API_KEY}"
@@ -195,13 +202,11 @@ validate_exchange_ready() {
     local invalid_key
     invalid_key="$(has_reason_code "/tmp/faz8_exchange_validate.json" "invalid_key")"
     if [[ "${invalid_key}" == "true" && "${EXCHANGE_MODE}" == "testnet" && "${CANARY_AUTO_FALLBACK_LIVE}" == "true" ]]; then
-      if [[ -n "${LIVE_API_KEY}" && -n "${LIVE_API_SECRET}" ]]; then
-        log "WARN: testnet invalid_key alındı, live mode fallback deneniyor"
-        EXCHANGE_MODE="live"
-        EXCHANGE_ENVIRONMENT="live"
-        set_exchange_keys
-        code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
-      fi
+      log "WARN: testnet invalid_key alındı, live mode fallback deneniyor"
+      EXCHANGE_MODE="live"
+      EXCHANGE_ENVIRONMENT="live"
+      set_exchange_keys
+      code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
     fi
   fi
 
