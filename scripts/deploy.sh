@@ -62,19 +62,40 @@ PY
 
 check_health() {
   local base_url="$1"
-  local health_code ready_code
+  local live_code ready_code
+  local fallback_base="${BACKEND_BASE_URL:-http://127.0.0.1:8001}"
 
-  health_code="$(curl -s -o /tmp/deploy_health_body.json -w '%{http_code}' "${base_url}/health" || true)"
-  if [[ "${health_code}" != "200" ]]; then
-    health_code="$(curl -s -o /tmp/deploy_health_body.json -w '%{http_code}' "${base_url}/api/health" || true)"
+  live_code="$(curl -s -o /tmp/deploy_health_live_body.json -w '%{http_code}' "${base_url}/health/live" || true)"
+  if [[ "${live_code}" != "200" ]]; then
+    live_code="$(curl -s -o /tmp/deploy_health_live_body.json -w '%{http_code}' "${base_url}/api/health/live" || true)"
+  fi
+  if [[ "${live_code}" != "200" ]]; then
+    # Legacy fallback
+    live_code="$(curl -s -o /tmp/deploy_health_live_body.json -w '%{http_code}' "${base_url}/health" || true)"
+  fi
+  if [[ "${live_code}" != "200" ]]; then
+    live_code="$(curl -s -o /tmp/deploy_health_live_body.json -w '%{http_code}' "${base_url}/api/health" || true)"
+  fi
+  if [[ "${live_code}" != "200" ]]; then
+    live_code="$(curl -s -o /tmp/deploy_health_live_body.json -w '%{http_code}' "${fallback_base}/api/health/live" || true)"
   fi
 
-  ready_code="$(curl -s -o /tmp/deploy_ready_body.json -w '%{http_code}' "${base_url}/ready" || true)"
+  ready_code="$(curl -s -o /tmp/deploy_health_ready_body.json -w '%{http_code}' "${base_url}/health/ready" || true)"
   if [[ "${ready_code}" != "200" ]]; then
-    ready_code="$(curl -s -o /tmp/deploy_ready_body.json -w '%{http_code}' "${base_url}/api/ready" || true)"
+    ready_code="$(curl -s -o /tmp/deploy_health_ready_body.json -w '%{http_code}' "${base_url}/api/health/ready" || true)"
+  fi
+  if [[ "${ready_code}" != "200" ]]; then
+    # Legacy fallback
+    ready_code="$(curl -s -o /tmp/deploy_health_ready_body.json -w '%{http_code}' "${base_url}/ready" || true)"
+  fi
+  if [[ "${ready_code}" != "200" ]]; then
+    ready_code="$(curl -s -o /tmp/deploy_health_ready_body.json -w '%{http_code}' "${base_url}/api/ready" || true)"
+  fi
+  if [[ "${ready_code}" != "200" ]]; then
+    ready_code="$(curl -s -o /tmp/deploy_health_ready_body.json -w '%{http_code}' "${fallback_base}/api/health/ready" || true)"
   fi
 
-  [[ "${health_code}" == "200" && "${ready_code}" == "200" ]]
+  [[ "${live_code}" == "200" && "${ready_code}" == "200" ]]
 }
 
 if [[ "${1:-}" == "" ]]; then

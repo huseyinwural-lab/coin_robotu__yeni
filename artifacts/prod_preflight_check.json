@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_0_FINAL_BLOCKER_CLEANUP",
   "status": "PASS",
-  "generated_at": "2026-04-02T15:22:27.248554+00:00",
+  "generated_at": "2026-04-02T15:43:04.549879+00:00",
   "checks": [
     {
       "name": "DATABASE_URL not empty",
@@ -74,9 +74,14 @@
       "detail": "Backend log içinde REDIS_CONNECT_OK bulunmalı (CI modunda skip)"
     },
     {
-      "name": "Healthcheck endpoint Redis OK",
+      "name": "Healthcheck liveness endpoint OK",
       "status": "PASS",
-      "detail": "health endpoint redis.status=ready dönmeli (runtime health checks açıkken)"
+      "detail": "health/live endpoint 200 dönmeli (runtime health checks açıkken)"
+    },
+    {
+      "name": "Healthcheck readiness endpoint Redis OK",
+      "status": "PASS",
+      "detail": "health/ready endpoint redis.status=ready dönmeli (runtime health checks açıkken)"
     },
     {
       "name": "Redis fail-fast behavior",
@@ -95,8 +100,39 @@
     "reason": "runtime_checks_disabled_or_redis_module_missing"
   },
   "health_probe": {
-    "source": "http_probe",
-    "error": "HTTP Error 403: Forbidden"
+    "source": "split_probe",
+    "live": {
+      "source": "http_probe",
+      "base_url": "http://127.0.0.1:8001",
+      "path": "/api/health/live",
+      "status_code": 200,
+      "status": "ok",
+      "checks": {
+        "process": {
+          "status": "up",
+          "uptime_seconds": 1330
+        }
+      }
+    },
+    "ready": {
+      "source": "http_probe",
+      "base_url": "http://127.0.0.1:8001",
+      "path": "/api/health/ready",
+      "status_code": 200,
+      "status": "ready",
+      "checks": {
+        "database": {
+          "status": "ready"
+        },
+        "redis": {
+          "status": "ready"
+        },
+        "preview_smoke_gate": {
+          "status": "skipped",
+          "reason": "disabled_by_flag"
+        }
+      }
+    }
   },
   "failfast_probe": {
     "return_code": null,

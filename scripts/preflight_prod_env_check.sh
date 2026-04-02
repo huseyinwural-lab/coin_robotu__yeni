@@ -199,19 +199,54 @@ if runtime_checks_enabled:
 add_check('App boot Redis connect success log', boot_log_ok if runtime_checks_enabled else True, 'Backend log içinde REDIS_CONNECT_OK bulunmalı (CI modunda skip)')
 
 health_probe = {}
-health_url = (frontend_backend_url.rstrip('/') + '/api/health') if frontend_backend_url else ''
-if health_url:
-    try:
-        with urllib.request.urlopen(health_url, timeout=12) as resp:  # noqa: S310
-            body = json.loads(resp.read().decode('utf-8'))
-            health_probe = {
-                'source': 'http_probe',
-                'status_code': int(resp.status),
-                'redis': body.get('checks', {}).get('redis', {}),
-                'status': body.get('status'),
-            }
-    except Exception as exc:  # noqa: BLE001
-        health_probe = {'source': 'http_probe', 'error': str(exc)[:300]}
+health_live_probe = {}
+health_ready_probe = {}
+
+
+def _http_probe_with_fallback(paths: list[str]) -> dict:
+    base_candidates = [
+        (frontend_backend_url or '').rstrip('/'),
+        str(proc_env.get('BACKEND_BASE_URL') or '').rstrip('/'),
+        'http://127.0.0.1:8001',
+    ]
+    base_urls = [item for item in base_candidates if item]
+    if len(base_urls) == 0:
+        return {'source': 'http_probe', 'error': 'backend_url_missing'}
+
+    last_error = None
+    attempted: list[str] = []
+    for base_url in base_urls:
+        for probe_path in paths:
+            probe_url = base_url + probe_path
+            attempted.append(probe_url)
+            try:
+                with urllib.request.urlopen(probe_url, timeout=12) as resp:  # noqa: S310
+                    body = json.loads(resp.read().decode('utf-8'))
+                    return {
+                        'source': 'http_probe',
+                        'base_url': base_url,
+                        'path': probe_path,
+                        'status_code': int(resp.status),
+                        'status': body.get('status'),
+                        'checks': body.get('checks', {}),
+                    }
+            except Exception as exc:  # noqa: BLE001
+                last_error = str(exc)[:300]
+
+    return {
+        'source': 'http_probe',
+        'error': last_error or 'probe_failed',
+        'attempted': attempted[-8:],
+    }
+
+
+health_live_probe = _http_probe_with_fallback(['/api/health/live', '/health/live', '/api/health', '/health'])
+health_ready_probe = _http_probe_with_fallback(['/api/health/ready', '/health/ready', '/api/ready', '/ready'])
+health_probe = {
+    'source': 'split_probe',
+    'live': health_live_probe,
+    'ready': health_ready_probe,
+}
 
 backend_python = proc_env.get('BACKEND_PYTHON') or '/root/.venv/bin/python'
 try:
@@ -221,12 +256,12 @@ except PermissionError:
 
 python_cmd = backend_python if backend_python_exists else sys.executable
 
-if runtime_health_checks and not health_probe.get('redis'):
+if runtime_health_checks and not ((health_ready_probe.get('checks') or {}).get('redis')):
     health_script = (
-        "import json; from server import health_check; "
-        "resp = health_check(); "
+        "import json; from server import simple_readiness_check; "
+        "resp = simple_readiness_check(); "
         "body = json.loads(resp.body.decode('utf-8')); "
-        "print(json.dumps({'source': 'inprocess_probe', 'status_code': resp.status_code, 'redis': body.get('checks', {}).get('redis', {}), 'status': body.get('status')}))"
+        "print(json.dumps({'source': 'inprocess_probe', 'status_code': resp.status_code, 'checks': body.get('checks', {}), 'status': body.get('status')}))"
     )
     health_proc = subprocess.run(
         [python_cmd, '-c', health_script],
@@ -237,14 +272,24 @@ if runtime_health_checks and not health_probe.get('redis'):
     )
     if health_proc.returncode == 0:
         try:
-            health_probe = json.loads((health_proc.stdout or '').strip().splitlines()[-1])
+            parsed = json.loads((health_proc.stdout or '').strip().splitlines()[-1])
+            health_ready_probe = parsed
+            health_probe = {
+                'source': 'split_probe',
+                'live': health_live_probe,
+                'ready': health_ready_probe,
+            }
         except Exception:  # noqa: BLE001
-            health_probe = {'source': 'inprocess_probe', 'parse_error': (health_proc.stdout or '')[-500:]}
+            health_ready_probe = {'source': 'inprocess_probe', 'parse_error': (health_proc.stdout or '')[-500:]}
+            health_probe = {'source': 'split_probe', 'live': health_live_probe, 'ready': health_ready_probe}
     else:
-        health_probe = {'source': 'inprocess_probe', 'error': (health_proc.stderr or health_proc.stdout or '')[-500:]}
+        health_ready_probe = {'source': 'inprocess_probe', 'error': (health_proc.stderr or health_proc.stdout or '')[-500:]}
+        health_probe = {'source': 'split_probe', 'live': health_live_probe, 'ready': health_ready_probe}
 
-health_redis_ok = health_probe.get('redis', {}).get('status') == 'ready'
-add_check('Healthcheck endpoint Redis OK', health_redis_ok if runtime_health_checks else True, 'health endpoint redis.status=ready dönmeli (runtime health checks açıkken)')
+health_live_ok = int(health_live_probe.get('status_code') or 0) == 200
+health_redis_ok = ((health_ready_probe.get('checks') or {}).get('redis') or {}).get('status') == 'ready'
+add_check('Healthcheck liveness endpoint OK', health_live_ok if runtime_health_checks else True, 'health/live endpoint 200 dönmeli (runtime health checks açıkken)')
+add_check('Healthcheck readiness endpoint Redis OK', health_redis_ok if runtime_health_checks else True, 'health/ready endpoint redis.status=ready dönmeli (runtime health checks açıkken)')
 
 if runtime_health_checks:
     failfast_env = dict(os.environ)

@@ -522,16 +522,37 @@ else
 fi
 
 log "Health/Ready doğrulama"
-HEALTH_CODE="$(curl -sS -o /tmp/faz8_health.json -w '%{http_code}' "${BASE_URL}/health" || true)"
-READY_CODE="$(curl -sS -o /tmp/faz8_ready.json -w '%{http_code}' "${BASE_URL}/ready" || true)"
+FALLBACK_BASE_URL="${BACKEND_BASE_URL:-http://127.0.0.1:8001}"
+HEALTH_CODE="$(curl -sS -o /tmp/faz8_health_live.json -w '%{http_code}' "${BASE_URL}/health/live" || true)"
+READY_CODE="$(curl -sS -o /tmp/faz8_health_ready.json -w '%{http_code}' "${BASE_URL}/health/ready" || true)"
 if [[ "${HEALTH_CODE}" != "200" ]]; then
-  HEALTH_CODE="$(curl -sS -o /tmp/faz8_health.json -w '%{http_code}' "${BASE_URL}/api/health" || true)"
+  HEALTH_CODE="$(curl -sS -o /tmp/faz8_health_live.json -w '%{http_code}' "${BASE_URL}/api/health/live" || true)"
 fi
 if [[ "${READY_CODE}" != "200" ]]; then
-  READY_CODE="$(curl -sS -o /tmp/faz8_ready.json -w '%{http_code}' "${BASE_URL}/api/ready" || true)"
+  READY_CODE="$(curl -sS -o /tmp/faz8_health_ready.json -w '%{http_code}' "${BASE_URL}/api/health/ready" || true)"
 fi
-[[ "${HEALTH_CODE}" == "200" ]] || fail "health 200 değil"
-[[ "${READY_CODE}" == "200" ]] || fail "ready 200 değil"
+if [[ "${HEALTH_CODE}" != "200" ]]; then
+  # legacy fallback
+  HEALTH_CODE="$(curl -sS -o /tmp/faz8_health_live.json -w '%{http_code}' "${BASE_URL}/health" || true)"
+fi
+if [[ "${HEALTH_CODE}" != "200" ]]; then
+  HEALTH_CODE="$(curl -sS -o /tmp/faz8_health_live.json -w '%{http_code}' "${BASE_URL}/api/health" || true)"
+fi
+if [[ "${HEALTH_CODE}" != "200" ]]; then
+  HEALTH_CODE="$(curl -sS -o /tmp/faz8_health_live.json -w '%{http_code}' "${FALLBACK_BASE_URL}/api/health/live" || true)"
+fi
+if [[ "${READY_CODE}" != "200" ]]; then
+  # legacy fallback
+  READY_CODE="$(curl -sS -o /tmp/faz8_health_ready.json -w '%{http_code}' "${BASE_URL}/ready" || true)"
+fi
+if [[ "${READY_CODE}" != "200" ]]; then
+  READY_CODE="$(curl -sS -o /tmp/faz8_health_ready.json -w '%{http_code}' "${BASE_URL}/api/ready" || true)"
+fi
+if [[ "${READY_CODE}" != "200" ]]; then
+  READY_CODE="$(curl -sS -o /tmp/faz8_health_ready.json -w '%{http_code}' "${FALLBACK_BASE_URL}/api/health/ready" || true)"
+fi
+[[ "${HEALTH_CODE}" == "200" ]] || fail "health/live 200 değil"
+[[ "${READY_CODE}" == "200" ]] || fail "health/ready 200 değil"
 
 fetch_canary_status
 
