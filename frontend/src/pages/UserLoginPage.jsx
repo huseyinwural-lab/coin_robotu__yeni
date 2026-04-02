@@ -176,7 +176,7 @@ export const UserLoginPage = () => {
             onClick={() => navigate(`/admin/login?email=${encodeURIComponent(form.email || "")}`)}
             data-testid="user-login-admin-shortcut-button"
           >
-            Admin girişi için buraya git → /admin/login
+            Yönetici paneline geç → /admin/login
           </button>
         </header>
 

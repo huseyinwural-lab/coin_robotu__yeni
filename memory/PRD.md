@@ -1,3 +1,34 @@
+## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
+
+### Tamamlananlar (P0/P1)
+- Scanner run endpointine `market_type` (spot/futures/all) desteği eklendi; Spot ve Futures ayrı çalıştırılabilir hale getirildi.
+- Stale açık intent/sinyal temizliği için yeni endpoint eklendi: `POST /api/user/signals/cleanup-stale-intents`.
+- Sinyal ve trade API yanıtlarına `market_type` alanı eklendi; UI’da görünürlük tamamlandı.
+- Scanner fallback akışı güçlendirildi (manual selection fallback + live auto-release akış uyumu).
+- `intent_not_in_queue` kaynaklı otomatik dispatch kırılımı giderildi; auto-release edilmiş intentler filled olarak işleniyor.
+- Decision cards 500 hatası (Pydantic alan eksikliği) giderildi; contribution payload normalize edildi.
+- User UI güncellendi:
+  - Scanner: market type seçici + indicator
+  - Signals: market kolonu + stale cleanup butonu
+  - Trades: market filtresi + market kolonu
+- Admin UI için merkezi TR lokalizasyon katmanı eklendi (`adminTurkishLocale` + PanelLayout observer).
+- User login ekranında admin kısayol metni revize edilerek submit butonuyla karışma riski azaltıldı.
+
+### Test Özeti
+- Backend doğrulama (deep backend agent): PASS
+  - cleanup, signal-mode, scanner(spot/futures), fix-all-blockers, signals/trades market_type doğrulandı.
+- Lokal backend smoke (curl/python): PASS
+  - Signals: spot+futures market görünürlüğü, filled satırlar mevcut.
+  - Trades: spot+futures market görünürlüğü mevcut.
+  - Decision cards endpointi 200 döndü.
+- Frontend smoke (Playwright screenshot):
+  - User flow: login -> scanner/signals/trades sayfalarında yeni market öğeleri doğrulandı.
+  - Admin flow: login -> admin users sayfasında Türkçeleştirilmiş menü/metin doğrulandı.
+
+### Kalan / Sonraki
+- P0 canlı kanıt akışını kullanıcı gerçek anahtarlarıyla son UI kabulünden geçirmek (Scanner → Signal → Trade, Spot+Futures).
+- P1 Admin TR sözlüğünü kalan edge metinlere genişletmek (tam kapsama ince ayar).
+
 ## 2026-04-02 — Testnet Tam Temizlik (Kod + Script + Workflow + Docs + Artifacts)
 
 ### Yapılan temizlik
