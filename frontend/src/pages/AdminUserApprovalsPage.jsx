@@ -338,7 +338,22 @@ export const AdminUserApprovalsPage = () => {
 
       if (context.approval_disabled) {
         const missing = (context.missing_data_fields || []).join(", ");
-        toast.error(`Approval blocked. Missing: ${missing || "-"}`);
+        const preApprove = window.confirm(
+          `Eksik veri var (${missing || "-"}). Ön onay verilsin mi? Kullanıcı veri girişini sonradan tamamlayacak.`,
+        );
+        if (!preApprove) {
+          toast.error(`Approval blocked. Missing: ${missing || "-"}`);
+          return;
+        }
+
+        await apiClient.post(`/auth/admin/user-approval-requests/${userId}/approve`, null);
+        toast.success("Kullanıcı ön onaylandı. Eksik verileri sonradan tamamlayabilir.");
+        await loadRequests();
+        setContexts((prev) => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
         return;
       }
 
