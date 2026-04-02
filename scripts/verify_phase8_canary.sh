@@ -215,6 +215,65 @@ repair_user_venue_assignment() {
   log "PASS: venue assignment repaired env=${env} market=${market}"
 }
 
+ensure_allowed_market_enabled() {
+  local exchange="binance"
+  local market="${EXCHANGE_MARKET_TYPE}"
+  local env="${EXCHANGE_ENVIRONMENT}"
+
+  local list_code
+  list_code="$(request_json GET "${BASE_URL}/api/venues/admin/allowed-markets" "" "${ADMIN_TOKEN}" "/tmp/faz8_allowed_markets.json")"
+  [[ "${list_code}" == "200" ]] || fail_with_body "Allowed markets list alınamadı http=${list_code}" "/tmp/faz8_allowed_markets.json"
+
+  local row_json
+  row_json="$(python - <<PY
+import json
+from pathlib import Path
+rows=json.loads(Path('/tmp/faz8_allowed_markets.json').read_text(encoding='utf-8'))
+exchange='${exchange}'
+market='${market}'
+env='${env}'
+match=None
+for row in rows:
+    if str(row.get('exchange_code','')).lower()==exchange and str(row.get('market_type','')).lower()==market and str(row.get('environment','')).lower()==env:
+        match=row
+        break
+print(json.dumps(match or {}, ensure_ascii=False))
+PY
+)"
+
+  local row_id row_enabled
+  row_id="$(python - <<PY
+import json
+row=json.loads('''${row_json}''') if '''${row_json}'''.strip() else {}
+print(str(row.get('id') or '').strip())
+PY
+)"
+  row_enabled="$(python - <<PY
+import json
+row=json.loads('''${row_json}''') if '''${row_json}'''.strip() else {}
+print('true' if bool(row.get('enabled')) else 'false')
+PY
+)"
+
+  if [[ -z "${row_id}" ]]; then
+    local create_payload create_code
+    create_payload="{\"exchange_code\":\"${exchange}\",\"market_type\":\"${market}\",\"environment\":\"${env}\",\"enabled\":true}"
+    create_code="$(request_json POST "${BASE_URL}/api/venues/admin/allowed-markets" "${create_payload}" "${ADMIN_TOKEN}" "/tmp/faz8_allowed_market_create.json")"
+    [[ "${create_code}" == "201" || "${create_code}" == "200" ]] || fail_with_body "Allowed market create başarısız http=${create_code}" "/tmp/faz8_allowed_market_create.json"
+    log "PASS: allowed market created ${exchange}/${market}/${env}"
+    return
+  fi
+
+  if [[ "${row_enabled}" != "true" ]]; then
+    local toggle_code
+    toggle_code="$(request_json PUT "${BASE_URL}/api/venues/admin/allowed-markets/${row_id}" "{\"enabled\":true}" "${ADMIN_TOKEN}" "/tmp/faz8_allowed_market_toggle.json")"
+    [[ "${toggle_code}" == "200" ]] || fail_with_body "Allowed market enable başarısız http=${toggle_code}" "/tmp/faz8_allowed_market_toggle.json"
+    log "PASS: allowed market enabled ${exchange}/${market}/${env}"
+  else
+    log "PASS: allowed market zaten enabled ${exchange}/${market}/${env}"
+  fi
+}
+
 validate_exchange_ready() {
   local code
   code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
@@ -232,13 +291,19 @@ validate_exchange_ready() {
   fi
 
   if [[ "${code}" != "200" ]]; then
-    local live_not_allowed assignment_required testnet_not_allowed
+    local live_not_allowed assignment_required testnet_not_allowed market_disabled
     live_not_allowed="$(has_reason_code "/tmp/faz8_exchange_validate.json" "live_not_allowed")"
     assignment_required="$(has_reason_code "/tmp/faz8_exchange_validate.json" "assignment_required")"
     testnet_not_allowed="$(has_reason_code "/tmp/faz8_exchange_validate.json" "testnet_not_allowed")"
+    market_disabled="$(has_reason_code "/tmp/faz8_exchange_validate.json" "market_disabled")"
     if [[ "${live_not_allowed}" == "true" || "${assignment_required}" == "true" || "${testnet_not_allowed}" == "true" ]]; then
       log "WARN: venue assignment reason detected, admin repair deneniyor"
       repair_user_venue_assignment "${EXCHANGE_ENVIRONMENT}" "${EXCHANGE_MARKET_TYPE}"
+      code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
+    fi
+    if [[ "${code}" != "200" && "${market_disabled}" == "true" ]]; then
+      log "WARN: market_disabled detected, allowed-market enable deneniyor"
+      ensure_allowed_market_enabled
       code="$(request_json GET "${BASE_URL}/api/exchange/validate?exchange=binance&market_type=${EXCHANGE_MARKET_TYPE}&environment=${EXCHANGE_ENVIRONMENT}" "" "${USER_TOKEN}" "/tmp/faz8_exchange_validate.json")"
     fi
   fi
