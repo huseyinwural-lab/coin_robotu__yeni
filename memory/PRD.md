@@ -1,3 +1,19 @@
+## 2026-04-02 — ADMIN İLK KURULUM KILAVUZ SCRIPTİ (RUNBOOK)
+
+### Eklenenler
+- Yeni script: `/app/scripts/admin_first_setup_guide.sh`
+  - Admin ilk kurulum doğrulamasını tek komutta yapar.
+  - Kontroller: `/api/health`, `/api/ready`, admin login, `/api/admin/execution-readiness`, `/api/phase4/admin/production-gate`.
+  - Session binding için `X-Session-Device` kullanır.
+  - Preview ortamındaki bilinen auth/session dalgalanması için otomatik lokal protected-check fallback içerir.
+  - İsteğe bağlı JSON rapor üretir: `--json-out <path>`.
+- Yeni doküman: `/app/docs/admin_first_setup_runbook.md`
+  - Hızlı kullanım, PASS kriterleri ve admin sonrası operasyon adımlarını içerir.
+
+### Doğrulama
+- `bash /app/scripts/admin_first_setup_guide.sh --json-out /tmp/admin_first_setup_report.json` çalıştırıldı.
+- Sonuç: `overall=PASS`.
+
 ## 2026-04-02 — READ-ONLY API DOĞRULAMA (KAPANIŞ KONTROLÜ)
 
 ### Kapsam
