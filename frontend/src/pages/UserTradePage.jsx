@@ -106,6 +106,14 @@ export const UserTradePage = () => {
   }, [form.size_mode, form.size_value, midPrice]);
 
   const canRunValidation = Number(midPrice || 0) > 0 && Number(estimatedQty || 0) > 0 && Boolean(form.symbol);
+  const canConfirmPreview = useMemo(() => {
+    const preview = previewResult?.preview || {};
+    const status = String(preview.validation_status || "").toLowerCase();
+    const hasToken = Boolean(preview.intent_token);
+    if (!hasToken) return false;
+    if (!status) return true;
+    return ["valid", "approved", "ready"].includes(status);
+  }, [previewResult]);
   const isFutures = useMemo(() => {
     const selectedConnection = connections.find((row) => row.id === selectedConnectionId);
     return String(selectedConnection?.market_type || "futures").toLowerCase() === "futures";
@@ -177,6 +185,20 @@ export const UserTradePage = () => {
     loadOpenOrders();
   }, [executionResult, previewResult]);
 
+  useEffect(() => {
+    setPreviewResult(null);
+    setConfirmChecked(false);
+  }, [
+    selectedConnectionId,
+    form.symbol,
+    form.side,
+    form.order_type,
+    form.size_mode,
+    form.size_value,
+    form.leverage,
+    form.margin_type,
+  ]);
+
   const runValidation = async ({ silent = false } = {}) => {
     const payload = {
       symbol: form.symbol,
@@ -246,6 +268,12 @@ export const UserTradePage = () => {
       const data = await postJsonWithSession("/v1/user/trading/preview", payload);
       setPreviewResult(data);
       setConfirmChecked(false);
+      const previewStatus = String(data?.preview?.validation_status || "").toLowerCase();
+      const rejectCodes = (data?.preview?.reject_reason_codes || []).filter(Boolean);
+      if (previewStatus && !["valid", "approved", "ready"].includes(previewStatus)) {
+        toast.error(`Preview geçersiz: ${rejectCodes.join(", ") || previewStatus}`);
+        return;
+      }
       if (!validation?.valid) {
         toast.warning(hasExecutionModeSwitch ? "Fast market tespit edildi; preview limit-style moda adapte edildi" : "Validation warning var; preview panelinde detayları inceleyin");
       } else {
@@ -270,7 +298,7 @@ export const UserTradePage = () => {
   };
 
   const handleConfirmAndExecute = async () => {
-    if (!previewResult?.preview?.intent_token || !confirmChecked) {
+    if (!previewResult?.preview?.intent_token || !confirmChecked || !canConfirmPreview) {
       toast.error("Confirm onayı gerekli");
       return;
     }
@@ -557,9 +585,14 @@ export const UserTradePage = () => {
               <input type="checkbox" checked={confirmChecked} onChange={(event) => setConfirmChecked(event.target.checked)} data-testid="user-trade-confirm-checkbox" />
               Risk preview ve execution etkisini okudum, confirm ediyorum.
             </label>
-            <Button type="button" onClick={handleConfirmAndExecute} disabled={isSubmitting || !confirmChecked} data-testid="user-trade-confirm-order-button">
+            <Button type="button" onClick={handleConfirmAndExecute} disabled={isSubmitting || !confirmChecked || !canConfirmPreview} data-testid="user-trade-confirm-order-button">
               {isSubmitting ? "Executing..." : "Confirm Order"}
             </Button>
+            {!canConfirmPreview && (
+              <p className="text-xs text-amber-200" data-testid="user-trade-preview-invalid-hint">
+                Preview geçersiz; notional/kurallar uygun olduğunda confirm aktif olur.
+              </p>
+            )}
           </div>
         )}
 
