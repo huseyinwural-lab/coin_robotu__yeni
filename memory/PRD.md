@@ -1,3 +1,45 @@
+## 2026-04-03 — P0 Prod Stabilizasyonu (Zombie + WS 404 Döngü + Token Sızıntısı + Soak)
+
+### Tamamlananlar (P0)
+- **Zombie process sızıntısı kapatıldı:** yönetimsiz `subprocess.Popen` çağrıları merkezi guard ile değiştirildi.
+  - Yeni dosya: `backend/core/process_guard.py` (`spawn_shell_and_reap`)
+  - Güncellenenler:
+    - `backend/runtime_control/service_controller.py`
+    - `backend/routers/admin_action_center.py`
+    - `backend/routers/admin_live_trading_dashboard.py`
+- **WS endpoint karmaşası çözüldü:** `GET /api/runtime/ws/execution-timeline` (HTTP polling) endpointi eklendi.
+  - Dosya: `backend/routers/runtime_control.py`
+- **Token leakage kapatıldı (strict header):** WS auth artık query token kabul etmiyor; sadece `Authorization: Bearer` kabulü var.
+  - Dosyalar:
+    - `backend/api/runtime_ws.py`
+    - `backend/api/incident_ws.py`
+    - `backend/api/user_live_ws.py`
+- **Frontend sonsuz WS retry kaldırıldı / HTTP polling’e alındı:**
+  - `frontend/src/pages/AdminDashboardPage.jsx`
+  - `frontend/src/pages/AdminIncidentIntelligencePage.jsx`
+  - `frontend/src/pages/user/UserLiveTradingDashboardPage.jsx`
+  - Query-string token kullanımı frontend tarafında kaldırıldı (`?token=` yok).
+- **24 saat soak izleme scripti eklendi:**
+  - `scripts/soak_test_monitor.py`
+  - Özellikler: admin login, periyodik API load, zombie proses takibi, JSONL örnek + özet rapor üretimi.
+
+### Doğrulama Özeti
+- Backend doğrulama (deep backend agent): **PASS**
+  - `/api/runtime/ws/execution-timeline` auth ile 200 (`status=http_polling`), authsuz 401.
+  - `/api/runtime/ws/health` auth ile 200.
+  - Zombie process birikimi gözlenmedi.
+- Frontend doğrulama (frontend testing agent): **P0 PASS**
+  - Token query leakage yok.
+  - Execution-timeline tarafında sonsuz retry / 404 spam yok.
+  - Incident/User live ekranlarında stream durumu `http_polling`.
+- Lokal soak dry-run: **PASS**
+  - Çıktı: `/app/artifacts/soak_quick/soak_summary.json`
+  - `status=PASS`, `max_zombie_count=0`.
+
+### Kalanlar / Sonraki
+- P1: Admin UI TR kapsamını kalan metinlerde tamamla.
+- P1: Admin Dashboard yükleme davranışını ayrı UX/perf turunda stabilize et (P0 güvenlik/kaçak kapsamında blocker değil).
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)

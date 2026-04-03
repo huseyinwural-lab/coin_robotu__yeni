@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 import json
 import os
 import subprocess
@@ -37,24 +38,46 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def login_admin(base_url: str, email: str, password: str) -> str:
+def _decode_jwt_payload(token: str) -> dict:
+    token = str(token or "").strip()
+    if not token or token.count(".") < 2:
+        return {}
+    try:
+        middle = token.split(".")[1]
+        middle += "=" * (-len(middle) % 4)
+        decoded = base64.urlsafe_b64decode(middle.encode("utf-8")).decode("utf-8")
+        payload = json.loads(decoded)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def login_admin(base_url: str, email: str, password: str, *, session_id: str, session_device: str) -> tuple[str, str]:
     url = f"{base_url.rstrip('/')}/api/auth/login/admin"
-    response = requests.post(url, json={"email": email, "password": password}, timeout=25)
+    headers = {
+        "X-Session-ID": session_id,
+        "X-Session-Device": session_device,
+        "User-Agent": "soak-test-monitor/1.0",
+    }
+    response = requests.post(url, json={"email": email, "password": password}, headers=headers, timeout=25)
     response.raise_for_status()
     payload = response.json() if response.content else {}
     token = str(payload.get("access_token") or "").strip()
     if not token:
         raise RuntimeError("admin_login_no_access_token")
-    return token
+    token_payload = _decode_jwt_payload(token)
+    token_device_id = str(token_payload.get("device_id") or session_device).strip() or session_device
+    return token, token_device_id
 
 
-def fetch_endpoint(base_url: str, token: str, path: str) -> EndpointResult:
+def fetch_endpoint(base_url: str, token: str, path: str, *, session_id: str, session_device: str) -> EndpointResult:
     started = time.perf_counter()
     headers = {
         "Authorization": f"Bearer {token}",
-        "X-Session-ID": "soak-session",
-        "X-Session-Device": "soak-device-000000000000000000000001",
+        "X-Session-ID": session_id,
+        "X-Session-Device": session_device,
         "X-Request-ID": f"soak-{int(time.time() * 1000)}",
+        "User-Agent": "soak-test-monitor/1.0",
     }
     try:
         response = requests.get(f"{base_url.rstrip('/')}/api{path}", headers=headers, timeout=25)
@@ -115,7 +138,15 @@ def main() -> int:
     samples_path = output_dir / "soak_samples.jsonl"
     summary_path = output_dir / "soak_summary.json"
 
-    token = login_admin(args.base_url, args.admin_email, args.admin_password)
+    session_id = "soak-session"
+    session_device = "soak-device-000000000000000000000001"
+    token, session_device = login_admin(
+        args.base_url,
+        args.admin_email,
+        args.admin_password,
+        session_id=session_id,
+        session_device=session_device,
+    )
     endpoints = [
         "/health/live",
         "/health/ready",
@@ -124,7 +155,7 @@ def main() -> int:
         "/runtime/alerts?limit=20",
     ]
 
-    duration_seconds = int(max(1.0, args.duration_hours) * 3600)
+    duration_seconds = int(max(1 / 3600, float(args.duration_hours)) * 3600)
     interval_seconds = max(5, int(args.interval_seconds))
     burst = max(1, int(args.burst))
     started_at = time.time()
@@ -146,7 +177,15 @@ def main() -> int:
             endpoint_runs = []
             for _ in range(burst):
                 for path in endpoints:
-                    endpoint_runs.append(fetch_endpoint(args.base_url, token, path))
+                    endpoint_runs.append(
+                        fetch_endpoint(
+                            args.base_url,
+                            token,
+                            path,
+                            session_id=session_id,
+                            session_device=session_device,
+                        )
+                    )
 
             zombie_state = collect_zombies()
             zombie_count = int(zombie_state["zombie_count"])

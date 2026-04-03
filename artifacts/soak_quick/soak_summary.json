@@ -1,0 +1,13 @@
+{
+  "started_at": "2026-04-03T16:44:47.111168+00:00",
+  "finished_at": "2026-04-03T16:44:57.283104+00:00",
+  "duration_hours_requested": 0.002,
+  "interval_seconds": 5,
+  "burst": 1,
+  "total_samples": 1,
+  "max_zombie_count": 0,
+  "first_zombie_seen_at": null,
+  "total_endpoint_errors": 0,
+  "status": "PASS",
+  "samples_file": "/app/artifacts/soak_quick/soak_samples.jsonl"
+}

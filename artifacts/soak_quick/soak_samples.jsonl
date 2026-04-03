@@ -1,0 +1,14 @@
+{"timestamp": "2026-04-03T16:41:46.659645+00:00", "elapsed_seconds": 0, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 1269.31, "errors": []}}
+{"timestamp": "2026-04-03T16:41:56.374102+00:00", "elapsed_seconds": 11, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 940.92, "errors": []}}
+{"timestamp": "2026-04-03T16:42:06.067628+00:00", "elapsed_seconds": 21, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 936.61, "errors": []}}
+{"timestamp": "2026-04-03T16:42:15.899563+00:00", "elapsed_seconds": 30, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 964.39, "errors": []}}
+{"timestamp": "2026-04-03T16:42:25.514485+00:00", "elapsed_seconds": 40, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 920.96, "errors": []}}
+{"timestamp": "2026-04-03T16:42:35.136433+00:00", "elapsed_seconds": 50, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 922.41, "errors": []}}
+{"timestamp": "2026-04-03T16:42:44.745340+00:00", "elapsed_seconds": 59, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 919.73, "errors": []}}
+{"timestamp": "2026-04-03T16:42:54.596286+00:00", "elapsed_seconds": 69, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 968.16, "errors": []}}
+{"timestamp": "2026-04-03T16:43:04.204486+00:00", "elapsed_seconds": 79, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 919.54, "errors": []}}
+{"timestamp": "2026-04-03T16:43:13.856698+00:00", "elapsed_seconds": 88, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 928.36, "errors": []}}
+{"timestamp": "2026-04-03T16:43:23.497147+00:00", "elapsed_seconds": 98, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 925.91, "errors": []}}
+{"timestamp": "2026-04-03T16:43:33.065240+00:00", "elapsed_seconds": 108, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 911.67, "errors": []}}
+{"timestamp": "2026-04-03T16:43:42.644992+00:00", "elapsed_seconds": 117, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 913.2, "errors": []}}
+{"timestamp": "2026-04-03T16:44:52.282872+00:00", "elapsed_seconds": 0, "zombie": {"zombie_count": 0, "zombies": []}, "request_stats": {"total": 5, "failed": 0, "avg_latency_ms": 1026.13, "errors": []}}
