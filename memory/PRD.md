@@ -115,6 +115,52 @@
   - active checkbox görünmüyor, `strategy-form-active-note` görünüyor
   - detail ekranı stabil, kritik JS error yok
 
+## 2026-04-03 — Strategy Domain Control Eksik Kapatma (Backend + Frontend + UI)
+
+### Tamamlanan Düzeltmeler
+- **Version create idempotency görünürlüğü eklendi**
+  - Backend `create_strategy_version` artık `(row, created_new)` döndürüyor.
+  - Router `x-strategy-version-created` header set ediyor.
+  - Audit action artık doğru ayrışıyor: `strategy_version_created` / `strategy_version_reused`.
+  - Dosyalar:
+    - `backend/services/strategy_domain_service.py`
+    - `backend/routers/strategy_domain.py`
+- **Promotion duplicate guard eklendi**
+  - Aynı strategy+version için aktif pending promote request varken ikinci istek `409 promotion_request_already_pending` döner.
+  - Dosya: `backend/services/strategy_domain_service.py`
+- **Regime binding conflict guard eklendi**
+  - `allowed_regimes` ve `blocked_regimes` overlap ise `422 regime_binding_overlap_conflict`.
+  - Regime listeleri normalize (lowercase + dedupe) ediliyor.
+  - `priority` için schema sınırı eklendi (`1..1000`).
+  - Dosyalar:
+    - `backend/services/strategy_domain_service.py`
+    - `backend/schemas.py`
+- **Audit export CSV kontratı düzeltildi**
+  - Backend CSV export artık `content` alanı ile gerçek CSV içerik döndürüyor.
+  - Frontend export akışı `.csv` uzantısı ve `text/csv` blob ile indiriyor.
+  - Dosyalar:
+    - `backend/services/strategy_domain_service.py`
+    - `frontend/src/pages/AdminStrategiesPage.jsx`
+- **Strategy timeline sorgusu iyileştirildi**
+  - Timeline çekiminde strategy referanslı kayıtları daha doğru yakalayan DB filtreleme kullanıldı (entity_id + details text match).
+  - Dosya: `backend/services/strategy_domain_service.py`
+- **UI güvenlik/operasyonel iyileştirme**
+  - Promote approve/reject aksiyonlarına confirm dialog eklendi.
+  - Filtre sonucu boşsa stale detail/timeline/promotion state temizleniyor.
+  - Dosya: `frontend/src/pages/AdminStrategiesPage.jsx`
+- **Observability render-order bug düzeltildi**
+  - `selectedSignalsApproved` tanımı `canExecuteSelectedSignals` öncesine alındı.
+  - Dosya: `frontend/src/pages/AdminStrategyObservabilityPage.jsx`
+
+### Doğrulama
+- Backend manuel doğrulama: **PASS**
+  - version create header: ilk `true`, ikinci `false`
+  - promotion duplicate: ikinci çağrı `409`
+  - regime overlap: `422`
+  - CSV export: `200`, `format=csv`, `content` dolu
+- Frontend automation: **PASS (kod/doğrulama odaklı)**
+  - stale state temizliği, duplicate version mesajı, csv export uzantısı, promote confirm akışları mevcut
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)
