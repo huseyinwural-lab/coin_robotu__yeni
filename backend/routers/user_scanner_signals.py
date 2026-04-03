@@ -716,11 +716,11 @@ def run_live_spot_roundtrip_from_scanner(
         db,
         current_user.id,
         requested_mode="AUTO",
-        max_results=max(10, max_symbols * 3),
+        max_results=max(30, max_symbols * 8),
         symbol_source="crypto",
         market_type="spot",
         selected_symbols=[],
-        symbol_selection_mode="top_volume",
+        symbol_selection_mode="all_market_symbols",
     )
 
     rows = list_user_signals(db, current_user.id, limit=200)
