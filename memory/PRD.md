@@ -365,6 +365,45 @@
 - Frontend test agent: **PASS (100%)**
   - Open Position Intervention yeni kurallar doğrulandı
 
+## 2026-04-03 — Gate Advisory + User Strategy Selection (12 Active Templates)
+
+### Gate (Canlı Geçiş Kapısı)
+- Adım **5/6/7/8** (Risk Policy, Strategy Template, Bot Oluştur & Başlat, Production Gate Rerun) artık **advisory** olarak işaretlendi.
+- Bu adımlar **GO/NO-GO blocker değil**; wizard kilidini ilerleme açısından bloklamıyor.
+- Progress metni zorunlu/advisory ayrımıyla güncellendi:
+  - `Wizard İlerlemesi (zorunlu): X/Y · advisory: Z`
+- Dosya: `frontend/src/pages/AdminLiveGatePage.jsx`
+
+### User Strategy Selection (otomatik aktif template kaynaklı)
+- Kaynak: mevcut **ACTIVE Strategy Template**’ler, otomatik ve en fazla **12** seçenek.
+- Bot formuna eklendi:
+  - Basket Mode çoklu seçim (`bot-form-template-multi-select`)
+  - Performance Labeling (Agresif/Trend, Muhafazakar/Arbitraj, Düşük Volatilite/Scalping)
+  - Risk-Adaptive Scaling önerisi (kaldıraç + risk/trade) ve kullanıcı onayı
+  - Basit correlation uyarıları (zıt strateji kombinasyonlarında)
+- Dosya: `frontend/src/pages/BotProfilesPage.jsx`
+
+### Backend uyumu (kırmadan)
+- Bot create/update şeması genişletildi:
+  - `strategy_template_ids`, `risk_adaptive_confirmed`
+- `position_id` zorunluluğu kaldırılmış yeni akışa uyumlu bot snapshot metadata taşınıyor.
+- Runtime summary artık `strategy_template_ids` ve `risk_adaptive_confirmed` döndürüyor.
+- Dosyalar:
+  - `backend/schemas.py`
+  - `backend/routers/bot_profiles.py`
+  - `backend/services/bot_runtime_service.py`
+
+### Doğrulama
+- Lint: Python + JS **PASS**
+- Backend manuel API doğrulama: **PASS**
+  - user bot create/update yeni alanlarla başarılı
+  - list response yeni alanları döndürüyor
+- Frontend doğrulama:
+  - Screenshot otomasyonu ile doğrulandı:
+    - Gate adım 5/6/7/8 advisory badge mevcut
+    - Progress metni required/advisory ayrımlı
+    - User bot formunda multi-select + labeling + risk-adaptive blokları mevcut
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)
