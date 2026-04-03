@@ -28,14 +28,15 @@ export const ProtectedRoute = ({ children, role = null }) => {
     return <Navigate to={loginPath} replace />;
   }
 
+  const normalizedRole = String(user?.role || "").toLowerCase();
   const roleMatched =
     !role
-    || (role === "admin" && adminRoles.has(user.role))
-    || (role === "user" && (user.role === "user" || adminRoles.has(user.role)))
-    || (role !== "admin" && role !== "user" && user.role === role);
+    || (role === "admin" && adminRoles.has(normalizedRole))
+    || (role === "user" && (normalizedRole === "user" || adminRoles.has(normalizedRole)))
+    || (role !== "admin" && role !== "user" && normalizedRole === String(role || "").toLowerCase());
 
   if (!roleMatched) {
-    return <Navigate to={adminRoles.has(user.role) ? "/admin/dashboard" : "/user/dashboard"} replace />;
+    return <Navigate to={adminRoles.has(normalizedRole) ? "/admin/dashboard" : "/user/dashboard"} replace />;
   }
 
   return children;

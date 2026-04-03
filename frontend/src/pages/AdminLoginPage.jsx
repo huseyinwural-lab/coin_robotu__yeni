@@ -56,7 +56,7 @@ export const AdminLoginPage = () => {
       return;
     }
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
-    if (adminRoles.has(user.role)) {
+    if (adminRoles.has(String(user.role || "").toLowerCase())) {
       navigate("/admin/dashboard", { replace: true });
       return;
     }
@@ -71,7 +71,7 @@ export const AdminLoginPage = () => {
     const storedToken = localStorage.getItem("token");
     if (storedToken && user) {
       const adminRoles = new Set(["super_admin", "admin", "ops"]);
-      navigate(adminRoles.has(user.role) ? "/admin/dashboard" : "/user/dashboard", { replace: true });
+      navigate(adminRoles.has(String(user.role || "").toLowerCase()) ? "/admin/dashboard" : "/user/dashboard", { replace: true });
       return;
     }
     setSubmitting(true);
@@ -106,7 +106,7 @@ export const AdminLoginPage = () => {
         return;
       }
       toast.success("Admin girişi başarılı");
-      navigate("/admin/dashboard", { replace: true });
+      window.location.assign("/admin/dashboard");
     } catch (error) {
       toast.error(getErrorMessage(error, "Admin girişi başarısız"));
     } finally {

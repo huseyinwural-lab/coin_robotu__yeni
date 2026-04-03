@@ -55,7 +55,8 @@ export const UserLoginPage = () => {
       return;
     }
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
-    if (adminRoles.has(user.role)) {
+    const normalizedRole = String(user.role || "").toLowerCase();
+    if (adminRoles.has(normalizedRole)) {
       setPanelHint("admin");
       return;
     }
@@ -107,8 +108,11 @@ export const UserLoginPage = () => {
           toast.info(`MFA doğrulama adımı gerekli${reasons ? ` (${reasons})` : ""}`);
           return;
         }
+        const normalizedRole = String(loginResult?.user?.role || "").toLowerCase();
+        const adminRoles = new Set(["super_admin", "admin", "ops"]);
+        const nextPath = adminRoles.has(normalizedRole) ? "/admin/dashboard" : "/user/dashboard";
         toast.success(`Giriş başarılı${rememberMe ? "" : " (oturum cihazda saklanmayacak)"}`);
-        navigate("/user/dashboard", { replace: true });
+        window.location.assign(nextPath);
       }
     } catch (error) {
       const message = getErrorMessage(error, "İşlem başarısız");

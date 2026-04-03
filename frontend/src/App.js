@@ -111,7 +111,7 @@ const HomeRedirect = () => {
   if (!user) {
     return <LandingPage />;
   }
-  if (adminRoles.has(user.role)) {
+  if (adminRoles.has(String(user.role || "").toLowerCase())) {
     return <Navigate to="/admin/dashboard" replace />;
   }
   return <Navigate to="/user/dashboard" replace />;
