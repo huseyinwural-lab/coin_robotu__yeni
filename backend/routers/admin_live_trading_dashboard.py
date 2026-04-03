@@ -1,5 +1,4 @@
 import json
-import subprocess
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -7,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
+from core.process_guard import spawn_shell_and_reap
 from deps import require_admin
 from models import AuditLog, FailedEvent, PaperPosition, RiskOrchestratorPolicy, StateRebuildLog, SystemAlert, User, UserExecutionIntent, UserRole
 from services.audit_service import create_audit_log
@@ -513,7 +513,10 @@ def admin_live_trading_critical_alert_action(
             action_result = {"reconnect_requested": True}
 
         if fix == "restart-service":
-            subprocess.Popen(["bash", "-lc", "(sleep 1; supervisorctl restart backend frontend) >> /tmp/live_control_restart.log 2>&1"], cwd="/app")
+            spawn_shell_and_reap(
+                command="(sleep 1; supervisorctl restart backend frontend) >> /tmp/live_control_restart.log 2>&1",
+                cwd="/app",
+            )
             action_result = {"restart_scheduled": True, "log": "/tmp/live_control_restart.log"}
 
         if fix == "cancel-stuck-orders":

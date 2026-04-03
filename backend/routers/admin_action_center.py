@@ -1,5 +1,4 @@
 import json
-import subprocess
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,6 +8,7 @@ from sqlalchemy.orm import Session
 from db import get_db, redis_client
 from deps import require_admin
 from models import AdminControl, AuditLog, SystemAlert, User, UserExecutionIntent, UserRole
+from core.process_guard import spawn_shell_and_reap
 from services.audit_service import create_audit_log
 from services.execution_safety_service import execution_safety_snapshot, update_execution_safety_state
 
@@ -465,7 +465,7 @@ def action_center_restart_services(
     targets = _normalize_restart_targets(payload.targets)
     services_arg = " ".join(targets)
     command = f"(sleep 1; supervisorctl restart {services_arg}) >> /tmp/action_center_restart.log 2>&1"
-    subprocess.Popen(["bash", "-lc", command], cwd="/app")
+    spawn_shell_and_reap(command=command, cwd="/app")
 
     operation_id = f"restart-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
     audit_entry = create_audit_log(

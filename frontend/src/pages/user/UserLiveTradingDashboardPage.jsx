@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { apiClient, FRONTEND_BACKEND_URL, getSessionDeviceId } from "@/lib/api";
+import { apiClient } from "@/lib/api";
 
 const WINDOW_OPTIONS = ["1h", "6h", "24h"];
 
@@ -35,15 +35,6 @@ export default function UserLiveTradingDashboardPage() {
   const [queue, setQueue] = useState({ pending_orders: [], pending_decisions: [], queue_depth: 0 });
   const [streamState, setStreamState] = useState("connecting");
   const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
-
-  const hydrate = useCallback((payload) => {
-    setSummary(payload.summary || null);
-    setPositions(payload.positions || { positions: [] });
-    setStrategies(payload.strategies || { items: [] });
-    setTrades(payload.trades || { items: [] });
-    setQueue(payload.queue || { pending_orders: [], pending_decisions: [], queue_depth: 0 });
-    setDecisionCards(payload.decision_cards || []);
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,42 +77,18 @@ export default function UserLiveTradingDashboardPage() {
 
   useEffect(() => {
     const token = window.localStorage.getItem("token");
-    if (!token || !FRONTEND_BACKEND_URL) return undefined;
-    const base = FRONTEND_BACKEND_URL.replace(/\/$/, "");
-    const wsUrl = base.startsWith("https://") ? `${base.replace("https://", "wss://")}/api/user/live/ws/stream` : `${base.replace("http://", "ws://")}/api/user/live/ws/stream`;
-    let reconnectTimer = null;
-    let socket = null;
-
-    const connect = () => {
-      const deviceId = getSessionDeviceId();
-      socket = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}&device_id=${encodeURIComponent(deviceId)}`);
-      socket.onopen = () => setStreamState("connected");
-      socket.onclose = () => {
-        setStreamState("disconnected");
-        reconnectTimer = window.setTimeout(connect, 2500);
-      };
-      socket.onerror = () => setStreamState("error");
-      socket.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (payload.event_type !== "user_live_snapshot") return;
-          hydrate(payload);
-        } catch {
-          setStreamState("error");
-        }
-      };
-    };
-
-    connect();
-    const heartbeat = window.setInterval(() => {
-      if (socket && socket.readyState === WebSocket.OPEN) socket.send("ping");
+    if (!token) {
+      setStreamState("disconnected");
+      return undefined;
+    }
+    setStreamState("http_polling");
+    const timer = window.setInterval(() => {
+      load();
     }, 15000);
     return () => {
-      window.clearInterval(heartbeat);
-      if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      if (socket) socket.close();
+      window.clearInterval(timer);
     };
-  }, [hydrate]);
+  }, [load]);
 
   const exportDailyReport = async (format) => {
     try {

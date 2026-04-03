@@ -163,8 +163,6 @@ export const AdminDashboardPage = () => {
   const [runtimeAlertFilters, setRuntimeAlertFilters] = useState({ severity: "all", state: "all", symbol: "", user_id: "", window_minutes: "60" });
   const [alertNoteDrafts, setAlertNoteDrafts] = useState({});
   const timelineContainerRef = useRef(null);
-  const runtimeWsRef = useRef(null);
-  const runtimeWsReconnectTimerRef = useRef(null);
   const [criticalDialogState, setCriticalDialogState] = useState({
     open: false,
     actionKey: "",
@@ -271,6 +269,7 @@ export const AdminDashboardPage = () => {
         runtimeGoLiveChecklistResponse,
         runtimeProxyHealthResponse,
         runtimeWizardStateResponse,
+        runtimeTimelineResponse,
       ] = await Promise.all([
         apiClient.get("/dashboard/summary"),
         apiClient.get("/admin/action-center/summary"),
@@ -306,6 +305,15 @@ export const AdminDashboardPage = () => {
         apiClient.get("/runtime/go-live/checklist"),
         apiClient.get("/runtime/exchange/proxy-health"),
         apiClient.get("/runtime/go-live/wizard/state"),
+        (isManagerRole
+          ? apiClient.get("/runtime/ws/execution-timeline", { params: { limit: 120 } })
+          : Promise.resolve({ data: { status: "disabled_role", items: [] } }))
+          .catch((error) => ({
+            data: {
+              status: Number(error?.response?.status || 0) === 404 ? "disabled_missing_endpoint" : "polling_error",
+              items: [],
+            },
+          })),
       ]);
 
       const summaryPayload = summaryResponse?.data || null;
@@ -330,6 +338,9 @@ export const AdminDashboardPage = () => {
       setRuntimeGoLiveChecklist(runtimeGoLiveChecklistResponse?.data?.result || null);
       setRuntimeProxyHealth(runtimeProxyHealthResponse?.data?.result || null);
       setGoLiveWizardState(runtimeWizardStateResponse?.data?.result || null);
+      const timelineItems = Array.isArray(runtimeTimelineResponse?.data?.items) ? runtimeTimelineResponse.data.items : [];
+      setRuntimeTimelineEvents(timelineItems.slice(-50).reverse());
+      setRuntimeWsStatus(String(runtimeTimelineResponse?.data?.status || (isManagerRole ? "http_polling" : "disabled_role")));
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Admin dashboard verisi yüklenemedi";
@@ -340,7 +351,7 @@ export const AdminDashboardPage = () => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [alertFilters, runtimeAlertFilters]);
+  }, [alertFilters, isManagerRole, runtimeAlertFilters]);
 
   useEffect(() => {
     loadDashboard();
@@ -356,63 +367,12 @@ export const AdminDashboardPage = () => {
 
   useEffect(() => {
     if (!isManagerRole) {
-      setRuntimeWsStatus("disconnected");
+      setRuntimeWsStatus("disabled_role");
+      setRuntimeTimelineEvents([]);
       return undefined;
     }
-
-    const connectTimeline = () => {
-      const token = localStorage.getItem("token");
-      const backendUrl = process.env.REACT_APP_BACKEND_URL;
-      if (!token || !backendUrl) {
-        setRuntimeWsStatus("disconnected");
-        return;
-      }
-
-      const wsBase = backendUrl.startsWith("https://")
-        ? backendUrl.replace("https://", "wss://")
-        : backendUrl.replace("http://", "ws://");
-      const wsUrl = `${wsBase}/api/runtime/ws/execution-timeline?token=${encodeURIComponent(token)}`;
-      setRuntimeWsStatus("connecting");
-      const socket = new WebSocket(wsUrl);
-      runtimeWsRef.current = socket;
-
-      socket.onopen = () => {
-        setRuntimeWsStatus("connected");
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data || "{}");
-          if (payload?.event_type === "runtime_stream_bootstrap") {
-            setRuntimeTimelineEvents((payload?.events || []).slice(-50).reverse());
-            return;
-          }
-          setRuntimeTimelineEvents((prev) => [payload, ...prev].slice(0, 50));
-        } catch (_error) {
-          // ignore malformed message
-        }
-      };
-
-      socket.onclose = () => {
-        setRuntimeWsStatus("reconnecting");
-        runtimeWsReconnectTimerRef.current = setTimeout(connectTimeline, 1800);
-      };
-
-      socket.onerror = () => {
-        setRuntimeWsStatus("reconnecting");
-      };
-    };
-
-    connectTimeline();
-
-    return () => {
-      if (runtimeWsReconnectTimerRef.current) {
-        clearTimeout(runtimeWsReconnectTimerRef.current);
-      }
-      if (runtimeWsRef.current) {
-        runtimeWsRef.current.close();
-      }
-    };
+    setRuntimeWsStatus((prev) => (prev === "connecting" ? "http_polling" : prev));
+    return undefined;
   }, [isManagerRole]);
 
   useEffect(() => {

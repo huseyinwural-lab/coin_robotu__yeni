@@ -16,15 +16,14 @@ router = APIRouter()
 
 
 def _extract_token(websocket: WebSocket) -> str | None:
-    token = websocket.query_params.get("token")
-    if token:
-        return token
     auth_header = websocket.headers.get("authorization")
     if not auth_header:
         return None
-    if auth_header.lower().startswith("bearer "):
-        return auth_header[7:].strip()
-    return auth_header.strip()
+    scheme, _, value = auth_header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    token = value.strip()
+    return token or None
 
 
 def _resolve_admin_user(token: str | None):
@@ -56,7 +55,7 @@ def _device_matches_token(websocket: WebSocket, user) -> bool:
     except ValueError:
         return False
     token_device_id = str(payload.get("device_id") or "").strip()
-    provided_device_id = str(websocket.query_params.get("device_id") or websocket.headers.get("x-session-device") or "").strip()
+    provided_device_id = str(websocket.headers.get("x-session-device") or "").strip()
     return bool(token_device_id and provided_device_id and token_device_id == provided_device_id)
 
 

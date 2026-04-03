@@ -1,6 +1,7 @@
 import json
-import subprocess
 from datetime import datetime, timezone
+
+from core.process_guard import spawn_shell_and_reap
 
 
 def _decode(value):
@@ -58,7 +59,7 @@ def restart_runtime_service(*, service: str) -> dict:
     # Current deployment has supervisor-managed frontend/backend only.
     # For worker/ws requests, schedule lightweight backend restart as runtime recovery action.
     command = "(sleep 1; supervisorctl restart backend) >> /tmp/runtime_control_service_restart.log 2>&1"
-    subprocess.Popen(["bash", "-lc", command], cwd="/app")
+    spawn_shell_and_reap(command=command, cwd="/app")
     return {
         "status": "scheduled",
         "requested_service": normalized,

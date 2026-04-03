@@ -12,13 +12,14 @@ router = APIRouter()
 
 
 def _extract_token(websocket: WebSocket) -> str | None:
-    token = websocket.query_params.get("token")
-    if token:
-        return token
     auth_header = websocket.headers.get("authorization")
-    if auth_header and auth_header.lower().startswith("bearer "):
-        return auth_header[7:].strip()
-    return auth_header.strip() if auth_header else None
+    if not auth_header:
+        return None
+    scheme, _, value = auth_header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    token = value.strip()
+    return token or None
 
 
 @router.websocket("/user/live/ws/stream")
@@ -35,7 +36,7 @@ async def user_live_stream(websocket: WebSocket):
     subject = str(payload.get("sub") or "").strip()
     role = str(payload.get("role") or "").strip().lower()
     token_device_id = str(payload.get("device_id") or "").strip()
-    provided_device_id = str(websocket.query_params.get("device_id") or websocket.headers.get(DEVICE_HEADER_NAME) or "").strip()
+    provided_device_id = str(websocket.headers.get(DEVICE_HEADER_NAME) or "").strip()
     if not subject or role != UserRole.USER.value or not token_device_id or token_device_id != provided_device_id:
         await websocket.close(code=1008)
         return

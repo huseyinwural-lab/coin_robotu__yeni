@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, Play, RefreshCw, ShieldAlert, Sparkles, Workflow } from "lucide-react";
 import { toast } from "sonner";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -7,21 +7,13 @@ import "@xyflow/react/dist/style.css";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { apiClient, FRONTEND_BACKEND_URL, getSessionDeviceId } from "@/lib/api";
+import { apiClient } from "@/lib/api";
 
 const severityTone = {
   CRITICAL: "border-l-red-600 bg-red-50 text-red-900",
   ERROR: "border-l-orange-500 bg-orange-50 text-orange-900",
   WARNING: "border-l-amber-500 bg-amber-50 text-amber-900",
   INFO: "border-l-blue-500 bg-blue-50 text-blue-900",
-};
-
-const streamUrl = () => {
-  const base = FRONTEND_BACKEND_URL.replace(/\/$/, "");
-  if (!base) return "";
-  if (base.startsWith("https://")) return `${base.replace("https://", "wss://")}/api/incident-intelligence/ws/stream`;
-  if (base.startsWith("http://")) return `${base.replace("http://", "ws://")}/api/incident-intelligence/ws/stream`;
-  return "";
 };
 
 const buildGraphNodes = (nodes = []) =>
@@ -57,7 +49,6 @@ export const AdminIncidentIntelligencePage = () => {
   const [actionLoading, setActionLoading] = useState("");
   const [liveActionSymbol, setLiveActionSymbol] = useState("BTCUSDT");
   const [liveTargetLeverage, setLiveTargetLeverage] = useState("1");
-  const socketRef = useRef(null);
 
   const selectedIncident = useMemo(
     () => incidents.find((item) => item.incident_id === selectedIncidentId) || incidents[0] || null,
@@ -111,49 +102,15 @@ export const AdminIncidentIntelligencePage = () => {
   }, [loadIncidentDetail, selectedIncidentId]);
 
   useEffect(() => {
-    const token = window.localStorage.getItem("token");
-    const url = streamUrl();
-    if (!token || !url) return undefined;
-    let reconnectTimer = null;
-    let socket = null;
-
-    const connect = () => {
-      const deviceId = getSessionDeviceId();
-      socket = new WebSocket(`${url}?token=${encodeURIComponent(token)}&device_id=${encodeURIComponent(deviceId)}`);
-      socketRef.current = socket;
-      socket.onopen = () => setStreamState("connected");
-      socket.onclose = () => {
-        setStreamState("disconnected");
-        reconnectTimer = window.setTimeout(connect, 2000);
-      };
-      socket.onerror = () => setStreamState("error");
-      socket.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data);
-          if (["incident_stream_bootstrap", "incident_intelligence_snapshot"].includes(payload.event_type)) {
-            loadDashboard();
-            if (selectedIncidentId) {
-              loadIncidentDetail(selectedIncidentId);
-            }
-          }
-        } catch {
-          setStreamState("error");
-        }
-      };
-    };
-
-    connect();
-    const heartbeat = window.setInterval(() => {
-      if (socket && socket.readyState === WebSocket.OPEN) socket.send("ping");
+    setStreamState("http_polling");
+    const refreshTimer = window.setInterval(() => {
+      loadDashboard();
+      if (selectedIncidentId) {
+        loadIncidentDetail(selectedIncidentId);
+      }
     }, 15000);
     return () => {
-      window.clearInterval(heartbeat);
-      if (reconnectTimer) {
-        window.clearTimeout(reconnectTimer);
-      }
-      if (socket) {
-        socket.close();
-      }
+      window.clearInterval(refreshTimer);
     };
   }, [loadDashboard, loadIncidentDetail, selectedIncidentId]);
 

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
+from core.runtime_stream import runtime_stream_hub
 from deps import require_admin
 from models import AlertPolicy, AuditLog, PermissionDriftEvent, SystemAlert, User, UserExchangeConnection, UserRole
 from runtime_control import (
@@ -347,6 +348,18 @@ def runtime_ws_force_new_session(payload: RuntimeActionRequest, current_admin: U
 def runtime_ws_health(current_admin: User = Depends(require_admin)):
     _ = current_admin
     return get_ws_health(redis_client)
+
+
+@router.get("/ws/execution-timeline")
+def runtime_ws_execution_timeline(
+    limit: int = Query(default=50, ge=1, le=200),
+    current_admin: User = Depends(require_admin),
+):
+    _ = current_admin
+    return {
+        "status": "http_polling",
+        "items": runtime_stream_hub.get_recent_events(limit=limit),
+    }
 
 
 @router.post("/pipeline/resync")
