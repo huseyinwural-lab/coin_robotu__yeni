@@ -40,6 +40,38 @@
 - P1: Admin UI TR kapsamını kalan metinlerde tamamla.
 - P1: Admin Dashboard yükleme davranışını ayrı UX/perf turunda stabilize et (P0 güvenlik/kaçak kapsamında blocker değil).
 
+## 2026-04-03 — P1 Dashboard Stabilizasyonu + CORS/Deploy Konfig Senkronu
+
+### Tamamlananlar
+- **Admin Dashboard yükleme dalgalanması stabilize edildi**
+  - Dosya: `frontend/src/pages/AdminDashboardPage.jsx`
+  - İyileştirmeler:
+    - Çoklu eşzamanlı load çakışmasını engellemek için `loadInFlightRef` guard eklendi.
+    - Dashboard verileri tek hata ile tamamen düşmesin diye çağrılar `Promise.allSettled` ile dayanıklı hale getirildi.
+    - Endpoint bazlı timeoutlar tanımlandı (12s) ve kısmi başarısızlıkta mevcut ekran korunuyor.
+    - 401 senaryosunda kullanıcıya tek seferlik uyarı + auto-refresh güvenli şekilde durdurma davranışı eklendi.
+- **CORS_ORIGINS senkronlandı**
+  - `backend/.env` güncellendi: local + preview + production domain listesi
+  - `deploy/live.env.example` içine `CORS_ORIGINS` eklendi.
+- **Deploy konfig temizliği**
+  - `backend/.env` içinde duplicate env key’ler temizlendi:
+    - `LIVE_TRADING_ENABLED`
+    - `BINANCE_LIVE_API_KEY`
+    - `BINANCE_LIVE_API_SECRET`
+    - `BINANCE_SPOT_LIVE_BASE_URL`
+    - `BINANCE_FUTURES_LIVE_BASE_URL`
+
+### Test Sonuçları
+- Frontend stabilization regression (automation): **PASS**
+  - Dashboard skeleton kilitlenmesi yok
+  - Auto-refresh sırasında tam reset/flicker yok
+  - Runtime timeline state görünür (`http_polling`)
+- Backend final smoke/regression (automation): **PASS**
+  - `/api/health/live`, `/api/health/ready`, `/api/health` = 200
+  - `/api/runtime/ws/execution-timeline` auth ile 200, authsuz 401
+  - `.env` duplicate key = 0
+  - Zombie/defunct process = 0
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)
