@@ -305,6 +305,29 @@
   - Auto Unblock prompt+confirm çalışıyor.
   - Cross-check sonucu ham JSON değil, özet formatta gösteriliyor.
 
+## 2026-04-03 — Audit Logs küçük ek (Linked incidents altı Errors + 1/7/30 gün)
+
+### Yapılanlar
+- `AuditLogsPage` içinde **Linked incidents** bölümünün altına **Errors** listesi eklendi.
+- 3 filtre butonu eklendi: **1 gün / 7 gün / 30 gün**.
+- Liste yalnız `ERROR` + `CRITICAL` severity incidentleri zaman penceresine göre gösteriyor.
+- Kayıt yoksa boş durum mesajı gösteriliyor.
+- `data-testid` eklendi:
+  - `audit-error-list-section`
+  - `audit-error-window-filter-1d-button`
+  - `audit-error-window-filter-7d-button`
+  - `audit-error-window-filter-30d-button`
+  - `audit-error-list-empty`
+
+### Route uyumu
+- `/admin/core/logs` route alias eklendi ve `AuditLogsPage`'e bağlandı (eski kullanım ile uyum).
+
+### Doğrulama
+- Frontend automation: **PASS**
+  - Errors bölümü görünür
+  - 1/7/30 filtre butonları çalışıyor
+  - `/admin/core/logs` route alias çalışıyor
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)
