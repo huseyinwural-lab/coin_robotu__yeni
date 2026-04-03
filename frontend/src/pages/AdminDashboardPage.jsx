@@ -165,6 +165,7 @@ export const AdminDashboardPage = () => {
   const timelineContainerRef = useRef(null);
   const loadInFlightRef = useRef(false);
   const authErrorNotifiedRef = useRef(false);
+  const initialLoadFailSafeRef = useRef(null);
   const [criticalDialogState, setCriticalDialogState] = useState({
     open: false,
     actionKey: "",
@@ -255,6 +256,12 @@ export const AdminDashboardPage = () => {
       setIsRefreshing(true);
     } else {
       setIsLoading(true);
+      if (initialLoadFailSafeRef.current) {
+        clearTimeout(initialLoadFailSafeRef.current);
+      }
+      initialLoadFailSafeRef.current = setTimeout(() => {
+        setIsLoading(false);
+      }, 4500);
     }
     setLoadError("");
 
@@ -365,6 +372,10 @@ export const AdminDashboardPage = () => {
       setLoadError(typeof message === "string" ? message : "Admin dashboard verisi yüklenemedi");
       toast.error(typeof message === "string" ? message : "Admin dashboard verisi yüklenemedi");
     } finally {
+      if (initialLoadFailSafeRef.current) {
+        clearTimeout(initialLoadFailSafeRef.current);
+        initialLoadFailSafeRef.current = null;
+      }
       hasLoadedOnceRef.current = true;
       setIsLoading(false);
       setIsRefreshing(false);
@@ -811,7 +822,15 @@ export const AdminDashboardPage = () => {
   };
 
   if (isLoading && !summary) {
-    return <LoadingSkeleton rows={8} testId="admin-dashboard-loading-skeleton" />;
+    return (
+      <section className="space-y-4" data-testid="admin-dashboard-page">
+        <header className="border border-blue-900 bg-slate-900 p-4" data-testid="admin-dashboard-header">
+          <h2 className="text-4xl font-black uppercase tracking-tight text-blue-300" data-testid="admin-dashboard-title">Admin Dashboard Shell</h2>
+          <p className="mt-2 text-sm text-slate-400" data-testid="admin-dashboard-description">Dashboard yükleniyor, kısmi paneller hazırlanıyor...</p>
+        </header>
+        <LoadingSkeleton rows={6} testId="admin-dashboard-loading-skeleton" />
+      </section>
+    );
   }
 
   if (!summary) {

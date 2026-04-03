@@ -367,7 +367,21 @@ export const UserSignalsPage = () => {
   };
 
   if (isLoading) {
-    return <LoadingSkeleton rows={6} testId="user-signals-loading-skeleton" />;
+    return (
+      <section className="grid grid-cols-12 gap-4" data-testid="user-signals-page">
+        <header className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-signals-header">
+          <div className="flex flex-wrap items-center justify-between gap-3" data-testid="user-signals-header-controls">
+            <div>
+              <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-signals-title">Signals</h2>
+              <p className="mt-2 text-sm text-slate-400" data-testid="user-signals-description">Sinyal ekranı yükleniyor...</p>
+            </div>
+          </div>
+        </header>
+        <div className="col-span-12">
+          <LoadingSkeleton rows={6} testId="user-signals-loading-skeleton" />
+        </div>
+      </section>
+    );
   }
 
   return (

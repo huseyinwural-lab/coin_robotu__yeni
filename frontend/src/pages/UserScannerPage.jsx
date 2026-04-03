@@ -1017,7 +1017,15 @@ export const UserScannerPage = () => {
   };
 
   if (isLoading) {
-    return <LoadingSkeleton rows={6} testId="user-scanner-loading-skeleton" />;
+    return (
+      <section className="space-y-4" data-testid="user-scanner-page">
+        <header className="rounded-2xl border border-indigo-900/50 bg-slate-900 p-4" data-testid="user-scanner-header">
+          <h2 className="text-4xl font-black uppercase tracking-tight text-indigo-200" data-testid="user-scanner-title">User Scanner</h2>
+          <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-subtitle">Tarama ekranı yükleniyor...</p>
+        </header>
+        <LoadingSkeleton rows={6} testId="user-scanner-loading-skeleton" />
+      </section>
+    );
   }
 
   const openExecuteFromScanner = (item) => {
