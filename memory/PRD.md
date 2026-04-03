@@ -404,6 +404,40 @@
     - Progress metni required/advisory ayrımlı
     - User bot formunda multi-select + labeling + risk-adaptive blokları mevcut
 
+## 2026-04-03 — Yükleme Performansı ve Scanner UI Düzeltmeleri (Admin Dashboard / User Scanner / User Signals)
+
+### Yapılanlar
+- **User Scanner hız/timeout iyileştirmesi**
+  - Scanner tarafındaki paralel çağrılara endpoint bazlı timeout eklendi (8s, screener 10s).
+  - Explainability çağrısı ilk yükte bloklayıcı olmaktan çıkarıldı (`await` kaldırıldı).
+  - Dosya: `frontend/src/pages/UserScannerPage.jsx`
+- **User Signals hız iyileştirmesi**
+  - Signals yükleme çağrılarına timeout eklendi (8s).
+  - Dosya: `frontend/src/pages/UserSignalsPage.jsx`
+- **Admin Dashboard hız/algılanan performans iyileştirmesi**
+  - Dashboard çağrı timeoutları 12s -> 8s düşürüldü (erken degrade/fallback).
+  - İlk yükte shell fail-safe eklendi; sayfa boş kalmak yerine başlık + loading shell gösteriyor.
+  - Dosya: `frontend/src/pages/AdminDashboardPage.jsx`
+- **Scanner koyu alan beyazlaştırma**
+  - Automation profile alanındaki koyu input/select ve satır arka planları beyaza çekildi.
+  - Dosya: `frontend/src/pages/UserScannerPage.jsx`
+- **Auth redirect dayanıklılığı**
+  - User/Admin login sayfalarında rol normalize edildi (`toLowerCase`) ve başarı sonrası hard redirect (`window.location.assign`) ile redirect stabilitesi artırıldı.
+  - `ProtectedRoute` ve `HomeRedirect` role matching normalize edildi.
+  - Dosyalar:
+    - `frontend/src/pages/UserLoginPage.jsx`
+    - `frontend/src/pages/AdminLoginPage.jsx`
+    - `frontend/src/components/ProtectedRoute.jsx`
+    - `frontend/src/App.js`
+
+### Doğrulama
+- Lint: JS **PASS** (tüm ilgili dosyalar)
+- Frontend automation: **PASS**
+  - User login redirect `/user/dashboard` çalışıyor
+  - `/user/scanner` render + beyaz input/select doğrulandı
+  - `/user/signals` title render doğrulandı
+  - `/admin/dashboard` title shell render doğrulandı
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)
