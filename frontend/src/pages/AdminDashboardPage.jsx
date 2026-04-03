@@ -163,6 +163,8 @@ export const AdminDashboardPage = () => {
   const [runtimeAlertFilters, setRuntimeAlertFilters] = useState({ severity: "all", state: "all", symbol: "", user_id: "", window_minutes: "60" });
   const [alertNoteDrafts, setAlertNoteDrafts] = useState({});
   const timelineContainerRef = useRef(null);
+  const loadInFlightRef = useRef(false);
+  const authErrorNotifiedRef = useRef(false);
   const [criticalDialogState, setCriticalDialogState] = useState({
     open: false,
     actionKey: "",
@@ -244,6 +246,11 @@ export const AdminDashboardPage = () => {
   const allFilteredSelected = filteredAlerts.length > 0 && filteredAlerts.every((item) => selectedAlertIds.includes(item.id));
 
   const loadDashboard = useCallback(async () => {
+    if (loadInFlightRef.current) {
+      return;
+    }
+    loadInFlightRef.current = true;
+
     if (hasLoadedOnceRef.current) {
       setIsRefreshing(true);
     } else {
@@ -252,29 +259,11 @@ export const AdminDashboardPage = () => {
     setLoadError("");
 
     try {
-      const [
-        summaryResponse,
-        actionSummaryResponse,
-        killSwitchResponse,
-        incidentResponse,
-        alertsResponse,
-        latestAutoCloseResponse,
-        actionAuditResponse,
-        runtimePnlSummaryResponse,
-        runtimeAlertsResponse,
-        runtimeSmokeResponse,
-        runtimeKillSwitchResponse,
-        runtimeExecutionModeResponse,
-        runtimeReadinessResponse,
-        runtimeGoLiveChecklistResponse,
-        runtimeProxyHealthResponse,
-        runtimeWizardStateResponse,
-        runtimeTimelineResponse,
-      ] = await Promise.all([
-        apiClient.get("/dashboard/summary"),
-        apiClient.get("/admin/action-center/summary"),
-        apiClient.get("/admin/kill-switch"),
-        apiClient.get("/admin/action-center/incident-history", { params: { limit: 25 } }),
+      const requests = [
+        apiClient.get("/dashboard/summary", { timeout: 12000 }),
+        apiClient.get("/admin/action-center/summary", { timeout: 12000 }),
+        apiClient.get("/admin/kill-switch", { timeout: 12000 }),
+        apiClient.get("/admin/action-center/incident-history", { params: { limit: 25 }, timeout: 12000 }),
         apiClient.get("/admin/action-center/alerts", {
           params: {
             status_filter: alertFilters.status_filter,
@@ -284,10 +273,11 @@ export const AdminDashboardPage = () => {
             window_hours: Number(alertFilters.window_hours || 24),
             limit: 250,
           },
+          timeout: 12000,
         }),
-        apiClient.get("/admin/action-center/close-next-actions/latest"),
-        apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 8 } }),
-        apiClient.get("/runtime/pnl/summary"),
+        apiClient.get("/admin/action-center/close-next-actions/latest", { timeout: 12000 }),
+        apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 8 }, timeout: 12000 }),
+        apiClient.get("/runtime/pnl/summary", { timeout: 12000 }),
         apiClient.get("/runtime/alerts", {
           params: {
             limit: 20,
@@ -297,50 +287,78 @@ export const AdminDashboardPage = () => {
             user_id: runtimeAlertFilters.user_id || undefined,
             window_minutes: Number(runtimeAlertFilters.window_minutes || 60),
           },
+          timeout: 12000,
         }),
-        apiClient.get("/runtime/health/smoke"),
-        apiClient.get("/runtime/safety/kill-switch"),
-        apiClient.get("/runtime/execution/mode"),
-        apiClient.get("/runtime/canary/readiness-score"),
-        apiClient.get("/runtime/go-live/checklist"),
-        apiClient.get("/runtime/exchange/proxy-health"),
-        apiClient.get("/runtime/go-live/wizard/state"),
+        apiClient.get("/runtime/health/smoke", { timeout: 12000 }),
+        apiClient.get("/runtime/safety/kill-switch", { timeout: 12000 }),
+        apiClient.get("/runtime/execution/mode", { timeout: 12000 }),
+        apiClient.get("/runtime/canary/readiness-score", { timeout: 12000 }),
+        apiClient.get("/runtime/go-live/checklist", { timeout: 12000 }),
+        apiClient.get("/runtime/exchange/proxy-health", { timeout: 12000 }),
+        apiClient.get("/runtime/go-live/wizard/state", { timeout: 12000 }),
         (isManagerRole
-          ? apiClient.get("/runtime/ws/execution-timeline", { params: { limit: 120 } })
-          : Promise.resolve({ data: { status: "disabled_role", items: [] } }))
-          .catch((error) => ({
-            data: {
-              status: Number(error?.response?.status || 0) === 404 ? "disabled_missing_endpoint" : "polling_error",
-              items: [],
-            },
-          })),
-      ]);
+          ? apiClient.get("/runtime/ws/execution-timeline", { params: { limit: 120 }, timeout: 12000 })
+          : Promise.resolve({ data: { status: "disabled_role", items: [] } })),
+      ];
 
-      const summaryPayload = summaryResponse?.data || null;
+      const settled = await Promise.allSettled(requests);
+      const pickData = (index, fallback) => {
+        const row = settled[index];
+        if (row?.status === "fulfilled") {
+          return row.value?.data ?? fallback;
+        }
+        return fallback;
+      };
+
+      const unresolvedErrors = settled.filter((row) => row.status === "rejected");
+      const hasAuthError = unresolvedErrors.some((row) => Number(row?.reason?.response?.status || 0) === 401);
+
+      if (hasAuthError) {
+        if (!authErrorNotifiedRef.current) {
+          toast.error("Dashboard oturum doğrulaması gerekiyor. Otomatik yenileme durduruldu.");
+          authErrorNotifiedRef.current = true;
+        }
+        if (autoRefreshEnabled) {
+          setAutoRefreshEnabled(false);
+        }
+      } else {
+        authErrorNotifiedRef.current = false;
+      }
+
+      const summaryPayload = pickData(0, null);
       setSummary((prevSummary) => {
         if (prevSummary?.metrics) {
           setPreviousMetrics(prevSummary.metrics);
         }
         return summaryPayload;
       });
-      setActionCenterSummary(actionSummaryResponse?.data || null);
-      setKillSwitchState(killSwitchResponse?.data || null);
-      setIncidentHistory(incidentResponse?.data || { audit_events: [], recent_alerts: [] });
-      setAlerts(alertsResponse?.data?.items || []);
-      setLatestAutoCloseAudit(latestAutoCloseResponse?.data?.found ? latestAutoCloseResponse?.data?.item : null);
-      setActionAuditSnippet(actionAuditResponse?.data?.items || []);
-      setRuntimePnlSummary(runtimePnlSummaryResponse?.data || null);
-      setRuntimeAlerts(runtimeAlertsResponse?.data?.items || []);
-      setRuntimeSmoke(runtimeSmokeResponse?.data?.smoke || null);
-      setRuntimeKillSwitch(runtimeKillSwitchResponse?.data?.kill_switch || null);
-      setRuntimeExecutionMode(runtimeExecutionModeResponse?.data || null);
-      setRuntimeReadiness(runtimeReadinessResponse?.data?.result || null);
-      setRuntimeGoLiveChecklist(runtimeGoLiveChecklistResponse?.data?.result || null);
-      setRuntimeProxyHealth(runtimeProxyHealthResponse?.data?.result || null);
-      setGoLiveWizardState(runtimeWizardStateResponse?.data?.result || null);
-      const timelineItems = Array.isArray(runtimeTimelineResponse?.data?.items) ? runtimeTimelineResponse.data.items : [];
+      setActionCenterSummary(pickData(1, null));
+      setKillSwitchState(pickData(2, null));
+      setIncidentHistory(pickData(3, { audit_events: [], recent_alerts: [] }));
+      setAlerts(pickData(4, { items: [] })?.items || []);
+      setLatestAutoCloseAudit(pickData(5, { found: false })?.found ? pickData(5, { item: null })?.item : null);
+      setActionAuditSnippet(pickData(6, { items: [] })?.items || []);
+      setRuntimePnlSummary(pickData(7, null));
+      setRuntimeAlerts(pickData(8, { items: [] })?.items || []);
+      setRuntimeSmoke(pickData(9, { smoke: null })?.smoke || null);
+      setRuntimeKillSwitch(pickData(10, { kill_switch: null })?.kill_switch || null);
+      setRuntimeExecutionMode(pickData(11, null));
+      setRuntimeReadiness(pickData(12, { result: null })?.result || null);
+      setRuntimeGoLiveChecklist(pickData(13, { result: null })?.result || null);
+      setRuntimeProxyHealth(pickData(14, { result: null })?.result || null);
+      setGoLiveWizardState(pickData(15, { result: null })?.result || null);
+
+      const timelineData = pickData(16, { status: hasAuthError ? "auth_required" : "polling_error", items: [] });
+      const timelineItems = Array.isArray(timelineData?.items) ? timelineData.items : [];
       setRuntimeTimelineEvents(timelineItems.slice(-50).reverse());
-      setRuntimeWsStatus(String(runtimeTimelineResponse?.data?.status || (isManagerRole ? "http_polling" : "disabled_role")));
+      setRuntimeWsStatus(String(timelineData?.status || (isManagerRole ? "http_polling" : "disabled_role")));
+
+      if (!summaryPayload) {
+        const firstError = unresolvedErrors[0]?.reason;
+        const message = firstError?.response?.data?.detail || "Admin dashboard verisi yüklenemedi";
+        setLoadError(typeof message === "string" ? message : "Admin dashboard verisi yüklenemedi");
+      }
+
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       const message = error?.response?.data?.detail || "Admin dashboard verisi yüklenemedi";
@@ -350,8 +368,9 @@ export const AdminDashboardPage = () => {
       hasLoadedOnceRef.current = true;
       setIsLoading(false);
       setIsRefreshing(false);
+      loadInFlightRef.current = false;
     }
-  }, [alertFilters, isManagerRole, runtimeAlertFilters]);
+  }, [alertFilters, autoRefreshEnabled, isManagerRole, runtimeAlertFilters]);
 
   useEffect(() => {
     loadDashboard();
