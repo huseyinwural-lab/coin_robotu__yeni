@@ -161,6 +161,47 @@
 - Frontend automation: **PASS (kod/doğrulama odaklı)**
   - stale state temizliği, duplicate version mesajı, csv export uzantısı, promote confirm akışları mevcut
 
+## 2026-04-03 — Bot Profile Yönetimi Eksik Kapatma (Backend + Frontend + UI)
+
+### Tamamlanan Düzeltmeler
+- **Liste DTO/UI kontrat uyumu sağlandı**
+  - Bot runtime list response alanları genişletildi: `exchange`, `market_type`, `strategy_type`, `strategy_template_id`, `symbols`, `leverage`, `is_enabled`, `is_running`, `symbol_source_type`, `scanner_id`.
+  - Dosyalar:
+    - `backend/schemas.py`
+    - `backend/services/bot_runtime_service.py`
+- **Update şema eksiği kapatıldı**
+  - `BotProfileUpdate` artık `symbol_source_type`, `scanner_id`, `mode` kabul ediyor.
+  - `BotProfileCreate` içine `mode` eklendi.
+  - Dosya: `backend/schemas.py`
+- **Mode seçimi çalışır hale getirildi**
+  - Create/Update akışında `mode` alınıp bot snapshot’a `preferred_mode` olarak kaydediliyor.
+  - Start akışında runtime mode bu `preferred_mode` ile başlatılıyor.
+  - Dosyalar:
+    - `backend/routers/bot_profiles.py`
+    - `backend/services/bot_runtime_service.py`
+- **Scanner source davranışı iyileştirildi**
+  - `scanner_id` ile `UserScannerSymbolSelection` okunup scanner sonuçları seçili sembollerle filtreleniyor.
+  - Dosya: `backend/services/bot_runtime_service.py`
+- **Frontend BotProfilesPage dayanıklılık iyileştirmeleri**
+  - `fetchItems` hata yönetimi + selectedBot stale temizleme/rebind.
+  - Edit akışında güvenli `symbols` fallback.
+  - Pause butonunda try/catch + kullanıcıya hata toast.
+  - Form payload’ına `mode` eklendi.
+  - Table symbols render’ında null-safe fallback.
+  - Detail panel başlık metin kontrastı düzeltildi.
+  - Dosya: `frontend/src/pages/BotProfilesPage.jsx`
+
+### Doğrulama
+- Lint: Python + JS **PASS**
+- Backend doğrulama (agent): **PASS**
+  - create/update payload alanları doğru
+  - list DTO alanları mevcut
+  - start mode davranışı doğrulandı
+  - pause/stop/delete + detail regresyonu başarılı
+- Frontend doğrulama:
+  - Automation ajanı login akışında preview auth abort (`ERR_ABORTED`) nedeniyle flow testini bloklu raporladı.
+  - Kod inceleme ve backend doğrulama ile Bot Profile düzeltmeleri doğrulandı.
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)
