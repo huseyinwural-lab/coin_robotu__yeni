@@ -152,7 +152,12 @@ export const UserTradePage = () => {
         const connectionRows = connectionRes.data || [];
         setConnections(connectionRows);
         const defaultConnection = connectionRows.find((row) => row.is_default) || connectionRows[0] || null;
-        setSelectedConnectionId(defaultConnection?.id || "");
+        setSelectedConnectionId((prev) => {
+          if (prev && connectionRows.some((row) => row.id === prev)) {
+            return prev;
+          }
+          return defaultConnection?.id || "";
+        });
 
         const scannerSymbols = (screenerRes.data || [])
           .map((row) => String(row.symbol || "").trim().toUpperCase())
