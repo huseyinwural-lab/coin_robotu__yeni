@@ -295,7 +295,7 @@ def refresh_open_positions(db: Session, latest_prices: dict[str, float]):
 
 
 def manual_close_position(db: Session, position: PaperPosition, reason: str):
-    position.status = reason
+    position.status = "closed"
     position.realized_pnl = position.unrealized_pnl
     position.closed_at = datetime.now(timezone.utc)
     db.add(
