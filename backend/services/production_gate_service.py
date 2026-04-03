@@ -5,13 +5,14 @@ import os
 import time
 import uuid
 from collections import Counter
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from db import redis_client
+from db import SessionLocal, redis_client
 from models import AuditLog, BrandSetting, ReleaseGateOverride, UserExchangeConnection
 from services.audit_service import create_audit_log
 from services.execution_mode_control_service import read_mode_snapshots
@@ -1650,31 +1651,35 @@ def _list_audit_history(db: Session, *, limit: int = 30) -> list[dict]:
 
 
 def get_production_gate_status(db: Session, *, refresh_checks: bool = False, audit_limit: int = 30) -> dict:
-    run_history_cleanup_job(db, force=False)
     store = _load_store(db)
+    working_store = deepcopy(store)
     changed = False
     auto_reconciled = False
     auto_reconcile_previous_state = None
 
-    if refresh_checks or len(list(store.get("checks") or [])) == 0:
+    if refresh_checks:
+        run_history_cleanup_job(db, force=False)
+
+    if refresh_checks or len(list(working_store.get("checks") or [])) == 0:
         remediation_state = build_prod_config_remediation_state(db)
-        store["checks"] = _build_checks_from_remediation(remediation_state)
-        store["updated_at"] = _iso(_utcnow())
+        working_store["checks"] = _build_checks_from_remediation(remediation_state)
+        if refresh_checks:
+            working_store["updated_at"] = _iso(_utcnow())
+            changed = True
+
+    if refresh_checks and _sync_override_expiry(db, store=working_store):
         changed = True
 
-    if _sync_override_expiry(db, store=store):
-        changed = True
-
-    preview_status = _resolve_status(store)
-    if AUTO_RERUN_STALE_ON_READ and bool(preview_status.get("has_stale_or_running")):
+    preview_status = _resolve_status(working_store)
+    if refresh_checks and AUTO_RERUN_STALE_ON_READ and bool(preview_status.get("has_stale_or_running")):
         remediation_state = build_prod_config_remediation_state(db)
-        store["checks"] = _build_checks_from_remediation(remediation_state)
-        store["updated_at"] = _iso(_utcnow())
+        working_store["checks"] = _build_checks_from_remediation(remediation_state)
+        working_store["updated_at"] = _iso(_utcnow())
         changed = True
-        preview_status = _resolve_status(store)
+        preview_status = _resolve_status(working_store)
 
-    if AUTO_RECONCILE_AFTER_OVERRIDE_EXPIRE:
-        transition_reason = str((store.get("last_transition") or {}).get("reason_code") or "").strip().upper()
+    if refresh_checks and AUTO_RECONCILE_AFTER_OVERRIDE_EXPIRE:
+        transition_reason = str((working_store.get("last_transition") or {}).get("reason_code") or "").strip().upper()
         can_auto_reconcile = (
             str(preview_status.get("configured_state") or "NO_GO") == "NO_GO"
             and bool(preview_status.get("checklist_complete"))
@@ -1683,22 +1688,22 @@ def get_production_gate_status(db: Session, *, refresh_checks: bool = False, aud
             and transition_reason == "OVERRIDE_EXPIRED"
         )
         if can_auto_reconcile:
-            auto_reconcile_previous_state = str(store.get("state") or "NO_GO")
-            store["state"] = "GO"
-            store["updated_at"] = _iso(_utcnow())
-            store["last_transition"] = {
+            auto_reconcile_previous_state = str(working_store.get("state") or "NO_GO")
+            working_store["state"] = "GO"
+            working_store["updated_at"] = _iso(_utcnow())
+            working_store["last_transition"] = {
                 "previous_state": auto_reconcile_previous_state,
                 "next_state": "GO",
                 "reason_code": "AUTO_RECONCILE_AFTER_OVERRIDE_EXPIRE",
                 "reason_text": "Override süresi dolduktan sonra tüm kontroller PASS olduğu için GO durumuna otomatik geçildi.",
-                "expiry": _iso(_parse_dt((store.get("override") or {}).get("expires_at"))) if store.get("override") else None,
+                "expiry": _iso(_parse_dt((working_store.get("override") or {}).get("expires_at"))) if working_store.get("override") else None,
                 "changed_at": _iso(_utcnow()),
             }
             changed = True
             auto_reconciled = True
 
     if changed:
-        store = _persist_store(db, store=store, actor_user_id=store.get("updated_by_user_id"))
+        working_store = _persist_store(db, store=working_store, actor_user_id=working_store.get("updated_by_user_id"))
 
     if auto_reconciled:
         create_audit_log(
@@ -1714,11 +1719,11 @@ def get_production_gate_status(db: Session, *, refresh_checks: bool = False, aud
                 "next_state": "GO",
                 "reason_code": "AUTO_RECONCILE_AFTER_OVERRIDE_EXPIRE",
                 "reason_text": "override_expired_checks_passed",
-                "expiry": _iso(_parse_dt((store.get("override") or {}).get("expires_at"))) if store.get("override") else None,
+                "expiry": _iso(_parse_dt((working_store.get("override") or {}).get("expires_at"))) if working_store.get("override") else None,
             },
         )
 
-    status_payload = _resolve_status(store)
+    status_payload = _resolve_status(working_store)
     status_payload["audit_history"] = _list_audit_history(db, limit=audit_limit) if audit_limit > 0 else []
     return status_payload
 
@@ -2014,6 +2019,8 @@ def create_production_gate_override(
         raise ValueError("invalid_override_reason_code")
     if len(normalized_reason_text) < 12:
         raise ValueError("reason_text_too_short")
+    if int(ttl_minutes) < 1:
+        raise ValueError("ttl_minutes_min_1")
     if int(ttl_minutes) > 30:
         raise ValueError("ttl_minutes_max_30")
 
@@ -2024,7 +2031,7 @@ def create_production_gate_override(
         raise ValueError("override_requires_no_go_state")
 
     now = _utcnow()
-    expires_at = now + timedelta(minutes=max(int(ttl_minutes), 1))
+    expires_at = now + timedelta(minutes=int(ttl_minutes))
     gate_snapshot = {
         "configured_state": current_status.get("configured_state"),
         "effective_state": current_status.get("effective_state"),
@@ -2144,8 +2151,11 @@ def enforce_production_gate_or_raise(
     except OperationalError:
         # transient DB bağlantı kapanmalarında tek seferlik refresh dene
         db.rollback()
-        db.close()
-        gate_status = get_production_gate_status(db, refresh_checks=False, audit_limit=0)
+        retry_db = SessionLocal()
+        try:
+            gate_status = get_production_gate_status(retry_db, refresh_checks=False, audit_limit=0)
+        finally:
+            retry_db.close()
     if bool(gate_status.get("deploy_allowed")):
         create_audit_log(
             db,

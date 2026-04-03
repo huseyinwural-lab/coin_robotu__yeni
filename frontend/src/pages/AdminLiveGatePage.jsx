@@ -116,6 +116,14 @@ export const AdminLiveGatePage = () => {
   };
 
   const autoUnblock = async () => {
+    const confirmationPhrase = window.prompt("Onay için AUTO UNBLOCK yazın");
+    if (String(confirmationPhrase || "").trim().toUpperCase() !== "AUTO UNBLOCK") {
+      setError("Auto Unblock iptal edildi: onay metni doğrulanmadı.");
+      return;
+    }
+    if (!window.confirm("Auto Unblock işlemi kritik aksiyonlar çalıştıracak. Devam edilsin mi?")) {
+      return;
+    }
     setUnblockLoading(true);
     setError("");
     try {
@@ -266,15 +274,26 @@ export const AdminLiveGatePage = () => {
 
   const wizardSteps = useMemo(() => {
     return steps.map((step, index) => {
-      const unlocked = true;
-      const done = step.state === "PASS" || !!manualComplete[step.id];
-      return { ...step, unlocked, done };
+      const previousSteps = steps.slice(0, index);
+      const unlocked = previousSteps.every((prev) => prev.state === "PASS" || !!manualComplete[prev.id]);
+      const manualDoneAllowed = step.state !== "FAIL";
+      const done = step.state === "PASS" || (manualDoneAllowed && !!manualComplete[step.id]);
+      return { ...step, unlocked, done, manualDoneAllowed };
     });
   }, [steps, manualComplete]);
 
   const doneCount = wizardSteps.filter((item) => item.done).length;
 
   const markStepDone = async (id) => {
+    const target = wizardSteps.find((item) => item.id === id);
+    if (!target?.unlocked) {
+      setError("Bu adım henüz kilitli. Önce önceki adımları tamamlayın.");
+      return;
+    }
+    if (!target?.manualDoneAllowed) {
+      setError("FAIL durumundaki adım manuel tamamlanamaz. Önce fix uygulayın.");
+      return;
+    }
     const next = { ...manualComplete, [id]: true };
     setManualComplete(next);
     try {
@@ -285,6 +304,11 @@ export const AdminLiveGatePage = () => {
   };
 
   const resetStepDone = async (id) => {
+    const target = wizardSteps.find((item) => item.id === id);
+    if (!target?.unlocked) {
+      setError("Bu adım henüz kilitli.");
+      return;
+    }
     const next = { ...manualComplete };
     delete next[id];
     setManualComplete(next);
@@ -415,7 +439,7 @@ export const AdminLiveGatePage = () => {
                   </>
                 ) : null}
 
-                <Button type="button" size="sm" variant="outline" disabled={!step.unlocked || step.done} onClick={() => markStepDone(step.id)} data-testid={`admin-live-gate-step-complete-button-${step.id}`}>
+                <Button type="button" size="sm" variant="outline" disabled={!step.unlocked || step.done || !step.manualDoneAllowed} onClick={() => markStepDone(step.id)} data-testid={`admin-live-gate-step-complete-button-${step.id}`}>
                   Tamamlandı İşaretle
                 </Button>
                 <Button type="button" size="sm" variant="ghost" disabled={!manualComplete[step.id]} onClick={() => resetStepDone(step.id)} data-testid={`admin-live-gate-step-reset-button-${step.id}`}>

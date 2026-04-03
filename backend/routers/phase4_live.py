@@ -115,7 +115,6 @@ router = APIRouter(prefix="/phase4", tags=["phase4_live"])
 logger = logging.getLogger(__name__)
 MODE_TRANSITION_PHRASES = {
     "LIVE": "SWITCH TO LIVE",
-    "LIVE": "SWITCH TO LIVE",
     "SIM": "SWITCH TO SIM",
     "PAPER": "SWITCH TO PAPER",
     "MOCK": "SWITCH TO MOCK",
@@ -822,7 +821,12 @@ def admin_production_gate_analytics_cross_check(
 ):
     payload = validate_production_gate_analytics_cross_check(db)
     if not bool(payload.get("is_consistent")):
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=payload)
+        mismatch_count = len(payload.get("mismatches") or [])
+        logger.warning("production_gate_analytics_cross_check_mismatch", extra={"mismatch_count": mismatch_count})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "production_gate_cross_check_mismatch", "mismatch_count": mismatch_count},
+        )
     return payload
 
 
@@ -833,7 +837,12 @@ def admin_production_gate_system_cross_check(
 ):
     payload = validate_production_gate_analytics_cross_check(db)
     if not bool(payload.get("is_consistent")):
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=payload)
+        mismatch_count = len(payload.get("mismatches") or [])
+        logger.warning("production_gate_system_cross_check_mismatch", extra={"mismatch_count": mismatch_count})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "production_gate_cross_check_mismatch", "mismatch_count": mismatch_count},
+        )
     return payload
 
 
@@ -958,7 +967,7 @@ def admin_production_gate_mode_transition(
     if target_mode is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_mode")
 
-    expected_phrase = MODE_TRANSITION_PHRASES[requested_mode]
+    expected_phrase = MODE_TRANSITION_PHRASES[target_mode]
     if str(request.confirmation_phrase or "").strip().upper() != expected_phrase:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -67,8 +67,12 @@ export const AdminExecutionReadinessPage = () => {
   const [selectedAnomalyIntentIds, setSelectedAnomalyIntentIds] = useState([]);
   const [quickActionModal, setQuickActionModal] = useState({ open: false, action: "", intentIds: [] });
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const previousFailCountRef = useRef(0);
+  const loadInFlightRef = useRef(false);
+  const loadRequestRef = useRef(0);
+  const hasLoadedRef = useRef(false);
 
   const expectedPhrase = useMemo(() => {
     if (targetMode === "SIM") return "SWITCH TO SIM";
@@ -79,9 +83,21 @@ export const AdminExecutionReadinessPage = () => {
 
   const deployBlocked = !gate?.deploy_allowed;
 
-  const load = useCallback(async (refreshChecks = false) => {
-    setLoading(true);
+  const load = useCallback(async (refreshChecks = false, showToastOnError = true) => {
+    if (loadInFlightRef.current) {
+      return;
+    }
+    loadInFlightRef.current = true;
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
+
+    if (!hasLoadedRef.current) {
+      setLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
     setP1PanelError("");
+
     try {
       const anomalyParams = new URLSearchParams({ window: analyticsWindow });
       if (anomalySeverityFilter !== "ALL") {
@@ -91,27 +107,7 @@ export const AdminExecutionReadinessPage = () => {
         anomalyParams.append("type", anomalyTypeFilter);
       }
 
-      const [
-        { data: gateData },
-        { data: readinessData },
-        { data: opsData },
-        { data: historyData },
-        { data: comparePayload },
-        { data: analyticsPayload },
-        { data: timelinePayload },
-        { data: safetyGatePayload },
-        { data: intentLifecyclePayload },
-        { data: quarantinePayload },
-        { data: reconciliationPayload },
-        { data: trendPayload },
-        { data: interventionPayload },
-        { data: acceptanceLatestPayload },
-        { data: explainPayload },
-        { data: analyticsGatePayload },
-        { data: analyticsBlockersPayload },
-        { data: analyticsRecoveryPayload },
-        { data: anomaliesPayload },
-      ] = await Promise.all([
+      const settled = await Promise.allSettled([
         apiClient.get(`/phase4/admin/production-gate?refresh_checks=${refreshChecks ? "true" : "false"}`),
         apiClient.get("/admin/execution-readiness"),
         apiClient.get("/phase4/admin/production-gate/ops-overview"),
@@ -132,25 +128,52 @@ export const AdminExecutionReadinessPage = () => {
         apiClient.get(`/execution-safety/analytics/recovery?window=${analyticsWindow}`),
         apiClient.get(`/execution-safety/anomalies/false-decisions?${anomalyParams.toString()}`),
       ]);
-      setGate(gateData);
-      setReadiness(readinessData);
-      setOps(opsData);
-      setCheckHistory(historyData);
-      setCompareData(comparePayload);
-      setOverrideAnalytics(analyticsPayload);
-      setTimelineData(timelinePayload);
-      setSafetyGate(safetyGatePayload || null);
-      setIntentLifecycle(intentLifecyclePayload || null);
-      setRuntimeQuarantine(quarantinePayload || null);
-      setReconciliationSummary(reconciliationPayload || null);
-      setGateTrend(trendPayload || null);
-      setInterventionTrail(interventionPayload || null);
-      setAcceptanceLatest(acceptanceLatestPayload?.latest || null);
-      setGateExplain(explainPayload || null);
-      setAnalyticsGateFailures(analyticsGatePayload || null);
-      setAnalyticsBlockers(analyticsBlockersPayload || null);
-      setAnalyticsRecovery(analyticsRecoveryPayload || null);
-      setAnomalies(anomaliesPayload || null);
+
+      if (requestId !== loadRequestRef.current) {
+        return;
+      }
+
+      const getData = (index) => (settled[index]?.status === "fulfilled" ? settled[index].value?.data : undefined);
+      const gateData = getData(0);
+      const readinessData = getData(1);
+      const opsData = getData(2);
+      const historyData = getData(3);
+      const comparePayload = getData(4);
+      const analyticsPayload = getData(5);
+      const timelinePayload = getData(6);
+      const safetyGatePayload = getData(7);
+      const intentLifecyclePayload = getData(8);
+      const quarantinePayload = getData(9);
+      const reconciliationPayload = getData(10);
+      const trendPayload = getData(11);
+      const interventionPayload = getData(12);
+      const acceptanceLatestPayload = getData(13);
+      const explainPayload = getData(14);
+      const analyticsGatePayload = getData(15);
+      const analyticsBlockersPayload = getData(16);
+      const analyticsRecoveryPayload = getData(17);
+      const anomaliesPayload = getData(18);
+
+      if (gateData !== undefined) setGate(gateData);
+      if (readinessData !== undefined) setReadiness(readinessData);
+      if (opsData !== undefined) setOps(opsData);
+      if (historyData !== undefined) setCheckHistory(historyData);
+      if (comparePayload !== undefined) setCompareData(comparePayload);
+      if (analyticsPayload !== undefined) setOverrideAnalytics(analyticsPayload);
+      if (timelinePayload !== undefined) setTimelineData(timelinePayload);
+      if (safetyGatePayload !== undefined) setSafetyGate(safetyGatePayload || null);
+      if (intentLifecyclePayload !== undefined) setIntentLifecycle(intentLifecyclePayload || null);
+      if (quarantinePayload !== undefined) setRuntimeQuarantine(quarantinePayload || null);
+      if (reconciliationPayload !== undefined) setReconciliationSummary(reconciliationPayload || null);
+      if (trendPayload !== undefined) setGateTrend(trendPayload || null);
+      if (interventionPayload !== undefined) setInterventionTrail(interventionPayload || null);
+      if (acceptanceLatestPayload !== undefined) setAcceptanceLatest(acceptanceLatestPayload?.latest || null);
+      if (explainPayload !== undefined) setGateExplain(explainPayload || null);
+      if (analyticsGatePayload !== undefined) setAnalyticsGateFailures(analyticsGatePayload || null);
+      if (analyticsBlockersPayload !== undefined) setAnalyticsBlockers(analyticsBlockersPayload || null);
+      if (analyticsRecoveryPayload !== undefined) setAnalyticsRecovery(analyticsRecoveryPayload || null);
+      if (anomaliesPayload !== undefined) setAnomalies(anomaliesPayload || null);
+
       const refreshedIntentIds = new Set((anomaliesPayload?.items || []).map((item) => item.intent_id).filter(Boolean));
       setSelectedAnomalyIntentIds((prev) => prev.filter((id) => refreshedIntentIds.has(id)));
 
@@ -158,28 +181,45 @@ export const AdminExecutionReadinessPage = () => {
       if (flappingConfig.window_sec) setFlappingWindowSec(Number(flappingConfig.window_sec));
       if (flappingConfig.threshold) setFlappingThreshold(Number(flappingConfig.threshold));
 
-      const nextFailCount = Number(opsData?.active_fail_count || 0);
+      const nextFailCount = Number(opsData?.active_fail_count || previousFailCountRef.current || 0);
       if (nextFailCount > previousFailCountRef.current) {
         setNewFailPulse(true);
       }
       previousFailCountRef.current = nextFailCount;
+
+      const errors = settled.filter((item) => item.status === "rejected");
+      if (errors.length > 0 && showToastOnError) {
+        toast.error(`${errors.length} panel verisi güncellenemedi, kalan veriler korundu`);
+      }
+      if (!gateData && !readinessData && errors.length > 0) {
+        const firstDetail = errors[0]?.reason?.response?.data?.detail;
+        const message = typeof firstDetail === "string" ? firstDetail : "Production Gate verisi alınamadı";
+        setP1PanelError(message);
+      }
+      hasLoadedRef.current = true;
     } catch (error) {
       const message = error?.response?.data?.detail || "Production Gate verisi alınamadı";
       setP1PanelError(message);
-      toast.error(message);
+      if (showToastOnError) {
+        toast.error(message);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+      loadInFlightRef.current = false;
     }
   }, [analyticsWindow, anomalySeverityFilter, anomalyTypeFilter]);
 
   useEffect(() => {
-    load(true);
+    load(true, true);
   }, [load]);
 
   useEffect(() => {
     if (!autoRefreshEnabled) return undefined;
     const timer = setInterval(() => {
-      load(false);
+      load(false, false);
     }, Math.max(Number(autoRefreshIntervalSec || 0), 10) * 1000);
     return () => clearInterval(timer);
   }, [autoRefreshEnabled, autoRefreshIntervalSec, load]);
@@ -344,16 +384,11 @@ export const AdminExecutionReadinessPage = () => {
   }, [runAction]);
 
   const handleRunCrossCheck = useCallback(async () => {
-    try {
+    await runAction(async () => {
       const { data } = await apiClient.get("/phase4/admin/production-gate/system/cross-check");
       setCrossCheckResult(data);
-      toast.success("Cross-check tutarlı");
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      setCrossCheckResult(detail || { is_consistent: false, mismatches: ["unknown"] });
-      toast.error("Cross-check mismatch: FAIL");
-    }
-  }, []);
+    }, "Cross-check tutarlı");
+  }, [runAction]);
 
   const handleExportJson = useCallback(async () => {
     try {
