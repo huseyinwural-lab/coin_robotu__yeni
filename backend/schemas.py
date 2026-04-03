@@ -2028,7 +2028,7 @@ class RiskOrchestratorOpenPositionResponse(BaseModel):
 
 
 class RiskOrchestratorInterventionRequest(BaseModel):
-    position_id: str
+    position_id: str | None = None
     action_type: str
     reason_note: str = Field(min_length=3, max_length=1000)
     payload: dict = Field(default_factory=dict)

@@ -135,6 +135,7 @@ export const AdminRiskOrchestratorPage = () => {
     reason_note: "",
     reduce_ratio: "0.5",
     expires_in_minutes: "60",
+    target_symbol: "",
   });
 
   const [rejectFilters, setRejectFilters] = useState({ reason_code: "", symbol: "", strategy_id: "" });
@@ -458,14 +459,29 @@ export const AdminRiskOrchestratorPage = () => {
   };
 
   const handleIntervene = async () => {
+    const normalizedAction = String(interventionState.action_type || "").trim();
+    const hasSelectedPosition = Boolean(interventionState.position_id);
+    const scopeSymbol = String(interventionState.target_symbol || "").trim().toUpperCase();
+
+    if (["reduce_position", "close_position"].includes(normalizedAction) && !hasSelectedPosition) {
+      toast.error("Bu aksiyon için açık pozisyon seçilmelidir.");
+      return;
+    }
+
+    if (normalizedAction === "block_further_adds" && !hasSelectedPosition && !scopeSymbol) {
+      toast.error("Pozisyon yoksa sembol bazlı müdahale için symbol girin.");
+      return;
+    }
+
     try {
       await apiClient.post("/strategy-domain/admin/risk-orchestrator/supervisor/intervene", {
-        position_id: interventionState.position_id,
-        action_type: interventionState.action_type,
+        position_id: interventionState.position_id || null,
+        action_type: normalizedAction,
         reason_note: interventionState.reason_note,
         payload: {
           reduce_ratio: toNumberOrNull(interventionState.reduce_ratio),
           expires_in_minutes: toNumberOrNull(interventionState.expires_in_minutes),
+          target_symbol: scopeSymbol || null,
         },
       });
       toast.success("Pozisyon müdahalesi işlendi");
@@ -475,6 +491,21 @@ export const AdminRiskOrchestratorPage = () => {
       toast.error(resolveApiErrorMessage(error, "Müdahale başarısız"));
     }
   };
+
+  const selectedPosition = useMemo(
+    () => positions.find((position) => position.position_id === interventionState.position_id) || null,
+    [interventionState.position_id, positions],
+  );
+
+  const interventionSubmitDisabled = useMemo(() => {
+    if (!isSuperAdmin) return true;
+    const normalizedAction = String(interventionState.action_type || "").trim();
+    const hasSelectedPosition = Boolean(interventionState.position_id);
+    const hasScopeSymbol = Boolean(String(interventionState.target_symbol || "").trim());
+    if (["reduce_position", "close_position"].includes(normalizedAction) && !hasSelectedPosition) return true;
+    if (normalizedAction === "block_further_adds" && !hasSelectedPosition && !hasScopeSymbol) return true;
+    return false;
+  }, [interventionState.action_type, interventionState.position_id, interventionState.target_symbol, isSuperAdmin]);
 
   const openRejectDetail = async (rejectId) => {
     try {
@@ -962,10 +993,15 @@ export const AdminRiskOrchestratorPage = () => {
           <CardHeader>
             <CardTitle data-testid="risk-intervention-title">4) Open Position Intervention</CardTitle>
             <CardDescription data-testid="risk-intervention-description">
-              Reduce, close, block further adds.
+              Admin pozisyon açmaz. User pozisyonu açar; admin açık pozisyonda müdahale veya symbol-scope blok uygular.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            {positions.length === 0 && (
+              <div className="rounded border border-amber-500/40 bg-amber-950/20 p-2 text-xs text-amber-200" data-testid="risk-intervention-no-open-position-banner">
+                Açık pozisyon bulunamadı. Position-level aksiyonlar yerine symbol-scope `block_further_adds` kullanabilirsiniz.
+              </div>
+            )}
             <div className="grid gap-2 sm:grid-cols-2" data-testid="risk-intervention-form-grid">
               <select
                 value={interventionState.position_id}
@@ -991,6 +1027,12 @@ export const AdminRiskOrchestratorPage = () => {
                 <option value="block_further_adds">block_further_adds</option>
               </select>
               <Input
+                value={interventionState.target_symbol}
+                onChange={(event) => setInterventionState((prev) => ({ ...prev, target_symbol: event.target.value.toUpperCase() }))}
+                placeholder="scope symbol (örn: BTCUSDT)"
+                data-testid="risk-intervention-target-symbol-input"
+              />
+              <Input
                 value={interventionState.reduce_ratio}
                 onChange={(event) => setInterventionState((prev) => ({ ...prev, reduce_ratio: event.target.value }))}
                 placeholder="reduce ratio"
@@ -1008,6 +1050,9 @@ export const AdminRiskOrchestratorPage = () => {
                 data-testid="risk-intervention-expiry-input"
               />
             </div>
+            <div className="rounded border border-slate-700/60 bg-slate-900/70 px-2 py-1 text-[11px] text-slate-300" data-testid="risk-intervention-mode-hint">
+              mode: {selectedPosition ? `position (${selectedPosition.symbol})` : "scope"} • reduce/close için position zorunlu, block_further_adds için symbol-scope desteklenir.
+            </div>
             <Textarea
               value={interventionState.reason_note}
               onChange={(event) => setInterventionState((prev) => ({ ...prev, reason_note: event.target.value }))}
@@ -1016,7 +1061,7 @@ export const AdminRiskOrchestratorPage = () => {
             />
             <Button
               onClick={handleIntervene}
-              disabled={!isSuperAdmin}
+              disabled={interventionSubmitDisabled}
               title={superAdminOnlyTitle}
               data-testid="risk-intervention-submit-button"
             >

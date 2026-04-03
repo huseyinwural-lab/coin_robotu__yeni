@@ -3214,21 +3214,28 @@ def list_open_positions(db: Session, *, limit: int = 100) -> list[Position]:
 def execute_position_intervention(
     db: Session,
     *,
-    position_id: str,
+    position_id: str | None,
     action_type: str,
     reason_note: str,
     actor_id: str,
     actor_role: str,
     payload: dict | None = None,
 ) -> dict:
-    position = db.query(Position).filter(Position.position_id == position_id).first()
-    if position is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="position_not_found")
-
+    normalized_action = str(action_type or "").strip().lower()
     context = payload or {}
+    normalized_position_id = str(position_id or "").strip()
+    position = None
+    if normalized_position_id:
+        position = db.query(Position).filter(Position.position_id == normalized_position_id).first()
+        if position is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="position_not_found")
+
+    if normalized_action in {"reduce_position", "close_position"} and position is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="position_id_required_for_position_action")
+
     result_summary: dict = {}
 
-    if action_type == "reduce_position":
+    if normalized_action == "reduce_position":
         reduce_ratio = float(context.get("reduce_ratio") or 0.5)
         reduce_ratio = max(0.05, min(0.95, reduce_ratio))
         before_qty = float(position.size or 0)
@@ -3238,14 +3245,24 @@ def execute_position_intervention(
             position.status = "closed"
         position.updated_at = _now()
         result_summary = {"before_quantity": before_qty, "after_quantity": new_qty, "reduce_ratio": reduce_ratio}
-    elif action_type == "close_position":
+    elif normalized_action == "close_position":
         before_qty = float(position.size or 0)
         position.size = 0.0
         position.status = "closed"
         position.updated_at = _now()
         result_summary = {"before_quantity": before_qty, "after_quantity": 0.0, "closed": True}
-    elif action_type == "block_further_adds":
-        target_key = f"SYMBOL:{(position.symbol or '').upper()}"
+    elif normalized_action == "block_further_adds":
+        target_symbol = str(context.get("target_symbol") or "").upper().strip()
+        target_key_input = str(context.get("target_key") or "").strip()
+        if position is not None:
+            target_symbol = str(position.symbol or "").upper().strip() or target_symbol
+        if target_key_input:
+            target_key = target_key_input
+        elif target_symbol:
+            target_key = f"SYMBOL:{target_symbol}"
+        else:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="target_symbol_required_for_scope_intervention")
+
         override = create_manual_override(
             db,
             actor_id=actor_id,
@@ -3256,14 +3273,18 @@ def execute_position_intervention(
             override_value={"block_new_adds": True},
             expires_in_minutes=int(context.get("expires_in_minutes") or 60),
         )
-        result_summary = {"created_override_id": override.override_id, "target_key": target_key}
+        result_summary = {
+            "created_override_id": override.override_id,
+            "target_key": target_key,
+            "mode": "position" if position is not None else "scope",
+        }
     else:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported_intervention_type")
 
     intervention = RiskOrchestratorInterventionLog(
         intervention_id=f"ro-int-{uuid4().hex[:18]}",
-        intent_id=position.position_id,
-        action_type=action_type,
+        intent_id=position.position_id if position is not None else None,
+        action_type=normalized_action,
         reason_note=reason_note,
         actor_id=actor_id,
         actor_role=actor_role,
@@ -3274,16 +3295,17 @@ def execute_position_intervention(
     db.add(intervention)
     db.commit()
     db.refresh(intervention)
-    db.refresh(position)
+    if position is not None:
+        db.refresh(position)
 
     create_audit_log(
         db,
         action="risk_orchestrator_position_intervention",
-        entity_type="position",
-        entity_id=position.position_id,
+        entity_type="position" if position is not None else "risk_scope",
+        entity_id=position.position_id if position is not None else str(result_summary.get("target_key") or "unknown"),
         actor_user_id=actor_id,
         actor_role=actor_role,
-        details={"action_type": action_type, "reason_note": reason_note, "result_summary": result_summary},
+        details={"action_type": normalized_action, "reason_note": reason_note, "result_summary": result_summary},
         severity="high",
     )
 
