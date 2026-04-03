@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+from decimal import ROUND_DOWN
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -25,7 +27,8 @@ from core.users.user_scanner_signal_service import (
 )
 from db import get_db
 from deps import require_user
-from models import PendingSignal, User, UserExecutionIntent, UserScannerResult
+from models import PendingSignal, User, UserExecutionIntent, UserScannerResult, UserExchangeConnection
+from core.users.user_exchange_connector import decrypt_exchange_secret
 from schemas import (
     UserScannerOverviewResponse,
     UserScannerAutomationConfigResponse,
@@ -46,6 +49,12 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.explainability_rules_service import build_screener_explain
+from services.live_mode_service import (
+    adapter as live_adapter,
+    validate_exchange_credentials_for_user,
+    _fetch_symbol_filters,
+    _quantize_to_step,
+)
 from services.quote_asset_constraints import allowed_quote_assets
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
 
@@ -646,4 +655,209 @@ def cleanup_stale_intents_and_signals(
         "expired_signal_count": len(expired_signal_ids),
         "cancelled_intent_ids": cancelled_intent_ids,
         "expired_signal_ids": expired_signal_ids,
+    }
+
+
+@router.post("/scanner/live-spot-roundtrip")
+def run_live_spot_roundtrip_from_scanner(
+    max_symbols: int = Query(default=3, ge=1, le=10),
+    hold_seconds: float = Query(default=1.0, ge=0.2, le=10.0),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    connection = (
+        db.query(UserExchangeConnection)
+        .filter(
+            UserExchangeConnection.user_id == current_user.id,
+            UserExchangeConnection.market_type == "spot",
+            UserExchangeConnection.environment == "live",
+        )
+        .order_by(UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+    if connection is None:
+        raise HTTPException(status_code=400, detail={"reason": "live_spot_connection_not_found"})
+
+    validation_payload, validation_status = validate_exchange_credentials_for_user(
+        db,
+        current_user.id,
+        exchange="binance",
+        market_type="spot",
+        environment="live",
+        connection_id=connection.id,
+    )
+    if validation_status != 200:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "reason": "spot_live_validation_failed",
+                "validation": validation_payload,
+            },
+        )
+
+    api_key = decrypt_exchange_secret(connection.api_key_encrypted)
+    api_secret = decrypt_exchange_secret(connection.api_secret_encrypted)
+
+    wallet_before, wallet_status, _ = live_adapter.account_probe_spot(api_key, api_secret, environment="live")
+    if wallet_status >= 400:
+        raise HTTPException(status_code=400, detail={"reason": "spot_wallet_probe_failed", "payload": wallet_before})
+
+    total_usdt_before = 0.0
+    free_usdt_before = 0.0
+    for balance in wallet_before.get("balances") or []:
+        if str(balance.get("asset") or "").upper() == "USDT":
+            free_usdt_before = float(balance.get("free") or 0.0)
+            total_usdt_before = free_usdt_before + float(balance.get("locked") or 0.0)
+            break
+
+    quote_order_qty = round(max(total_usdt_before * 0.2, 5.0), 2)
+
+    scanner_result = run_user_scanner(
+        db,
+        current_user.id,
+        requested_mode="AUTO",
+        max_results=max(10, max_symbols * 3),
+        symbol_source="crypto",
+        market_type="spot",
+        selected_symbols=[],
+        symbol_selection_mode="top_volume",
+    )
+
+    rows = list_user_signals(db, current_user.id, limit=200)
+    approved_symbols: list[str] = []
+    for row in rows:
+        if str(getattr(row, "market_type", "spot") or "spot").lower() != "spot":
+            continue
+        if not bool(getattr(row, "execution_eligible", False)):
+            continue
+        if str(getattr(row, "blocked_reason_code", "") or "").strip():
+            continue
+        symbol = str(getattr(row, "symbol", "") or "").upper().strip()
+        if symbol and symbol not in approved_symbols:
+            approved_symbols.append(symbol)
+        if len(approved_symbols) >= max_symbols:
+            break
+
+    if len(approved_symbols) < max_symbols:
+        for symbol in scanner_result.get("selected_symbols") or []:
+            symbol = str(symbol or "").upper().strip()
+            if symbol and symbol not in approved_symbols:
+                approved_symbols.append(symbol)
+            if len(approved_symbols) >= max_symbols:
+                break
+
+    approved_symbols = approved_symbols[:max_symbols]
+    order_reports: list[dict] = []
+
+    for symbol in approved_symbols:
+        entry: dict = {"symbol": symbol, "quote_order_qty": quote_order_qty}
+        buy_payload, buy_status = live_adapter.create_spot_market_order(
+            api_key,
+            api_secret,
+            symbol=symbol,
+            side="BUY",
+            quote_order_qty=quote_order_qty,
+            environment="live",
+        )
+        entry["buy_status"] = buy_status
+        entry["buy_payload"] = buy_payload
+        if buy_status >= 400:
+            entry["error"] = "buy_failed"
+            order_reports.append(entry)
+            continue
+
+        buy_order_id = int(float(buy_payload.get("orderId") or 0))
+        buy_query = buy_payload
+        for _ in range(8):
+            time.sleep(0.3)
+            queried, _ = live_adapter.query_spot_order(api_key, api_secret, symbol, buy_order_id, environment="live")
+            buy_query = queried
+            if str(queried.get("status") or "").upper() in {"FILLED", "CANCELED", "EXPIRED", "REJECTED", "PARTIALLY_FILLED"}:
+                break
+
+        entry["buy_query"] = buy_query
+        executed_qty = float(buy_query.get("executedQty") or 0.0)
+        if executed_qty <= 0:
+            entry["error"] = "buy_executed_qty_zero"
+            order_reports.append(entry)
+            continue
+
+        symbol_filters = _fetch_symbol_filters(symbol, environment="live")
+        sell_qty = _quantize_to_step(
+            executed_qty,
+            float(symbol_filters.get("step_size") or 0.000001),
+            int(symbol_filters.get("quantity_precision") or 6),
+            rounding=ROUND_DOWN,
+        )
+
+        sell_params = {
+            "symbol": symbol,
+            "side": "SELL",
+            "type": "MARKET",
+            "quantity": str(sell_qty),
+        }
+        time.sleep(hold_seconds)
+        sell_payload, sell_status = live_adapter._signed_post_spot(
+            api_key,
+            api_secret,
+            "/api/v3/order",
+            sell_params,
+            environment="live",
+        )
+        entry["sell_status"] = sell_status
+        entry["sell_payload"] = sell_payload
+        if sell_status >= 400:
+            entry["error"] = "sell_failed"
+            order_reports.append(entry)
+            continue
+
+        sell_order_id = int(float(sell_payload.get("orderId") or 0))
+        sell_query = sell_payload
+        for _ in range(8):
+            time.sleep(0.3)
+            queried, _ = live_adapter.query_spot_order(api_key, api_secret, symbol, sell_order_id, environment="live")
+            sell_query = queried
+            if str(queried.get("status") or "").upper() in {"FILLED", "CANCELED", "EXPIRED", "REJECTED", "PARTIALLY_FILLED"}:
+                break
+
+        entry["sell_query"] = sell_query
+        buy_quote = float(buy_query.get("cummulativeQuoteQty") or 0.0)
+        sell_quote = float(sell_query.get("cummulativeQuoteQty") or 0.0)
+        entry["round_trip_quote_pnl"] = round(sell_quote - buy_quote, 8)
+        entry["exchange_order_ids"] = {
+            "buy": str(buy_query.get("orderId") or buy_order_id),
+            "sell": str(sell_query.get("orderId") or sell_order_id),
+        }
+        order_reports.append(entry)
+
+    wallet_after, wallet_after_status, _ = live_adapter.account_probe_spot(api_key, api_secret, environment="live")
+    total_usdt_after = total_usdt_before
+    free_usdt_after = free_usdt_before
+    if wallet_after_status < 400:
+        for balance in wallet_after.get("balances") or []:
+            if str(balance.get("asset") or "").upper() == "USDT":
+                free_usdt_after = float(balance.get("free") or 0.0)
+                total_usdt_after = free_usdt_after + float(balance.get("locked") or 0.0)
+                break
+
+    return {
+        "status": "ok",
+        "scanner": {
+            "run_id": scanner_result.get("run_id"),
+            "result_count": scanner_result.get("result_count"),
+            "actionable_count": scanner_result.get("actionable_count"),
+            "selected_symbols": scanner_result.get("selected_symbols") or [],
+        },
+        "approved_symbols_used": approved_symbols,
+        "wallet_before": {
+            "spot_total_usdt": total_usdt_before,
+            "spot_free_usdt": free_usdt_before,
+            "per_trade_quote_qty_20pct": quote_order_qty,
+        },
+        "wallet_after": {
+            "spot_total_usdt": total_usdt_after,
+            "spot_free_usdt": free_usdt_after,
+            "delta_total_usdt": round(total_usdt_after - total_usdt_before, 8),
+        },
+        "orders": order_reports,
     }
