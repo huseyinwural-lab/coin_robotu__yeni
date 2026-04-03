@@ -26,6 +26,7 @@ from services.execution_intent_service import (
     preview_execution_intent,
     submit_execution_intent,
 )
+from core.users.user_portfolio_engine import build_user_portfolio_snapshot
 from services.explainability_service import record_decision_trace
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.canonical_strategy_registry_service import GLOBAL_RISK_POLICY
@@ -905,6 +906,7 @@ def _build_signal_intent_payload(
     row: PendingSignal,
     signal: SignalEvent,
     exchange_connection: UserExchangeConnection | None,
+    position_size_value_usdt: float,
 ) -> dict:
     side = "buy" if signal.direction == "long" else "sell"
     market_type = (signal.market_type or "spot").lower()
@@ -927,7 +929,7 @@ def _build_signal_intent_payload(
         "side": side,
         "order_type": "market",
         "position_size_mode": "fixed_notional",
-        "position_size_value": 10.0,
+        "position_size_value": round(max(float(position_size_value_usdt or 0.0), 0.0), 4),
         "take_profit_mode": "percent",
         "take_profit_value": 2,
         "stop_loss_mode": "percent",
@@ -960,6 +962,22 @@ def _build_signal_intent_payload(
     return payload
 
 
+def _resolve_dynamic_trade_notional_usdt(db: Session, user_id: str) -> float:
+    try:
+        snapshot = build_user_portfolio_snapshot(db, user_id)
+    except Exception:
+        snapshot = {}
+
+    available_balance = float(snapshot.get("available_balance") or 0.0)
+    current_capital = float(snapshot.get("current_capital") or 0.0)
+    reference_balance = available_balance if available_balance > 0 else current_capital
+    if reference_balance <= 0:
+        return 0.0
+
+    # User constraint: per trade max 20% of wallet balance.
+    return round(reference_balance * 0.19, 4)
+
+
 def _dispatch_signal_to_execution(
     db: Session,
     *,
@@ -973,7 +991,8 @@ def _dispatch_signal_to_execution(
     row.decided_at = datetime.now(timezone.utc)
     row.decision_note = row.decision_note or "approved"
 
-    payload = _build_signal_intent_payload(row, signal, exchange_connection)
+    dynamic_notional_usdt = _resolve_dynamic_trade_notional_usdt(db, row.user_id)
+    payload = _build_signal_intent_payload(row, signal, exchange_connection, dynamic_notional_usdt)
     intent, validation = preview_execution_intent(db, row.user_id, payload)
     row.created_order_intent_id = intent.id
     _set_state(row, "ORDER_INTENT_CREATED")
