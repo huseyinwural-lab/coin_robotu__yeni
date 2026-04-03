@@ -41,14 +41,23 @@ export const BotProfilesPage = () => {
   const [selectedSymbols, setSelectedSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
 
   const fetchItems = async () => {
-    const [profilesRes, strategyPerfRes, templatesRes] = await Promise.all([
-      apiClient.get("/bot-profiles"),
-      apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
-      apiClient.get("/strategy-templates"),
-    ]);
-    setItems(profilesRes.data || []);
-    setStrategyPerformance(strategyPerfRes.data || { items: [] });
-    setTemplates(templatesRes.data || []);
+    try {
+      const [profilesRes, strategyPerfRes, templatesRes] = await Promise.all([
+        apiClient.get("/bot-profiles"),
+        apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
+        apiClient.get("/strategy-templates"),
+      ]);
+      const nextItems = profilesRes.data || [];
+      setItems(nextItems);
+      setStrategyPerformance(strategyPerfRes.data || { items: [] });
+      setTemplates(templatesRes.data || []);
+      setSelectedBot((prev) => {
+        if (!prev?.id) return prev;
+        return nextItems.find((item) => item.id === prev.id) || null;
+      });
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Bot listesi yüklenemedi");
+    }
   };
 
   const findStrategyParity = (strategyType) => (strategyPerformance?.items || []).find((item) => item.strategy_id === strategyType);
@@ -126,6 +135,7 @@ export const BotProfilesPage = () => {
       strategy_template_id: form.template_id || null,
       timeframe: form.timeframe,
       trend_timeframe: form.trend_timeframe,
+      mode: form.mode || "live_ready_disabled",
       leverage: 1,
       is_enabled: Boolean(form.is_enabled),
     };
@@ -153,10 +163,10 @@ export const BotProfilesPage = () => {
     setEditingId(item.id);
     setForm({
       ...item,
-      symbols: item.symbols.join(","),
+      symbols: (item.symbols || []).join(","),
       mode: item.mode || "live_ready_disabled",
-      symbol_source_type: item.symbol_source || "manual",
-      scanner_id: item.symbol_source_summary?.scanner_id || "",
+      symbol_source_type: item.symbol_source_type || item.symbol_source || "manual",
+      scanner_id: item.scanner_id || item.symbol_source_summary?.scanner_id || "",
       template_id: item.strategy_template_id || item.template_id || "",
     });
     setSymbolSource("crypto");
@@ -390,7 +400,7 @@ export const BotProfilesPage = () => {
                 <TableCell data-testid={`bot-table-status-${item.id}`}>{item.status || (item.is_running ? "RUNNING" : "IDLE")}</TableCell>
                 <TableCell data-testid={`bot-table-health-${item.id}`}>{item.health || "HEALTHY"}</TableCell>
                 <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "live_ready_disabled"}</TableCell>
-                <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbol_source_summary?.summary || item.symbols.join(", ")}</TableCell>
+                <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbol_source_summary?.summary || (item.symbols || []).join(", ")}</TableCell>
                 <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.last_heartbeat || (item.is_running ? "running" : "stopped")}</TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-2">
@@ -407,7 +417,23 @@ export const BotProfilesPage = () => {
                     >
                       {item.status === "RUNNING" ? "Stop" : "Start"}
                     </Button>
-                    <Button size="sm" variant="outline" className="border-amber-400 bg-transparent text-amber-200" onClick={async () => { await apiClient.post(`/bot-profiles/${item.id}/pause`); toast.success('Bot pause edildi'); fetchItems(); }} data-testid={`bot-table-pause-${item.id}`}>Pause</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-amber-400 bg-transparent text-amber-200"
+                      onClick={async () => {
+                        try {
+                          await apiClient.post(`/bot-profiles/${item.id}/pause`);
+                          toast.success('Bot pause edildi');
+                          await fetchItems();
+                        } catch (error) {
+                          toast.error(error?.response?.data?.detail || 'Bot pause işlemi başarısız');
+                        }
+                      }}
+                      data-testid={`bot-table-pause-${item.id}`}
+                    >
+                      Pause
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
@@ -433,8 +459,8 @@ export const BotProfilesPage = () => {
         <section className="space-y-3 rounded-2xl border border-black/20 bg-white/10 p-4" data-testid="bot-detail-panel">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-xl font-bold text-black" data-testid="bot-detail-title">{selectedBot.name}</h3>
-              <p className="text-sm text-black/70" data-testid="bot-detail-subtitle">{selectedBot.strategy_id || selectedBot.strategy_type} · {selectedBot.mode}</p>
+              <h3 className="text-xl font-bold text-slate-100" data-testid="bot-detail-title">{selectedBot.name}</h3>
+              <p className="text-sm text-slate-300" data-testid="bot-detail-subtitle">{selectedBot.strategy_id || selectedBot.strategy_type} · {selectedBot.mode}</p>
             </div>
             <div className="flex flex-wrap gap-2" data-testid="bot-detail-tabs">
               {['overview','runtime','bindings','performance','logs','trades'].map((tab) => (

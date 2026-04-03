@@ -42,7 +42,15 @@ def create_bot_profile(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    bot_profile = BotProfile(user_id=current_user.id, **payload.model_dump())
+    payload_data = payload.model_dump()
+    preferred_mode = str(payload_data.pop("mode", "live_ready_disabled") or "live_ready_disabled").strip()
+    if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
+        preferred_mode = "live_ready_disabled"
+    bot_profile = BotProfile(user_id=current_user.id, **payload_data)
+    bot_profile.symbol_resolution_snapshot = {
+        **(bot_profile.symbol_resolution_snapshot or {}),
+        "preferred_mode": preferred_mode,
+    }
     db.add(bot_profile)
     db.commit()
     db.refresh(bot_profile)
@@ -70,8 +78,18 @@ def update_bot_profile(
     if bot_profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot profile not found")
 
-    for key, value in payload.model_dump().items():
+    payload_data = payload.model_dump()
+    preferred_mode = str(payload_data.pop("mode", "live_ready_disabled") or "live_ready_disabled").strip()
+    if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
+        preferred_mode = "live_ready_disabled"
+
+    for key, value in payload_data.items():
         setattr(bot_profile, key, value)
+
+    bot_profile.symbol_resolution_snapshot = {
+        **(bot_profile.symbol_resolution_snapshot or {}),
+        "preferred_mode": preferred_mode,
+    }
 
     db.commit()
     db.refresh(bot_profile)

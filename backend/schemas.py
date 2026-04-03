@@ -316,13 +316,15 @@ class BotProfileBase(BaseModel):
 
 
 class BotProfileCreate(BotProfileBase):
-    pass
+    mode: str | None = "live_ready_disabled"
 
 
 class BotProfileUpdate(BaseModel):
     name: str
     exchange: str
     market_type: str
+    symbol_source_type: str = "manual"
+    scanner_id: str | None = None
     symbols: list[str]
     strategy_type: str
     strategy_template_id: str | None = None
@@ -330,6 +332,7 @@ class BotProfileUpdate(BaseModel):
     trend_timeframe: str
     leverage: int = Field(default=3, ge=1, le=25)
     is_enabled: bool
+    mode: str | None = "live_ready_disabled"
 
 
 class BotProfileResponse(BotProfileBase):
@@ -361,6 +364,16 @@ class BotRuntimeActionResponse(BaseModel):
 class BotRuntimeStatusResponse(BaseModel):
     id: str
     name: str
+    exchange: str | None = None
+    market_type: str | None = None
+    strategy_type: str | None = None
+    strategy_template_id: str | None = None
+    symbols: list[str] = Field(default_factory=list)
+    leverage: int | None = None
+    is_enabled: bool = True
+    is_running: bool = False
+    symbol_source_type: str = "manual"
+    scanner_id: str | None = None
     status: str
     mode: str
     strategy_id: str | None = None

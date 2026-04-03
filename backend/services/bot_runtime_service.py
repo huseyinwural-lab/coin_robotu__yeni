@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from core.bot_runtime_engine import bind_bot_runtime, heartbeat_bot_runtime, initialize_bot_runtime, set_bot_runtime_state
 from db import redis_client
-from models import BotProfile, ExecutionMetric, PaperPosition, PendingSignal, RiskPolicy, SignalEvent, UserExchangeConnection, UserScannerResult
+from models import BotProfile, ExecutionMetric, PaperPosition, PendingSignal, RiskPolicy, SignalEvent, UserExchangeConnection, UserScannerResult, UserScannerSymbolSelection
 from services.strategy_template_resolution_service import resolve_effective_strategy_config
 
 
@@ -53,6 +53,18 @@ def _resolve_bindings(db, bot: BotProfile) -> dict:
 def _resolve_symbol_source(db, bot: BotProfile) -> dict:
     source_type = str(getattr(bot, "symbol_source_type", "manual") or "manual")
     if source_type == "scanner" and str(getattr(bot, "scanner_id", "") or "").strip():
+        scanner_id = str(getattr(bot, "scanner_id", "") or "").strip()
+        selection_row = (
+            db.query(UserScannerSymbolSelection)
+            .filter(UserScannerSymbolSelection.user_id == bot.user_id, UserScannerSymbolSelection.scanner_id == scanner_id)
+            .first()
+        )
+        selected_symbols = [
+            str(symbol).upper().strip()
+            for symbol in list((selection_row.selected_symbols if selection_row else []) or [])
+            if str(symbol).strip()
+        ]
+        selected_set = set(selected_symbols)
         rows = (
             db.query(UserScannerResult)
             .filter(UserScannerResult.user_id == bot.user_id)
@@ -63,16 +75,29 @@ def _resolve_symbol_source(db, bot: BotProfile) -> dict:
         symbols = []
         for row in rows:
             symbol = str(getattr(row, "symbol", "") or "").upper().strip()
+            if selected_set and symbol not in selected_set:
+                continue
             if symbol and symbol not in symbols:
                 symbols.append(symbol)
         if not symbols:
-            return {"ok": False, "source_type": "scanner", "scanner_id": bot.scanner_id, "symbols": [], "summary": "scanner_source_empty", "last_resolution_time": None, "resolution_status": "failed"}
+            resolution_reason = "scanner_selection_empty" if selected_set else "scanner_source_empty"
+            return {
+                "ok": False,
+                "source_type": "scanner",
+                "scanner_id": scanner_id,
+                "symbols": [],
+                "summary": resolution_reason,
+                "selected_symbols": selected_symbols,
+                "last_resolution_time": None,
+                "resolution_status": "failed",
+            }
         return {
             "ok": True,
             "source_type": "scanner",
-            "scanner_id": bot.scanner_id,
+            "scanner_id": scanner_id,
             "symbols": symbols,
-            "summary": f"scanner:{bot.scanner_id}",
+            "summary": f"scanner:{scanner_id}",
+            "selected_symbols": selected_symbols,
             "last_resolution_time": rows[0].generated_at if rows else None,
             "resolution_status": "resolved",
         }
@@ -145,6 +170,11 @@ def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution:
 
 def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     runtime = _ensure_runtime(db, bot)
+    preferred_mode = str((getattr(bot, "symbol_resolution_snapshot", {}) or {}).get("preferred_mode") or "live_ready_disabled").strip()
+    if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
+        preferred_mode = "live_ready_disabled"
+    runtime_mode = str(runtime.get("mode") or "live_ready_disabled")
+    mode_value = runtime_mode if str(runtime.get("status") or "").upper() == "RUNNING" else preferred_mode
     symbol_resolution = _resolve_symbol_source(db, bot)
     strategy_binding, risk_binding, execution_binding, binding_validation, compatibility = _build_binding_blocks(db, bot, runtime, symbol_resolution)
     positions = db.query(PaperPosition).filter(PaperPosition.user_id == bot.user_id, PaperPosition.status == "open", PaperPosition.symbol.in_(list(bot.symbols or []))).all()
@@ -188,8 +218,18 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     return {
         "id": bot.id,
         "name": bot.name,
+        "exchange": bot.exchange,
+        "market_type": bot.market_type,
+        "strategy_type": bot.strategy_type,
+        "strategy_template_id": getattr(bot, "strategy_template_id", None),
+        "symbols": list(bot.symbols or []),
+        "leverage": int(getattr(bot, "leverage", 1) or 1),
+        "is_enabled": bool(getattr(bot, "is_enabled", True)),
+        "is_running": bool(getattr(bot, "is_running", False)),
+        "symbol_source_type": str(getattr(bot, "symbol_source_type", "manual") or "manual"),
+        "scanner_id": getattr(bot, "scanner_id", None),
         "status": runtime.get("status", "IDLE"),
-        "mode": runtime.get("mode", "live_ready_disabled"),
+        "mode": mode_value,
         "strategy_id": runtime.get("strategy_id"),
         "risk_profile_id": runtime.get("risk_profile_id"),
         "execution_profile_id": runtime.get("execution_profile_id"),
@@ -309,11 +349,23 @@ def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
     symbol_resolution = _resolve_symbol_source(db, bot)
     strategy_resolution = dict(bindings.get("strategy_resolution") or {})
     strategy_ok = bool(strategy_resolution.get("validation_result", {}).get("runtime_eligible", True))
+    preferred_mode = str((getattr(bot, "symbol_resolution_snapshot", {}) or {}).get("preferred_mode") or "live_ready_disabled").strip()
+    if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
+        preferred_mode = "live_ready_disabled"
     if not bindings["strategy_id"] or not bindings["execution_profile_id"] or not symbol_resolution.get("ok") or not strategy_ok:
         runtime = set_bot_runtime_state(redis_client, bot_id=bot.id, state="ERROR", error="binding_failed")
+        runtime["mode"] = preferred_mode
+        runtime.setdefault("runtime_context", {})["preferred_mode"] = preferred_mode
         return {**runtime, "binding_ok": False}
     bot.symbol_resolution_snapshot = _json_safe(symbol_resolution)
-    runtime = bind_bot_runtime(redis_client, bot=bot, strategy_id=bindings["strategy_id"], risk_profile_id=bindings["risk_profile_id"], execution_profile_id=bindings["execution_profile_id"], mode="live_ready_disabled")
+    runtime = bind_bot_runtime(
+        redis_client,
+        bot=bot,
+        strategy_id=bindings["strategy_id"],
+        risk_profile_id=bindings["risk_profile_id"],
+        execution_profile_id=bindings["execution_profile_id"],
+        mode=preferred_mode,
+    )
     runtime["symbol_source"] = symbol_resolution.get("source_type", "manual")
     runtime.setdefault("runtime_context", {})["symbol_resolution_snapshot"] = symbol_resolution
     runtime.setdefault("runtime_context", {})["binding_sources"] = bindings
