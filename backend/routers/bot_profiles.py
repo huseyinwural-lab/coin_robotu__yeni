@@ -44,12 +44,25 @@ def create_bot_profile(
 ):
     payload_data = payload.model_dump()
     preferred_mode = str(payload_data.pop("mode", "live_ready_disabled") or "live_ready_disabled").strip()
+    selected_template_ids = [
+        str(value).strip()
+        for value in list(payload_data.pop("strategy_template_ids", []) or [])
+        if str(value).strip()
+    ]
+    risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
     if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
         preferred_mode = "live_ready_disabled"
+
+    if not payload_data.get("strategy_template_id") and selected_template_ids:
+        payload_data["strategy_template_id"] = selected_template_ids[0]
+
     bot_profile = BotProfile(user_id=current_user.id, **payload_data)
     bot_profile.symbol_resolution_snapshot = {
         **(bot_profile.symbol_resolution_snapshot or {}),
         "preferred_mode": preferred_mode,
+        "strategy_template_ids": selected_template_ids,
+        "basket_mode_enabled": len(selected_template_ids) > 1,
+        "risk_adaptive_confirmed": risk_adaptive_confirmed,
     }
     db.add(bot_profile)
     db.commit()
@@ -80,8 +93,17 @@ def update_bot_profile(
 
     payload_data = payload.model_dump()
     preferred_mode = str(payload_data.pop("mode", "live_ready_disabled") or "live_ready_disabled").strip()
+    selected_template_ids = [
+        str(value).strip()
+        for value in list(payload_data.pop("strategy_template_ids", []) or [])
+        if str(value).strip()
+    ]
+    risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
     if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
         preferred_mode = "live_ready_disabled"
+
+    if not payload_data.get("strategy_template_id") and selected_template_ids:
+        payload_data["strategy_template_id"] = selected_template_ids[0]
 
     for key, value in payload_data.items():
         setattr(bot_profile, key, value)
@@ -89,6 +111,9 @@ def update_bot_profile(
     bot_profile.symbol_resolution_snapshot = {
         **(bot_profile.symbol_resolution_snapshot or {}),
         "preferred_mode": preferred_mode,
+        "strategy_template_ids": selected_template_ids,
+        "basket_mode_enabled": len(selected_template_ids) > 1,
+        "risk_adaptive_confirmed": risk_adaptive_confirmed,
     }
 
     db.commit()

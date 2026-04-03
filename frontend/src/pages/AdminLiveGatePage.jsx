@@ -17,6 +17,7 @@ const hasAnyReason = (readiness, list) => {
 };
 
 export const AdminLiveGatePage = () => {
+  const advisoryStepIds = new Set([5, 6, 7, 8]);
   const [loading, setLoading] = useState(true);
   const [rerunLoading, setRerunLoading] = useState(false);
   const [unblockLoading, setUnblockLoading] = useState(false);
@@ -225,6 +226,7 @@ export const AdminLiveGatePage = () => {
         state: hasAnyReason(readiness, ["RISK_POLICY_MISSING", "EXPOSURE_NO_EQUITY", "MARGIN_DATA_MISSING"]) ? "FAIL" : "PASS",
         reason: reasons.filter((code) => ["RISK_POLICY_MISSING", "EXPOSURE_NO_EQUITY", "MARGIN_DATA_MISSING"].includes(code)).join(", "),
         to: "/admin/risk-orchestrator",
+        advisory: true,
       },
       {
         id: 6,
@@ -233,6 +235,7 @@ export const AdminLiveGatePage = () => {
         state: hasAnyReason(readiness, ["STRATEGY_ENGINE_UNKNOWN"]) ? "FAIL" : "PASS",
         reason: reasons.filter((code) => ["STRATEGY_ENGINE_UNKNOWN"].includes(code)).join(", "),
         to: "/admin/strategies",
+        advisory: true,
       },
       {
         id: 7,
@@ -241,6 +244,7 @@ export const AdminLiveGatePage = () => {
         state: hasAnyReason(readiness, ["ORDER_EXECUTION_MISSING", "WORKER_STATE_UNKNOWN"]) ? "WAIT" : "PASS",
         reason: reasons.filter((code) => ["ORDER_EXECUTION_MISSING", "WORKER_STATE_UNKNOWN"].includes(code)).join(", "),
         to: "/user/bot-profiles",
+        advisory: true,
       },
       {
         id: 8,
@@ -249,6 +253,7 @@ export const AdminLiveGatePage = () => {
         state: gate?.effective_state === "GO" && gate?.deploy_allowed ? "PASS" : "FAIL",
         reason: gateReasons.join(", "),
         to: "/admin/live-trading-dashboard",
+        advisory: true,
       },
       {
         id: 9,
@@ -275,14 +280,19 @@ export const AdminLiveGatePage = () => {
   const wizardSteps = useMemo(() => {
     return steps.map((step, index) => {
       const previousSteps = steps.slice(0, index);
-      const unlocked = previousSteps.every((prev) => prev.state === "PASS" || !!manualComplete[prev.id]);
-      const manualDoneAllowed = step.state !== "FAIL";
-      const done = step.state === "PASS" || (manualDoneAllowed && !!manualComplete[step.id]);
+      const unlocked = previousSteps.every((prev) => {
+        if (prev.advisory) return true;
+        return prev.state === "PASS" || !!manualComplete[prev.id];
+      });
+      const manualDoneAllowed = !step.advisory && step.state !== "FAIL";
+      const done = step.advisory ? true : step.state === "PASS" || (manualDoneAllowed && !!manualComplete[step.id]);
       return { ...step, unlocked, done, manualDoneAllowed };
     });
   }, [steps, manualComplete]);
 
-  const doneCount = wizardSteps.filter((item) => item.done).length;
+  const requiredStepCount = wizardSteps.filter((item) => !item.advisory).length;
+  const requiredDoneCount = wizardSteps.filter((item) => !item.advisory && item.done).length;
+  const advisoryCount = wizardSteps.filter((item) => item.advisory).length;
 
   const markStepDone = async (id) => {
     const target = wizardSteps.find((item) => item.id === id);
@@ -339,7 +349,9 @@ export const AdminLiveGatePage = () => {
             </Button>
           </div>
         </div>
-        <p className="mt-3 text-sm text-slate-300" data-testid="admin-live-gate-progress-text">Wizard İlerlemesi: <strong>{doneCount}/10</strong></p>
+        <p className="mt-3 text-sm text-slate-300" data-testid="admin-live-gate-progress-text">
+          Wizard İlerlemesi (zorunlu): <strong>{requiredDoneCount}/{requiredStepCount}</strong> · advisory: {advisoryCount}
+        </p>
         {error ? <p className="mt-3 text-sm text-amber-300" data-testid="admin-live-gate-error-text">{error}</p> : null}
       </div>
 
@@ -372,6 +384,15 @@ export const AdminLiveGatePage = () => {
                   <Icon className="h-3.5 w-3.5" /> {meta.label}
                 </span>
               </div>
+
+              {step.advisory || advisoryStepIds.has(step.id) ? (
+                <p
+                  className="mt-2 inline-flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-950/20 px-2 py-1 text-[11px] text-cyan-200"
+                  data-testid={`admin-live-gate-step-advisory-badge-${step.id}`}
+                >
+                  Advisory · GO/NO-GO blocker değil
+                </p>
+              ) : null}
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Link

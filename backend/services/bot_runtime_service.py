@@ -170,12 +170,18 @@ def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution:
 
 def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     runtime = _ensure_runtime(db, bot)
-    preferred_mode = str((getattr(bot, "symbol_resolution_snapshot", {}) or {}).get("preferred_mode") or "live_ready_disabled").strip()
+    snapshot = getattr(bot, "symbol_resolution_snapshot", {}) or {}
+    preferred_mode = str(snapshot.get("preferred_mode") or "live_ready_disabled").strip()
     if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
         preferred_mode = "live_ready_disabled"
     runtime_mode = str(runtime.get("mode") or "live_ready_disabled")
     mode_value = runtime_mode if str(runtime.get("status") or "").upper() == "RUNNING" else preferred_mode
     symbol_resolution = _resolve_symbol_source(db, bot)
+    strategy_template_ids = [
+        str(value).strip()
+        for value in list(snapshot.get("strategy_template_ids") or [])
+        if str(value).strip()
+    ]
     strategy_binding, risk_binding, execution_binding, binding_validation, compatibility = _build_binding_blocks(db, bot, runtime, symbol_resolution)
     positions = db.query(PaperPosition).filter(PaperPosition.user_id == bot.user_id, PaperPosition.status == "open", PaperPosition.symbol.in_(list(bot.symbols or []))).all()
     resolved_symbols = list(symbol_resolution.get("symbols") or list(bot.symbols or []))
@@ -222,6 +228,8 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "market_type": bot.market_type,
         "strategy_type": bot.strategy_type,
         "strategy_template_id": getattr(bot, "strategy_template_id", None),
+        "strategy_template_ids": strategy_template_ids,
+        "risk_adaptive_confirmed": bool(snapshot.get("risk_adaptive_confirmed")),
         "symbols": list(bot.symbols or []),
         "leverage": int(getattr(bot, "leverage", 1) or 1),
         "is_enabled": bool(getattr(bot, "is_enabled", True)),

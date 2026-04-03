@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -20,11 +20,14 @@ const initialForm = {
   trend_timeframe: "1h",
   is_enabled: true,
   template_id: "",
+  strategy_template_ids: [],
+  risk_adaptive_confirmed: false,
 };
 
 export const BotProfilesPage = () => {
   const [items, setItems] = useState([]);
   const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
+  const [userRisk, setUserRisk] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [selectedBot, setSelectedBot] = useState(null);
   const [detailTab, setDetailTab] = useState("overview");
@@ -42,15 +45,17 @@ export const BotProfilesPage = () => {
 
   const fetchItems = async () => {
     try {
-      const [profilesRes, strategyPerfRes, templatesRes] = await Promise.all([
+      const [profilesRes, strategyPerfRes, templatesRes, riskRes] = await Promise.all([
         apiClient.get("/bot-profiles"),
         apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
         apiClient.get("/strategy-templates"),
+        apiClient.get("/user/live/risk"),
       ]);
       const nextItems = profilesRes.data || [];
       setItems(nextItems);
       setStrategyPerformance(strategyPerfRes.data || { items: [] });
       setTemplates(templatesRes.data || []);
+      setUserRisk(riskRes.data || null);
       setSelectedBot((prev) => {
         if (!prev?.id) return prev;
         return nextItems.find((item) => item.id === prev.id) || null;
@@ -61,6 +66,80 @@ export const BotProfilesPage = () => {
   };
 
   const findStrategyParity = (strategyType) => (strategyPerformance?.items || []).find((item) => item.strategy_id === strategyType);
+
+  const strategyLabelMap = {
+    trend_following: "Agresif / Trend Takipçisi",
+    mean_reversion: "Muhafazakar / Arbitraj",
+    volatility_breakout: "Agresif / Kırılım",
+    low_vol_scalping: "Düşük Volatilite / Scalping",
+    scalping: "Düşük Volatilite / Scalping",
+  };
+
+  const strategyRiskFactor = {
+    trend_following: 1.2,
+    volatility_breakout: 1.15,
+    mean_reversion: 0.8,
+    low_vol_scalping: 0.75,
+    scalping: 0.8,
+  };
+
+  const activeTemplateOptions = useMemo(() => {
+    const latestByCode = new Map();
+    for (const item of templates || []) {
+      const isActive = String(item?.lifecycle_state || "").toUpperCase() === "ACTIVE";
+      if (!isActive) continue;
+      const key = String(item.template_code || item.id || "");
+      const prev = latestByCode.get(key);
+      if (!prev || Number(item.version_num || 0) >= Number(prev.version_num || 0)) {
+        latestByCode.set(key, item);
+      }
+    }
+    return Array.from(latestByCode.values())
+      .sort((a, b) => Number(b.version_num || 0) - Number(a.version_num || 0))
+      .slice(0, 12)
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        strategy_type: item.strategy_type,
+        label: strategyLabelMap[item.strategy_type] || "Nötr / Genel",
+      }));
+  }, [templates]);
+
+  const selectedBasketTemplates = useMemo(
+    () => activeTemplateOptions.filter((item) => (form.strategy_template_ids || []).includes(item.id)),
+    [activeTemplateOptions, form.strategy_template_ids],
+  );
+
+  const correlationWarnings = useMemo(() => {
+    const types = new Set(selectedBasketTemplates.map((item) => item.strategy_type));
+    const warnings = [];
+    if (types.has("trend_following") && types.has("mean_reversion")) {
+      warnings.push("Trend takip + mean reversion birlikte verimliliği düşürebilir.");
+    }
+    if (types.has("volatility_breakout") && (types.has("scalping") || types.has("low_vol_scalping"))) {
+      warnings.push("Kırılım + düşük volatilite scalping kombinasyonu zıt sinyal üretebilir.");
+    }
+    return warnings;
+  }, [selectedBasketTemplates]);
+
+  const riskAdaptiveRecommendation = useMemo(() => {
+    const baseCapital = Number(userRisk?.base_capital || 0);
+    const baseRiskPct = Number(userRisk?.risk_per_trade_used || 1);
+    if (!selectedBasketTemplates.length) {
+      return { recommendedRiskPct: baseRiskPct || 1, recommendedLeverage: 1, note: "Strateji seçimi bekleniyor." };
+    }
+    const avgFactor =
+      selectedBasketTemplates.reduce((acc, item) => acc + Number(strategyRiskFactor[item.strategy_type] || 1), 0) /
+      Math.max(1, selectedBasketTemplates.length);
+    const recommendedRiskPct = Math.max(0.25, Math.min(5, Number((baseRiskPct * avgFactor).toFixed(2))));
+    const baseLeverage = baseCapital >= 10000 ? 2 : 1;
+    const recommendedLeverage = Math.max(1, Math.min(10, Math.round(baseLeverage * avgFactor)));
+    return {
+      recommendedRiskPct,
+      recommendedLeverage,
+      note: `Bakiyen (${baseCapital || 0}) ve User Risk Policy baz alınarak önerildi.`,
+    };
+  }, [selectedBasketTemplates, strategyRiskFactor, userRisk?.base_capital, userRisk?.risk_per_trade_used]);
 
   useEffect(() => {
     const loadDetail = async () => {
@@ -84,15 +163,14 @@ export const BotProfilesPage = () => {
   }, [selectedBot]);
 
   const applyTemplate = (templateId) => {
-    const template = (templates || []).find((item) => item.id === templateId);
+    const template = (activeTemplateOptions || []).find((item) => item.id === templateId);
     if (!template) return;
     setForm((prev) => ({
       ...prev,
       name: prev.name || `${template.name} Bot`,
       strategy_type: template.strategy_type || prev.strategy_type,
-      timeframe: template.timeframe || prev.timeframe,
-      market_type: template.market_type || prev.market_type,
       template_id: template.id,
+      strategy_template_ids: prev.strategy_template_ids?.length ? prev.strategy_template_ids : [template.id],
     }));
     toast.success("Template bot formuna aktarıldı");
   };
@@ -132,12 +210,14 @@ export const BotProfilesPage = () => {
       scanner_id: form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null,
       symbols: parsedSymbols,
       strategy_type: form.strategy_type,
-      strategy_template_id: form.template_id || null,
+      strategy_template_id: form.template_id || (form.strategy_template_ids?.[0] || null),
+      strategy_template_ids: form.strategy_template_ids || [],
       timeframe: form.timeframe,
       trend_timeframe: form.trend_timeframe,
       mode: form.mode || "live_ready_disabled",
-      leverage: 1,
+      leverage: form.risk_adaptive_confirmed ? Number(riskAdaptiveRecommendation.recommendedLeverage || 1) : 1,
       is_enabled: Boolean(form.is_enabled),
+      risk_adaptive_confirmed: Boolean(form.risk_adaptive_confirmed),
     };
 
     try {
@@ -168,6 +248,8 @@ export const BotProfilesPage = () => {
       symbol_source_type: item.symbol_source_type || item.symbol_source || "manual",
       scanner_id: item.scanner_id || item.symbol_source_summary?.scanner_id || "",
       template_id: item.strategy_template_id || item.template_id || "",
+      strategy_template_ids: item.strategy_template_ids || (item.strategy_template_id ? [item.strategy_template_id] : []),
+      risk_adaptive_confirmed: Boolean(item.risk_adaptive_confirmed),
     });
     setSymbolSource("crypto");
     setSymbolMode("manual_selection");
@@ -322,18 +404,86 @@ export const BotProfilesPage = () => {
             value={form.template_id}
             onChange={(event) => {
               const value = event.target.value;
-              setForm((prev) => ({ ...prev, template_id: value }));
+              setForm((prev) => ({ ...prev, template_id: value, strategy_template_ids: value ? [value] : [] }));
               applyTemplate(value);
             }}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             data-testid="bot-form-template-select"
           >
             <option value="">no template</option>
-            {(templates || []).map((item) => (
+            {(activeTemplateOptions || []).map((item) => (
               <option key={item.id} value={item.id}>{item.name}</option>
             ))}
           </select>
-          <p className="form-helper-text" data-testid="bot-form-template-helper">Ayrı template ekranı yerine bot profili içinden başlangıç seçilir.</p>
+          <p className="form-helper-text" data-testid="bot-form-template-helper">Aktif template’lerden otomatik listelenir (max 12).</p>
+
+          <label className="mt-2 block text-xs text-slate-300" htmlFor="bot-form-template-multi-select" data-testid="bot-form-template-multi-label">
+            Basket Mode (çoklu strateji seçimi)
+          </label>
+          <select
+            id="bot-form-template-multi-select"
+            multiple
+            value={form.strategy_template_ids || []}
+            onChange={(event) => {
+              const selectedIds = Array.from(event.target.selectedOptions).map((option) => option.value);
+              setForm((prev) => ({
+                ...prev,
+                strategy_template_ids: selectedIds,
+                template_id: selectedIds[0] || prev.template_id || "",
+              }));
+            }}
+            className="mt-2 h-28 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            data-testid="bot-form-template-multi-select"
+          >
+            {(activeTemplateOptions || []).map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name} · {item.label}
+              </option>
+            ))}
+          </select>
+
+          <div className="mt-2 rounded border border-slate-700/60 bg-slate-950/60 p-2" data-testid="bot-form-performance-labeling-box">
+            <p className="text-xs text-slate-300" data-testid="bot-form-performance-labeling-title">Performance Labeling</p>
+            <div className="mt-1 flex flex-wrap gap-1" data-testid="bot-form-performance-labeling-tags">
+              {(selectedBasketTemplates || []).length === 0 ? (
+                <span className="text-xs text-slate-500" data-testid="bot-form-performance-labeling-empty">Henüz strateji seçilmedi</span>
+              ) : (
+                selectedBasketTemplates.map((item) => (
+                  <span key={item.id} className="rounded border border-cyan-500/40 bg-cyan-900/20 px-2 py-0.5 text-[11px] text-cyan-200" data-testid={`bot-form-performance-labeling-tag-${item.id}`}>
+                    {item.name} · {item.label}
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="mt-2 rounded border border-emerald-600/30 bg-emerald-950/20 p-2" data-testid="bot-form-risk-adaptive-box">
+            <p className="text-xs text-emerald-200" data-testid="bot-form-risk-adaptive-title">Risk-Adaptive Scaling</p>
+            <p className="mt-1 text-xs text-emerald-100" data-testid="bot-form-risk-adaptive-recommendation">
+              Öneri: kaldıraç <strong>{riskAdaptiveRecommendation.recommendedLeverage}x</strong> · risk/trade <strong>%{riskAdaptiveRecommendation.recommendedRiskPct}</strong>
+            </p>
+            <p className="mt-1 text-[11px] text-emerald-300" data-testid="bot-form-risk-adaptive-note">{riskAdaptiveRecommendation.note}</p>
+            <label className="mt-2 inline-flex items-center gap-2 text-xs text-emerald-100" data-testid="bot-form-risk-adaptive-confirm-label">
+              <input
+                type="checkbox"
+                checked={Boolean(form.risk_adaptive_confirmed)}
+                onChange={(event) => setForm((prev) => ({ ...prev, risk_adaptive_confirmed: event.target.checked }))}
+                data-testid="bot-form-risk-adaptive-confirm-checkbox"
+              />
+              Bu öneriyi onaylıyorum
+            </label>
+          </div>
+
+          {correlationWarnings.length > 0 ? (
+            <div className="mt-2 rounded border border-amber-500/40 bg-amber-950/20 p-2" data-testid="bot-form-correlation-warning-box">
+              <p className="text-xs font-medium text-amber-200" data-testid="bot-form-correlation-warning-title">Combo/Basket Uyarısı</p>
+              <ul className="mt-1 list-disc pl-4 text-xs text-amber-100" data-testid="bot-form-correlation-warning-list">
+                {correlationWarnings.map((warning, idx) => (
+                  <li key={`${warning}-${idx}`} data-testid={`bot-form-correlation-warning-item-${idx}`}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
 
         <div className="form-group" data-testid="bot-form-group-mode">

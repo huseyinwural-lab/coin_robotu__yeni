@@ -317,6 +317,8 @@ class BotProfileBase(BaseModel):
 
 class BotProfileCreate(BotProfileBase):
     mode: str | None = "live_ready_disabled"
+    strategy_template_ids: list[str] = Field(default_factory=list)
+    risk_adaptive_confirmed: bool = False
 
 
 class BotProfileUpdate(BaseModel):
@@ -328,11 +330,13 @@ class BotProfileUpdate(BaseModel):
     symbols: list[str]
     strategy_type: str
     strategy_template_id: str | None = None
+    strategy_template_ids: list[str] = Field(default_factory=list)
     timeframe: str
     trend_timeframe: str
     leverage: int = Field(default=3, ge=1, le=25)
     is_enabled: bool
     mode: str | None = "live_ready_disabled"
+    risk_adaptive_confirmed: bool = False
 
 
 class BotProfileResponse(BotProfileBase):
@@ -368,6 +372,8 @@ class BotRuntimeStatusResponse(BaseModel):
     market_type: str | None = None
     strategy_type: str | None = None
     strategy_template_id: str | None = None
+    strategy_template_ids: list[str] = Field(default_factory=list)
+    risk_adaptive_confirmed: bool = False
     symbols: list[str] = Field(default_factory=list)
     leverage: int | None = None
     is_enabled: bool = True
