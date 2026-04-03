@@ -28,7 +28,6 @@ const initialForm = {
   },
   parameters: { ema_fast: 20, ema_slow: 50, source: "close" },
   backtest_result_ref: "",
-  is_active: false,
   reason_note: "",
 };
 
@@ -135,7 +134,6 @@ export const StrategyTemplatesPage = () => {
     logic_schema: form.logic_schema,
     parameters: form.parameters,
     backtest_result_ref: String(form.backtest_result_ref || "").trim() || null,
-    is_active: Boolean(form.is_active),
     reason_note: String(form.reason_note || "").trim() || "manual_update",
   });
 
@@ -175,10 +173,16 @@ export const StrategyTemplatesPage = () => {
       logic_schema: item.logic_schema || {},
       parameters: item.parameters || {},
       backtest_result_ref: item.backtest_result_ref || "",
-      is_active: item.is_active,
       reason_note: "edit_template",
     });
   };
+
+  const selectedLifecycleState = String(selected?.lifecycle_state || "").toUpperCase();
+  const canValidate = Boolean(selected?.id) && ["DRAFT", "VALIDATED"].includes(selectedLifecycleState);
+  const canMarkBacktestPassed = Boolean(selected?.id) && ["VALIDATED", "BACKTEST_PASSED"].includes(selectedLifecycleState);
+  const canPromoteActive = Boolean(selected?.id) && ["BACKTEST_PASSED", "ACTIVE"].includes(selectedLifecycleState);
+  const canDeprecate = Boolean(selected?.id) && selectedLifecycleState !== "ROLLED_BACK";
+  const canRollback = Boolean(selected?.id) && Boolean(selected?.parent_template_id);
 
   const actionReason = (fallback) => String(form.reason_note || fallback || "manual_action").trim();
 
@@ -342,10 +346,9 @@ export const StrategyTemplatesPage = () => {
               <div>
                 <p className="mb-2 text-xs uppercase tracking-widest text-slate-500">Reason Note</p>
                 <Input placeholder="reason note" value={form.reason_note} onChange={(event) => setForm((prev) => ({ ...prev, reason_note: event.target.value }))} data-testid="strategy-form-reason-input" />
-                <label className="mt-3 flex items-center gap-2 text-sm text-slate-300" data-testid="strategy-form-active-checkbox-wrapper">
-                  <input type="checkbox" checked={form.is_active} onChange={(event) => setForm((prev) => ({ ...prev, is_active: event.target.checked }))} data-testid="strategy-form-active-checkbox" />
-                  active flag (draft save dışında activate aksiyonu önerilir)
-                </label>
+                <p className="mt-3 text-xs text-amber-300" data-testid="strategy-form-active-note">
+                  Active state yalnız lifecycle aksiyonlarıyla değişir (Promote / Deprecate / Rollback).
+                </p>
               </div>
             </div>
 
@@ -362,11 +365,11 @@ export const StrategyTemplatesPage = () => {
                 <Button type="submit" className="bg-blue-500 text-white hover:bg-blue-600" data-testid="strategy-form-submit-button">{editingId ? 'Güncelle' : 'Template Oluştur'}</Button>
                 {editingId && <Button type="button" variant="outline" onClick={() => { setEditingId(null); setForm(initialForm); }} data-testid="strategy-form-cancel-edit-button">İptal</Button>}
                 <Button type="button" variant="outline" onClick={cloneVersion} disabled={!selected?.id} data-testid="strategy-form-clone-version-button">Clone Version</Button>
-                <Button type="button" variant="outline" onClick={validateVersion} disabled={!selected?.id} data-testid="strategy-form-validate-button">Validate</Button>
-                <Button type="button" variant="outline" onClick={markBacktestPassed} disabled={!selected?.id} data-testid="strategy-form-backtest-passed-button">Mark Backtest Passed</Button>
-                <Button type="button" variant="outline" onClick={promoteToActive} disabled={!selected?.id} data-testid="strategy-form-promote-active-button">Promote Active</Button>
-                <Button type="button" variant="outline" onClick={deprecateVersion} disabled={!selected?.id} data-testid="strategy-form-deprecate-button">Deprecate</Button>
-                <Button type="button" variant="outline" onClick={rollbackVersion} disabled={!selected?.id} data-testid="strategy-form-rollback-button">Rollback</Button>
+                <Button type="button" variant="outline" onClick={validateVersion} disabled={!canValidate} data-testid="strategy-form-validate-button">Validate</Button>
+                <Button type="button" variant="outline" onClick={markBacktestPassed} disabled={!canMarkBacktestPassed} data-testid="strategy-form-backtest-passed-button">Mark Backtest Passed</Button>
+                <Button type="button" variant="outline" onClick={promoteToActive} disabled={!canPromoteActive} data-testid="strategy-form-promote-active-button">Promote Active</Button>
+                <Button type="button" variant="outline" onClick={deprecateVersion} disabled={!canDeprecate} data-testid="strategy-form-deprecate-button">Deprecate</Button>
+                <Button type="button" variant="outline" onClick={rollbackVersion} disabled={!canRollback} data-testid="strategy-form-rollback-button">Rollback</Button>
               </div>
             )}
           </form>

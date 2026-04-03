@@ -306,7 +306,16 @@ def build_strategy_template_detail(db, *, template_id: str) -> dict | None:
         if group_template_ids
         else []
     )
-    audits = db.query(AuditLog).filter(AuditLog.entity_type == "strategy_template", AuditLog.entity_id == template.id).order_by(AuditLog.created_at.desc()).limit(50).all()
+    audits = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.entity_type == "strategy_template",
+            AuditLog.entity_id.in_(group_template_ids or [template.id]),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(100)
+        .all()
+    )
     resolved = resolve_effective_strategy_config(db, template_id=template.id)
     outcome_analytics, recent_outcomes, trace_spine, learning_feedback = _build_outcome_analytics(trades)
     promotion_lifecycle = _build_promotion_lifecycle(template=template, audits=audits)

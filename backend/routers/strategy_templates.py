@@ -74,6 +74,7 @@ def create_strategy_template(
         version_group_id=str(uuid.uuid4()),
         version_num=1,
         lifecycle_state="DRAFT",
+        is_active=False,
         param_schema=payload.param_schema or {},
         logic_schema=payload.logic_schema or {},
         indicator_schema=payload.indicator_schema or {},
@@ -109,6 +110,8 @@ def update_strategy_template(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
 
     for key, value in payload.model_dump(exclude={"reason_note"}).items():
+        if key == "is_active":
+            continue
         setattr(strategy_template, key, value)
 
     strategy_template.last_validated_at = datetime.now(timezone.utc)
@@ -159,6 +162,21 @@ def clone_strategy_template_version(template_id: str, payload: StrategyTemplateC
     db.add(cloned)
     db.commit()
     db.refresh(cloned)
+    create_audit_log(
+        db,
+        action="strategy_template_version_cloned",
+        entity_type="strategy_template",
+        entity_id=cloned.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details=build_critical_action_details(
+            actor=current_admin.id,
+            reason=payload.reason,
+            scope="strategy_template:clone_version",
+            before_state={"template_id": template.id, "version": template.version_num},
+            after_state={"template_id": cloned.id, "version": cloned.version_num},
+        ),
+    )
     return cloned
 
 
@@ -176,9 +194,10 @@ def activate_strategy_template(template_id: str, payload: StrategyTemplateReason
 def validate_strategy_template(template_id: str, payload: StrategyTemplateReasonRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     template = _get_template_or_404(db, template_id)
     current_state = str(template.lifecycle_state or "").upper()
-    if current_state not in {"DRAFT", "VALIDATED", "BACKTEST_PASSED"}:
+    if current_state not in {"DRAFT", "VALIDATED"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_state_transition_for_validation")
     template.lifecycle_state = "VALIDATED"
+    template.is_active = False
     template.last_validated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(template)
@@ -204,9 +223,10 @@ def validate_strategy_template(template_id: str, payload: StrategyTemplateReason
 def mark_backtest_passed_strategy_template(template_id: str, payload: StrategyTemplateReasonRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     template = _get_template_or_404(db, template_id)
     current_state = str(template.lifecycle_state or "").upper()
-    if current_state not in {"VALIDATED", "BACKTEST_PASSED", "ACTIVE"}:
+    if current_state not in {"VALIDATED", "BACKTEST_PASSED"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="validation_required_before_backtest_pass")
     template.lifecycle_state = "BACKTEST_PASSED"
+    template.is_active = False
     template.last_validated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(template)
@@ -293,7 +313,13 @@ def rollback_strategy_template(template_id: str, payload: StrategyTemplateReason
     target = db.query(StrategyTemplate).filter(StrategyTemplate.id == current.parent_template_id).first()
     if target is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="rollback_target_not_found")
-    db.query(StrategyTemplate).filter(StrategyTemplate.version_group_id == current.version_group_id).update({StrategyTemplate.is_active: False, StrategyTemplate.lifecycle_state: "DEPRECATED"})
+    peers = db.query(StrategyTemplate).filter(StrategyTemplate.version_group_id == current.version_group_id).all()
+    for peer in peers:
+        peer.is_active = False
+        if peer.id in {target.id, current.id}:
+            continue
+        if str(peer.lifecycle_state or "").upper() != "ROLLED_BACK":
+            peer.lifecycle_state = "DEPRECATED"
     target.is_active = True
     target.lifecycle_state = "ACTIVE"
     current.lifecycle_state = "ROLLED_BACK"

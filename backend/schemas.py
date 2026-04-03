@@ -439,7 +439,7 @@ class RiskPolicyResponse(RiskPolicyBase):
     updated_at: datetime
 
 
-class StrategyTemplateBase(BaseModel):
+class StrategyTemplateRequestBase(BaseModel):
     name: str
     strategy_type: str
     parameters: dict
@@ -450,21 +450,20 @@ class StrategyTemplateBase(BaseModel):
     risk_hint_ref: str | None = None
     allowed_venues: list[str] = Field(default_factory=list)
     allowed_modes: list[str] = Field(default_factory=list)
-    is_active: bool = True
 
 
-class StrategyTemplateCreate(StrategyTemplateBase):
+class StrategyTemplateCreate(StrategyTemplateRequestBase):
     template_code: str | None = None
     backtest_result_ref: str | None = None
     reason_note: str | None = None
 
 
-class StrategyTemplateUpdate(StrategyTemplateBase):
+class StrategyTemplateUpdate(StrategyTemplateRequestBase):
     backtest_result_ref: str | None = None
     reason_note: str | None = None
 
 
-class StrategyTemplateResponse(StrategyTemplateBase):
+class StrategyTemplateResponse(StrategyTemplateRequestBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -476,6 +475,7 @@ class StrategyTemplateResponse(StrategyTemplateBase):
     rollback_from_template_id: str | None = None
     backtest_result_ref: str | None = None
     last_validated_at: datetime | None = None
+    is_active: bool
     created_by: str
     created_at: datetime
     updated_at: datetime

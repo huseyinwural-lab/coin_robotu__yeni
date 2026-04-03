@@ -46,15 +46,19 @@ export const StrategyTemplateDetailPage = () => {
   const navigate = useNavigate();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
+      setLoadError("");
       try {
         const data = await fetchTemplateDetail(`/strategy-templates/${templateId}`);
         setDetail(data || null);
       } catch (error) {
-        toast.error(error?.response?.data?.detail || "Template detail yüklenemedi");
+        const message = error?.response?.data?.detail || "Template detail yüklenemedi";
+        setLoadError(String(message));
+        toast.error(message);
       } finally {
         setLoading(false);
       }
@@ -87,6 +91,14 @@ export const StrategyTemplateDetailPage = () => {
         </div>
       </header>
       {loading && <p className="text-sm text-slate-400" data-testid="strategy-template-detail-loading">loading...</p>}
+      {!loading && !detail && (
+        <article className="border border-rose-500/40 bg-rose-500/10 p-4" data-testid="strategy-template-detail-error-panel">
+          <p className="text-sm text-rose-200" data-testid="strategy-template-detail-error-message">{loadError || "Template detayı bulunamadı"}</p>
+          <div className="mt-3">
+            <Button variant="outline" onClick={() => navigate('/user/strategies')} data-testid="strategy-template-detail-error-back-button">Listeye dön</Button>
+          </div>
+        </article>
+      )}
       {detail && (
         <div className="grid gap-4 xl:grid-cols-12" data-testid="strategy-template-detail-grid">
           <article className="border border-slate-800 bg-slate-900 p-4 xl:col-span-12" data-testid="strategy-template-detail-performance-summary-panel">

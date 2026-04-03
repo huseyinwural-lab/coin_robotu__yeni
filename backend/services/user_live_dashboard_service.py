@@ -502,7 +502,11 @@ def sync_user_trade_projection(db: Session, *, user_id: str) -> dict:
             "unrealized_pnl": None,
             "strategy_name": str((row.normalized_order_payload or {}).get("strategy_type") or "manual_trade"),
             "strategy_template_id": (row.normalized_order_payload or {}).get("strategy_template_id"),
-            "strategy_version_id": (row.normalized_order_payload or {}).get("strategy_template_version") or (row.normalized_order_payload or {}).get("template_code"),
+            "strategy_version_id": (
+                (row.normalized_order_payload or {}).get("strategy_version_id")
+                or (row.normalized_order_payload or {}).get("strategy_template_version_id")
+                or (row.normalized_order_payload or {}).get("strategy_template_version")
+            ),
             "scan_run_id": (row.normalized_order_payload or {}).get("scan_run_id"),
             "signal_id": (row.normalized_order_payload or {}).get("signal_id"),
             "decision_card_id": (row.normalized_order_payload or {}).get("decision_card_id"),
@@ -516,6 +520,7 @@ def sync_user_trade_projection(db: Session, *, user_id: str) -> dict:
                 "market_type": str(row.market_type or "spot").lower(),
                 "meta_engine_decision": row.meta_engine_decision,
                 "allocation_source": (row.normalized_order_payload or {}).get("strategy_type"),
+                "strategy_template_code": (row.normalized_order_payload or {}).get("template_code"),
             },
         }
         _upsert_trade_projection(db, user_id=user_id, trade_id=str(row.position_id or row.id), payload=payload)
