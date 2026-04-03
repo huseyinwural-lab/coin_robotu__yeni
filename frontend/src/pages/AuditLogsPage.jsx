@@ -58,6 +58,7 @@ export const AuditLogsPage = () => {
   const [integrityResult, setIntegrityResult] = useState(null);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [expandedEventRows, setExpandedEventRows] = useState({});
+  const [errorWindowDays, setErrorWindowDays] = useState(1);
 
   const fetchSavedQueries = useCallback(async () => {
     try {
@@ -453,6 +454,30 @@ export const AuditLogsPage = () => {
     rootCauseBreakdown?.failure_type,
     rootCauseBreakdown?.root_cause,
   ]);
+
+  const filteredErrorIncidents = useMemo(() => {
+    const threshold = Date.now() - Number(errorWindowDays || 1) * 24 * 60 * 60 * 1000;
+    const toTs = (value) => {
+      if (!value) return null;
+      const parsed = new Date(value).getTime();
+      return Number.isNaN(parsed) ? null : parsed;
+    };
+
+    return (incidents || [])
+      .filter((incident) => {
+        const severity = String(incident?.severity || "").toUpperCase();
+        const isErrorLike = severity === "ERROR" || severity === "CRITICAL";
+        if (!isErrorLike) return false;
+        const ts = toTs(incident?.created_at || incident?.detected_at || incident?.updated_at || incident?.occurred_at);
+        if (!ts) return true;
+        return ts >= threshold;
+      })
+      .sort((a, b) => {
+        const aTs = new Date(a?.created_at || a?.detected_at || a?.updated_at || 0).getTime() || 0;
+        const bTs = new Date(b?.created_at || b?.detected_at || b?.updated_at || 0).getTime() || 0;
+        return bTs - aTs;
+      });
+  }, [errorWindowDays, incidents]);
 
   const actionSuggestion = useMemo(() => {
     if (!selectedCorrelation) {
@@ -993,6 +1018,40 @@ export const AuditLogsPage = () => {
               ))}
             </div>
           )}
+
+          <div className="mt-4 border-t border-slate-700/60 pt-3" data-testid="audit-error-list-section">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-rose-200" data-testid="audit-error-list-title">Errors (en altta)</p>
+              <div className="flex items-center gap-2" data-testid="audit-error-window-filter-group">
+                {[1, 7, 30].map((days) => (
+                  <Button
+                    key={days}
+                    size="sm"
+                    variant={errorWindowDays === days ? "default" : "outline"}
+                    onClick={() => setErrorWindowDays(days)}
+                    data-testid={`audit-error-window-filter-${days}d-button`}
+                  >
+                    {days} gün
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {filteredErrorIncidents.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-400" data-testid="audit-error-list-empty">Seçili pencerede hata yok.</p>
+            ) : (
+              <div className="mt-2 space-y-2" data-testid="audit-error-list-items">
+                {filteredErrorIncidents.map((incident, idx) => (
+                  <div key={`${incident.incident_id}-err-${idx}`} className="rounded border border-rose-700/50 bg-rose-950/20 px-3 py-2" data-testid={`audit-error-item-${idx}`}>
+                    <p className="text-sm text-rose-100" data-testid={`audit-error-item-id-${idx}`}>{incident.incident_id}</p>
+                    <p className="text-xs text-rose-200/90" data-testid={`audit-error-item-meta-${idx}`}>
+                      {String(incident.severity || "-").toUpperCase()} • {incident.status || "-"} • {incident.created_at || incident.updated_at || "tarih_yok"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>
