@@ -242,7 +242,14 @@
   - Reason/phrase validasyonu doğru
   - Double-submit koruması çalışıyor
   - `loading`/`refreshing` davranışı stabil
-  - Not: `/api/admin/live-trading/execution-quality` endpointi backend 500 dönebiliyor (frontend regression dışı, backend servis kaynaklı).
+  - Not (kapatıldı): `/api/admin/live-trading/execution-quality` endpointindeki 500 sorunu ayrıca giderildi.
+
+### Ek Hotfix (aynı tur)
+- **Execution quality endpoint 500 düzeltildi**
+  - Kök neden: `live_execution_logs` tablosu olmayan ortamlarda fallback sorgusu `ProgrammingError` fırlatıyordu.
+  - Çözüm: `build_execution_quality_summary` içinde fallback `LiveExecutionLog` sorgusu try/except ile güvenli hale getirildi; hata loglanıp boş fallback ile 200 response dönülüyor.
+  - Dosya: `backend/services/live_trading_dashboard_service.py`
+- Doğrulama: endpoint şimdi **200** dönüyor ve expected JSON alanlarını içeriyor.
 
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
