@@ -67,21 +67,27 @@ export const BotProfilesPage = () => {
 
   const findStrategyParity = (strategyType) => (strategyPerformance?.items || []).find((item) => item.strategy_id === strategyType);
 
-  const strategyLabelMap = {
-    trend_following: "Agresif / Trend Takipçisi",
-    mean_reversion: "Muhafazakar / Arbitraj",
-    volatility_breakout: "Agresif / Kırılım",
-    low_vol_scalping: "Düşük Volatilite / Scalping",
-    scalping: "Düşük Volatilite / Scalping",
-  };
+  const strategyLabelMap = useMemo(
+    () => ({
+      trend_following: "Agresif / Trend Takipçisi",
+      mean_reversion: "Muhafazakar / Arbitraj",
+      volatility_breakout: "Agresif / Kırılım",
+      low_vol_scalping: "Düşük Volatilite / Scalping",
+      scalping: "Düşük Volatilite / Scalping",
+    }),
+    [],
+  );
 
-  const strategyRiskFactor = {
-    trend_following: 1.2,
-    volatility_breakout: 1.15,
-    mean_reversion: 0.8,
-    low_vol_scalping: 0.75,
-    scalping: 0.8,
-  };
+  const strategyRiskFactor = useMemo(
+    () => ({
+      trend_following: 1.2,
+      volatility_breakout: 1.15,
+      mean_reversion: 0.8,
+      low_vol_scalping: 0.75,
+      scalping: 0.8,
+    }),
+    [],
+  );
 
   const activeTemplateOptions = useMemo(() => {
     const latestByCode = new Map();
@@ -103,7 +109,7 @@ export const BotProfilesPage = () => {
         strategy_type: item.strategy_type,
         label: strategyLabelMap[item.strategy_type] || "Nötr / Genel",
       }));
-  }, [templates]);
+  }, [templates, strategyLabelMap]);
 
   const selectedBasketTemplates = useMemo(
     () => activeTemplateOptions.filter((item) => (form.strategy_template_ids || []).includes(item.id)),
