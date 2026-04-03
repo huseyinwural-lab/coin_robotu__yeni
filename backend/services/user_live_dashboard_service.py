@@ -442,6 +442,13 @@ def sync_user_trade_projection(db: Session, *, user_id: str) -> dict:
     metrics = db.query(ExecutionMetric).filter(ExecutionMetric.user_id == user_id).all()
     strategy_map = _position_strategy_map(db, user_id, positions)
 
+    open_position_ids: set[str] = {str(row.id) for row in positions if str(row.status or "").lower() == "open"}
+    pending_projection_ids: set[str] = {
+        str(row.position_id or row.id)
+        for row in intents
+        if str(row.status or "").upper() in {"PREVIEWED", "QUEUED", "APPROVED", "SUBMITTED"}
+    }
+
     synced = 0
     for row in positions:
         metric = next((item for item in metrics if str(item.symbol or "").upper() == str(row.symbol or "").upper()), None)
@@ -513,8 +520,26 @@ def sync_user_trade_projection(db: Session, *, user_id: str) -> dict:
         }
         _upsert_trade_projection(db, user_id=user_id, trade_id=str(row.position_id or row.id), payload=payload)
 
+    stale_open_rows = (
+        db.query(UserTradeProjection)
+        .filter(UserTradeProjection.user_id == user_id, UserTradeProjection.status == "OPEN")
+        .all()
+    )
+    stale_closed = 0
+    now = datetime.now(timezone.utc)
+    for row in stale_open_rows:
+        trade_id = str(row.trade_id or "")
+        if trade_id in open_position_ids or trade_id in pending_projection_ids:
+            continue
+        row.status = "CLOSED"
+        row.closed_at = now
+        row.reconciliation_status = "SYNCED"
+        row.reconciliation_reason = "stale_open_projection_auto_closed"
+        row.updated_at = now
+        stale_closed += 1
+
     db.commit()
-    return {"synced": synced, "intent_rows": len(intents)}
+    return {"synced": synced, "intent_rows": len(intents), "stale_closed": stale_closed}
 
 
 def build_user_trade_projection_list(db: Session, user_id: str, *, limit: int = 120) -> list[dict]:
