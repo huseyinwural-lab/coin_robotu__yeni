@@ -202,6 +202,48 @@
   - Automation ajanı login akışında preview auth abort (`ERR_ABORTED`) nedeniyle flow testini bloklu raporladı.
   - Kod inceleme ve backend doğrulama ile Bot Profile düzeltmeleri doğrulandı.
 
+## 2026-04-03 — Live Gösterge Paneli / Control Hub Eksik Kapatma
+
+### Tamamlanan Düzeltmeler
+- **Dashboard dayanıklılığı artırıldı (frontend):**
+  - `Promise.all` -> `Promise.allSettled` geçişi ile kısmi başarısızlıkta panel tamamen düşmüyor.
+  - In-flight guard + request id kontrolü ile race condition azaltıldı.
+  - İlk yükleme `loading`, periyodik yenileme `isRefreshing` olarak ayrıldı (flicker azaltımı).
+  - Dosya: `frontend/src/pages/AdminLiveTradingDashboardPage.jsx`
+- **Kritik aksiyon güvenliği artırıldı (frontend):**
+  - Reason validasyonu 5+ karaktere çekildi (backend ile hizalı).
+  - Modal submit sırasında double-submit koruması (`isActionRunning`, disabled + "Çalışıyor...").
+  - Dosya: `frontend/src/pages/AdminLiveTradingDashboardPage.jsx`
+- **Daily report export UI eklendi (frontend):**
+  - JSON/CSV export butonları eklendi, gerçek dosya indirme akışı bağlandı.
+  - Dosya: `frontend/src/pages/AdminLiveTradingDashboardPage.jsx`
+- **Alert history filtre doğruluğu düzeltildi (backend):**
+  - Alert history sorgusu yalnız ilgili alert (`entity_type=system_alert AND entity_id=alert_id`) ile sınırlandı.
+  - Dosya: `backend/routers/admin_live_trading_dashboard.py`
+- **Summary fallback hata sızıntısı kapatıldı (backend):**
+  - Ham exception string response’tan kaldırıldı, log’da tutuluyor.
+  - Dosya: `backend/routers/admin_live_trading_dashboard.py`
+- **Unified Control Room window doğrulaması eklendi (backend):**
+  - `window` parametresi `7d|30d` ile sınırlandı.
+  - Dosya: `backend/routers/unified_control_room.py`
+- **Unified Control Room checklist/stage statik olmaktan çıkarıldı (backend):**
+  - Checklist ve stage aktivasyonu runtime sinyallerinden türetiliyor.
+  - Dosya: `backend/services/unified_control_room_service.py`
+
+### Test Sonuçları
+- Lint: Python + JS **PASS**
+- Backend test agent: **PASS**
+  - unified-control-room window validation çalışıyor (invalid -> 422)
+  - critical alerts endpoint 200
+  - daily report export JSON/CSV 200
+  - summary response’ta raw exception sızıntısı yok
+- Frontend test agent: **PASS (11/12)**
+  - Export butonları ve indirme akışı çalışıyor
+  - Reason/phrase validasyonu doğru
+  - Double-submit koruması çalışıyor
+  - `loading`/`refreshing` davranışı stabil
+  - Not: `/api/admin/live-trading/execution-quality` endpointi backend 500 dönebiliyor (frontend regression dışı, backend servis kaynaklı).
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)

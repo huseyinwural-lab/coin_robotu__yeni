@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
@@ -27,6 +28,8 @@ WINDOW_MAP = {
     "6h": timedelta(hours=6),
     "24h": timedelta(hours=24),
 }
+
+logger = logging.getLogger(__name__)
 
 REJECT_STATUSES = {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}
 PARTIAL_FILL_STATUSES = {"PARTIALLY_FILLED", "PARTIAL", "PARTIAL_FILL"}
@@ -198,13 +201,17 @@ def build_execution_quality_summary(db: Session, *, window: str = "1h") -> dict:
     metrics = _execution_rows(db, since)
 
     if not metrics:
-        fallback_rows = (
-            db.query(LiveExecutionLog)
-            .filter(LiveExecutionLog.created_at >= since)
-            .order_by(LiveExecutionLog.created_at.desc())
-            .limit(1200)
-            .all()
-        )
+        try:
+            fallback_rows = (
+                db.query(LiveExecutionLog)
+                .filter(LiveExecutionLog.created_at >= since)
+                .order_by(LiveExecutionLog.created_at.desc())
+                .limit(1200)
+                .all()
+            )
+        except Exception:
+            logger.exception("live_execution_logs_query_failed")
+            fallback_rows = []
         latencies = [_safe_float(row.execution_latency) for row in fallback_rows if row.execution_latency is not None]
         slippages = [abs(_safe_float(row.slippage)) for row in fallback_rows if row.slippage is not None]
         quality_scores = [_safe_float(row.execution_quality_score) for row in fallback_rows]
