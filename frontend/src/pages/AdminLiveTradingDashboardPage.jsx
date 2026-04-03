@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -69,6 +69,12 @@ export const AdminLiveTradingDashboardPage = () => {
   const [windowSize, setWindowSize] = useState("1h");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isActionRunning, setIsActionRunning] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const loadInFlightRef = useRef(false);
+  const loadRequestRef = useRef(0);
+  const hasLoadedRef = useRef(false);
 
   const [summary, setSummary] = useState(null);
   const [scannerHealth, setScannerHealth] = useState(null);
@@ -117,51 +123,77 @@ export const AdminLiveTradingDashboardPage = () => {
     });
   };
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false, showToastOnError = true } = {}) => {
+    if (loadInFlightRef.current) {
+      return;
+    }
+    loadInFlightRef.current = true;
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
+
+    if (!hasLoadedRef.current && !silent) {
+      setLoading(true);
+    } else {
+      setIsRefreshing(true);
+    }
+
     try {
-      const [
-        summaryRes,
-        scannerRes,
-        executionRes,
-        riskRes,
-        dailyRes,
-        learningRes,
-        controlRes,
-        alertsRes,
-        failedRes,
-        positionsRes,
-        auditRes,
-        scannerControlRes,
-      ] = await Promise.all([
-        apiClient.get("/admin/live-trading/summary", { params: { window: windowSize } }),
-        apiClient.get("/admin/live-trading/scanner-health", { params: { window: windowSize } }),
-        apiClient.get("/admin/live-trading/execution-quality", { params: { window: windowSize } }),
-        apiClient.get("/admin/live-trading/risk-summary", { params: { window: windowSize } }),
-        apiClient.get("/admin/live-trading/daily-report"),
-        apiClient.get("/admin/live-trading/learning-summary", { params: { window: windowSize } }),
-        apiClient.get("/admin/live-trading/control-layer/state"),
-        apiClient.get("/admin/live-trading/control-layer/critical-alerts", { params: { status_filter: "all", limit: 40 } }),
-        apiClient.get("/admin/live-trading/control-layer/execution-quality/failed-orders", { params: { status_filter: "all", limit: 100 } }),
-        apiClient.get("/admin/live-trading/control-layer/trading-performance/open-positions", { params: { limit: 100 } }),
-        apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 40 } }),
-        apiClient.get("/admin/live-trading/control-layer/scanner"),
-      ]);
+      const requests = [
+        apiClient.get("/admin/live-trading/summary", { params: { window: windowSize }, timeout: 12000 }),
+        apiClient.get("/admin/live-trading/scanner-health", { params: { window: windowSize }, timeout: 12000 }),
+        apiClient.get("/admin/live-trading/execution-quality", { params: { window: windowSize }, timeout: 12000 }),
+        apiClient.get("/admin/live-trading/risk-summary", { params: { window: windowSize }, timeout: 12000 }),
+        apiClient.get("/admin/live-trading/daily-report", { timeout: 12000 }),
+        apiClient.get("/admin/live-trading/learning-summary", { params: { window: windowSize }, timeout: 12000 }),
+        apiClient.get("/admin/live-trading/control-layer/state", { timeout: 12000 }),
+        apiClient.get("/admin/live-trading/control-layer/critical-alerts", { params: { status_filter: "all", limit: 40 }, timeout: 12000 }),
+        apiClient.get("/admin/live-trading/control-layer/execution-quality/failed-orders", { params: { status_filter: "all", limit: 100 }, timeout: 12000 }),
+        apiClient.get("/admin/live-trading/control-layer/trading-performance/open-positions", { params: { limit: 100 }, timeout: 12000 }),
+        apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 40 }, timeout: 12000 }),
+        apiClient.get("/admin/live-trading/control-layer/scanner", { timeout: 12000 }),
+      ];
 
-      setSummary(summaryRes.data || null);
-      setScannerHealth(scannerRes.data || null);
-      setExecutionQuality(executionRes.data || null);
-      setRiskSummary(riskRes.data || null);
-      setDailyReport(dailyRes.data || null);
-      setLearningSummary(learningRes.data || null);
-      setControlState(controlRes.data || null);
-      setCriticalAlerts(alertsRes.data?.items || []);
-      setFailedOrders(failedRes.data?.items || []);
-      setOpenPositions(positionsRes.data?.items || []);
-      setActionAudit(auditRes.data?.items || []);
-      setScannerControl(scannerControlRes.data || null);
+      const settled = await Promise.allSettled(requests);
+      if (requestId !== loadRequestRef.current) {
+        return;
+      }
 
-      const threshold = controlRes.data?.latency_thresholds;
+      const failedCount = settled.filter((row) => row.status === "rejected").length;
+      const pickData = (index) => {
+        const row = settled[index];
+        if (row?.status === "fulfilled") {
+          return row.value?.data;
+        }
+        return undefined;
+      };
+
+      const summaryData = pickData(0);
+      const scannerData = pickData(1);
+      const executionData = pickData(2);
+      const riskData = pickData(3);
+      const dailyData = pickData(4);
+      const learningData = pickData(5);
+      const controlData = pickData(6);
+      const alertsData = pickData(7);
+      const failedData = pickData(8);
+      const positionsData = pickData(9);
+      const auditData = pickData(10);
+      const scannerControlData = pickData(11);
+
+      if (summaryData !== undefined) setSummary(summaryData || null);
+      if (scannerData !== undefined) setScannerHealth(scannerData || null);
+      if (executionData !== undefined) setExecutionQuality(executionData || null);
+      if (riskData !== undefined) setRiskSummary(riskData || null);
+      if (dailyData !== undefined) setDailyReport(dailyData || null);
+      if (learningData !== undefined) setLearningSummary(learningData || null);
+      if (controlData !== undefined) setControlState(controlData || null);
+      if (alertsData !== undefined) setCriticalAlerts(alertsData?.items || []);
+      if (failedData !== undefined) setFailedOrders(failedData?.items || []);
+      if (positionsData !== undefined) setOpenPositions(positionsData?.items || []);
+      if (auditData !== undefined) setActionAudit(auditData?.items || []);
+      if (scannerControlData !== undefined) setScannerControl(scannerControlData || null);
+
+      const threshold = controlData?.latency_thresholds;
       if (threshold) {
         setLatencyForm({
           scan_latency_ms: String(threshold.scan_latency_ms ?? "1500"),
@@ -170,35 +202,82 @@ export const AdminLiveTradingDashboardPage = () => {
         });
       }
 
-      if (riskRes.data) {
+      if (riskData) {
         setRiskForm({
-          max_loss_pct: String(riskRes.data.daily_loss_pct ?? 5),
-          account_exposure_pct: String(riskRes.data.config?.account_max_notional_pct ?? 60),
-          symbol_exposure_pct: String(riskRes.data.config?.symbol_max_notional_pct ?? 25),
+          max_loss_pct: String(riskData.daily_loss_pct ?? 5),
+          account_exposure_pct: String(riskData.config?.account_max_notional_pct ?? 60),
+          symbol_exposure_pct: String(riskData.config?.symbol_max_notional_pct ?? 25),
         });
       }
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      const message = typeof detail === "string" ? detail : "Live Trading Dashboard verisi alınamadı";
-      toast.error(message);
+
+      if (failedCount > 0 && showToastOnError) {
+        toast.error(`${failedCount} panel güncellenemedi, kalan veriler gösteriliyor`);
+      }
+      hasLoadedRef.current = true;
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) {
+        setLoading(false);
+        setIsRefreshing(false);
+      }
+      loadInFlightRef.current = false;
     }
   }, [windowSize]);
 
+  const exportDailyReport = useCallback(async (formatType) => {
+    setIsExporting(true);
+    try {
+      const normalized = String(formatType || "json").toLowerCase();
+      const reportDate = String(dailyReport?.date || "latest");
+      if (normalized === "csv") {
+        const response = await apiClient.get("/admin/live-trading/daily-report/export", {
+          params: { format: "csv" },
+          responseType: "blob",
+        });
+        const blob = new Blob([response.data], { type: "text/csv;charset=utf-8" });
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `live_trading_daily_report_${reportDate}.csv`;
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+      } else {
+        const { data } = await apiClient.get("/admin/live-trading/daily-report/export", {
+          params: { format: "json" },
+        });
+        const blob = new Blob([JSON.stringify(data || {}, null, 2)], { type: "application/json" });
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `live_trading_daily_report_${reportDate}.json`;
+        anchor.click();
+        window.URL.revokeObjectURL(url);
+      }
+      toast.success(`Daily report export hazır (${normalized.toUpperCase()})`);
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const message = typeof detail === "string" ? detail : "Daily report export başarısız";
+      toast.error(message);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [dailyReport?.date]);
+
   useEffect(() => {
-    load();
+    load({ silent: false, showToastOnError: true });
   }, [load]);
 
   useEffect(() => {
     if (!autoRefresh) return undefined;
-    const timer = setInterval(() => load(), 30000);
+    const timer = setInterval(() => load({ silent: true, showToastOnError: false }), 30000);
     return () => clearInterval(timer);
   }, [autoRefresh, load]);
 
   const runAction = async () => {
-    if (!actionDialog.reason || actionDialog.reason.trim().length < 3) {
-      toast.error("Reason zorunlu");
+    if (isActionRunning) {
+      return;
+    }
+    if (!actionDialog.reason || actionDialog.reason.trim().length < 5) {
+      toast.error("Reason en az 5 karakter olmalı");
       return;
     }
     if (actionDialog.phrase.trim().toUpperCase() !== actionDialog.expectedPhrase) {
@@ -206,6 +285,7 @@ export const AdminLiveTradingDashboardPage = () => {
       return;
     }
 
+    setIsActionRunning(true);
     try {
       if (actionDialog.actionKey.startsWith("mode_")) {
         const mode = actionDialog.actionKey.replace("mode_", "").toUpperCase();
@@ -330,10 +410,12 @@ export const AdminLiveTradingDashboardPage = () => {
 
       toast.success("Aksiyon tamamlandı");
       setActionDialog((prev) => ({ ...prev, open: false }));
-      await load();
+      await load({ silent: true, showToastOnError: true });
     } catch (error) {
       const detail = error?.response?.data?.detail;
       toast.error(typeof detail === "string" ? detail : JSON.stringify(detail || {}));
+    } finally {
+      setIsActionRunning(false);
     }
   };
 
@@ -392,11 +474,13 @@ export const AdminLiveTradingDashboardPage = () => {
           </select>
         </label>
 
-        <Button type="button" variant="outline" onClick={load} data-testid="admin-live-trading-dashboard-refresh-button">Yenile</Button>
+        <Button type="button" variant="outline" onClick={() => load({ silent: true, showToastOnError: true })} data-testid="admin-live-trading-dashboard-refresh-button">Yenile</Button>
         <Button type="button" variant="outline" onClick={() => navigate("/admin/pipeline-operations")} data-testid="admin-live-trading-dashboard-open-pipeline-operations-button">Unified Pipeline Ops</Button>
         <Button type="button" variant="outline" onClick={() => setAutoRefresh((prev) => !prev)} data-testid="admin-live-trading-dashboard-auto-refresh-toggle-button">
           auto-refresh: {autoRefresh ? "ON" : "OFF"}
         </Button>
+        <Button type="button" variant="outline" disabled={isExporting} onClick={() => exportDailyReport("json")} data-testid="admin-live-trading-dashboard-export-json-button">Export JSON</Button>
+        <Button type="button" variant="outline" disabled={isExporting} onClick={() => exportDailyReport("csv")} data-testid="admin-live-trading-dashboard-export-csv-button">Export CSV</Button>
         <Input
           value={globalSearch}
           onChange={(event) => setGlobalSearch(event.target.value)}
@@ -765,6 +849,7 @@ export const AdminLiveTradingDashboardPage = () => {
       </div>
 
       <p className="text-xs text-slate-500" data-testid="live-dashboard-loading-state">loading={String(loading)}</p>
+      <p className="text-xs text-slate-500" data-testid="live-dashboard-refreshing-state">refreshing={String(isRefreshing)}</p>
 
       <Dialog open={actionDialog.open} onOpenChange={(open) => setActionDialog((prev) => ({ ...prev, open }))}>
         <DialogContent className="max-w-2xl border border-amber-700 bg-slate-950" data-testid="live-control-action-confirm-modal">
@@ -787,8 +872,8 @@ export const AdminLiveTradingDashboardPage = () => {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setActionDialog((prev) => ({ ...prev, open: false }))} data-testid="live-control-action-confirm-cancel-button">Vazgeç</Button>
-            <Button onClick={runAction} data-testid="live-control-action-confirm-submit-button">Onayla ve Çalıştır</Button>
+            <Button variant="outline" onClick={() => setActionDialog((prev) => ({ ...prev, open: false }))} disabled={isActionRunning} data-testid="live-control-action-confirm-cancel-button">Vazgeç</Button>
+            <Button onClick={runAction} disabled={isActionRunning} data-testid="live-control-action-confirm-submit-button">{isActionRunning ? "Çalışıyor..." : "Onayla ve Çalıştır"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

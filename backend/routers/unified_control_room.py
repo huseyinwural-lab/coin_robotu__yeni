@@ -12,7 +12,7 @@ router = APIRouter(prefix="/admin/unified-control-room", tags=["unified_control_
 
 @router.get("/overview")
 def unified_control_room_overview(
-    window: str = Query(default="7d"),
+    window: str = Query(default="7d", pattern="^(7d|30d)$"),
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):

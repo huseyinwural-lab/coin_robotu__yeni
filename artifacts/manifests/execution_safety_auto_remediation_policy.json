@@ -1,0 +1,7 @@
+{
+  "global_default_enabled": false,
+  "low_auto_retry_max_retry_count": 1,
+  "high_requires_manual_confirmation": true,
+  "tenants": {},
+  "updated_at": "2026-04-03T19:15:44Z"
+}

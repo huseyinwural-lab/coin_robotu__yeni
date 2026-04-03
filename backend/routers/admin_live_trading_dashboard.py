@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -31,6 +32,7 @@ from services.live_trading_dashboard_service import (
 from services.production_gate_service import enforce_production_gate_or_raise
 
 router = APIRouter(prefix="/admin/live-trading", tags=["admin_live_trading_dashboard"])
+logger = logging.getLogger(__name__)
 
 MANAGER_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN}
 OPS_ALLOWED_ALERT_ACTIONS = {"resolve", "mute", "fix_action"}
@@ -413,7 +415,7 @@ def admin_live_trading_critical_alerts(
     for row in rows:
         alert_history = (
             db.query(AuditLog)
-            .filter((AuditLog.entity_id == row.id) | (AuditLog.entity_type == "system_alert"))
+            .filter(AuditLog.entity_type == "system_alert", AuditLog.entity_id == row.id)
             .order_by(AuditLog.created_at.desc())
             .limit(8)
             .all()
@@ -1068,13 +1070,17 @@ def admin_live_trading_summary(
     _ = current_admin
     try:
         return build_live_trading_summary(db, redis_client, window=window)
-    except Exception as exc:
+    except Exception:
+        logger.exception("admin_live_trading_summary_failed")
         return {
             "window": window,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "system_health": {"status": "degraded", "execution_mode": "MOCK", "kill_switch_active": False, "fallback_active": True},
-            "critical_alerts": {"status": "critical", "items": [{"code": "summary_generation_failed", "message": str(exc)}]},
-            "component_errors": [{"component": "summary", "error": str(exc)}],
+            "critical_alerts": {
+                "status": "critical",
+                "items": [{"code": "summary_generation_failed", "message": "summary_generation_failed"}],
+            },
+            "component_errors": [{"component": "summary", "error": "internal_error"}],
         }
 
 

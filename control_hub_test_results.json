@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-04-03T19:19:06.852080",
+  "backend_url": "https://trade-trace-engine.preview.emergentagent.com",
+  "overall_success": true,
+  "results": [
+    {
+      "test": "Admin Login",
+      "success": true,
+      "details": "Login successful. Token length: 601 chars",
+      "timestamp": "2026-04-03T19:18:44.734089",
+      "expected_status": 200,
+      "actual_status": 200
+    },
+    {
+      "test": "Unified Control Room Overview (Valid)",
+      "success": true,
+      "details": "Overview data retrieved successfully. Keys: ['generated_at', 'window', 'checklist', 'stage_activation', 'live_operations', 'learning_adaptation', 'risk_market_context', 'action_center', 'explainability']",
+      "timestamp": "2026-04-03T19:18:50.973477",
+      "expected_status": 200,
+      "actual_status": 200
+    },
+    {
+      "test": "Unified Control Room Overview (Invalid)",
+      "success": true,
+      "details": "Validation error returned correctly. Error: {'detail': [{'type': 'string_pattern_mismatch', 'loc': ['query', 'window'], 'msg': \"String should match pattern '^(7d|30d)$'\", 'input': 'invalid', 'ctx': {'pattern': '^(7d|30d)$'}, 'url': 'https://errors.pydantic.dev/2.12/v/string_pattern_mismatch'}]}",
+      "timestamp": "2026-04-03T19:18:52.292210",
+      "expected_status": 422,
+      "actual_status": 422
+    },
+    {
+      "test": "Critical Alerts",
+      "success": true,
+      "details": "Critical alerts retrieved successfully. Response keys: ['items', 'count']",
+      "timestamp": "2026-04-03T19:18:54.137741",
+      "expected_status": 200,
+      "actual_status": 200
+    },
+    {
+      "test": "Daily Report Export (CSV)",
+      "success": true,
+      "details": "CSV export successful. Content-Type: text/csv; charset=utf-8, Content length: 590",
+      "timestamp": "2026-04-03T19:18:58.559581",
+      "expected_status": 200,
+      "actual_status": 200
+    },
+    {
+      "test": "Daily Report Export (JSON)",
+      "success": true,
+      "details": "JSON export successful. Content-Type: application/json, Response keys: ['date', 'generated_at', 'execution_mode', 'trades_count', 'win_rate', 'pnl_usdt', 'max_drawdown_pct', 'open_positions', 'execution_quality_score', 'fallback_rate', 'scan_latency_avg_ms', 'decision_latency_avg_ms', 'risk_reject_rate', 'allow_count', 'reduce_size_count', 'pass_count', 'block_count', 'top_3_strategy_stats', 'top_3_symbol_stats', 'critical_errors']",
+      "timestamp": "2026-04-03T19:19:02.963512",
+      "expected_status": 200,
+      "actual_status": 200
+    },
+    {
+      "test": "Live Trading Summary",
+      "success": true,
+      "details": "Live trading summary retrieved successfully. Keys: ['window', 'generated_at', 'system_health', 'trading_performance', 'risk_engine', 'scanner_health', 'execution_quality', 'learning_snapshot', 'critical_alerts', 'thresholds', 'component_errors']. No raw exception strings detected.",
+      "timestamp": "2026-04-03T19:19:06.851888",
+      "expected_status": 200,
+      "actual_status": 200
+    }
+  ]
+}

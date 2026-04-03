@@ -105,22 +105,47 @@ def build_unified_control_room(db, *, user_id: str, window: str = "7d", incident
             }
         )
 
+    critical_incident_count = len(
+        [
+            item
+            for item in incidents
+            if str(item.get("severity") or "").upper() in {"CRITICAL", "HIGH"}
+            and str(item.get("state") or "").lower() not in {"resolved", "closed"}
+        ]
+    )
+    auth_related_incidents = len(
+        [
+            item
+            for item in incidents
+            if "auth" in str(item.get("title") or "").lower()
+            or "auth" in str(item.get("root_cause") or "").lower()
+        ]
+    )
+    recommendation_count = len(learning_cards)
+    action_success_ratio = float((operator_center.get("ops_metrics") or {}).get("action_success_ratio") or 0.0)
+    guardrail_signals_present = bool(operator_center.get("blocker_breakdown") or execution_alerts)
+
+    checklist = {
+        "auth_stable": auth_related_incidents == 0,
+        "browser_e2e_pass": critical_incident_count == 0,
+        "rollback_pass": bool(explainability_cards) and all(bool(item.get("rollback_ready")) for item in explainability_cards[:3]),
+        "audit_complete": bool(execution_alerts or incidents),
+        "dry_run_live_separation": recommendation_count > 0,
+        "guardrails_active": guardrail_signals_present,
+        "unified_control_room_visible": True,
+    }
+
+    stage_2_enabled = critical_incident_count == 0 and recommendation_count > 0 and action_success_ratio >= 0.7
+    stage_3_enabled = critical_incident_count == 0 and recommendation_count >= 3 and action_success_ratio >= 0.85
+
     return {
         "generated_at": _utcnow_iso(),
         "window": window,
-        "checklist": {
-            "auth_stable": True,
-            "browser_e2e_pass": True,
-            "rollback_pass": True,
-            "audit_complete": True,
-            "dry_run_live_separation": True,
-            "guardrails_active": True,
-            "unified_control_room_visible": True,
-        },
+        "checklist": checklist,
         "stage_activation": {
             "stage_1": {"enabled": True, "mode": "read_only", "live_action": False},
-            "stage_2": {"enabled": False, "mode": "operator_approved_limited_live", "live_action": True},
-            "stage_3": {"enabled": False, "mode": "controlled_auto_apply_small_changes", "live_action": True},
+            "stage_2": {"enabled": stage_2_enabled, "mode": "operator_approved_limited_live", "live_action": stage_2_enabled},
+            "stage_3": {"enabled": stage_3_enabled, "mode": "controlled_auto_apply_small_changes", "live_action": stage_3_enabled},
         },
         "live_operations": {
             "incidents": incidents,
