@@ -71,7 +71,7 @@ export const AdminLoginPage = () => {
     const storedToken = localStorage.getItem("token");
     if (storedToken && user) {
       const adminRoles = new Set(["super_admin", "admin", "ops"]);
-      navigate(adminRoles.has(user.role) ? "/user/strategies" : "/user/dashboard", { replace: true });
+      navigate(adminRoles.has(user.role) ? "/admin/dashboard" : "/user/dashboard", { replace: true });
       return;
     }
     setSubmitting(true);

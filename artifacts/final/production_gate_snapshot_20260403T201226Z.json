@@ -57,7 +57,7 @@
         "suggested_action": null,
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-03T20:12:40.369888Z",
+      "last_run_at": "2026-04-03T20:11:31.686876Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -78,7 +78,7 @@
         "suggested_action": null,
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-03T20:12:40.369888Z",
+      "last_run_at": "2026-04-03T20:11:31.686876Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -99,7 +99,7 @@
         "suggested_action": null,
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-03T20:12:40.369888Z",
+      "last_run_at": "2026-04-03T20:11:31.686876Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -122,7 +122,7 @@
         "policy_bypass_applied": true,
         "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-03T20:12:40.369888Z",
+      "last_run_at": "2026-04-03T20:11:31.686876Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -148,7 +148,7 @@
         "policy_bypass_applied": true,
         "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-03T20:12:40.369888Z",
+      "last_run_at": "2026-04-03T20:11:31.686876Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -174,7 +174,7 @@
   "flapping_checks": [],
   "policy_bypass_applied": true,
   "policy_blocking_mode": "KILL_SWITCH_ONLY",
-  "updated_at": "2026-04-03T20:12:40.369919Z",
+  "updated_at": "2026-04-03T20:11:31.686908Z",
   "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
   "audit_history": [
     {
