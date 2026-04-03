@@ -7,11 +7,14 @@ import os
 import statistics
 import time
 import uuid
+from ipaddress import ip_address
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_DOWN, ROUND_UP
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
+from dotenv import dotenv_values
 from sqlalchemy.orm import Session
 
 from core.users.user_exchange_connector import (
@@ -115,19 +118,55 @@ class BinanceFuturesLiveAdapter:
         return raw.rstrip("/") if raw else default
 
     @staticmethod
+    def _ssl_verify(base_url: str) -> bool:
+        forced = str(os.environ.get("BINANCE_PROXY_VERIFY_SSL") or "").strip().lower()
+        if forced:
+            return forced in {"1", "true", "yes", "on"}
+
+        parsed = urlparse(base_url or "")
+        host = parsed.hostname or ""
+        if parsed.scheme == "https" and host:
+            try:
+                ip_address(host)
+                return False
+            except ValueError:
+                return True
+        return True
+
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _dotenv_snapshot() -> dict:
+        try:
+            return dict(dotenv_values("/app/backend/.env"))
+        except Exception:
+            return {}
+
+    @classmethod
+    def _env(cls, key: str) -> str | None:
+        value = os.environ.get(key)
+        if value is not None and str(value).strip() != "":
+            return str(value)
+        snapshot = cls._dotenv_snapshot()
+        raw = snapshot.get(key)
+        if raw is None:
+            return None
+        raw_str = str(raw).strip()
+        return raw_str if raw_str != "" else None
+
+    @staticmethod
     def _futures_rest(environment: str = "live") -> str:
         normalized = str(environment or "live").strip().lower()
         chosen = (
-            os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
-            or os.environ.get("BINANCE_FUTURES_BASE_URL")
+            BinanceFuturesLiveAdapter._env("BINANCE_FUTURES_LIVE_BASE_URL")
+            or BinanceFuturesLiveAdapter._env("BINANCE_FUTURES_BASE_URL")
             or BINANCE_FUTURES_LIVE_BASE_URL
             or BINANCE_FUTURES_LIVE_REST
         )
         if normalized == "live":
             return BinanceFuturesLiveAdapter._normalize_base_url(chosen, BINANCE_FUTURES_LIVE_REST)
         return BinanceFuturesLiveAdapter._normalize_base_url(
-            os.environ.get("BINANCE_FUTURES_LIVE_BASE_URL")
-            or os.environ.get("BINANCE_FUTURES_BASE_URL")
+            BinanceFuturesLiveAdapter._env("BINANCE_FUTURES_LIVE_BASE_URL")
+            or BinanceFuturesLiveAdapter._env("BINANCE_FUTURES_BASE_URL")
             or BINANCE_FUTURES_LIVE_BASE_URL
             or BINANCE_FUTURES_LIVE_REST,
             BINANCE_FUTURES_LIVE_REST,
@@ -137,16 +176,16 @@ class BinanceFuturesLiveAdapter:
     def _spot_rest(environment: str = "live") -> str:
         normalized = str(environment or "live").strip().lower()
         chosen = (
-            os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
-            or os.environ.get("BINANCE_SPOT_BASE_URL")
+            BinanceFuturesLiveAdapter._env("BINANCE_SPOT_LIVE_BASE_URL")
+            or BinanceFuturesLiveAdapter._env("BINANCE_SPOT_BASE_URL")
             or BINANCE_SPOT_LIVE_BASE_URL
             or BINANCE_SPOT_LIVE_REST
         )
         if normalized == "live":
             return BinanceFuturesLiveAdapter._normalize_base_url(chosen, BINANCE_SPOT_LIVE_REST)
         return BinanceFuturesLiveAdapter._normalize_base_url(
-            os.environ.get("BINANCE_SPOT_LIVE_BASE_URL")
-            or os.environ.get("BINANCE_SPOT_BASE_URL")
+            BinanceFuturesLiveAdapter._env("BINANCE_SPOT_LIVE_BASE_URL")
+            or BinanceFuturesLiveAdapter._env("BINANCE_SPOT_BASE_URL")
             or BINANCE_SPOT_LIVE_BASE_URL
             or BINANCE_SPOT_LIVE_REST,
             BINANCE_SPOT_LIVE_REST,
@@ -158,43 +197,54 @@ class BinanceFuturesLiveAdapter:
         mkt = str(market or "futures").strip().lower()
         if mkt == "spot":
             token = (
-                os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
+                BinanceFuturesLiveAdapter._env("BINANCE_SPOT_LIVE_PROXY_TOKEN")
                 if env == "live"
-                else os.environ.get("BINANCE_SPOT_LIVE_PROXY_TOKEN")
+                else BinanceFuturesLiveAdapter._env("BINANCE_SPOT_LIVE_PROXY_TOKEN")
             )
-            token = token or os.environ.get("BINANCE_SPOT_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
+            token = token or BinanceFuturesLiveAdapter._env("BINANCE_SPOT_PROXY_TOKEN") or BinanceFuturesLiveAdapter._env("BINANCE_PROXY_TOKEN")
             return str(token or "").strip()
 
         token = (
-            os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
+            BinanceFuturesLiveAdapter._env("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
             if env == "live"
-            else os.environ.get("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
+            else BinanceFuturesLiveAdapter._env("BINANCE_FUTURES_LIVE_PROXY_TOKEN")
         )
-        token = token or os.environ.get("BINANCE_FUTURES_PROXY_TOKEN") or os.environ.get("BINANCE_PROXY_TOKEN")
+        token = token or BinanceFuturesLiveAdapter._env("BINANCE_FUTURES_PROXY_TOKEN") or BinanceFuturesLiveAdapter._env("BINANCE_PROXY_TOKEN")
         return str(token or "").strip()
+
+    @classmethod
+    def _uses_path_token_proxy(cls, *, environment: str, market: str) -> bool:
+        base_url = cls._spot_rest(environment) if str(market).lower() == "spot" else cls._futures_rest(environment)
+        parsed = urlparse(base_url or "")
+        path = str(parsed.path or "").strip()
+        return path.startswith("/p/")
 
     @classmethod
     def _signed_headers(cls, api_key: str, *, environment: str, market: str) -> dict:
         headers = {"X-MBX-APIKEY": api_key}
         token = cls._proxy_token(environment, market)
-        if token:
+        if token and not cls._uses_path_token_proxy(environment=environment, market=market):
             headers["X-Proxy-Token"] = token
         return headers
 
     @classmethod
     def _public_headers(cls, *, environment: str, market: str) -> dict:
         token = cls._proxy_token(environment, market)
-        return {"X-Proxy-Token": token} if token else {}
+        if token and not cls._uses_path_token_proxy(environment=environment, market=market):
+            return {"X-Proxy-Token": token}
+        return {}
 
     def ping(self) -> dict:
         return self.ping_with_environment("live")
 
     def ping_with_environment(self, environment: str = "live") -> dict:
         rest_url = self._futures_rest(environment)
+        verify_ssl = self._ssl_verify(rest_url)
         try:
             response = httpx.get(
                 f"{rest_url}/fapi/v1/time",
                 timeout=self._timeout("ping", 6),
+                verify=verify_ssl,
             )
             response.raise_for_status()
             payload = response.json()
@@ -215,11 +265,13 @@ class BinanceFuturesLiveAdapter:
             }
 
     def exchange_info(self, symbol: str, *, environment: str = "live") -> dict:
+        futures_rest = self._futures_rest(environment)
         try:
             response = httpx.get(
-                f"{self._futures_rest(environment)}/fapi/v1/exchangeInfo",
+                f"{futures_rest}/fapi/v1/exchangeInfo",
                 params={"symbol": symbol},
                 timeout=self._timeout("exchange_info", 7),
+                verify=self._ssl_verify(futures_rest),
             )
             response.raise_for_status()
             return response.json()
@@ -238,11 +290,13 @@ class BinanceFuturesLiveAdapter:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
         signature = self._signature(api_secret, query)
-        url = f"{self._futures_rest(environment)}{endpoint}?{query}&signature={signature}"
+        futures_rest = self._futures_rest(environment)
+        url = f"{futures_rest}{endpoint}?{query}&signature={signature}"
         response = httpx.get(
             url,
             headers=self._signed_headers(api_key, environment=environment, market="futures"),
             timeout=self._timeout("signed_get", 8),
+            verify=self._ssl_verify(futures_rest),
         )
         payload = response.json() if response.content else {}
         return payload, response.status_code, dict(response.headers)
@@ -259,11 +313,13 @@ class BinanceFuturesLiveAdapter:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
         signature = self._signature(api_secret, query)
-        url = f"{self._spot_rest(environment)}{endpoint}?{query}&signature={signature}"
+        spot_rest = self._spot_rest(environment)
+        url = f"{spot_rest}{endpoint}?{query}&signature={signature}"
         response = httpx.get(
             url,
             headers=self._signed_headers(api_key, environment=environment, market="spot"),
             timeout=self._timeout("signed_get", 8),
+            verify=self._ssl_verify(spot_rest),
         )
         payload = response.json() if response.content else {}
         return payload, response.status_code, dict(response.headers)
@@ -280,11 +336,13 @@ class BinanceFuturesLiveAdapter:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
         signature = self._signature(api_secret, query)
-        url = f"{self._futures_rest(environment)}{endpoint}?{query}&signature={signature}"
+        futures_rest = self._futures_rest(environment)
+        url = f"{futures_rest}{endpoint}?{query}&signature={signature}"
         response = httpx.post(
             url,
             headers=self._signed_headers(api_key, environment=environment, market="futures"),
             timeout=self._timeout("signed_post", 10),
+            verify=self._ssl_verify(futures_rest),
         )
         payload = response.json() if response.content else {}
         return payload, response.status_code
@@ -301,11 +359,13 @@ class BinanceFuturesLiveAdapter:
         params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
         query = urlencode(params)
         signature = self._signature(api_secret, query)
-        url = f"{self._spot_rest(environment)}{endpoint}?{query}&signature={signature}"
+        spot_rest = self._spot_rest(environment)
+        url = f"{spot_rest}{endpoint}?{query}&signature={signature}"
         response = httpx.post(
             url,
             headers=self._signed_headers(api_key, environment=environment, market="spot"),
             timeout=self._timeout("signed_post", 10),
+            verify=self._ssl_verify(spot_rest),
         )
         payload = response.json() if response.content else {}
         return payload, response.status_code
@@ -329,6 +389,7 @@ class BinanceFuturesLiveAdapter:
             url,
             headers=self._signed_headers(api_key, environment=environment, market="spot" if spot else "futures"),
             timeout=self._timeout("signed_delete", 8),
+            verify=self._ssl_verify(base_url),
         )
         payload = response.json() if response.content else {}
         return payload, response.status_code
@@ -369,10 +430,12 @@ class BinanceFuturesLiveAdapter:
         return self._signed_get_spot(api_key, api_secret, "/api/v3/account", {}, environment=environment)
 
     def mark_price(self, symbol: str, *, environment: str = "live") -> float:
+        futures_rest = self._futures_rest(environment)
         response = httpx.get(
-            f"{self._futures_rest(environment)}/fapi/v1/ticker/price",
+            f"{futures_rest}/fapi/v1/ticker/price",
             params={"symbol": symbol},
             timeout=self._timeout("market_data", 8),
+            verify=self._ssl_verify(futures_rest),
         )
         response.raise_for_status()
         payload = response.json()
@@ -382,13 +445,15 @@ class BinanceFuturesLiveAdapter:
         payload = None
         errors: list[str] = []
 
-        futures_url = f"{self._futures_rest(environment)}/fapi/v1/ticker/bookTicker"
+        futures_rest = self._futures_rest(environment)
+        futures_url = f"{futures_rest}/fapi/v1/ticker/bookTicker"
         try:
             response = httpx.get(
                 futures_url,
                 params={"symbol": symbol},
                 headers=self._public_headers(environment=environment, market="futures"),
                 timeout=self._timeout("market_data", 8),
+                verify=self._ssl_verify(futures_rest),
             )
             response.raise_for_status()
             payload = response.json()
@@ -396,13 +461,15 @@ class BinanceFuturesLiveAdapter:
             errors.append(f"futures:{exc}")
 
         if payload is None:
-            spot_url = f"{self._spot_rest(environment)}/api/v3/ticker/bookTicker"
+            spot_rest = self._spot_rest(environment)
+            spot_url = f"{spot_rest}/api/v3/ticker/bookTicker"
             try:
                 response = httpx.get(
                     spot_url,
                     params={"symbol": symbol},
                     headers=self._public_headers(environment=environment, market="spot"),
                     timeout=self._timeout("market_data", 8),
+                    verify=self._ssl_verify(spot_rest),
                 )
                 response.raise_for_status()
                 payload = response.json()
@@ -805,7 +872,16 @@ def permission_status_for_user(db: Session, user_id: str) -> dict:
 def _normalize_permissions(account_payload: dict, market_type: str, environment: str) -> list[str]:
     raw_permissions = account_payload.get("permissions") if isinstance(account_payload, dict) else None
     if isinstance(raw_permissions, list) and raw_permissions:
-        return sorted({str(item).upper() for item in raw_permissions})
+        normalized = {str(item).upper() for item in raw_permissions}
+        if bool(account_payload.get("canTrade")):
+            normalized.add("TRADE")
+            if market_type == "futures":
+                normalized.add("FUTURES")
+            elif market_type == "spot":
+                normalized.add("SPOT")
+            else:
+                normalized.add("FUTURES" if environment == "live" else "SPOT")
+        return sorted(normalized)
 
     permissions: set[str] = set()
     if bool(account_payload.get("canTrade")):
