@@ -131,7 +131,7 @@ export const UserTradePage = () => {
   }, [previewResult]);
   const isFutures = useMemo(() => {
     const selectedConnection = connections.find((row) => row.id === selectedConnectionId);
-    return String(selectedConnection?.market_type || "futures").toLowerCase() === "futures";
+    return String(selectedConnection?.market_type || "spot").toLowerCase() === "futures";
   }, [connections, selectedConnectionId]);
 
   useEffect(() => {
