@@ -1,19 +1,19 @@
 {
-  "timestamp": "2026-04-03T21:37:03.868053",
+  "timestamp": "2026-04-03T21:41:22.642172",
   "backend_url": "https://trade-trace-engine.preview.emergentagent.com",
-  "overall_success": false,
+  "overall_success": true,
   "results": [
     {
       "test": "Admin Login",
       "success": true,
       "details": "Admin login successful. Token length: 601 chars",
-      "timestamp": "2026-04-03T21:36:58.897135"
+      "timestamp": "2026-04-03T21:41:01.472321"
     },
     {
       "test": "Reduce Position Without Position ID",
       "success": true,
       "details": "Correct validation error returned: position_id_required_for_position_action",
-      "timestamp": "2026-04-03T21:37:00.121969",
+      "timestamp": "2026-04-03T21:41:02.652661",
       "expected_status": 422,
       "actual_status": 422,
       "expected_error": "position_id_required_for_position_action",
@@ -23,7 +23,7 @@
       "test": "Block Further Adds Without Symbol",
       "success": true,
       "details": "Correct validation error returned: target_symbol_required_for_scope_intervention",
-      "timestamp": "2026-04-03T21:37:01.283099",
+      "timestamp": "2026-04-03T21:41:03.832289",
       "expected_status": 422,
       "actual_status": 422,
       "expected_error": "target_symbol_required_for_scope_intervention",
@@ -31,17 +31,17 @@
     },
     {
       "test": "Block Further Adds With Symbol",
-      "success": false,
-      "details": "BACKEND ISSUE: API validation fails even with target_symbol provided. Expected: 200, Got: 422. Response: {\"detail\":\"target_symbol_required_for_scope_intervention\"}. Payload sent: {'action_type': 'block_further_adds', 'position_id': None, 'target_symbol': 'BTCUSDT', 'expires_in_minutes': 15, 'reason_note': 'Test intervention for BTCUSDT block_further_adds'}. This indicates a backend validation logic issue.",
-      "timestamp": "2026-04-03T21:37:02.464336",
+      "success": true,
+      "details": "Intervention successful: {'intervention_id': 'ro-int-5e2ebffcacac474198', 'action_type': 'block_further_adds', 'status': 'success', 'reason_note': 'Test intervention for BTCUSDT block_further_adds', 'intent_id': None, 'result_summary': {'created_override_id': 'ro-ovr-9f765da8178c4208ae', 'target_key': 'SYMBOL:BTCUSDT', 'mode': 'scope'}, 'created_at': '2026-04-03T21:41:17.392952Z'}",
+      "timestamp": "2026-04-03T21:41:21.219084",
       "expected_status": 200,
-      "actual_status": 422
+      "actual_status": 200
     },
     {
       "test": "Positions Endpoint Regression",
       "success": true,
       "details": "Positions endpoint working correctly: 100 positions",
-      "timestamp": "2026-04-03T21:37:03.867856",
+      "timestamp": "2026-04-03T21:41:22.641975",
       "expected_status": 200,
       "actual_status": 200
     }

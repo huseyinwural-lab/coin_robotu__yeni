@@ -2008,6 +2008,12 @@ def admin_risk_supervisor_intervene(
     current_super_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    effective_payload = dict(payload.payload or {})
+    if payload.target_symbol and not effective_payload.get("target_symbol"):
+        effective_payload["target_symbol"] = payload.target_symbol
+    if payload.target_key and not effective_payload.get("target_key"):
+        effective_payload["target_key"] = payload.target_key
+
     result = execute_position_intervention(
         db,
         position_id=payload.position_id,
@@ -2015,7 +2021,7 @@ def admin_risk_supervisor_intervene(
         reason_note=payload.reason_note,
         actor_id=current_super_admin.id,
         actor_role=current_super_admin.role.value,
-        payload=payload.payload,
+        payload=effective_payload,
     )
     intervention = result["intervention"]
     return RiskOrchestratorInterventionResponse(
