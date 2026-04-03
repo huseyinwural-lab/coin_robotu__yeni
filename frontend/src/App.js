@@ -232,6 +232,7 @@ function App() {
             <Route path="system-status" element={<MonitoringPage />} />
             <Route path="phase4-live" element={<Phase4LiveControlPage />} />
             <Route path="audit-logs" element={<AuditLogsPage />} />
+            <Route path="core/logs" element={<AuditLogsPage />} />
 
             <Route path="strategy-allocation" element={<Navigate to="/admin/strategy/allocation" replace />} />
             <Route path="strategy-intelligence" element={<Navigate to="/admin/strategy/intelligence" replace />} />
