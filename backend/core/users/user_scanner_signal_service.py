@@ -590,11 +590,13 @@ def _default_bot_for_user(db: Session, user_id: str, symbols: list[str], market_
         .first()
     )
     if running_row:
-        merged_symbols = list(dict.fromkeys([*(running_row.symbols or []), *normalized_symbols]))[:40]
+        merged_symbols = list(dict.fromkeys([*normalized_symbols, *(running_row.symbols or [])]))[:40]
         if merged_symbols != (running_row.symbols or []):
             running_row.symbols = merged_symbols
-            running_row.updated_at = datetime.now(timezone.utc)
-            db.flush()
+        if int(getattr(running_row, "leverage", 1) or 1) != 1:
+            running_row.leverage = 1
+        running_row.updated_at = datetime.now(timezone.utc)
+        db.flush()
         return running_row
 
     row = (
@@ -609,11 +611,11 @@ def _default_bot_for_user(db: Session, user_id: str, symbols: list[str], market_
     )
     if row:
         row.is_running = True
-        merged_symbols = list(dict.fromkeys([*(row.symbols or []), *normalized_symbols]))[:40]
+        merged_symbols = list(dict.fromkeys([*normalized_symbols, *(row.symbols or [])]))[:40]
         row.symbols = merged_symbols
         if str(row.market_type or "spot").lower() != normalized_market_type:
             row.market_type = normalized_market_type
-        row.leverage = 3 if normalized_market_type == "futures" else 1
+        row.leverage = 1
         row.updated_at = datetime.now(timezone.utc)
         db.flush()
         return row
@@ -628,7 +630,7 @@ def _default_bot_for_user(db: Session, user_id: str, symbols: list[str], market_
         strategy_type="futures_momentum" if normalized_market_type == "futures" else "spot_pullback",
         timeframe="15m",
         trend_timeframe="1h",
-        leverage=3 if normalized_market_type == "futures" else 1,
+        leverage=1,
         is_enabled=True,
         is_running=True,
     )
@@ -925,7 +927,7 @@ def _build_signal_intent_payload(
         "side": side,
         "order_type": "market",
         "position_size_mode": "fixed_notional",
-        "position_size_value": max(20.0, round(float(row.confidence or 0.5) * 120.0, 2)),
+        "position_size_value": 10.0,
         "take_profit_mode": "percent",
         "take_profit_value": 2,
         "stop_loss_mode": "percent",
@@ -944,7 +946,7 @@ def _build_signal_intent_payload(
 
     if market_type == "futures":
         payload["margin_mode"] = "isolated"
-        payload["leverage"] = 3
+        payload["leverage"] = 1
 
     if exchange_connection is not None:
         payload.update(
@@ -1320,8 +1322,12 @@ def run_user_scanner(
     selected = ranked[:max_results]
     selected_symbols = [str(item.get("symbol") or "").upper() for item in selected if str(item.get("symbol") or "").strip()]
 
-    if len(selected) == 0 and len(normalized_selected_symbols) > 0:
-        fallback_symbols = normalized_selected_symbols[:max_results]
+    fallback_seed_symbols = normalized_selected_symbols[:max_results]
+    if len(fallback_seed_symbols) == 0:
+        fallback_seed_symbols = [str(symbol).upper() for symbol in (market_scope or []) if str(symbol).strip()][:max_results]
+
+    if len(selected) == 0 and len(fallback_seed_symbols) > 0:
+        fallback_symbols = fallback_seed_symbols
         selected = []
         for index, symbol in enumerate(fallback_symbols):
             fallback_signal = "long" if index % 2 == 0 else "short"

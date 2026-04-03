@@ -267,11 +267,8 @@ def scanner_run(
     db: Session = Depends(get_db),
 ):
     selected_symbols = payload.selected_symbols or []
-    if len(selected_symbols) == 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_allowed_quote_notice())
-
     valid_symbols = filter_allowed_quote_symbols(selected_symbols)
-    if len(valid_symbols) == 0:
+    if payload.symbol_selection_mode == "manual_selection" and len(valid_symbols) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_allowed_quote_notice())
 
     try:
