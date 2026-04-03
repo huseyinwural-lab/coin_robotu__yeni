@@ -52,7 +52,7 @@ export const AdminLoginPage = () => {
       return;
     }
 
-    if (loading || submitting || mfaState?.mfaRequired || !user || !storedToken) {
+    if (loading || mfaState?.mfaRequired || !user || !storedToken) {
       return;
     }
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
@@ -61,7 +61,7 @@ export const AdminLoginPage = () => {
       return;
     }
     setForm((prev) => ({ ...prev, email: user?.email || prev.email }));
-  }, [loading, mfaState?.mfaRequired, navigate, submitting, user]);
+  }, [loading, mfaState?.mfaRequired, navigate, user]);
 
   const onSubmit = async (event) => {
     event.preventDefault();

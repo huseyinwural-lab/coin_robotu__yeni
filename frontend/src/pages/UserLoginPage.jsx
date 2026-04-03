@@ -51,7 +51,7 @@ export const UserLoginPage = () => {
     if (!storedToken && user) {
       return;
     }
-    if (loading || submitting || mfaState?.mfaRequired || !user || !storedToken) {
+    if (loading || mfaState?.mfaRequired || !user || !storedToken) {
       return;
     }
     const adminRoles = new Set(["super_admin", "admin", "ops"]);
@@ -60,7 +60,7 @@ export const UserLoginPage = () => {
       return;
     }
     navigate("/user/dashboard", { replace: true });
-  }, [loading, mfaState?.mfaRequired, navigate, submitting, user]);
+  }, [loading, mfaState?.mfaRequired, navigate, user]);
 
   const onSubmit = async (event) => {
     event.preventDefault();
