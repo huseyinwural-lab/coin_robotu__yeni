@@ -251,6 +251,60 @@
   - Dosya: `backend/services/live_trading_dashboard_service.py`
 - Doğrulama: endpoint şimdi **200** dönüyor ve expected JSON alanlarını içeriyor.
 
+## 2026-04-03 — Production Gate Control Panel (P0→P1) Tek Tur Kapatma
+
+### Kapatılan P0
+- **Read endpoint side-effect azaltıldı**
+  - `get_production_gate_status(refresh_checks=false)` artık cleanup/override-expiry-sync/auto-rerun/auto-reconcile gibi yazma etkilerini tetiklemiyor.
+  - Side-effect yalnız explicit refresh/check aksiyonlarında.
+  - Dosya: `backend/services/production_gate_service.py`
+- **Session fallback bug düzeltildi**
+  - `OperationalError` durumunda kapalı/bozuk session yeniden kullanılmıyor; `SessionLocal()` ile güvenli retry yapılıyor.
+  - Dosya: `backend/services/production_gate_service.py`
+- **TTL sınırı netleştirildi**
+  - Service seviyesinde `ttl_minutes < 1` açık şekilde reddediliyor.
+  - Dosya: `backend/services/production_gate_service.py`
+- **Cross-check hata detayları sanitize edildi**
+  - Mismatch durumunda 500 detail artık ham payload değil: `{ error, mismatch_count }`.
+  - Dosya: `backend/routers/phase4_live.py`
+
+### Kapatılan P1
+- **Execution Readiness frontend stabilizasyonu**
+  - `Promise.all` -> `Promise.allSettled`, kısmi başarısızlıkta veri korunuyor.
+  - In-flight + requestId guard ile race/overlap azaltıldı.
+  - `loading` vs `isRefreshing` ayrımı ile auto-refresh flicker azaltıldı.
+  - Cross-check aksiyonu action lock üzerinden çalıştırıldı.
+  - Dosya: `frontend/src/pages/AdminExecutionReadinessPage.jsx`
+- **Cross-check UI ham JSON dump kaldırıldı**
+  - Kullanıcı dostu özet: `PASS/FAIL · mismatches=X · sources=Y`.
+  - Dosya: `frontend/src/pages/AdminExecutionReadinessPage.jsx`
+- **Live Gate adım güvenliği artırıldı**
+  - Adım kilidi artık önceki adımlara bağlı.
+  - `FAIL` adımlar için manuel complete engeli eklendi.
+  - Dosya: `frontend/src/pages/AdminLiveGatePage.jsx`
+- **Auto Unblock çift onay eklendi**
+  - Prompt phrase (`AUTO UNBLOCK`) + confirm adımı zorunlu.
+  - Dosya: `frontend/src/pages/AdminLiveGatePage.jsx`
+- **Mode transition phrase map temizliği**
+  - Duplicate `LIVE` key kaldırıldı; `expected_phrase` normalize mode’dan hesaplanıyor.
+  - Dosyalar:
+    - `backend/routers/phase4_live.py`
+    - `backend/schemas.py`
+
+### Ek Auth Hotfix (regression sırasında)
+- Admin login’de yanlış yönlendirme (`admin` kullanıcıda `/user/strategies`) düzeltildi -> `/admin/dashboard`.
+- Dosya: `frontend/src/pages/AdminLoginPage.jsx`
+
+### Test Sonuçları
+- Backend test agent: **PASS (6/6)**
+  - Read side-effect kontrol, refresh path, mode transition kontratı, cross-check sanitize, TTL min validation, fallback stabilitesi.
+- Frontend test agent: **PASS**
+  - Admin login redirect düzeldi.
+  - Execution Readiness auto-refresh/flicker davranışı stabil.
+  - Live Gate kilit/manual-complete kuralları çalışıyor.
+  - Auto Unblock prompt+confirm çalışıyor.
+  - Cross-check sonucu ham JSON değil, özet formatta gösteriliyor.
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)
