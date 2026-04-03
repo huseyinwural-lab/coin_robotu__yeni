@@ -390,6 +390,16 @@ export const AdminExecutionReadinessPage = () => {
     }, "Cross-check tutarlı");
   }, [runAction]);
 
+  const crossCheckSummaryText = useMemo(() => {
+    if (!crossCheckResult || typeof crossCheckResult !== "object") {
+      return "-";
+    }
+    const isConsistent = Boolean(crossCheckResult.is_consistent);
+    const mismatchCount = Array.isArray(crossCheckResult.mismatches) ? crossCheckResult.mismatches.length : 0;
+    const sourceCount = Array.isArray(crossCheckResult.comparison_sources) ? crossCheckResult.comparison_sources.length : 0;
+    return `${isConsistent ? "PASS" : "FAIL"} · mismatches=${mismatchCount} · sources=${sourceCount}`;
+  }, [crossCheckResult]);
+
   const handleExportJson = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -767,7 +777,7 @@ export const AdminExecutionReadinessPage = () => {
           </div>
           <div className="mt-2 text-xs text-slate-300" data-testid="admin-production-gate-hardening-ops-results">
             <p data-testid="admin-production-gate-cleanup-result">cleanup_result: {cleanupResult ? JSON.stringify(cleanupResult) : "-"}</p>
-            <p data-testid="admin-production-gate-cross-check-result">cross_check_result: {crossCheckResult ? JSON.stringify(crossCheckResult) : "-"}</p>
+            <p data-testid="admin-production-gate-cross-check-result">cross_check_result: {crossCheckSummaryText}</p>
           </div>
         </div>
       </header>

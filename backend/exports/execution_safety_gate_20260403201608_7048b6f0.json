@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "proof_type": "execution_safety_gate_snapshot",
+  "created_at": "2026-04-03T20:16:08.994516+00:00",
+  "gate": {
+    "gate_state": "BLOCKED",
+    "execution_allowed": false,
+    "hard_blockers": [
+      "EXECUTION_PROOF_MOCKED_PATHS",
+      "EXECUTION_PROOF_REAL_METRIC_MISSING",
+      "LIVE_TRADING_DISABLED"
+    ],
+    "soft_warnings": [],
+    "hard_blockers_detail": [
+      {
+        "step_key": "BYBIT_ORDER_SMOKE",
+        "reason_code": "LIVE_TRADING_DISABLED",
+        "message": "LIVE_TRADING_ENABLED=false"
+      },
+      {
+        "step_key": "PROOF_QUALITY",
+        "reason_code": "EXECUTION_PROOF_MOCKED_PATHS",
+        "message": "execution_proof_has_mocked_paths"
+      },
+      {
+        "step_key": "PROOF_QUALITY",
+        "reason_code": "EXECUTION_PROOF_REAL_METRIC_MISSING",
+        "message": "real_metric_count<=0"
+      },
+      {
+        "step_key": "EXECUTION_MODE",
+        "reason_code": "LIVE_TRADING_DISABLED",
+        "message": "LIVE_TRADING_ENABLED=false"
+      }
+    ],
+    "readiness_state": "UNKNOWN",
+    "readiness_score": 0.0,
+    "go_live_allowed": false,
+    "validator_reason_codes": [
+      "validator_runtime_error"
+    ],
+    "bybit_order_smoke": {
+      "status": "FAIL",
+      "reason_code": "LIVE_TRADING_DISABLED",
+      "detail": "LIVE_TRADING_ENABLED=false",
+      "checked_at": "2026-04-03T20:16:08.994489+00:00"
+    },
+    "checked_at": "2026-04-03T20:16:08.994516+00:00"
+  },
+  "validator": {
+    "execution_mode": "LIVE",
+    "execution_allowed": false,
+    "readiness_state": "UNKNOWN",
+    "score": 0.0
+  },
+  "metadata": {
+    "schema_version": "1.0",
+    "artifact_type": "execution_safety_gate",
+    "created_at": "2026-04-03T20:16:08.994572+00:00",
+    "artifact_id": "7048b6f0-910c-4449-b95b-630bf9ff5b59",
+    "sha256": "17b12446545547052007b9855d74df53d51bb4be6efac09a7a11fa6ba2f26d16"
+  },
+  "artifact_type": "execution_safety_gate",
+  "sha256": "17b12446545547052007b9855d74df53d51bb4be6efac09a7a11fa6ba2f26d16"
+}

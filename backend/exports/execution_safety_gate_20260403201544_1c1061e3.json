@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "proof_type": "execution_safety_gate_snapshot",
+  "created_at": "2026-04-03T20:15:44.288832+00:00",
+  "gate": {
+    "gate_state": "BLOCKED",
+    "execution_allowed": false,
+    "hard_blockers": [
+      "EXECUTION_PROOF_MOCKED_PATHS",
+      "EXECUTION_PROOF_REAL_METRIC_MISSING",
+      "LIVE_TRADING_DISABLED"
+    ],
+    "soft_warnings": [],
+    "hard_blockers_detail": [
+      {
+        "step_key": "BYBIT_ORDER_SMOKE",
+        "reason_code": "LIVE_TRADING_DISABLED",
+        "message": "LIVE_TRADING_ENABLED=false"
+      },
+      {
+        "step_key": "PROOF_QUALITY",
+        "reason_code": "EXECUTION_PROOF_MOCKED_PATHS",
+        "message": "execution_proof_has_mocked_paths"
+      },
+      {
+        "step_key": "PROOF_QUALITY",
+        "reason_code": "EXECUTION_PROOF_REAL_METRIC_MISSING",
+        "message": "real_metric_count<=0"
+      },
+      {
+        "step_key": "EXECUTION_MODE",
+        "reason_code": "LIVE_TRADING_DISABLED",
+        "message": "LIVE_TRADING_ENABLED=false"
+      }
+    ],
+    "readiness_state": "UNKNOWN",
+    "readiness_score": 0.0,
+    "go_live_allowed": false,
+    "validator_reason_codes": [
+      "validator_runtime_error"
+    ],
+    "bybit_order_smoke": {
+      "status": "FAIL",
+      "reason_code": "LIVE_TRADING_DISABLED",
+      "detail": "LIVE_TRADING_ENABLED=false",
+      "checked_at": "2026-04-03T20:15:44.288806+00:00"
+    },
+    "checked_at": "2026-04-03T20:15:44.288832+00:00"
+  },
+  "validator": {
+    "execution_mode": "LIVE",
+    "execution_allowed": false,
+    "readiness_state": "UNKNOWN",
+    "score": 0.0
+  },
+  "metadata": {
+    "schema_version": "1.0",
+    "artifact_type": "execution_safety_gate",
+    "created_at": "2026-04-03T20:15:44.288882+00:00",
+    "artifact_id": "1c1061e3-5259-443a-a03f-27ed79fc1202",
+    "sha256": "7ad41b5ac2c2f019b7ef57f6d6aa535fadec47274e6ea67eefb4ddfdac1f259f"
+  },
+  "artifact_type": "execution_safety_gate",
+  "sha256": "7ad41b5ac2c2f019b7ef57f6d6aa535fadec47274e6ea67eefb4ddfdac1f259f"
+}
