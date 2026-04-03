@@ -105,7 +105,22 @@ export const UserTradePage = () => {
     return Number((sizeValue / price).toFixed(6));
   }, [form.size_mode, form.size_value, midPrice]);
 
-  const canRunValidation = Number(midPrice || 0) > 0 && Number(estimatedQty || 0) > 0 && Boolean(form.symbol);
+  const orderSizeForValidation = useMemo(() => {
+    if (form.size_mode === "USDT") {
+      const fallback = Number(form.size_value || 0);
+      const qty = Number(estimatedQty || 0);
+      return qty > 0 ? qty : fallback;
+    }
+    return Number(estimatedQty || 0);
+  }, [form.size_mode, form.size_value, estimatedQty]);
+
+  const canRunValidation = useMemo(() => {
+    if (!form.symbol) return false;
+    if (form.size_mode === "USDT") {
+      return Number(form.size_value || 0) > 0;
+    }
+    return Number(estimatedQty || 0) > 0;
+  }, [form.symbol, form.size_mode, form.size_value, estimatedQty]);
   const canConfirmPreview = useMemo(() => {
     const preview = previewResult?.preview || {};
     const status = String(preview.validation_status || "").toLowerCase();
@@ -206,7 +221,7 @@ export const UserTradePage = () => {
       order_type: form.order_type,
       side: form.side,
       price: Number(form.price || midPrice || 0),
-      size: Number(estimatedQty || 0),
+      size: Number(orderSizeForValidation || 0),
       leverage: isFutures ? Number(form.leverage || 1) : 1,
       margin_mode: isFutures ? form.margin_type : "isolated",
     };
@@ -256,7 +271,7 @@ export const UserTradePage = () => {
         position_size_value: form.size_mode === "USDT" ? Number(form.size_value || 0) : Number((Number(form.size_value || 0) * Number(midPrice || 0)).toFixed(4)),
         margin_mode: isFutures ? form.margin_type : null,
         leverage: isFutures ? Number(form.leverage || 1) : null,
-        size: Number(estimatedQty || 0),
+        size: Number(orderSizeForValidation || 0),
         price: form.price ? Number(form.price) : undefined,
         stop_price: form.stop_price ? Number(form.stop_price) : undefined,
         take_profit_price: form.take_profit_price ? Number(form.take_profit_price) : undefined,
