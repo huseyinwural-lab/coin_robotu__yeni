@@ -328,6 +328,43 @@
   - 1/7/30 filtre butonları çalışıyor
   - `/admin/core/logs` route alias çalışıyor
 
+## 2026-04-03 — Open Position Intervention Mantık Düzeltmesi (Admin Denetleyici Model)
+
+### Sorun
+- Admin panelde "Pozisyon seç" zorunluluğu vardı; açık pozisyon yokken müdahale paneli anlamsız kilitleniyordu.
+- İş kuralı gereği admin pozisyon açmamalı; user açmalı.
+
+### Uygulanan Çözüm (Dağıtmadan, backward-compatible)
+- **Dual-mode intervention** getirildi:
+  - `position` mode: `reduce_position` / `close_position` için `position_id` zorunlu
+  - `scope` mode: `block_further_adds` için `position_id` olmadan `target_symbol`/`target_key` ile müdahale
+- Backend request kontratı genişletildi (kırmadan):
+  - `position_id` artık optional
+  - root-level `target_symbol`/`target_key` desteklendi
+  - mevcut `payload` içinden gelen `target_symbol` de destekleniyor
+- Validation netleştirildi:
+  - `reduce/close` + no position => `422 position_id_required_for_position_action`
+  - `block_further_adds` + no target => `422 target_symbol_required_for_scope_intervention`
+- Audit/intervention logu scope modunu da kapsıyor (`entity_type=risk_scope`, `target_key` ile)
+
+### Frontend Değişiklikleri
+- `AdminRiskOrchestratorPage` Open Position Intervention paneli güncellendi:
+  - Pozisyon yok banner'ı eklendi
+  - `target_symbol` input eklendi (scope mode için)
+  - submit butonu action-type + position/symbol koşullarına göre akıllı disable
+  - mode hint: `position` vs `scope` açıklaması
+  - Admin’in pozisyon açmadığını net belirten açıklama
+
+### Test Sonuçları
+- Lint: Python + JS **PASS**
+- Backend test agent: **PASS (4/4)**
+  - reduce without position => 422
+  - block without symbol => 422
+  - block with symbol => 200
+  - positions endpoint regression yok
+- Frontend test agent: **PASS (100%)**
+  - Open Position Intervention yeni kurallar doğrulandı
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)
