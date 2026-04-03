@@ -178,10 +178,10 @@ export const AdminStrategyObservabilityPage = () => {
     return normalizedSelectedSignalIds.join("|") === normalizedSelectedSimulationIds.join("|");
   }, [normalizedSelectedSignalIds, normalizedSelectedSimulationIds, selectedSimulation.previewToken]);
 
-  const canExecuteSelectedSignals = isSuperAdmin && normalizedSelectedSignalIds.length > 0 && selectedMatchSimulation && selectedSignalsApproved;
   const selectedSignalsApproved = normalizedSelectedSignalIds.every(
     (signalId) => String(topSignalsById?.[signalId]?.governance_status || "pending") === "approved"
   );
+  const canExecuteSelectedSignals = isSuperAdmin && normalizedSelectedSignalIds.length > 0 && selectedMatchSimulation && selectedSignalsApproved;
   const timelineChainSummary = useMemo(() => {
     const map = {};
     for (const item of timelineItems || []) {

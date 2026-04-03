@@ -371,6 +371,13 @@ export const AdminStrategiesPage = () => {
         if (!hasSelected) {
           setSelectedStrategyId(filteredItems[0].strategy_id);
         }
+      } else {
+        setSelectedStrategyId("");
+        setDetail(null);
+        setTimelineItems([]);
+        setRollbackChain([]);
+        setPromotionRequests([]);
+        setBindingPreview(null);
       }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Strategy listesi yüklenemedi");
@@ -516,11 +523,13 @@ export const AdminStrategiesPage = () => {
     }
     try {
       const configJson = parsedVersionConfig.value || {};
-      await apiClient.post(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions`, {
+      const response = await apiClient.post(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions`, {
         config_json: configJson,
         config_schema_version: versionForm.config_schema_version,
       });
-      toast.success("Strategy version eklendi");
+      const createdHeader = String(response?.headers?.["x-strategy-version-created"] || "true").toLowerCase();
+      const createdNew = createdHeader === "true";
+      toast.success(createdNew ? "Strategy version eklendi" : "Aynı config mevcut: var olan version kullanıldı");
       await loadDetail(selectedStrategyId);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Version oluşturulamadı (JSON kontrol edin)");
@@ -722,14 +731,24 @@ export const AdminStrategiesPage = () => {
       const { data } = await apiClient.get(`/strategy-domain/admin/strategies/${selectedStrategyId}/audit-history/export`, {
         params: { format_type: formatType, limit: 2000 },
       });
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const normalizedFormat = String(formatType || "json").toLowerCase();
+      const isCsv = normalizedFormat === "csv";
+      const csvContent = String(data?.content || "").trim();
+      const generatedCsv = [
+        (data?.headers || []).join(","),
+        ...((data?.rows || []).map((row) => String(row || ""))),
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const fileContent = isCsv ? (csvContent || generatedCsv || "") : JSON.stringify(data, null, 2);
+      const blob = new Blob([fileContent], { type: isCsv ? "text/csv;charset=utf-8" : "application/json" });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `strategy_audit_export_${selectedStrategyId}_${formatType}.json`;
+      a.download = `strategy_audit_export_${selectedStrategyId}_${normalizedFormat}.${isCsv ? "csv" : "json"}`;
       a.click();
       window.URL.revokeObjectURL(url);
-      toast.success(`Audit export hazır: ${formatType.toUpperCase()}`);
+      toast.success(`Audit export hazır: ${normalizedFormat.toUpperCase()}`);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Audit export başarısız");
     }
@@ -782,6 +801,9 @@ export const AdminStrategiesPage = () => {
   };
 
   const approvePromote = async (requestId) => {
+    if (!window.confirm("Bu promotion request onaylansın mı?")) {
+      return;
+    }
     try {
       await apiClient.post(`/strategy-domain/admin/promotion-requests/${requestId}/approve`, { note: "approved_from_ui" });
       toast.success("Promote onaylandı");
@@ -792,6 +814,9 @@ export const AdminStrategiesPage = () => {
   };
 
   const rejectPromote = async (requestId) => {
+    if (!window.confirm("Bu promotion request reddedilsin mi?")) {
+      return;
+    }
     try {
       await apiClient.post(`/strategy-domain/admin/promotion-requests/${requestId}/reject`, { note: "rejected_from_ui" });
       toast.success("Promote request reddedildi");

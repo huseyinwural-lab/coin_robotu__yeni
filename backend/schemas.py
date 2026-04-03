@@ -1635,7 +1635,7 @@ class StrategyRegimeBindingCreate(BaseModel):
     strategy_version_id: str
     allowed_regimes: list[str] = Field(default_factory=list)
     blocked_regimes: list[str] = Field(default_factory=list)
-    priority: int = 100
+    priority: int = Field(default=100, ge=1, le=1000)
     gating_policy_version: str = "1.0"
 
 

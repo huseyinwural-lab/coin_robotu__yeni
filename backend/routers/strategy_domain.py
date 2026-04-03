@@ -610,24 +610,31 @@ def admin_strategy_lifecycle(strategy_id: str, current_admin: User = Depends(req
 def admin_create_strategy_version(
     strategy_id: str,
     payload: StrategyVersionCreate,
+    response: Response,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    row = create_strategy_version(
+    row, created_new = create_strategy_version(
         db,
         strategy_id=strategy_id,
         config_json=payload.config_json,
         config_schema_version=payload.config_schema_version,
         created_by=current_admin.id,
     )
+    response.headers["x-strategy-version-created"] = "true" if created_new else "false"
     create_audit_log(
         db,
-        action="strategy_version_created",
+        action="strategy_version_created" if created_new else "strategy_version_reused",
         entity_type="strategy_version",
         entity_id=row.version_id,
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
-        details={"strategy_id": strategy_id, "version_number": row.version_number, "version_hash": row.version_hash},
+        details={
+            "strategy_id": strategy_id,
+            "version_number": row.version_number,
+            "version_hash": row.version_hash,
+            "created_new": created_new,
+        },
     )
     return row
 

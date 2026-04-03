@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import asc, desc, or_
+from sqlalchemy import String, asc, cast, desc, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -457,10 +457,8 @@ def list_strategy_definitions_filtered(
         lifecycle_query = lifecycle_query.filter(StrategyVersionLifecycle.validation_status == validation_status)
 
     if lifecycle_state or active_only or production_only or validation_status:
-        strategy_ids = [item.strategy_id for item in lifecycle_query.all()]
-        if len(strategy_ids) == 0:
-            return [], 0
-        query = query.filter(StrategyDefinition.strategy_id.in_(strategy_ids))
+        strategy_ids_query = lifecycle_query.with_entities(StrategyVersionLifecycle.strategy_id).distinct()
+        query = query.filter(StrategyDefinition.strategy_id.in_(strategy_ids_query))
 
     total = query.count()
 
@@ -492,7 +490,7 @@ def create_strategy_version(
     config_json: dict,
     config_schema_version: str,
     created_by: str,
-) -> StrategyVersion:
+) -> tuple[StrategyVersion, bool]:
     strategy = get_strategy(db, strategy_id)
     if strategy is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_not_found")
@@ -522,7 +520,7 @@ def create_strategy_version(
         same_schema = str(latest.config_schema_version) == str(config_schema_version)
         if same_config and same_schema:
             _version_cache[latest.version_id] = (time.time(), latest.version_id)
-            return latest
+            return latest, False
 
     next_version = (latest.version_number + 1) if latest else 1
     version_hash = build_version_hash(
@@ -539,7 +537,7 @@ def create_strategy_version(
     )
     if existing_same_hash is not None:
         _version_cache[existing_same_hash.version_id] = (time.time(), existing_same_hash.version_id)
-        return existing_same_hash
+        return existing_same_hash, False
 
     row = StrategyVersion(
         version_id=str(uuid.uuid4()),
@@ -569,7 +567,7 @@ def create_strategy_version(
     db.commit()
     db.refresh(row)
     _version_cache[row.version_id] = (time.time(), row.version_id)
-    return row
+    return row, True
 
 
 def activate_strategy_version(db: Session, *, strategy_id: str, version_id: str) -> StrategyDefinition:
@@ -642,11 +640,17 @@ def create_strategy_regime_binding(
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="strategy_version_not_found")
 
+    normalized_allowed = sorted({str(item).strip().lower() for item in (allowed_regimes or []) if str(item).strip()})
+    normalized_blocked = sorted({str(item).strip().lower() for item in (blocked_regimes or []) if str(item).strip()})
+    overlap = sorted(set(normalized_allowed) & set(normalized_blocked))
+    if overlap:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="regime_binding_overlap_conflict")
+
     row = StrategyRegimeBinding(
         binding_id=str(uuid.uuid4()),
         strategy_version_id=strategy_version_id,
-        allowed_regimes=sorted(set(allowed_regimes)),
-        blocked_regimes=sorted(set(blocked_regimes)),
+        allowed_regimes=normalized_allowed,
+        blocked_regimes=normalized_blocked,
         priority=priority,
         gating_policy_version=gating_policy_version,
         created_by=created_by,
@@ -1068,12 +1072,24 @@ def compare_strategy_versions(
 
 
 def get_strategy_timeline(db: Session, *, strategy_id: str, limit: int = 200) -> list[dict[str, Any]]:
-    rows = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(max(limit * 5, 200)).all()
+    strategy_ref_pattern_spaced = f'%"strategy_id": "{strategy_id}"%'
+    strategy_ref_pattern_compact = f'%"strategy_id":"{strategy_id}"%'
+    rows = (
+        db.query(AuditLog)
+        .filter(
+            or_(
+                AuditLog.entity_id == strategy_id,
+                cast(AuditLog.details, String).ilike(strategy_ref_pattern_spaced),
+                cast(AuditLog.details, String).ilike(strategy_ref_pattern_compact),
+            )
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(max(limit * 5, 500))
+        .all()
+    )
     items: list[dict[str, Any]] = []
     for row in rows:
         details = row.details or {}
-        if row.entity_id != strategy_id and details.get("strategy_id") != strategy_id:
-            continue
         items.append(
             {
                 "audit_id": row.id,
@@ -1160,6 +1176,19 @@ def create_strategy_promotion_request(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="validation_required_before_promote")
     if require_dry_run and lifecycle.dry_run_status != _VALIDATION_PASS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="dry_run_required_before_promote")
+
+    existing_pending = (
+        db.query(StrategyPromotionRequest)
+        .filter(
+            StrategyPromotionRequest.strategy_id == strategy_id,
+            StrategyPromotionRequest.strategy_version_id == strategy_version_id,
+            StrategyPromotionRequest.status == _PROMOTION_PENDING,
+            StrategyPromotionRequest.expires_at >= _now_utc(),
+        )
+        .first()
+    )
+    if existing_pending is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="promotion_request_already_pending")
 
     request = StrategyPromotionRequest(
         request_id=str(uuid.uuid4()),
@@ -1988,22 +2017,30 @@ def export_strategy_audit_history(db: Session, *, strategy_id: str, format_type:
     items = get_strategy_timeline(db, strategy_id=strategy_id, limit=limit)
     if str(format_type).lower() == "csv":
         headers = ["audit_id", "timestamp", "action", "severity", "actor_user_id", "actor_role", "entity_type", "entity_id"]
-        rows = [
-            ",".join(
-                [
-                    str(item.get("audit_id") or ""),
-                    str(item.get("timestamp") or ""),
-                    str(item.get("action") or ""),
-                    str(item.get("severity") or ""),
-                    str(item.get("actor_user_id") or ""),
-                    str(item.get("actor_role") or ""),
-                    str(item.get("entity_type") or ""),
-                    str(item.get("entity_id") or ""),
-                ]
-            )
-            for item in items
-        ]
-        return {"strategy_id": strategy_id, "format": "csv", "headers": headers, "rows": rows, "count": len(items)}
+        buffer = []
+        for item in items:
+            row_values = [
+                str(item.get("audit_id") or ""),
+                str(item.get("timestamp") or ""),
+                str(item.get("action") or ""),
+                str(item.get("severity") or ""),
+                str(item.get("actor_user_id") or ""),
+                str(item.get("actor_role") or ""),
+                str(item.get("entity_type") or ""),
+                str(item.get("entity_id") or ""),
+            ]
+            escaped = ['"' + value.replace('"', '""') + '"' for value in row_values]
+            buffer.append(",".join(escaped))
+        csv_content = ",".join(headers) + "\n" + "\n".join(buffer)
+        rows = buffer
+        return {
+            "strategy_id": strategy_id,
+            "format": "csv",
+            "headers": headers,
+            "rows": rows,
+            "content": csv_content,
+            "count": len(items),
+        }
     return {"strategy_id": strategy_id, "format": "json", "items": items, "count": len(items)}
 
 
