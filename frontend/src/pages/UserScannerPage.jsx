@@ -684,8 +684,8 @@ export const UserScannerPage = () => {
     }
     try {
       const requestDescriptors = [
-        { key: "signal_mode", request: apiClient.get("/user/signal-mode") },
-        { key: "scanner_overview", request: apiClient.get("/user/scanner") },
+        { key: "signal_mode", request: apiClient.get("/user/signal-mode", { timeout: 8000 }) },
+        { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 8000 }) },
         {
           key: "scanner_results",
           request: apiClient.get("/screener", {
@@ -693,17 +693,18 @@ export const UserScannerPage = () => {
               limit: 80,
               filters: JSON.stringify(compactMinimalFilters(minimalFiltersRef.current)),
             },
+            timeout: 10000,
           }),
         },
-        { key: "strategy_templates", request: apiClient.get("/strategy-templates") },
-        { key: "scanner_automation", request: apiClient.get("/user/scanner/automation") },
-        { key: "scanner_profiles", request: apiClient.get("/user/scanner/automation-profiles") },
-        { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 } }) },
-        { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" } }) },
-        { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot") },
-        { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" } }) },
-        { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" } }) },
-        { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run") },
+        { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 8000 }) },
+        { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 8000 }) },
+        { key: "scanner_profiles", request: apiClient.get("/user/scanner/automation-profiles", { timeout: 8000 }) },
+        { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 }, timeout: 8000 }) },
+        { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 8000 }) },
+        { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", { timeout: 8000 }) },
+        { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" }, timeout: 8000 }) },
+        { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, timeout: 8000 }) },
+        { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 8000 }) },
       ];
       const responses = await Promise.allSettled(requestDescriptors.map((entry) => entry.request));
       const responsesWithEndpointMeta = responses.map((entry, index) => ({
@@ -758,7 +759,7 @@ export const UserScannerPage = () => {
       if (cards.length > 0) {
         const selectedSymbol = selectedDecisionSymbol || cards[0].symbol;
         setSelectedDecisionSymbol(selectedSymbol);
-        await loadSymbolExplainability(selectedSymbol);
+        loadSymbolExplainability(selectedSymbol);
       } else {
         setSelectedDecisionSymbol("");
         setSymbolExplainability(null);
@@ -1363,13 +1364,13 @@ export const UserScannerPage = () => {
             value={profileNameInput}
             onChange={(event) => setProfileNameInput(event.target.value)}
             placeholder="örn: scalp-3m"
-            className="h-10 rounded border border-violet-700 bg-black px-3 text-sm"
+            className="h-10 rounded border border-violet-300 bg-white px-3 text-sm text-slate-900"
             data-testid="user-scanner-automation-profile-name-input"
           />
           <select
             value={profileIntervalInput}
             onChange={(event) => setProfileIntervalInput(Number(event.target.value))}
-            className="h-10 rounded border border-violet-700 bg-black px-3 text-sm"
+            className="h-10 rounded border border-violet-300 bg-white px-3 text-sm text-slate-900"
             data-testid="user-scanner-automation-profile-interval-select"
           >
             {PROFILE_INTERVAL_OPTIONS.map((option) => (
@@ -1394,7 +1395,7 @@ export const UserScannerPage = () => {
             <p className="text-xs text-violet-200" data-testid="user-scanner-automation-profiles-empty">Henüz profil yok. İlk profilinizi oluşturabilirsiniz.</p>
           )}
           {automationProfiles.map((profile) => (
-            <div key={profile.id} className="flex flex-wrap items-center gap-2 rounded border border-violet-700/60 bg-black/20 p-2" data-testid={`user-scanner-automation-profile-row-${profile.id}`}>
+            <div key={profile.id} className="flex flex-wrap items-center gap-2 rounded border border-violet-300/80 bg-white p-2 text-slate-900" data-testid={`user-scanner-automation-profile-row-${profile.id}`}>
               <span className="text-sm font-semibold" data-testid={`user-scanner-automation-profile-name-${profile.id}`}>{profile.name}</span>
               <span className="text-xs" data-testid={`user-scanner-automation-profile-meta-${profile.id}`}>{Math.round(Number(profile.interval_seconds || 180) / 60)} dk · {profile.auto_enabled ? "aktif" : "pasif"}</span>
               <span className="text-xs" data-testid={`user-scanner-automation-profile-last-run-${profile.id}`}>son: {formatDateLabel(profile.last_run_at)}</span>

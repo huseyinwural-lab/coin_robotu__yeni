@@ -260,10 +260,10 @@ export const AdminDashboardPage = () => {
 
     try {
       const requests = [
-        apiClient.get("/dashboard/summary", { timeout: 12000 }),
-        apiClient.get("/admin/action-center/summary", { timeout: 12000 }),
-        apiClient.get("/admin/kill-switch", { timeout: 12000 }),
-        apiClient.get("/admin/action-center/incident-history", { params: { limit: 25 }, timeout: 12000 }),
+        apiClient.get("/dashboard/summary", { timeout: 8000 }),
+        apiClient.get("/admin/action-center/summary", { timeout: 8000 }),
+        apiClient.get("/admin/kill-switch", { timeout: 8000 }),
+        apiClient.get("/admin/action-center/incident-history", { params: { limit: 25 }, timeout: 8000 }),
         apiClient.get("/admin/action-center/alerts", {
           params: {
             status_filter: alertFilters.status_filter,
@@ -273,11 +273,11 @@ export const AdminDashboardPage = () => {
             window_hours: Number(alertFilters.window_hours || 24),
             limit: 250,
           },
-          timeout: 12000,
+          timeout: 8000,
         }),
-        apiClient.get("/admin/action-center/close-next-actions/latest", { timeout: 12000 }),
-        apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 8 }, timeout: 12000 }),
-        apiClient.get("/runtime/pnl/summary", { timeout: 12000 }),
+        apiClient.get("/admin/action-center/close-next-actions/latest", { timeout: 8000 }),
+        apiClient.get("/admin/live-trading/control-layer/action-audit", { params: { since_hours: 48, limit: 8 }, timeout: 8000 }),
+        apiClient.get("/runtime/pnl/summary", { timeout: 8000 }),
         apiClient.get("/runtime/alerts", {
           params: {
             limit: 20,
@@ -287,17 +287,17 @@ export const AdminDashboardPage = () => {
             user_id: runtimeAlertFilters.user_id || undefined,
             window_minutes: Number(runtimeAlertFilters.window_minutes || 60),
           },
-          timeout: 12000,
+          timeout: 8000,
         }),
-        apiClient.get("/runtime/health/smoke", { timeout: 12000 }),
-        apiClient.get("/runtime/safety/kill-switch", { timeout: 12000 }),
-        apiClient.get("/runtime/execution/mode", { timeout: 12000 }),
-        apiClient.get("/runtime/canary/readiness-score", { timeout: 12000 }),
-        apiClient.get("/runtime/go-live/checklist", { timeout: 12000 }),
-        apiClient.get("/runtime/exchange/proxy-health", { timeout: 12000 }),
-        apiClient.get("/runtime/go-live/wizard/state", { timeout: 12000 }),
+        apiClient.get("/runtime/health/smoke", { timeout: 8000 }),
+        apiClient.get("/runtime/safety/kill-switch", { timeout: 8000 }),
+        apiClient.get("/runtime/execution/mode", { timeout: 8000 }),
+        apiClient.get("/runtime/canary/readiness-score", { timeout: 8000 }),
+        apiClient.get("/runtime/go-live/checklist", { timeout: 8000 }),
+        apiClient.get("/runtime/exchange/proxy-health", { timeout: 8000 }),
+        apiClient.get("/runtime/go-live/wizard/state", { timeout: 8000 }),
         (isManagerRole
-          ? apiClient.get("/runtime/ws/execution-timeline", { params: { limit: 120 }, timeout: 12000 })
+          ? apiClient.get("/runtime/ws/execution-timeline", { params: { limit: 120 }, timeout: 8000 })
           : Promise.resolve({ data: { status: "disabled_role", items: [] } })),
       ];
 

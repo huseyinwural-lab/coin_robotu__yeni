@@ -34,11 +34,11 @@ export const UserSignalsPage = () => {
     }
     try {
       const [signalsRes, portfolioRes, tradesRes, modeRes, botsRes] = await Promise.allSettled([
-        apiClient.get("/user/signals", { params: { limit: 120 } }),
-        apiClient.get("/user/portfolio"),
-        apiClient.get("/user/trades", { params: { limit: 120 } }),
-        apiClient.get("/user/signal-mode"),
-        apiClient.get("/bot-profiles"),
+        apiClient.get("/user/signals", { params: { limit: 120 }, timeout: 8000 }),
+        apiClient.get("/user/portfolio", { timeout: 8000 }),
+        apiClient.get("/user/trades", { params: { limit: 120 }, timeout: 8000 }),
+        apiClient.get("/user/signal-mode", { timeout: 8000 }),
+        apiClient.get("/bot-profiles", { timeout: 8000 }),
       ]);
 
       const extractData = (result, fallbackValue) => {
