@@ -248,7 +248,11 @@ export const UserTradePage = () => {
           ["PREVIEWED", "REJECTED"].includes(String(item.status || "").toUpperCase()),
       );
       for (const item of stalePreviewOrders) {
-        await apiClient.post("/user/execution/intent/cancel", { intent_token: item.intent_token });
+        try {
+          await apiClient.post("/user/execution/intent/cancel", { intent_token: item.intent_token });
+        } catch {
+          // stale cancel hatası preview akışını bloklamasın
+        }
       }
       const hasExecutionModeSwitch = (validation?.violations || []).some((item) => item.code === "execution_mode_switch_required");
       const resolvedOrderType = (() => {
