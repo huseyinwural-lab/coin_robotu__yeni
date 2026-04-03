@@ -72,6 +72,49 @@
   - `.env` duplicate key = 0
   - Zombie/defunct process = 0
 
+## 2026-04-03 — Strategy Template Eksiklerinin Kapatılması (UI + Kod)
+
+### Tamamlanan Düzeltmeler
+- **Lifecycle bypass kapatıldı (is_active):**
+  - `StrategyTemplate` create artık zorunlu `is_active=False` (DRAFT aktif başlayamaz)
+  - update akışında `is_active` doğrudan set edilemez
+  - Dosya: `backend/routers/strategy_templates.py`
+- **State transition kuralları sıkılaştırıldı:**
+  - `validate`: sadece `DRAFT|VALIDATED`
+  - `mark-backtest-passed`: sadece `VALIDATED|BACKTEST_PASSED` (ACTIVE artık kabul edilmiyor)
+  - Dosya: `backend/routers/strategy_templates.py`
+- **Rollback yan etkisi düzeltildi:**
+  - Group içi tüm satırları körlemesine `DEPRECATED` yapan toplu update kaldırıldı
+  - Hedef/aktif satırlar kontrollü yönetiliyor, geçmiş `ROLLED_BACK` state’i korunuyor
+  - Dosya: `backend/routers/strategy_templates.py`
+- **Clone audit eklendi:**
+  - `strategy_template_version_cloned` audit log yazılıyor
+  - Dosya: `backend/routers/strategy_templates.py`
+- **Audit timeline kapsamı genişletildi:**
+  - Detail ekranı artık version group kapsamındaki strategy_template auditlerini de çekiyor
+  - Dosya: `backend/services/strategy_template_resolution_service.py`
+- **Trace spine semantiği düzeltildi:**
+  - `strategy_version_id` artık `template_code` fallback’ine düşmüyor
+  - Dosya: `backend/services/user_live_dashboard_service.py`
+- **UI guard iyileştirmeleri:**
+  - Lifecycle butonları state-aware disable/enable
+  - Active checkbox kaldırıldı, yerine bilgilendirme notu eklendi
+  - Detail sayfasına hata/boş state paneli eklendi
+  - Dosyalar:
+    - `frontend/src/pages/StrategyTemplatesPage.jsx`
+    - `frontend/src/pages/StrategyTemplateDetailPage.jsx`
+
+### Doğrulama
+- Backend senaryo testi: **PASS**
+  - create payload içinde `is_active=true` gönderilse bile kayıt `DRAFT + is_active=false`
+  - `ACTIVE` template için `mark-backtest-passed` artık **400** dönüyor
+  - rollback sonrası history: `v1=ACTIVE`, `v2=ROLLED_BACK`
+  - clone action audit timeline’da görünüyor
+- Frontend regression (automation): **PASS**
+  - Lifecycle buton kuralları doğru
+  - active checkbox görünmüyor, `strategy-form-active-note` görünüyor
+  - detail ekranı stabil, kritik JS error yok
+
 ## 2026-04-02 — Live Akış (Spot+Futures) ve Admin TR Lokalizasyonu Stabilizasyonu
 
 ### Tamamlananlar (P0/P1)
