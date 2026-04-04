@@ -30,9 +30,20 @@ def build_user_portfolio_snapshot(db: Session, user_id: str) -> dict:
         .filter(PaperPosition.user_id == user_id, PaperPosition.status != "open")
         .count()
     )
+    live_wallet_balance = _safe_float(readiness_snapshot.get("wallet_balance"))
+    live_available_balance = _safe_float(readiness_snapshot.get("available_balance"))
+
+    if can_trade_live:
+        current_capital = live_wallet_balance if live_wallet_balance > 0 else mapped["current_capital"]
+        available_balance = live_available_balance if live_available_balance > 0 else mapped["available_balance"]
+    else:
+        # canlıya çıkış öncesi test/paper bakiye gösterimini sıfırla
+        current_capital = 0.0
+        available_balance = 0.0
+
     return {
-        "current_capital": mapped["current_capital"],
-        "available_balance": mapped["available_balance"],
+        "current_capital": current_capital,
+        "available_balance": available_balance,
         "execution_mode": execution_mode,
         "open_notional": mapped["open_notional"],
         "open_unrealized_pnl": mapped["open_unrealized_pnl"],
