@@ -19186,3 +19186,27 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Doğrulama
 - `CI=true yarn build` PASS.
 
+## 2026-04-04 — Deploy HTTPS `/api` Routing Kalıcı Fix ✅
+
+### Sorun
+- Deploy domainde (`cb.infyra.de`) HTTPS altında `/api/*` istekleri backend yerine frontend dev server’a düşüp `Cannot GET/POST /api/...` 404 üretiyordu.
+
+### Uygulanan kalıcı çözüm
+- Frontend’e server-side `/api` proxy eklendi: `frontend/src/setupProxy.js`
+  - `http-proxy-middleware` ile `/api` -> `BACKEND_PROXY_TARGET`
+  - WebSocket destekli (`ws: true`)
+  - Hata anında kontrollü 502 JSON dönüşü
+  - Path rewrite ile `/api/auth/login/user` gibi rotalar backend’de doğru path’e iletiliyor.
+- Frontend env’e eklendi:
+  - `BACKEND_PROXY_TARGET=http://127.0.0.1:8001`
+
+### Doğrulama
+- Local same-origin proxy testi:
+  - `http://127.0.0.1:3000/api/health` -> 200
+  - `http://127.0.0.1:3000/api/auth/login/user` -> 200
+- Frontend test ajanı:
+  - `fetch('/api/health')` -> 200
+  - `fetch('/api/auth/login/user', POST)` -> 200
+  - `404 Cannot POST` yok
+- Build: `CI=true yarn build` PASS.
+
