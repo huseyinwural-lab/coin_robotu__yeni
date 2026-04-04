@@ -19490,6 +19490,7 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Route güncellemesi:
   - `/user/bot-profiles` artık redirect değil, doğrudan `BotProfilesPage` açıyor.
   - `/user/pro-bot-profiles` aynı ekranı açmaya devam ediyor.
+  - Sidebar `Bot Kur` linki `/user/strategies?step=2` yerine `/user/bot-profiles` yapıldı.
 - `BotProfilesPage.jsx` güncellendi:
   - Strateji select artık `/api/user/canonical-strategies` kaynağından besleniyor.
   - Sadece admin canonical registry’de `is_enabled=true` + `in_production_path=true` olan stratejiler (öncelik sıralı, max 12) listeleniyor.
