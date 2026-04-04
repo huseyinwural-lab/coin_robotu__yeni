@@ -74,9 +74,24 @@ export const UserSimpleScannerPage = () => {
   const [threshold, setThreshold] = useState("70");
   const [isRunning, setIsRunning] = useState(false);
   const [rows, setRows] = useState([]);
-  const [queryExpression, setQueryExpression] = useState("");
+  const [lastRunQueryExpression, setLastRunQueryExpression] = useState("");
 
   const isRsi = indicator === "rsi";
+  const liveQueryPreview = useMemo(() => {
+    try {
+      return buildQueryExpression({
+        indicator,
+        operator,
+        threshold,
+        rhsType,
+        rsiPeriod,
+        emaPeriod,
+      });
+    } catch {
+      return "-";
+    }
+  }, [indicator, operator, threshold, rhsType, rsiPeriod, emaPeriod]);
+
   const thresholdPlaceholder = useMemo(() => {
     if (isRsi) return "örn: 70";
     if (rhsType === "close") return "kapanış ile kıyas";
@@ -94,7 +109,7 @@ export const UserSimpleScannerPage = () => {
         rsiPeriod,
         emaPeriod,
       });
-      setQueryExpression(expression);
+      setLastRunQueryExpression(expression);
 
       const payload = {
         exchange,
@@ -210,7 +225,8 @@ export const UserSimpleScannerPage = () => {
             <Play className="mr-2 h-4 w-4" />
             {isRunning ? "Çalışıyor..." : "5. Run"}
           </Button>
-          <p className="text-xs text-slate-500" data-testid="simple-scanner-query-preview">Query: {queryExpression || "-"}</p>
+          <p className="text-xs text-slate-500" data-testid="simple-scanner-query-preview">Query: {liveQueryPreview}</p>
+          <p className="text-xs text-slate-500" data-testid="simple-scanner-last-run-query">Son Run: {lastRunQueryExpression || "-"}</p>
         </div>
       </div>
 
