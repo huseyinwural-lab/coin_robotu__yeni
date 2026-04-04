@@ -71,7 +71,7 @@ const userMenuGroups = [
     label: "Strategy",
     items: [
       { to: "/user/strategies", label: "Wizard (Strateji+Bot)", icon: TrendingUp, testId: "nav-wizard-strategy-bot-link" },
-      { to: "/user/strategies?step=2", label: "Bot Kur (Adım 2)", icon: TrendingUp, testId: "nav-bot-profiles-link" },
+      { to: "/user/bot-profiles", label: "Bot Kur", icon: TrendingUp, testId: "nav-bot-profiles-link" },
       { to: "/user/pro-strategies", label: "Profesyonel Görünüm", icon: ClipboardList, testId: "nav-strategy-templates-link" },
       { to: "/user/backtest-insights", label: "Backtest Insights", icon: LineChart, testId: "nav-backtest-insights-link" },
     ],
