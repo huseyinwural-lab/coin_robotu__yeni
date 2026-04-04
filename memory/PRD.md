@@ -19107,3 +19107,22 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Frontend build: `CI=true yarn build` → **PASS**.
 - Preview frontend testleri auth/CDN dalgalı; login akışına ek retry/timeout sertleştirmesi uygulandı (`AuthContext.jsx`, `UserLoginPage.jsx`).
 
+## 2026-04-04 — Indicator Screener RSI Manuel Parametre Girişi ✅
+
+- `UserIndicatorScreenerPage.jsx` içinde RSI eşikleri kullanıcı girişiyle yönetilecek şekilde güncellendi.
+- Yeni alanlar eklendi:
+  - `RSI Büyük (>)` input
+  - `RSI Küçük (<)` input
+  - `Query’ye Uygula`
+  - `Uygula + Tara`
+- Query oluşturma davranışı:
+  - Sadece büyük girilirse: `rsi14 > X`
+  - Sadece küçük girilirse: `rsi14 < Y`
+  - İkisi girilirse: `rsi14 > X AND rsi14 < Y`
+- Varsayılan query artık boş (`filter-only` mümkün), RSI 30 sabiti zorunlu olmaktan çıkarıldı.
+- Persist kapalı: sayfa yenilemede RSI manual inputlar boş başlar.
+
+### Test notu
+- Frontend test ajanı, preview ortamındaki tekrar eden login `ERR_ABORTED` nedeniyle UI akışını uçtan uca koşturamadı.
+- Kod seviyesi kontrol + lint sonucu: **PASS**.
+
