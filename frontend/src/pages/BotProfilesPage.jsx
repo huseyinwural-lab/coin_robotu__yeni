@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,8 @@ const initialForm = {
   name: "",
   exchange: "binance",
   market_type: "spot",
-  symbols: "BTCUSDT,ETHUSDT",
-  strategy_type: "trend_following",
+  symbols: "",
+  strategy_type: "",
   mode: "live_ready_disabled",
   symbol_source_type: "manual",
   scanner_id: "",
@@ -48,12 +48,30 @@ const TEMPLATE_BUNDLE_PRESETS = [
   { key: "event_driven", label: "Event Driven", strategy_types: ["news_sentiment_reaction", "momentum_ignition"] },
 ];
 
+const toCanonicalStrategyOptions = (items = []) => {
+  return (items || [])
+    .filter((item) => Boolean(item?.is_enabled) && Boolean(item?.in_production_path))
+    .sort((a, b) => Number(a?.priority || 999) - Number(b?.priority || 999))
+    .slice(0, 12)
+    .map((item, idx) => ({
+      id: String(item.strategy_id || `canonical-${idx}`),
+      strategy_id: String(item.strategy_id || `canonical_${idx}`),
+      name: String(item.strategy_id || `canonical_${idx}`).replaceAll("_", " "),
+      strategy_family: String(item.strategy_family || "general"),
+      market_regime: String(item.market_regime || "mixed"),
+      entry_long: item.entry_long || {},
+      exit_long: item.exit_long || {},
+    }));
+};
+
 export const BotProfilesPage = () => {
+  const location = useLocation();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
   const [userRisk, setUserRisk] = useState(null);
   const [templates, setTemplates] = useState([]);
+  const [canonicalStrategies, setCanonicalStrategies] = useState([]);
   const [selectedBot, setSelectedBot] = useState(null);
   const [detailTab, setDetailTab] = useState("overview");
   const [botStatus, setBotStatus] = useState(null);
@@ -66,7 +84,7 @@ export const BotProfilesPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [symbolSource, setSymbolSource] = useState("crypto");
   const [symbolMode, setSymbolMode] = useState("all_market_symbols");
-  const [selectedSymbols, setSelectedSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
+  const [selectedSymbols, setSelectedSymbols] = useState([]);
   const [selectedBundleKey, setSelectedBundleKey] = useState("");
 
   const parseApiErrorMessage = (error, fallback) => {
@@ -86,17 +104,19 @@ export const BotProfilesPage = () => {
 
   const fetchItems = async () => {
     try {
-      const [profilesRes, strategyPerfRes, templatesRes, riskRes] = await Promise.all([
+      const [profilesRes, strategyPerfRes, templatesRes, riskRes, canonicalRes] = await Promise.all([
         apiClient.get("/bot-profiles"),
         apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
         apiClient.get("/strategy-templates"),
         apiClient.get("/user/live/risk"),
+        apiClient.get("/user/canonical-strategies"),
       ]);
       const nextItems = profilesRes.data || [];
       setItems(nextItems);
       setStrategyPerformance(strategyPerfRes.data || { items: [] });
       setTemplates(templatesRes.data || []);
       setUserRisk(riskRes.data || null);
+      setCanonicalStrategies(canonicalRes.data || []);
       setSelectedBot((prev) => {
         if (!prev?.id) return prev;
         return nextItems.find((item) => item.id === prev.id) || null;
@@ -215,6 +235,16 @@ export const BotProfilesPage = () => {
     };
   }, [selectedBasketTemplates, strategyRiskFactor, userRisk?.base_capital, userRisk?.risk_per_trade_used]);
 
+  const canonicalStrategyOptions = useMemo(
+    () => toCanonicalStrategyOptions(canonicalStrategies),
+    [canonicalStrategies],
+  );
+
+  const selectedCanonicalStrategy = useMemo(
+    () => canonicalStrategyOptions.find((item) => item.strategy_id === form.strategy_type) || null,
+    [canonicalStrategyOptions, form.strategy_type],
+  );
+
   useEffect(() => {
     const loadDetail = async () => {
       if (!selectedBot?.id) return;
@@ -254,20 +284,96 @@ export const BotProfilesPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!activeTemplateOptions.length) return;
+    const queryStrategyId = String(new URLSearchParams(location.search || "").get("strategy_id") || "");
+    const queryStrategyExists = canonicalStrategyOptions.some((item) => item.strategy_id === queryStrategyId);
+
+    if (!activeTemplateOptions.length && !canonicalStrategyOptions.length) return;
     setForm((prev) => {
-      if (prev.template_id || (prev.strategy_template_ids || []).length > 0) {
+      const firstCanonical = canonicalStrategyOptions[0]?.strategy_id || "";
+      const firstTemplate = activeTemplateOptions[0] || null;
+
+      const nextStrategyType =
+        (queryStrategyExists && queryStrategyId)
+        || prev.strategy_type
+        || firstCanonical
+        || firstTemplate?.strategy_type
+        || "";
+
+      const matchedTemplate = activeTemplateOptions.find((item) => item.strategy_type === nextStrategyType);
+      const nextTemplateId = prev.template_id || matchedTemplate?.id || firstTemplate?.id || "";
+
+      if (nextStrategyType === prev.strategy_type && nextTemplateId === prev.template_id && (prev.strategy_template_ids || []).length > 0) {
         return prev;
       }
-      const first = activeTemplateOptions[0];
+
       return {
         ...prev,
-        template_id: first.id,
-        strategy_template_ids: [first.id],
-        strategy_type: first.strategy_type || prev.strategy_type,
+        strategy_type: nextStrategyType,
+        template_id: nextTemplateId,
+        strategy_template_ids: nextTemplateId ? [nextTemplateId] : prev.strategy_template_ids,
       };
     });
-  }, [activeTemplateOptions]);
+  }, [activeTemplateOptions, canonicalStrategyOptions, location.search]);
+
+  const createUserTemplateFromCanonical = async (canonicalStrategy) => {
+    const entryRules = canonicalStrategy?.entry_long?.rules || ["canonical_entry_signal"];
+    const exitRules = canonicalStrategy?.exit_long?.rules || ["canonical_exit_signal"];
+    const defaultParams = {
+      ema_fast: 20,
+      ema_slow: 50,
+      rsi_low: 30,
+      rsi_high: 70,
+      macd_fast: 12,
+      macd_slow: 26,
+      bb_period: 20,
+      adx_min: 20,
+    };
+
+    const payload = {
+      name: `${canonicalStrategy.name} - Bot`,
+      template_code: canonicalStrategy.strategy_id,
+      strategy_type: canonicalStrategy.strategy_id,
+      indicator_schema: {
+        indicators: ["ema", "rsi", "macd", "bb", "adx"],
+        timeframe: "15m",
+        params: defaultParams,
+      },
+      param_schema: {
+        ema_fast: { type: "int", default: 20 },
+        ema_slow: { type: "int", default: 50 },
+        rsi_low: { type: "int", default: 30 },
+        rsi_high: { type: "int", default: 70 },
+      },
+      logic_schema: {
+        entry_rules: { long_condition: entryRules.join(" AND "), threshold: 0 },
+        exit_rules: { stop_loss_pct: 1.5, take_profit_pct: 3.0, exit_condition: exitRules.join(" OR ") },
+        risk_hints: { position_size_hint_pct: 1.5, max_exposure_hint_pct: 20.0 },
+      },
+      parameters: defaultParams,
+      reason_note: "bot_profiles_attach_canonical_strategy",
+    };
+
+    const { data } = await apiClient.post("/user/strategy-templates", payload);
+    return data;
+  };
+
+  const ensureStrategyTemplateId = async () => {
+    if (form.template_id) {
+      return form.template_id;
+    }
+
+    const matchedTemplate = activeTemplateOptions.find((item) => item.strategy_type === form.strategy_type);
+    if (matchedTemplate?.id) {
+      return matchedTemplate.id;
+    }
+
+    if (!selectedCanonicalStrategy) {
+      return null;
+    }
+
+    const createdTemplate = await createUserTemplateFromCanonical(selectedCanonicalStrategy);
+    return createdTemplate?.id || null;
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -289,14 +395,16 @@ export const BotProfilesPage = () => {
     if (String(form.symbol_source_type || "manual") === "scanner" && !String(form.scanner_id || "").trim()) {
       nextErrors.scanner_id = "Scanner source için scanner_id zorunlu.";
     }
-    if (!(form.template_id || (form.strategy_template_ids || []).length > 0)) {
-      nextErrors.template_id = "En az bir aktif template seçin.";
+    if (!String(form.strategy_type || "").trim()) {
+      nextErrors.strategy_type = "Canonical strateji seçimi zorunlu.";
     }
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       toast.error("Form alanlarını kontrol edin");
       return;
     }
+
+    const strategyTemplateId = await ensureStrategyTemplateId();
 
     const payload = {
       name: form.name.trim(),
@@ -306,8 +414,8 @@ export const BotProfilesPage = () => {
       scanner_id: form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null,
       symbols: parsedSymbols,
       strategy_type: form.strategy_type,
-      strategy_template_id: form.template_id || (form.strategy_template_ids?.[0] || null),
-      strategy_template_ids: form.strategy_template_ids || [],
+      strategy_template_id: strategyTemplateId,
+      strategy_template_ids: strategyTemplateId ? [strategyTemplateId] : [],
       timeframe: form.timeframe,
       trend_timeframe: form.trend_timeframe,
       mode: form.mode || "live_ready_disabled",
@@ -327,7 +435,7 @@ export const BotProfilesPage = () => {
       setEditingId(null);
       setForm(initialForm);
       setSelectedBundleKey("");
-      setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
+      setSelectedSymbols([]);
       setSymbolMode("all_market_symbols");
       setFormErrors({});
       fetchItems();
@@ -393,7 +501,7 @@ export const BotProfilesPage = () => {
       if (editingId === item.id) {
         setEditingId(null);
         setForm(initialForm);
-        setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
+        setSelectedSymbols([]);
         setSymbolMode("all_market_symbols");
         setFormErrors({});
       }
@@ -410,7 +518,7 @@ export const BotProfilesPage = () => {
     <section className="space-y-4" data-testid="bot-profiles-page">
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="bot-profiles-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="bot-profiles-title">Bot Profile Yönetimi</h2>
-        <p className="mt-2 text-sm text-slate-400" data-testid="bot-profiles-description">Create / Update iskeleti hazır. Gerçek trade açılmaz.</p>
+        <p className="mt-2 text-sm text-slate-400" data-testid="bot-profiles-description">Eski bot ekranı aktif. Strateji seçimi admin canonical 12 listeyle çalışır.</p>
         <div className="mt-3">
           <Button type="button" variant="outline" onClick={() => navigate("/user/strategies?step=2")} data-testid="bot-profiles-open-wizard-button">
             Wizard Moduna Dön
@@ -503,18 +611,29 @@ export const BotProfilesPage = () => {
           <select
             id="bot-form-strategy-select"
             value={form.strategy_type}
-            onChange={(event) => setForm((prev) => ({ ...prev, strategy_type: event.target.value }))}
+            onChange={(event) => {
+              const strategyId = event.target.value;
+              const matchedTemplate = activeTemplateOptions.find((item) => item.strategy_type === strategyId);
+              setForm((prev) => ({
+                ...prev,
+                strategy_type: strategyId,
+                template_id: matchedTemplate?.id || "",
+                strategy_template_ids: matchedTemplate?.id ? [matchedTemplate.id] : [],
+              }));
+            }}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             data-testid="bot-form-strategy-select"
             aria-label="Strategy"
             aria-describedby="bot-form-strategy-helper"
             required
           >
-            {STRATEGY_TYPE_OPTIONS.map((item) => (
-              <option key={item} value={item}>{item}</option>
+            <option value="">Strateji seçin</option>
+            {(canonicalStrategyOptions.length ? canonicalStrategyOptions : STRATEGY_TYPE_OPTIONS.map((item) => ({ strategy_id: item, name: item.replaceAll("_", " ") }))).map((item) => (
+              <option key={item.strategy_id || item} value={item.strategy_id || item}>{item.name || item}</option>
             ))}
           </select>
-          <p className="form-helper-text" id="bot-form-strategy-helper" data-testid="bot-form-strategy-helper">Botun sinyal üretim metodunu seçin.</p>
+          <p className="form-helper-text" id="bot-form-strategy-helper" data-testid="bot-form-strategy-helper">Admin canonical registry’deki aktif 12 strateji listelenir.</p>
+          {formErrors.strategy_type && <p className="form-error-text" data-testid="bot-form-strategy-error">{formErrors.strategy_type}</p>}
         </div>
 
         <div className="form-group" data-testid="bot-form-group-template">

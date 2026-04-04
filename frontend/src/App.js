@@ -271,7 +271,7 @@ function App() {
             <Route path="trade" element={<UserTradePage />} />
             <Route path="trade-entry" element={<Navigate to="/user/trade" replace />} />
             <Route path="chart" element={<UserChartPage />} />
-            <Route path="bot-profiles" element={<Navigate to="/user/strategies?step=2" replace />} />
+            <Route path="bot-profiles" element={<BotProfilesPage />} />
             <Route path="pro-bot-profiles" element={<BotProfilesPage />} />
             <Route path="bots" element={<Navigate to="/user/bot-profiles" replace />} />
             <Route path="risk-policy" element={<RiskPoliciesPage />} />
