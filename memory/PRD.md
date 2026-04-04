@@ -19508,3 +19508,44 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `POST /api/auth/login/user` -> 200
   - `GET /api/auth/me` -> 401 `session_device_mismatch` (preview test ortamı cihaz oturumu kısıtı)
 
+## 2026-04-04 — Portfolio Cüzdan Hiyerarşisi + Bot Cüzdan Zorunlu Seçim ✅
+
+### Kullanıcı seçimleri
+- Toplam bakiye: **Spot + Futures**
+- Bot ekranı: **varsayılan cüzdan yok**, kullanıcı zorunlu elle seçer
+- Futures cüzdanı görünür ve kullanılabilir
+
+### Backend değişiklikleri
+- `UserPortfolioSnapshotResponse` genişletildi:
+  - `total_wallet_balance`
+  - `spot_wallet_balance`
+  - `futures_wallet_balance`
+- `build_user_portfolio_snapshot()` artık tüm kullanıcı exchange bağlantılarından spot/futures bakiyelerini toplayıp döndürüyor.
+- Bot API create/update tarafında `exchange_connection_id` zorunlu hale getirildi.
+  - Yoksa: `422 exchange_connection_required`
+  - Varsa: seçili bağlantıdan `exchange` ve `market_type` otomatik set edilir.
+- Runtime summary alanları eklendi:
+  - `selected_exchange_connection_id`
+  - `selected_exchange_connection_label`
+- Bot start sırasında `symbol_resolution_snapshot` merge edilerek seçilen cüzdan bilgisinin kaybolması önlendi.
+
+### Frontend değişiklikleri
+- `UserPortfolioPage` üst bölümüne yeni hiyerarşi eklendi:
+  1) Toplam Cüzdan Bakiyesi
+  2) Spot Bakiyesi
+  3) Futures Bakiyesi
+- `BotProfilesPage` formuna zorunlu cüzdan seçimi eklendi:
+  - `bot-form-wallet-connection-select`
+  - Seçim yapılmadan submit engellenir
+  - Seçime göre `exchange` ve `market_type` otomatik güncellenir
+
+### Test doğrulaması
+- Frontend test ajanı: **PASS (3/3)**
+  - Portfolio 3 kart görünürlüğü PASS
+  - Bot cüzdan zorunlu seçim PASS
+  - Futures cüzdan seçimi -> market type otomatik yansıma PASS
+- Backend test ajanı: **PASS (3/3)**
+  - Portfolio yeni alanlar PASS
+  - `exchange_connection_id` zorunluluk PASS
+  - Runtime selected cüzdan alanları PASS
+
