@@ -2186,6 +2186,8 @@ class UserExchangeConnectionResponse(BaseModel):
     has_api_secret: bool
     masked_api_key: str
     credential_fingerprint: str
+    global_activation_flag_key: str | None = None
+    global_activation_active: bool = False
     effective_source: str = "unresolved"
     routing_preview: dict = Field(default_factory=dict)
     environment_valid: bool = False

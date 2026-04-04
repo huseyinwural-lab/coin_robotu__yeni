@@ -30,7 +30,7 @@ from core.users.user_risk_settings import (
 )
 from db import get_db, redis_client
 from deps import require_step_up_for, require_user
-from models import BotProfile, PendingSignal, RiskPolicy, StrategyTemplate, User, UserExecutionIntent
+from models import BotProfile, PendingSignal, RiskPolicy, StrategyTemplate, User, UserExecutionIntent, UserExchangeConnection
 from services.live_mode_service import validate_exchange_credentials_for_user
 from services.credential_resolution_service import build_user_routing_preview
 from schemas import (
@@ -140,20 +140,75 @@ def list_user_canonical_strategies(current_user: User = Depends(require_user), d
 
 
 def _with_routing_metadata(*, row: dict, user_id: str, db: Session) -> dict:
+    exchange_code = str(row.get("exchange") or "binance").strip().lower()
+    market_type = str(row.get("market_type") or "spot").strip().lower()
+    activation_flag_key = f"is_{exchange_code}_{market_type}_active"
+    readiness_snapshot = row.get("readiness_snapshot") if isinstance(row.get("readiness_snapshot"), dict) else {}
+    activation_flags = readiness_snapshot.get("global_activation_flags") if isinstance(readiness_snapshot.get("global_activation_flags"), dict) else {}
+    activation_active = bool(
+        activation_flags.get(activation_flag_key)
+        if activation_flag_key in activation_flags
+        else readiness_snapshot.get("global_activation_active", False)
+    )
+
     preview = build_user_routing_preview(
         db,
         user_id=user_id,
-        exchange=row.get("exchange", "binance"),
-        market_type=row.get("market_type", "spot"),
+        exchange=exchange_code,
+        market_type=market_type,
         environment=row.get("environment", "live"),
         purpose="execution_fallback",
     )
     return {
         **row,
+        "global_activation_flag_key": activation_flag_key,
+        "global_activation_active": activation_active,
         "effective_source": preview.get("effective_source", "unresolved"),
         "routing_preview": preview.get("routing_preview", {}),
         "environment_valid": bool(preview.get("environment_valid", False)),
     }
+
+
+def _persist_global_activation_flag(
+    *,
+    db: Session,
+    user_id: str,
+    connection_id: str,
+    exchange: str,
+    market_type: str,
+    is_active: bool,
+) -> None:
+    row = (
+        db.query(UserExchangeConnection)
+        .filter(
+            UserExchangeConnection.id == connection_id,
+            UserExchangeConnection.user_id == user_id,
+        )
+        .first()
+    )
+    if row is None:
+        return
+
+    exchange_code = str(exchange or "binance").strip().lower()
+    market_code = str(market_type or "spot").strip().lower()
+    activation_flag_key = f"is_{exchange_code}_{market_code}_active"
+
+    snapshot = row.readiness_snapshot if isinstance(row.readiness_snapshot, dict) else {}
+    flags = snapshot.get("global_activation_flags") if isinstance(snapshot.get("global_activation_flags"), dict) else {}
+    flags[activation_flag_key] = bool(is_active)
+
+    snapshot.update(
+        {
+            "global_activation_flags": flags,
+            "global_activation_flag_key": activation_flag_key,
+            "global_activation_active": bool(is_active),
+            "global_activation_updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+    row.readiness_snapshot = snapshot
+    row.updated_at = datetime.now(timezone.utc)
+    db.commit()
 
 
 def _submit_trade_with_guard(
@@ -451,6 +506,16 @@ def revalidate_exchange_connection(
         environment=connection["environment"],
         connection_id=connection_id,
     )
+
+    _persist_global_activation_flag(
+        db=db,
+        user_id=current_user.id,
+        connection_id=connection_id,
+        exchange=connection["exchange"],
+        market_type=connection["market_type"],
+        is_active=bool(status_code < 400 and payload.get("is_valid") and payload.get("can_trade")),
+    )
+
     refreshed = get_user_exchange_connection(db, user_id=current_user.id, connection_id=connection_id)
 
     create_audit_log(
