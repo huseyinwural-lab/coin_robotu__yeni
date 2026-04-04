@@ -30,6 +30,7 @@ from deps import require_user
 from models import PendingSignal, User, UserExecutionIntent, UserScannerResult, UserExchangeConnection
 from core.users.user_exchange_connector import decrypt_exchange_secret
 from schemas import (
+    IndicatorScreenerPresetResponse,
     UserScannerOverviewResponse,
     UserScannerAutomationConfigResponse,
     UserScannerAutomationConfigUpdateRequest,
@@ -49,6 +50,7 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.explainability_rules_service import build_screener_explain
+from services.indicator_screener.indicator_query_engine_service import indicator_screener_presets
 from services.live_mode_service import (
     adapter as live_adapter,
     validate_exchange_credentials_for_user,
@@ -59,6 +61,17 @@ from services.quote_asset_constraints import allowed_quote_assets
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
+
+
+@router.get("/scanner/presets", response_model=list[IndicatorScreenerPresetResponse])
+def get_scanner_presets(
+    active_only: bool = Query(True),
+    current_user: User = Depends(require_user),
+):
+    presets = indicator_screener_presets()
+    if active_only:
+        presets = [item for item in presets if bool(item.get("is_active", True))]
+    return presets
 
 
 def _allowed_quote_notice() -> str:

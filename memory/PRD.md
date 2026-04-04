@@ -19426,3 +19426,19 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - Indicator Screener -> yeni basit ekran
   - Basit ekrandan profesyonel görünüme geri dönüş doğru
 
+## 2026-04-04 — Eski Scanner Presets 404 Fix ✅
+
+### Problem
+- Eski scanner açılışında `/api/user/scanner/presets?active_only=true` çağrısı 404 dönüyordu.
+
+### Uygulanan fix
+- Backend'e eksik endpoint eklendi:
+  - `GET /api/user/scanner/presets`
+  - kaynak: `indicator_screener_presets()`
+  - `active_only=true` filtresi destekli
+
+### Doğrulama
+- Local API doğrulama:
+  - `POST /api/auth/login/user` -> 200
+  - `GET /api/user/scanner/presets?active_only=true` -> 200 (preset listesi dönüyor)
+
