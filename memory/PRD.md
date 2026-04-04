@@ -19255,3 +19255,29 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - Professional View toggle route geçişleri
 - Build: `CI=true yarn build` PASS.
 
+## 2026-04-04 — Wizard Strateji Kaynağı Düzeltmesi (Admin Canonical Feed) ✅
+
+### Problem
+- Wizard Step1 başlangıçta fallback/hardcoded strateji isimleri gösterebiliyordu.
+- Kullanıcı beklentisi: hazır stratejiler doğrudan admin paneldeki canonical strategy registry’den beslenmeli.
+
+### Uygulanan fix
+- Backend:
+  - Yeni endpoint: `GET /api/user/canonical-strategies`
+  - Kaynak: `enabled_production_strategies(db)`
+  - Sadece admin tarafında `is_enabled=true` + `in_production_path=true` olan canonical kayıtlar user wizard’a açıldı.
+- Frontend (`UserStrategyBotWizardPage.jsx`):
+  - Step1 hazır strateji listesi artık `/api/user/canonical-strategies` ile yükleniyor.
+  - Fallback uydurma strateji isimleri tamamen kaldırıldı.
+  - Hazır strateji seçimi canonical `strategy_id` tabanlı çalışıyor.
+  - Bot attach akışında seçilen canonical stratejiden user template üretilip bota takılıyor.
+
+### Doğrulama
+- Backend: `/api/user/canonical-strategies` -> 200 (count>0)
+- Frontend test ajanı PASS:
+  - Kartlar canonical isimlerden geliyor (`ichimoku_trend_continuation`, `bollinger_squeeze_breakout`, `supertrend_flip`, `macd_impulse`)
+  - Fallback isimler yok (Trend Follower/Mean Reversion görünmüyor)
+  - Runtime crash yok
+  - Professional view butonu çalışıyor
+- Build: `CI=true yarn build` PASS.
+
