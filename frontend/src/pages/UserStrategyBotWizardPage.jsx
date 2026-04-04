@@ -20,21 +20,6 @@ const ERROR_TRANSLATION_MAP = {
   INVALID_STRATEGY_PARAMS: "Strateji kuralları geçersiz, parametreleri kontrol edin",
 };
 
-const FALLBACK_READY_STRATEGY_NAMES = [
-  "Trend Follower",
-  "Mean Reversion",
-  "Volatility Breakout",
-  "Low Vol Scalping",
-  "Momentum Ignition",
-  "Range Rotation",
-  "Orderflow Imbalance",
-  "Volume Profile Reclaim",
-  "Funding Carry",
-  "Basis Arbitrage",
-  "News Sentiment Reaction",
-  "MACD Trend Catch",
-];
-
 const defaultCustomBuilder = {
   name: "Özel Stratejim",
   timeframe: "15m",
@@ -73,18 +58,25 @@ const toFriendlyError = (error, fallback = "İşlem başarısız") => {
   return fallback;
 };
 
-const toActiveReadyTemplates = (items = []) => {
-  const latestByCode = new Map();
-  for (const item of items || []) {
-    const state = String(item?.lifecycle_state || "").toUpperCase();
-    if (!(state === "ACTIVE" || item?.is_active)) continue;
-    const key = String(item?.template_code || item?.id || "");
-    const prev = latestByCode.get(key);
-    if (!prev || Number(item.version_num || 0) >= Number(prev.version_num || 0)) {
-      latestByCode.set(key, item);
-    }
-  }
-  return Array.from(latestByCode.values()).slice(0, 12);
+const toCanonicalReadyStrategies = (items = []) => {
+  const rows = (items || [])
+    .filter((item) => Boolean(item?.is_enabled) && Boolean(item?.in_production_path))
+    .sort((a, b) => Number(a?.priority || 999) - Number(b?.priority || 999));
+
+  return rows.slice(0, 12).map((item, idx) => ({
+    id: String(item.strategy_id || `canonical-${idx}`),
+    strategy_id: String(item.strategy_id || `canonical_${idx}`),
+    name: String(item.strategy_id || `canonical_${idx}`).replaceAll("_", " "),
+    strategy_type: String(item.strategy_id || "trend_following"),
+    strategy_family: item.strategy_family,
+    market_regime: item.market_regime,
+    entry_long: item.entry_long || {},
+    exit_long: item.exit_long || {},
+    entry_short: item.entry_short || {},
+    exit_short: item.exit_short || {},
+    weight: item.weight,
+    priority: item.priority,
+  }));
 };
 
 const readStepFromSearch = (search) => {
@@ -101,7 +93,7 @@ export default function UserStrategyBotWizardPage() {
   const [step, setStep] = useState(() => readStepFromSearch(location.search));
   const [loading, setLoading] = useState(true);
   const [strategyMode, setStrategyMode] = useState("ready");
-  const [allTemplates, setAllTemplates] = useState([]);
+  const [canonicalStrategies, setCanonicalStrategies] = useState([]);
   const [selectedReadyTemplateId, setSelectedReadyTemplateId] = useState("");
   const [readyStrategyOverrides, setReadyStrategyOverrides] = useState({});
   const [customBuilder, setCustomBuilder] = useState(defaultCustomBuilder);
@@ -118,24 +110,7 @@ export default function UserStrategyBotWizardPage() {
   const [humanLogEvents, setHumanLogEvents] = useState([]);
   const [starting, setStarting] = useState(false);
 
-  const readyTemplates = useMemo(() => {
-    const active = toActiveReadyTemplates(allTemplates);
-    if (active.length > 0) return active;
-    return FALLBACK_READY_STRATEGY_NAMES.map((name, idx) => ({
-      id: `fallback-${idx}`,
-      name,
-      strategy_type: "trend_following",
-      template_code: `fallback_${idx}`,
-      version_num: 1,
-      parameters: { rsi_low: 30, rsi_high: 70 },
-      indicator_schema: { timeframe: "15m", params: { rsi_low: 30, rsi_high: 70 } },
-      logic_schema: {
-        entry_rules: { long_condition: "ema_fast > ema_slow", threshold: 0 },
-        exit_rules: { stop_loss_pct: 1.5, take_profit_pct: 2.5, exit_condition: "ema_fast < ema_slow" },
-        risk_hints: { position_size_hint_pct: 1.5, max_exposure_hint_pct: 20 },
-      },
-    }));
-  }, [allTemplates]);
+  const readyTemplates = useMemo(() => toCanonicalReadyStrategies(canonicalStrategies), [canonicalStrategies]);
 
   const selectedReadyTemplate = useMemo(
     () => readyTemplates.find((item) => item.id === selectedReadyTemplateId) || null,
@@ -145,8 +120,14 @@ export default function UserStrategyBotWizardPage() {
   const editableReadyParams = useMemo(() => {
     if (!selectedReadyTemplate) return {};
     return {
-      ...(selectedReadyTemplate.parameters || {}),
-      ...((selectedReadyTemplate.indicator_schema || {}).params || {}),
+      ema_fast: 20,
+      ema_slow: 50,
+      rsi_low: 30,
+      rsi_high: 70,
+      macd_fast: 12,
+      macd_slow: 26,
+      bb_period: 20,
+      adx_min: 20,
       ...(readyStrategyOverrides[selectedReadyTemplate.id] || {}),
     };
   }, [selectedReadyTemplate, readyStrategyOverrides]);
@@ -160,18 +141,20 @@ export default function UserStrategyBotWizardPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const [templatesRes, exchangeRes] = await Promise.all([
-          apiClient.get("/strategy-templates"),
+        const [canonicalRes, exchangeRes] = await Promise.all([
+          apiClient.get("/user/canonical-strategies"),
           apiClient.get("/user/exchange-connections"),
         ]);
-        const templateItems = templatesRes.data || [];
+        const canonicalItems = canonicalRes.data || [];
         const connectionItems = exchangeRes.data || [];
-        setAllTemplates(templateItems);
+        setCanonicalStrategies(canonicalItems);
         setExchangeConnections(connectionItems);
 
-        const active = toActiveReadyTemplates(templateItems);
+        const active = toCanonicalReadyStrategies(canonicalItems);
         if (active[0]?.id) {
           setSelectedReadyTemplateId(active[0].id);
+        } else {
+          toast.error("Admin strateji kaydı bulunamadı. Önce admin panelinde canonical stratejileri aktif edin.");
         }
         if (connectionItems[0]?.id) {
           setBotForm((prev) => ({ ...prev, exchange_connection_id: connectionItems[0].id }));
@@ -267,29 +250,46 @@ export default function UserStrategyBotWizardPage() {
     }
 
     const overrides = readyStrategyOverrides[selectedReadyTemplate.id] || {};
-    if (!Object.keys(overrides).length || String(selectedReadyTemplate.id || "").startsWith("fallback-")) {
-      return selectedReadyTemplate;
-    }
-
     const mergedParams = {
-      ...(selectedReadyTemplate.parameters || {}),
-      ...((selectedReadyTemplate.indicator_schema || {}).params || {}),
+      ema_fast: 20,
+      ema_slow: 50,
+      rsi_low: 30,
+      rsi_high: 70,
+      macd_fast: 12,
+      macd_slow: 26,
+      bb_period: 20,
+      adx_min: 20,
       ...overrides,
     };
+
+    const entryRules = selectedReadyTemplate.entry_long?.rules || ["canonical_entry_signal"];
+    const exitRules = selectedReadyTemplate.exit_long?.rules || ["canonical_exit_signal"];
+
     const payload = {
-      name: `${selectedReadyTemplate.name} - Özel`,
-      strategy_type: selectedReadyTemplate.strategy_type,
+      name: `${selectedReadyTemplate.name} - Wizard`,
+      template_code: selectedReadyTemplate.strategy_id,
+      strategy_type: selectedReadyTemplate.strategy_id,
       indicator_schema: {
-        ...(selectedReadyTemplate.indicator_schema || {}),
+        indicators: ["ema", "rsi", "macd", "bb", "adx"],
+        timeframe: "15m",
         params: mergedParams,
       },
-      param_schema: selectedReadyTemplate.param_schema || {},
-      logic_schema: selectedReadyTemplate.logic_schema || {},
+      param_schema: {
+        ema_fast: { type: "int", default: Number(mergedParams.ema_fast || 20) },
+        ema_slow: { type: "int", default: Number(mergedParams.ema_slow || 50) },
+        rsi_low: { type: "int", default: Number(mergedParams.rsi_low || 30) },
+        rsi_high: { type: "int", default: Number(mergedParams.rsi_high || 70) },
+      },
+      logic_schema: {
+        entry_rules: { long_condition: entryRules.join(" AND "), threshold: 0 },
+        exit_rules: { stop_loss_pct: 1.5, take_profit_pct: 3.0, exit_condition: exitRules.join(" OR ") },
+        risk_hints: { position_size_hint_pct: 1.5, max_exposure_hint_pct: 20.0 },
+      },
       parameters: mergedParams,
-      reason_note: "wizard_ready_override",
+      reason_note: "wizard_attach_canonical_strategy",
     };
     const template = await createUserTemplate(payload);
-    toast.success("Hazır strateji, yeni şablon olarak özelleştirildi");
+    toast.success("Admin kanonik strateji şablonu bota eklendi");
     return template;
   };
 
@@ -404,6 +404,11 @@ export default function UserStrategyBotWizardPage() {
 
           {strategyMode === "ready" ? (
             <>
+              {readyTemplates.length === 0 && (
+                <div className="mt-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800" data-testid="wizard-ready-strategy-empty-warning">
+                  Admin panelinde aktif kanonik strateji bulunamadı.
+                </div>
+              )}
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="wizard-ready-strategy-grid">
                 {readyTemplates.map((item, idx) => (
                   <button
