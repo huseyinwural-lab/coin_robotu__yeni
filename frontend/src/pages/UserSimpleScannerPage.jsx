@@ -129,7 +129,7 @@ export const UserSimpleScannerPage = () => {
               1) Borsa 2) Spot/Futures 3) Manuel Koşul 4) Run 5) Sonuç + Grafik
             </p>
           </div>
-          <Button type="button" variant="outline" onClick={() => navigate("/user/pro-scanner")} data-testid="simple-scanner-pro-view-button">
+          <Button type="button" variant="outline" onClick={() => navigate("/user/scanner")} data-testid="simple-scanner-pro-view-button">
             <Settings2 className="mr-2 h-4 w-4" />
             Profesyonel Görünüm
           </Button>

@@ -260,9 +260,9 @@ function App() {
             <Route path="execution" element={<UserExecutionPage />} />
             <Route path="alerts" element={<UserAlertCenterPage />} />
             <Route path="activity-log" element={<UserActivityLogPage />} />
-            <Route path="scanner" element={<UserSimpleScannerPage />} />
+            <Route path="scanner" element={<UserScannerPage />} />
             <Route path="pro-scanner" element={<UserScannerPage />} />
-            <Route path="indicator-screener" element={<Navigate to="/user/scanner" replace />} />
+            <Route path="indicator-screener" element={<UserSimpleScannerPage />} />
             <Route path="signals" element={<UserSignalsPage />} />
             <Route path="signal" element={<Navigate to="/user/signals" replace />} />
             <Route path="symbol/:symbol" element={<UserSymbolDecisionDetailPage />} />
