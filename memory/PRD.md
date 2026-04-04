@@ -19602,3 +19602,42 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `/api/user/exchange-connections` -> canlı spot/futures bağlantıları mevcut
   - Bot ekranı filtre mantığı spot/futures ayrımı için backend verisiyle uyumlu
 
+## 2026-04-04 — Basit Scanner Eksik Tamamlama (Timeframe + Sade Sonuç Listesi) ✅
+
+### Kullanıcı talebi
+- Timeframe seçimi genişletilsin: `3m, 5m, 15m, 1h, 4h, 1d, 3d`
+- Sonuç listesi sadeleştirilsin (eski rapor düzenine yakın)
+- Tarama anındaki fiyat (scan price) eklensin
+- Koşulda kullanılan metrik isimleri sonuçta aynen görünsün (`RSI7`, `EMA21` vb)
+
+### Uygulanan değişiklikler
+- Backend
+  - `market_data_provider.py`: desteklenen timeframe listesi genişletildi (`3m`, `3d` eklendi)
+  - `IndicatorScreenerRowResponse`: `scan_price` alanı eklendi
+  - Result row payload: `scan_price` set edildi
+  - Result row payload: `condition_metric_values` eklendi (koşuldaki alanların dinamik değer map’i)
+- Frontend (`UserSimpleScannerPage.jsx`)
+  - Timeframe dropdown eklendi (`simple-scanner-timeframe-select`)
+  - Run payload artık seçilen timeframe ile gönderiliyor
+  - Sonuç tablosu sadeleştirildi:
+    - Symbol
+    - Periyot
+    - Tarama Fiyatı
+    - Anlık Fiyat
+    - Koşul Özeti
+    - Skor
+    - Grafik
+  - Koşul özeti dinamik token gösterimi eklendi:
+    - Örn `EMA21:... · RSI7:...`
+  - Grafik açma butonu seçilen satır timeframe’i ile gider
+
+### Test
+- Lint:
+  - Backend: PASS
+  - Frontend: PASS
+- Backend manuel API doğrulama (local): PASS
+  - `POST /api/user/indicator-screener/run` with `timeframe=3m` -> 200
+  - `POST /api/user/indicator-screener/run` with `timeframe=3d` -> 200
+  - Row içinde `scan_price`, `timeframe`, `matched_rules`, `condition_metric_values` doğrulandı
+- Frontend preview E2E doğrulaması: auth/session/login kısıtı nedeniyle bloklu (infra/auth side issue), ancak kod ve backend sözleşmesi güncel.
+
