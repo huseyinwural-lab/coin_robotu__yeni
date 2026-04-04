@@ -774,7 +774,7 @@ export const BotProfilesPage = () => {
                 setEditingId(null);
                 setForm(initialForm);
                 setSelectedBundleKey("");
-                setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
+                setSelectedSymbols([]);
                 setSymbolMode("all_market_symbols");
                 setFormErrors({});
               }}

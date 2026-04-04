@@ -474,7 +474,13 @@ export default function UserStrategyBotWizardPage() {
           )}
 
           <div className="mt-5 flex flex-wrap gap-2" data-testid="wizard-step1-actions-row">
-            <Button type="button" onClick={() => goStep(2)} data-testid="wizard-step1-next-button">Bot Ayarla</Button>
+            <Button
+              type="button"
+              onClick={() => navigate(`/user/bot-profiles?strategy_id=${encodeURIComponent(selectedReadyTemplate?.strategy_id || "")}`)}
+              data-testid="wizard-step1-next-button"
+            >
+              Bot Kur Ekranına Geç
+            </Button>
           </div>
         </section>
       )}
