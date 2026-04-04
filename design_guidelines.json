@@ -1,104 +1,116 @@
 {
-  "theme": "dark",
-  "archetype": "Archetype 4 (Swiss & High-Contrast) + Terminal / Retro-Futurism Hybrid",
+  "theme": "LIGHT",
+  "archetype": "4 (Swiss & High-Contrast)",
+  "vibe": "Authority, clarity, and function-first. The interface acts as a transparent translator, converting complex 'nuclear plant' metrics into an intuitive, foolproof 3-step wizard.",
   "colors": {
-    "background": "#050505",
-    "surface": "#0F0F13",
-    "surface_hover": "#1A1A24",
-    "border": "rgba(255, 255, 255, 0.12)",
-    "text_primary": "#FFFFFF",
-    "text_secondary": "#A0A0AB",
-    "text_muted": "#52525E",
-    "accent_primary": "#00E5FF",
-    "accent_secondary": "#FF6B00",
-    "signal_error": "#FF3333",
-    "signal_warning": "#FFD600",
-    "signal_success": "#00FF66",
-    "signal_ai_learning": "#0044FF"
+    "background": "#FFFFFF",
+    "surface": "#F8FAFC",
+    "surface_glass": "bg-white/70 backdrop-blur-xl border-b border-slate-200",
+    "primary": "#0033A0",
+    "primary_hover": "#002060",
+    "accent_warning": "#F59E0B",
+    "accent_error": "#DC2626",
+    "accent_success": "#059669",
+    "text_main": "#0F172A",
+    "text_muted": "#64748B",
+    "border": "#E2E8F0"
   },
   "typography": {
-    "heading_font": "Cabinet Grotesk",
-    "body_font": "IBM Plex Sans",
-    "mono_font": "JetBrains Mono",
-    "hierarchy": {
-      "h1": "text-4xl sm:text-5xl font-black tracking-tighter leading-none",
+    "font_family_heading": "IBM Plex Sans",
+    "font_family_body": "IBM Plex Sans",
+    "strategy": "Swiss Brutalist (Tech/Art): One font family. Radical weight contrast (Black vs Light). Very crisp, reliable, and data-heavy vibe but cleanly readable.",
+    "sizes": {
+      "h1": "text-4xl sm:text-5xl font-black tracking-tighter",
       "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
-      "h3": "text-xl sm:text-2xl font-semibold",
+      "h3": "text-xl sm:text-2xl font-semibold tracking-tight",
       "h4": "text-lg sm:text-xl font-medium",
-      "body": "text-base leading-relaxed",
-      "small_label": "text-xs font-mono uppercase tracking-[0.2em]"
+      "body": "text-base font-normal leading-relaxed",
+      "small": "text-sm font-medium",
+      "label": "text-xs font-bold uppercase tracking-[0.2em]"
     }
   },
-  "spacing_and_layout": {
-    "grid_strategy": "MODE B: THE CONTROL ROOM GRID (Dense, Data-heavy)",
-    "base_grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4",
-    "gap": "gap-4 md:gap-6",
-    "padding_scale": "p-4, p-6, p-8 for standard components. Containers with borders MUST use p-6 internal padding.",
-    "border_radius": "rounded-none or rounded-sm (max 4px). Sharp, brutalist edges."
-  },
-  "surface_strategies": {
-    "header": "Crystal Glass - backdrop-blur-xl bg-[#050505]/60, 1px bottom border border-white/10.",
-    "cards": "Flat background (#0F0F13), 1px solid border (rgba(255,255,255,0.12)), no shadow by default. Hover: border-white/30 and subtle shadow.",
-    "active_incidents": "Grid Borders pattern. Expose the skeleton. Use Tracing Beam effect for critical active incidents.",
-    "buttons": "Neumorphism mix (sharp 1px border) with stark contrast. Primary action (Apply/Rollback) uses accent colors strictly. Normal actions are flat grey."
+  "layout_and_spacing": {
+    "spacing_scale": "Generous spacing. p-8 or p-12 for major containers. Containers with borders MUST have internal padding (p-6 or p-8).",
+    "grid_strategy": "The 'Bento' Grid Protocol (Universal): Use MODE B (Control Room) for the 'Professional View' complex dashboard, but for the Wizard, use a focused max-w-4xl centered layout or a split layout (left: stepper progress, right: interactive step content).",
+    "navigation": "Sticky top header containing Logo on the left, stepper progress in the middle (if applicable), and the 'Profesyonel Görünüm' toggle switch on the right."
   },
   "components": {
-    "libraries": [
-      "shadcn/ui (Tables, Tabs, Dialogs, Select, Forms)",
-      "@phosphor-icons/react (for dense technical icons)",
-      "recharts (for data visualization / risk context)"
+    "buttons": "Flat colors, no shadow, sharp 1px borders, radical hover states. MUST explicitly define text color on hover (e.g., hover:bg-slate-900 hover:text-white).",
+    "inputs": "Shadcn components heavily customized. Flat, 1px border-slate-200, focus:ring-2 focus:ring-blue-600.",
+    "cards": "Neumorphism is avoided. Use 'Grid Borders' or flat backgrounds with 1px border. No drop shadows; use shadow-sm at most.",
+    "stepper": "Vertical or horizontal step checklist representing the 3 wizard steps.",
+    "strategy_cards": "12 ready strategies displayed as clean 'Lego' blocks in a grid. Hover: slight lift (-translate-y-1), border darkens to primary blue.",
+    "logical_builder": "A custom UI section for 'Kendi Stratejini Yap'. Contains dropdowns/selects for EMA, RSI, MACD, BB, ADX and input sliders/number fields to tweak parameters (e.g., changing RSI from 30 to 25)."
+  },
+  "custom_domain_rules": {
+    "wizard_flow": [
+      {
+        "step": 1,
+        "title": "Strateji Seç/Kur",
+        "details": "Toggle between '12 Hazır Strateji' (Ready-made list) or 'Kendi Stratejini Yap' (Custom Logic Builder: EMA, RSI, MACD, BB, ADX). Users must be able to tweak parameters of the ready-made strategies (e.g., edit RSI 30 to 25)."
+      },
+      {
+        "step": 2,
+        "title": "Bot Ayarla",
+        "details": "Attach the selected/built strategy to the bot. Setup API keys, allocation, and limits."
+      },
+      {
+        "step": 3,
+        "title": "Onayla ve Başlat",
+        "details": "Review the summary of the setup and click 'Başlat' to run the bot."
+      }
     ],
-    "rules": {
-      "cards": "Go cardless or rectangular/dense styles. Overuse of standard rounded cards is forbidden.",
-      "modals": "Use Shadcn Dialog, stripped of Vercel-look. Apply sharp borders, backdrop-blur on overlay.",
-      "forms": "Use Shadcn inputs. No native HTML inputs. Explicit focus states: focus:ring-1 focus:ring-accent_primary focus:border-accent_primary.",
-      "tables": "Dense, technical tables. Use mono_font for all numerical/symbol data."
-    }
+    "error_translation_map": {
+      "ORDER_PRECHECK_FAILED": "Cüzdan bakiyesi yetersiz",
+      "API_PERMISSION_DENIED": "Borsa API izni geçersiz veya eksik",
+      "MIN_NOTIONAL_ERROR": "İşlem tutarı borsa limitinin altında",
+      "NETWORK_TIMEOUT": "Borsa ağına ulaşılamadı, tekrar deneniyor",
+      "INVALID_STRATEGY_PARAMS": "Strateji kuralları geçersiz, parametreleri kontrol edin"
+    },
+    "logs_ui": "Instead of raw technical logs, show a clean, human-readable status indicator like 'Stratejiye göre alım noktası bekleniyor...'."
   },
-  "motion_and_interaction": {
-    "hover_states": "ALWAYS explicitly set text color on hover. e.g., hover:bg-[#1A1A24] hover:text-white.",
-    "transitions": "Use specific properties: transition: transform 0.2s ease, border-color 0.2s ease.",
-    "micro_interactions": "Progress bars for cooldowns/rate limits. Status loaders for 'dry-run' and 'simulation' actions."
-  },
-  "testing_and_accessibility": {
-    "data_testid_requirement": "CRITICAL: All interactive elements (buttons, links, forms, tabs) MUST include a 'data-testid' attribute using kebab-case role-based naming. Example: data-testid='approve-live-action-button'.",
-    "contrast": "Text over backgrounds MUST meet APCA/WCAG AA standards. Interactive elements must have 3:1 contrast against adjacent colors."
+  "motion_and_interactions": {
+    "hover": "Explicit text color on hover. Slight lift for clickable strategy cards.",
+    "transitions": "transition-all duration-200 ease-out",
+    "loading": "Skeleton loaders for strategy fetching. Smooth step transitions in the wizard."
   },
   "media": {
-    "image_urls": {
-      "login_background": {
-        "url": "https://images.pexels.com/photos/3612932/pexels-photo-3612932.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-        "description": "Abstract dark geometric futuristic pattern. Use as full-screen background for global auth/login with 50% opacity black overlay.",
-        "category": "background"
+    "images": [
+      {
+        "id": "bot_logo",
+        "url": "https://static.prod-images.emergentagent.com/jobs/1478d949-5fa0-4f53-b3fb-a8b797974df7/images/cf6b1697b0b5fca2255fcabca326ccf10b6591bfef68ebc34ffec2618498d2aa.png",
+        "description": "A clean, modern geometric logo icon for a financial trading bot.",
+        "usage": "Top left header logo."
+      },
+      {
+        "id": "technical_grid_bg",
+        "url": "https://static.prod-images.emergentagent.com/jobs/1478d949-5fa0-4f53-b3fb-a8b797974df7/images/2e4f36156f99bd3ee09e7d5e8cc652096248c0dafe3663225cfbae987112b96b.png",
+        "description": "Subtle light grey structural grid on stark white background.",
+        "usage": "Use as a subtle full-page or section background pattern to give a technical but clean vibe (opacity 10-20%)."
+      },
+      {
+        "id": "lego_strategy_illustration",
+        "url": "https://static.prod-images.emergentagent.com/jobs/1478d949-5fa0-4f53-b3fb-a8b797974df7/images/75b43f68eb1da9590f6b7d94839c289b99fcf6689fdb8bcd9a057feacf4600d1.png",
+        "description": "Minimalist 3D illustration of clean white and Klein blue lego blocks snapping together.",
+        "usage": "Hero image, empty state illustration, or visual flair in the 'Kendi Stratejini Yap' (Custom Builder) section representing modular strategies."
       }
-    }
+    ],
+    "icons": "lucide-react"
   },
-  "page_specific_guidelines": {
-    "auth_session": {
-      "layout": "Centered stark login/reconnect terminal. Use login_background image. Clear session/device connection status.",
-      "function": "Must support websocket reconnect visualization (terminal logs style) to address 'preview admin login timeout' and 'auth loss' bugs."
-    },
-    "unified_control_room": {
-      "layout": "Single-page mega-dashboard. 4 major zones: Live Operations, Learning & Adaptation, Risk & Market Context, Action Center.",
-      "live_operations": "List active incidents. Use Signal Red/Warning Yellow borders.",
-      "learning_and_adaptation": "List actionable recommendations and decay/drift metrics.",
-      "risk_context": "Recharts visual area showing cluster risk and tail risk.",
-      "action_center": "Fixed bottom/side panel for preview, approve, reject, apply, rollback."
-    },
-    "explainability_cards": {
-      "design": "Data-heavy nested components. Use JetBrains Mono for 'before_state', 'after_state', 'incident_ref'. Include clear visual diffing (red for removed/before, green for added/after)."
-    },
-    "live_action_guardrails": {
-      "design": "Visual 'locks' on buttons. 'Dry Run' must be visually distinct from 'Live Apply' (e.g., dry run is outline button, live apply is solid). Show cooldown timers."
-    }
+  "accessibility_and_testing": {
+    "data_testid_requirement": "All interactive and key informational elements MUST include a data-testid attribute in kebab-case (e.g., data-testid='strategy-select-card-1', data-testid='wizard-next-step').",
+    "contrast": "Text over backgrounds must meet APCA minimums. Warning/Error colors must be checked for legibility."
   },
   "instructions_to_main_agent": [
-    "NOTE: The frontend project uses .js/.jsx files, NOT .tsx. Provide and implement code strictly in JS/JSX.",
-    "Implement the Unified Control Room as a highly dense, tactical 'Command Center' using the specified MODE B grid strategy.",
-    "Ensure global auth stability and shared audit logging is integrated into all actions (Learning, Incident, Execution).",
-    "Integrate 'data-testid' aggressively on all action buttons (approve, reject, rollback, dry-run).",
-    "Do NOT use HTML inputs or selects; strictly use customized shadcn components (adjust shadcn component files to be .js/.jsx).",
-    "Build the Human-in-the-loop policy engine UI (Controlled Auto-Apply) showing confidence, impact, decay, and sample coverage metrics.",
-    "Construct the Production Readiness Checklist as a clear, un-bypassable modal/screen before Stage Activation."
+    "Build a 3-step wizard as the default primary UI (Strateji Seç/Kur, Bot Ayarla, Onayla ve Başlat).",
+    "Include a 'Profesyonel Görünüm' (Professional View) toggle switch in the header that switches between the Wizard and the detailed 'Nuclear Plant' Dashboard.",
+    "Implement the strategy selector in Step 1 with two tabs/modes: '12 Hazır Strateji' (Ready) and 'Kendi Stratejini Yap' (Custom).",
+    "For the 'Kendi Stratejini Yap' mode, build a Logical Builder using EMA, RSI, MACD, BB, ADX with customizable parameter inputs.",
+    "Allow users to select a ready-made strategy and tweak its default parameters (e.g., changing RSI from 30 to 25).",
+    "Build a translation map function for error messages ensuring users only see the human-friendly versions (e.g., 'Cüzdan bakiyesi yetersiz') instead of technical codes.",
+    "Bot logs should display clean statuses like 'Stratejiye göre alım noktası bekleniyor' instead of raw technical arrays.",
+    "Use IBM Plex Sans for all typography with strict hierarchy and weight contrast (font-black vs font-light).",
+    "Use standard JavaScript (.js/.jsx) for the implementation (avoid TypeScript as per environment specs).",
+    "Integrate the generated image URLs into the UI."
   ]
 }
