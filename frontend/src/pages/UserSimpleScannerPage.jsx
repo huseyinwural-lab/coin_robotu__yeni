@@ -17,20 +17,6 @@ const MARKET_TYPE_OPTIONS = [
   { value: "futures", label: "Futures" },
 ];
 
-const INDICATOR_OPTIONS = [
-  { value: "rsi", label: "RSI" },
-  { value: "ema", label: "EMA" },
-  { value: "ma", label: "MA - Moving Average" },
-  { value: "boll", label: "BOLL - Bollinger Bands" },
-  { value: "vol", label: "Vol - Volume" },
-];
-
-const BOLL_LINE_OPTIONS = [
-  { value: "upper", label: "BOLL Upper" },
-  { value: "mid", label: "BOLL Mid" },
-  { value: "lower", label: "BOLL Lower" },
-];
-
 const toFriendlyError = (error, fallback = "Tarama çalıştırılamadı") => {
   const detail = error?.response?.data?.detail;
   if (typeof detail === "string" && detail.trim()) return detail;
@@ -44,52 +30,24 @@ const toFriendlyError = (error, fallback = "Tarama çalıştırılamadı") => {
   return error?.message || fallback;
 };
 
-const buildQueryExpression = ({
-  indicator,
-  operator,
-  threshold,
-  rhsType,
-  indicatorPeriod1,
-  indicatorPeriod2,
-  enablePeriod2,
-  bollLine,
-}) => {
-  const normalizedOperator = operator === "<" ? "<" : ">";
-
-  const parsePeriod = (raw, fallback) => Math.max(2, Number.parseInt(String(raw || ""), 10) || fallback);
-  const period1 = parsePeriod(indicatorPeriod1, indicator === "rsi" ? 14 : 50);
-  const period2 = parsePeriod(indicatorPeriod2, indicator === "rsi" ? 7 : 20);
-
-  const buildField = (period) => {
-    if (indicator === "rsi") return `rsi${period}`;
-    if (indicator === "ema") return `ema${period}`;
-    if (indicator === "ma") return `sma${period}`;
-    if (indicator === "boll") {
-      const line = ["upper", "mid", "lower"].includes(bollLine) ? bollLine : "upper";
-      return `boll_${line}${period}`;
-    }
-    return "volume";
-  };
-
-  const field1 = buildField(period1);
-  const canUsePeriod2 = Boolean(enablePeriod2) && indicator !== "vol";
-  if (canUsePeriod2) {
-    const field2 = buildField(period2);
-    return `${field1} ${normalizedOperator} ${field2}`;
+const normalizeConditionExpression = (rawCondition) => {
+  const source = String(rawCondition || "").trim();
+  if (!source) {
+    throw new Error("Koşul boş olamaz");
   }
 
-  if (rhsType === "close") {
-    return `${field1} ${normalizedOperator} close`;
-  }
-  if (rhsType === "last_price") {
-    return `${field1} ${normalizedOperator} last_price`;
-  }
+  const normalized = source
+    .replace(/G[ÜU]NCEL\s*F[İI]YAT/gi, "last_price")
+    .replace(/ANLIK\s*F[İI]YAT/gi, "last_price")
+    .replace(/LAST\s*PRICE/gi, "last_price")
+    .replace(/KAPANI[ŞS]/gi, "close")
+    .replace(/CLOSE/gi, "close")
+    .replace(/\s*(<=|>=|!=|=|<|>)\s*/g, " $1 ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 
-  const numericThreshold = Number(threshold);
-  if (Number.isNaN(numericThreshold)) {
-    throw new Error("Karşılaştırma değeri sayısal olmalı");
-  }
-  return `${field1} ${normalizedOperator} ${numericThreshold}`;
+  return normalized;
 };
 
 export const UserSimpleScannerPage = () => {
@@ -97,14 +55,7 @@ export const UserSimpleScannerPage = () => {
 
   const [exchange, setExchange] = useState("binance");
   const [marketType, setMarketType] = useState("spot");
-  const [indicator, setIndicator] = useState("rsi");
-  const [indicatorPeriod1, setIndicatorPeriod1] = useState("14");
-  const [enablePeriod2, setEnablePeriod2] = useState(false);
-  const [indicatorPeriod2, setIndicatorPeriod2] = useState("7");
-  const [bollLine, setBollLine] = useState("upper");
-  const [operator, setOperator] = useState(">");
-  const [rhsType, setRhsType] = useState("number");
-  const [threshold, setThreshold] = useState("70");
+  const [manualCondition, setManualCondition] = useState("rsi14 > 70");
   const [autoRefreshMinutes, setAutoRefreshMinutes] = useState("1");
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
@@ -114,42 +65,16 @@ export const UserSimpleScannerPage = () => {
 
   const liveQueryPreview = useMemo(() => {
     try {
-      return buildQueryExpression({
-        indicator,
-        operator,
-        threshold,
-        rhsType,
-        indicatorPeriod1,
-        indicatorPeriod2,
-        enablePeriod2,
-        bollLine,
-      });
+      return normalizeConditionExpression(manualCondition);
     } catch {
       return "-";
     }
-  }, [indicator, operator, threshold, rhsType, indicatorPeriod1, indicatorPeriod2, enablePeriod2, bollLine]);
-
-  const thresholdPlaceholder = useMemo(() => {
-    if (indicator === "rsi") return "örn: 70";
-    if (indicator === "vol") return "örn: 1000000";
-    if (rhsType === "close") return "kapanış ile kıyas";
-    if (rhsType === "last_price") return "anlık fiyat ile kıyas";
-    return "örn: 43000";
-  }, [indicator, rhsType]);
+  }, [manualCondition]);
 
   const runSimpleScan = useCallback(async ({ silent = false } = {}) => {
     setIsRunning(true);
     try {
-      const expression = buildQueryExpression({
-        indicator,
-        operator,
-        threshold,
-        rhsType,
-        indicatorPeriod1,
-        indicatorPeriod2,
-        enablePeriod2,
-        bollLine,
-      });
+      const expression = normalizeConditionExpression(manualCondition);
       setLastRunQueryExpression(expression);
 
       const payload = {
@@ -183,54 +108,16 @@ export const UserSimpleScannerPage = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [exchange, marketType, indicator, operator, threshold, rhsType, indicatorPeriod1, indicatorPeriod2, enablePeriod2, bollLine]);
+  }, [exchange, marketType, manualCondition]);
 
   useEffect(() => {
     if (!autoRefreshEnabled) return undefined;
     const minutes = Math.max(1, Number.parseInt(String(autoRefreshMinutes || ""), 10) || 1);
-    const intervalMs = minutes * 60 * 1000;
     const timer = window.setInterval(() => {
       runSimpleScan({ silent: true });
-    }, intervalMs);
+    }, minutes * 60 * 1000);
     return () => window.clearInterval(timer);
   }, [autoRefreshEnabled, autoRefreshMinutes, runSimpleScan]);
-
-  useEffect(() => {
-    if (indicator === "rsi") {
-      setIndicatorPeriod1("14");
-      setIndicatorPeriod2("7");
-      setRhsType("number");
-      setThreshold("70");
-      return;
-    }
-    if (indicator === "ema") {
-      setIndicatorPeriod1("50");
-      setIndicatorPeriod2("20");
-      setRhsType("close");
-      setThreshold("0");
-      return;
-    }
-    if (indicator === "ma") {
-      setIndicatorPeriod1("50");
-      setIndicatorPeriod2("20");
-      setRhsType("close");
-      setThreshold("0");
-      return;
-    }
-    if (indicator === "boll") {
-      setIndicatorPeriod1("20");
-      setIndicatorPeriod2("10");
-      setBollLine("upper");
-      setRhsType("close");
-      setThreshold("0");
-      return;
-    }
-    setIndicatorPeriod1("14");
-    setIndicatorPeriod2("7");
-    setRhsType("number");
-    setThreshold("1000000");
-    setEnablePeriod2(false);
-  }, [indicator]);
 
   return (
     <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6" data-testid="simple-scanner-page">
@@ -239,7 +126,7 @@ export const UserSimpleScannerPage = () => {
           <div data-testid="simple-scanner-header-copy">
             <h1 className="text-4xl font-black tracking-tight text-slate-900" data-testid="simple-scanner-title">Basit Scanner</h1>
             <p className="mt-1 text-sm text-slate-600" data-testid="simple-scanner-subtitle">
-              1) Borsa 2) Spot/Futures 3) İndikatör 4) Koşul 5) Run 6) Sonuç + Grafik
+              1) Borsa 2) Spot/Futures 3) Manuel Koşul 4) Run 5) Sonuç + Grafik
             </p>
           </div>
           <Button type="button" variant="outline" onClick={() => navigate("/user/pro-scanner")} data-testid="simple-scanner-pro-view-button">
@@ -265,96 +152,24 @@ export const UserSimpleScannerPage = () => {
             </select>
           </label>
 
-          <label className="space-y-1" data-testid="simple-scanner-indicator-field">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">3. İndikatör</span>
-            <select className="h-10 w-full rounded border border-slate-300 px-3" value={indicator} onChange={(event) => setIndicator(event.target.value)} data-testid="simple-scanner-indicator-select">
-              {INDICATOR_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-          </label>
-
-          <label className="space-y-1" data-testid="simple-scanner-period-field">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Periyot 1</span>
-            <Input
-              value={indicatorPeriod1}
-              onChange={(event) => setIndicatorPeriod1(event.target.value)}
-              placeholder={indicator === "rsi" ? "örn: 7, 14, 21" : "örn: 20, 50, 200"}
-              disabled={indicator === "vol"}
-              data-testid="simple-scanner-period1-input"
-            />
-          </label>
-
-          <label className="space-y-1" data-testid="simple-scanner-period2-field">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Periyot 2</span>
-            <div className="flex items-center gap-2">
-              <Input
-                value={indicatorPeriod2}
-                onChange={(event) => setIndicatorPeriod2(event.target.value)}
-                placeholder="örn: 50"
-                disabled={!enablePeriod2 || indicator === "vol"}
-                data-testid="simple-scanner-period2-input"
-              />
-              <label className="inline-flex items-center gap-1 text-xs text-slate-600" data-testid="simple-scanner-period2-enable-field">
-                <input
-                  type="checkbox"
-                  checked={enablePeriod2}
-                  onChange={(event) => setEnablePeriod2(event.target.checked)}
-                  disabled={indicator === "vol"}
-                  data-testid="simple-scanner-period2-enable-checkbox"
-                />
-                Periyot 2 aktif ✓
-              </label>
-            </div>
-          </label>
-
-          <label className="space-y-1" data-testid="simple-scanner-operator-field">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Koşul Operatörü</span>
-            <select className="h-10 w-full rounded border border-slate-300 px-3" value={operator} onChange={(event) => setOperator(event.target.value)} data-testid="simple-scanner-operator-select">
-              <option value=">">Büyük (&gt;)</option>
-              <option value="<">Küçük (&lt;)</option>
-            </select>
-          </label>
-
-          {indicator === "boll" && (
-            <label className="space-y-1" data-testid="simple-scanner-boll-line-field">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">BOLL Çizgisi</span>
-              <select className="h-10 w-full rounded border border-slate-300 px-3" value={bollLine} onChange={(event) => setBollLine(event.target.value)} data-testid="simple-scanner-boll-line-select">
-                {BOLL_LINE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-            </label>
-          )}
-
-          <label className="space-y-1" data-testid="simple-scanner-rhs-type-field">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Karşılaştır</span>
-            <select
-              className="h-10 w-full rounded border border-slate-300 px-3"
-              value={rhsType}
-              onChange={(event) => setRhsType(event.target.value)}
-              disabled={enablePeriod2 && indicator !== "vol"}
-              data-testid="simple-scanner-rhs-type-select"
-            >
-              <option value="number">Sabit Sayı</option>
-              <option value="close">Kapanış (close)</option>
-              <option value="last_price">Anlık Değer (last_price)</option>
-            </select>
-          </label>
-
-          {rhsType === "number" && !(enablePeriod2 && indicator !== "vol") && (
-            <label className="space-y-1" data-testid="simple-scanner-threshold-field">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Değer</span>
-              <Input value={threshold} onChange={(event) => setThreshold(event.target.value)} placeholder={thresholdPlaceholder} data-testid="simple-scanner-threshold-input" />
-            </label>
-          )}
-
           <label className="space-y-1" data-testid="simple-scanner-auto-refresh-field">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Otomatik Güncelleme (dk)</span>
             <Input value={autoRefreshMinutes} onChange={(event) => setAutoRefreshMinutes(event.target.value)} placeholder="1/3/5/10" data-testid="simple-scanner-auto-refresh-minutes-input" />
+          </label>
+
+          <label className="space-y-1 sm:col-span-2 lg:col-span-3" data-testid="simple-scanner-condition-field">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">3. Koşul (manuel)</span>
+            <Input value={manualCondition} onChange={(event) => setManualCondition(event.target.value)} placeholder="örn: rsi14 > 70 veya ema21 > güncel fiyat" data-testid="simple-scanner-condition-input" />
+            <p className="text-xs text-slate-500" data-testid="simple-scanner-condition-helper">
+              Örnekler: <strong>RSI14&gt;70</strong>, <strong>EMA21&gt;GÜNCEL FİYAT</strong>, <strong>SMA20&gt;SMA50</strong>
+            </p>
           </label>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="simple-scanner-run-row">
           <Button type="button" onClick={runSimpleScan} disabled={isRunning} data-testid="simple-scanner-run-button">
             <Play className="mr-2 h-4 w-4" />
-            {isRunning ? "Çalışıyor..." : "5. Run"}
+            {isRunning ? "Çalışıyor..." : "4. Run"}
           </Button>
           <Button
             type="button"
@@ -372,7 +187,7 @@ export const UserSimpleScannerPage = () => {
 
       <div className="rounded-xl border border-slate-200 bg-white p-5" data-testid="simple-scanner-results-card">
         <div className="mb-3 flex items-center justify-between" data-testid="simple-scanner-results-header-row">
-          <h2 className="text-lg font-bold text-slate-900" data-testid="simple-scanner-results-title">6. Sonuç Listesi</h2>
+          <h2 className="text-lg font-bold text-slate-900" data-testid="simple-scanner-results-title">5. Sonuç Listesi</h2>
           <p className="text-xs text-slate-500" data-testid="simple-scanner-results-count">Toplam: {rows.length}</p>
         </div>
 
@@ -418,7 +233,7 @@ export const UserSimpleScannerPage = () => {
               {rows.length === 0 && (
                 <tr data-testid="simple-scanner-empty-row">
                   <td colSpan={7} className="px-2 py-6 text-center text-sm text-slate-500" data-testid="simple-scanner-empty-message">
-                    Henüz sonuç yok. Üstten koşulu girip Run yap.
+                    Henüz sonuç yok. Üstten manuel koşulu girip Run yap.
                   </td>
                 </tr>
               )}
