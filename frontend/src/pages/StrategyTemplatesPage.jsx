@@ -254,6 +254,13 @@ export const StrategyTemplatesPage = () => {
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="strategy-templates-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="strategy-templates-title">Strategy Template Lifecycle</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="strategy-templates-description">Versioned, doğrulanabilir ve runtime resolution destekli strategy asset merkezi.</p>
+        {!isAdmin && (
+          <div className="mt-3">
+            <Button type="button" variant="outline" onClick={() => navigate("/user/strategies")} data-testid="strategy-templates-open-wizard-button">
+              Wizard Moduna Dön
+            </Button>
+          </div>
+        )}
       </header>
 
       {!isAdmin && (

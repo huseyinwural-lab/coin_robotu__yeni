@@ -66,6 +66,7 @@ import { UserSettingsPage } from "@/pages/UserSettingsPage";
 import { UserActivityLogPage } from "@/pages/UserActivityLogPage";
 import { UserScannerPage } from "@/pages/UserScannerPage";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
+import UserStrategyBotWizardPage from "@/pages/UserStrategyBotWizardPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
 import { UserSymbolDecisionDetailPage } from "@/pages/UserSymbolDecisionDetailPage";
 import { UserReportsPage } from "@/pages/UserReportsPage";
@@ -268,11 +269,13 @@ function App() {
             <Route path="trade" element={<UserTradePage />} />
             <Route path="trade-entry" element={<Navigate to="/user/trade" replace />} />
             <Route path="chart" element={<UserChartPage />} />
-            <Route path="bot-profiles" element={<BotProfilesPage />} />
+            <Route path="bot-profiles" element={<Navigate to="/user/strategies?step=2" replace />} />
+            <Route path="pro-bot-profiles" element={<BotProfilesPage />} />
             <Route path="bots" element={<Navigate to="/user/bot-profiles" replace />} />
             <Route path="risk-policy" element={<RiskPoliciesPage />} />
             <Route path="risk-policies" element={<RiskPoliciesPage />} />
-            <Route path="strategies" element={<StrategyTemplatesPage />} />
+            <Route path="strategies" element={<UserStrategyBotWizardPage />} />
+            <Route path="pro-strategies" element={<StrategyTemplatesPage />} />
             <Route path="strategies/:templateId" element={<StrategyTemplateDetailPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
             <Route path="exchange-settings" element={<UserExchangeSettingsPage />} />

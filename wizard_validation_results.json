@@ -1,0 +1,229 @@
+{
+  "timestamp": "2026-04-04T11:24:23.963880",
+  "backend_url": "https://trade-trace-engine.preview.emergentagent.com",
+  "user_email": "review.user@platform.local",
+  "overall_success": true,
+  "results": [
+    {
+      "test": "User Login",
+      "success": true,
+      "details": "Login successful. Token length: 591 chars",
+      "timestamp": "2026-04-04T11:24:08.661379"
+    },
+    {
+      "test": "Create Strategy Template",
+      "success": true,
+      "details": "Template created successfully. ID: 76e770ce-abe8-4512-aa44-28a579e9b5f5",
+      "timestamp": "2026-04-04T11:24:12.552239",
+      "response_data": {
+        "name": "test_template_18a09f58",
+        "strategy_type": "momentum",
+        "parameters": {
+          "rsi_period": 14,
+          "rsi_oversold": 30,
+          "rsi_overbought": 70,
+          "stop_loss_pct": 2.0,
+          "take_profit_pct": 4.0
+        },
+        "param_schema": {},
+        "logic_schema": {},
+        "indicator_schema": {},
+        "execution_profile_ref": null,
+        "risk_hint_ref": null,
+        "allowed_venues": [],
+        "allowed_modes": [],
+        "id": "76e770ce-abe8-4512-aa44-28a579e9b5f5",
+        "template_code": "usr_c3a295cccb",
+        "version_group_id": "4ebf2f89-39ed-47d9-bfdd-f3c72f3a1833",
+        "version_num": 1,
+        "lifecycle_state": "ACTIVE",
+        "parent_template_id": null,
+        "rollback_from_template_id": null,
+        "backtest_result_ref": null,
+        "last_validated_at": "2026-04-04T11:24:09.831841Z",
+        "is_active": true,
+        "created_by": "dab99b55-794f-4158-a268-a94daaea821a",
+        "created_at": "2026-04-04T11:24:09.832177Z",
+        "updated_at": "2026-04-04T11:24:09.832179Z"
+      }
+    },
+    {
+      "test": "Get Strategy Templates",
+      "success": true,
+      "details": "Template list retrieved successfully. Created template found in list. Total templates: 19",
+      "timestamp": "2026-04-04T11:24:14.954404",
+      "response_data": {
+        "total_count": 19,
+        "created_template_found": true
+      }
+    },
+    {
+      "test": "Create Bot Profile",
+      "success": true,
+      "details": "Bot profile created successfully. ID: 44736ac5-0348-4551-9d4d-2d2dd7d825b7",
+      "timestamp": "2026-04-04T11:24:18.713503",
+      "response_data": {
+        "name": "test_bot_5471ebf9",
+        "exchange": "binance",
+        "market_type": "spot",
+        "symbol_source_type": "manual",
+        "scanner_id": null,
+        "symbols": [
+          "BTCUSDT",
+          "ETHUSDT"
+        ],
+        "strategy_type": "momentum",
+        "strategy_template_id": "76e770ce-abe8-4512-aa44-28a579e9b5f5",
+        "timeframe": "15m",
+        "trend_timeframe": "1h",
+        "leverage": 3,
+        "is_enabled": true,
+        "id": "44736ac5-0348-4551-9d4d-2d2dd7d825b7",
+        "user_id": "dab99b55-794f-4158-a268-a94daaea821a",
+        "is_running": false,
+        "is_deleted": false,
+        "symbol_resolution_snapshot": {
+          "preferred_mode": "live_ready_disabled",
+          "strategy_template_ids": [
+            "76e770ce-abe8-4512-aa44-28a579e9b5f5"
+          ],
+          "basket_mode_enabled": false,
+          "risk_adaptive_confirmed": false
+        },
+        "deleted_at": null,
+        "created_at": "2026-04-04T11:24:15.988000Z",
+        "updated_at": "2026-04-04T11:24:15.988003Z"
+      }
+    },
+    {
+      "test": "Start Bot Profile",
+      "success": true,
+      "details": "Bot started successfully. Bot ID: 44736ac5-0348-4551-9d4d-2d2dd7d825b7",
+      "timestamp": "2026-04-04T11:24:22.804174",
+      "response_data": {
+        "bot_id": "44736ac5-0348-4551-9d4d-2d2dd7d825b7",
+        "status": "RUNNING",
+        "mode": "live_ready_disabled",
+        "strategy_id": "usr_c3a295cccb",
+        "risk_profile_id": "8de3c402-b573-4616-aff0-cb5354feea27",
+        "execution_profile_id": "96d17817-e92e-4ffa-b151-9e0747a7b09d",
+        "last_heartbeat": "2026-04-04T11:24:20.199281+00:00",
+        "runtime_context": {
+          "exchange": "binance",
+          "market_type": "spot",
+          "timeframe": "15m",
+          "trend_timeframe": "1h",
+          "symbols": [
+            "BTCUSDT",
+            "ETHUSDT"
+          ],
+          "graceful_stop": true,
+          "force_close_available": true,
+          "force_close_default": false,
+          "policy_force_close_enabled": false,
+          "symbol_resolution_snapshot": {
+            "ok": true,
+            "source_type": "manual",
+            "scanner_id": null,
+            "symbols": [
+              "BTCUSDT",
+              "ETHUSDT"
+            ],
+            "summary": "manual_symbols",
+            "last_resolution_time": "2026-04-04T11:24:20.199101+00:00",
+            "resolution_status": "resolved"
+          },
+          "binding_sources": {
+            "strategy_id": "usr_c3a295cccb",
+            "strategy_resolution": {
+              "template_id": "76e770ce-abe8-4512-aa44-28a579e9b5f5",
+              "template_code": "usr_c3a295cccb",
+              "version_group_id": "4ebf2f89-39ed-47d9-bfdd-f3c72f3a1833",
+              "version_num": 1,
+              "lifecycle_state": "ACTIVE",
+              "effective_runtime_config": {
+                "strategy_type": "momentum",
+                "template_name": "test_template_18a09f58",
+                "parameters": {
+                  "rsi_period": 14,
+                  "rsi_oversold": 30,
+                  "rsi_overbought": 70,
+                  "stop_loss_pct": 2.0,
+                  "take_profit_pct": 4.0
+                },
+                "logic_schema": {},
+                "indicator_schema": {},
+                "execution_profile_ref": null,
+                "risk_hint_ref": null,
+                "allowed_venues": [],
+                "allowed_modes": []
+              },
+              "validation_result": {
+                "ok": true,
+                "errors": [],
+                "override_used": false,
+                "execution_compatibility": "PASS",
+                "runtime_eligible": true,
+                "lifecycle_state": "ACTIVE"
+              }
+            },
+            "risk_profile_id": "8de3c402-b573-4616-aff0-cb5354feea27",
+            "risk_source": "user_active_policy",
+            "execution_profile_id": "96d17817-e92e-4ffa-b151-9e0747a7b09d",
+            "execution_profile_source": "user-live-futures"
+          },
+          "binding_validation_result": {
+            "strategy_id": "usr_c3a295cccb",
+            "strategy_template_id": "76e770ce-abe8-4512-aa44-28a579e9b5f5",
+            "risk_profile_id": "8de3c402-b573-4616-aff0-cb5354feea27",
+            "execution_profile_id": "96d17817-e92e-4ffa-b151-9e0747a7b09d",
+            "symbol_source": "manual",
+            "resolved_symbols": [
+              "BTCUSDT",
+              "ETHUSDT"
+            ],
+            "compatibility": "ok"
+          },
+          "queue_registration": {
+            "queue_name": "execution_queue",
+            "registered_at": "2026-04-04T11:24:20.199204+00:00",
+            "graceful_stop": true,
+            "force_close_default": false
+          },
+          "correlation_namespace": "bot:44736ac5-0348-4551-9d4d-2d2dd7d825b7"
+        },
+        "binding_ok": true,
+        "actor_id": "dab99b55-794f-4158-a268-a94daaea821a"
+      }
+    },
+    {
+      "test": "Error Response Format",
+      "success": true,
+      "details": "Error response format check. Status: 422, Format: array, Translatable: True",
+      "timestamp": "2026-04-04T11:24:23.963658",
+      "response_data": {
+        "status_code": 422,
+        "detail": [
+          {
+            "type": "missing",
+            "loc": [
+              "body",
+              "strategy_type"
+            ],
+            "msg": "Field required",
+            "input": {
+              "name": "",
+              "exchange": "invalid_exchange",
+              "market_type": "invalid_market",
+              "symbols": [],
+              "strategy_template_id": "non_existent_id"
+            },
+            "url": "https://errors.pydantic.dev/2.12/v/missing"
+          }
+        ],
+        "format_type": "array",
+        "is_translatable": true
+      }
+    }
+  ]
+}

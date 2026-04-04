@@ -30,7 +30,7 @@ from core.users.user_risk_settings import (
 )
 from db import get_db, redis_client
 from deps import require_step_up_for, require_user
-from models import BotProfile, PendingSignal, RiskPolicy, User, UserExecutionIntent
+from models import BotProfile, PendingSignal, RiskPolicy, StrategyTemplate, User, UserExecutionIntent
 from services.live_mode_service import validate_exchange_credentials_for_user
 from services.credential_resolution_service import build_user_routing_preview
 from schemas import (
@@ -45,6 +45,8 @@ from schemas import (
     UserPerformanceSnapshotResponse,
     OrderValidationRequest,
     OrderValidationResponse,
+    StrategyTemplateCreate,
+    StrategyTemplateResponse,
     UserPortfolioMapRequest,
     UserPortfolioMapResponse,
     UserPortfolioSnapshotResponse,
@@ -72,8 +74,62 @@ from services.user_live_dashboard_service import (
     build_user_trade_pending_orders,
     build_user_trade_projection_list,
 )
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/user", tags=["user_platform"])
+
+
+@router.post("/strategy-templates", response_model=StrategyTemplateResponse)
+def create_user_strategy_template(
+    payload: StrategyTemplateCreate,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    base_name = str(payload.name or "").strip() or "Custom Strategy"
+    resolved_name = base_name
+    suffix = 2
+    while db.query(StrategyTemplate.id).filter(StrategyTemplate.name == resolved_name).first() is not None:
+        resolved_name = f"{base_name} ({suffix})"
+        suffix += 1
+
+    payload_data = payload.model_dump(
+        exclude={"template_code", "backtest_result_ref", "reason_note", "param_schema", "logic_schema", "indicator_schema", "name"}
+    )
+
+    strategy_template = StrategyTemplate(
+        name=resolved_name,
+        created_by=current_user.id,
+        template_code=payload.template_code or f"usr_{uuid.uuid4().hex[:10]}",
+        version_group_id=str(uuid.uuid4()),
+        version_num=1,
+        lifecycle_state="ACTIVE",
+        is_active=True,
+        param_schema=payload.param_schema or {},
+        logic_schema=payload.logic_schema or {},
+        indicator_schema=payload.indicator_schema or {},
+        backtest_result_ref=payload.backtest_result_ref,
+        last_validated_at=datetime.now(timezone.utc),
+        **payload_data,
+    )
+    db.add(strategy_template)
+    db.commit()
+    db.refresh(strategy_template)
+
+    create_audit_log(
+        db,
+        action="user_strategy_template_created",
+        entity_type="strategy_template",
+        entity_id=strategy_template.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "reason": payload.reason_note or "wizard_create",
+            "scope": "user:strategy_template:create",
+            "template_id": strategy_template.id,
+            "template_code": strategy_template.template_code,
+        },
+    )
+    return strategy_template
 
 
 def _with_routing_metadata(*, row: dict, user_id: str, db: Session) -> dict:

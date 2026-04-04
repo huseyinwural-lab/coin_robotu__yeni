@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ const TEMPLATE_BUNDLE_PRESETS = [
 ];
 
 export const BotProfilesPage = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
   const [userRisk, setUserRisk] = useState(null);
@@ -409,6 +411,11 @@ export const BotProfilesPage = () => {
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="bot-profiles-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="bot-profiles-title">Bot Profile Yönetimi</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="bot-profiles-description">Create / Update iskeleti hazır. Gerçek trade açılmaz.</p>
+        <div className="mt-3">
+          <Button type="button" variant="outline" onClick={() => navigate("/user/strategies?step=2")} data-testid="bot-profiles-open-wizard-button">
+            Wizard Moduna Dön
+          </Button>
+        </div>
       </header>
 
       <form onSubmit={handleSubmit} className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="bot-profile-form">
