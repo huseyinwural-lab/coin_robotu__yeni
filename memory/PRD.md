@@ -19308,3 +19308,35 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Frontend lint PASS, build PASS.
 - Frontend test ajanı ilk turda core elementleri ve run akışını PASS verdi; ikinci turda preview auth/session dalgalanması nedeniyle bloklandı (bilinen ortam sorunu).
 
+## 2026-04-04 — Scanner Ek Talepler (Periyot Manuel + Close/Last Price + Auto Refresh) ✅
+
+### Uygulanan 3 düzenleme
+- **Periyot manuel giriş**
+  - Scanner’da period artık select değil input (`simple-scanner-period-input`).
+  - RSI/EMA için serbest periyot kabul ediliyor (örn `rsi21`, `ema34`).
+- **Karşılaştırma seçenekleri**
+  - `simple-scanner-rhs-type-select` içine eklendi:
+    - `Kapanış (close)`
+    - `Anlık Değer (last_price)`
+  - Query preview bu seçime göre canlı güncelleniyor (`ema50 < close`, `ema50 < last_price` vb.).
+- **Manuel dakikalı otomatik güncelleme**
+  - `simple-scanner-auto-refresh-minutes-input` eklendi (1/3/5/10 veya serbest sayı)
+  - `simple-scanner-auto-refresh-toggle-button` ile aç/kapat
+  - Belirlenen dakika aralığında tarama otomatik tetikleniyor ve `simple-scanner-last-updated-at` güncelleniyor.
+
+### Backend genişletmesi (query motoru)
+- Query parser artık:
+  - alan-karşılaştırması destekliyor (`ema34 < close`, `ema34 < last_price`)
+  - dinamik alanları destekliyor (`rsiN`, `emaN`)
+- Query engine dinamik indikator hesaplaması yapıyor:
+  - `calculate_query_indicator_values(candles, required_fields)`
+  - istenen `rsiN/emaN` alanları runtime hesaplanıyor
+- Sonuç satırlarına `last_price` alanı eklendi.
+
+### Doğrulama
+- Backend API doğrulama PASS:
+  - `rsi21 > 60` -> 200
+  - `ema34 < close` -> 200
+  - `ema34 < last_price` -> 200
+- Frontend lint PASS, Python lint PASS, `CI=true yarn build` PASS.
+
