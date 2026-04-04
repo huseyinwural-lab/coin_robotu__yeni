@@ -19380,3 +19380,35 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `volume > 1000000` -> 200
 - Frontend lint/build PASS (`CI=true yarn build`).
 
+## 2026-04-04 — Scanner Sadelik Revizyonu (Tam Manuel Koşul) ✅
+
+### Kullanıcı talebine göre sadeleştirme
+- Kaldırıldı:
+  - Periyot 1
+  - Periyot 2
+  - Değer alanı
+  - Operatör ayrı alanı
+- Eklendi / korundu:
+  - Tek manuel koşul inputu (`simple-scanner-condition-input`)
+  - Kullanıcı doğrudan koşul yazar:
+    - `RSI14>70`
+    - `EMA21>GÜNCEL FİYAT`
+
+### Normalizasyon davranışı
+- Koşul normalize edilerek backend’e gönderilir:
+  - `GÜNCEL FİYAT` / `ANLIK FİYAT` / `LAST PRICE` -> `last_price`
+  - `KAPANIŞ` -> `close`
+  - Operatör çevresine boşluk eklenir ve alanlar lowercase edilir.
+
+### Query motor desteği
+- Dinamik alan desteği aktif:
+  - `rsiN`, `emaN`, `smaN`
+  - `boll_upperN`, `boll_midN`, `boll_lowerN`
+  - field-to-field kıyas (`ema50 < ema200` vb.)
+
+### Doğrulama
+- Backend API PASS:
+  - `rsi14 > 70` -> 200
+  - `ema21 > last_price` -> 200
+- Frontend lint/build PASS.
+
