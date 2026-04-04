@@ -194,6 +194,34 @@ const summarizeEndpointBreakdown = (events, { windowMs = 60_000, nowTs = Date.no
   };
 };
 
+const toApiErrorMessage = (error, fallback = "İşlem başarısız") => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const parsed = detail
+      .map((item) => {
+        if (!item) return "";
+        if (typeof item === "string") return item;
+        if (typeof item === "object") {
+          return item.msg || item.message || item.type || "";
+        }
+        return String(item);
+      })
+      .filter(Boolean)
+      .join(" | ");
+    if (parsed) {
+      return parsed;
+    }
+  }
+  if (detail && typeof detail === "object") {
+    return detail.message || detail.msg || detail.code || fallback;
+  }
+  const generic = error?.message || error?.response?.statusText;
+  return generic || fallback;
+};
+
 const deriveRequestHealth = (events) => {
   const total = events.length;
   const success = events.filter((event) => event.ok).length;
@@ -531,7 +559,7 @@ export const UserScannerPage = () => {
       setSymbolExplainability(data || null);
     } catch (error) {
       setSymbolExplainability(null);
-      toast.error(error?.response?.data?.detail || "Explainability yüklenemedi");
+      toast.error(toApiErrorMessage(error, "Explainability yüklenemedi"));
     } finally {
       setIsExplainabilityLoading(false);
     }
@@ -555,7 +583,7 @@ export const UserScannerPage = () => {
       }
       return data;
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Otomasyon ayarı kaydedilemedi");
+      toast.error(toApiErrorMessage(error, "Otomasyon ayarı kaydedilemedi"));
       throw error;
     } finally {
       setIsSavingAutomation(false);
@@ -617,7 +645,7 @@ export const UserScannerPage = () => {
       }
       return data;
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Profil kaydedilemedi");
+      toast.error(toApiErrorMessage(error, "Profil kaydedilemedi"));
       throw error;
     } finally {
       setIsSavingAutomation(false);
@@ -646,7 +674,7 @@ export const UserScannerPage = () => {
       await load({ hydrateSelection: true, notifyAutoRuns: false });
       toast.success("Otomasyon profili oluşturuldu");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Profil oluşturulamadı");
+      toast.error(toApiErrorMessage(error, "Profil oluşturulamadı"));
     } finally {
       setIsSavingAutomation(false);
     }
@@ -659,7 +687,7 @@ export const UserScannerPage = () => {
       await load({ hydrateSelection: true, notifyAutoRuns: false });
       toast.success("Profil aktif edildi");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Profil aktif edilemedi");
+      toast.error(toApiErrorMessage(error, "Profil aktif edilemedi"));
     } finally {
       setIsSavingAutomation(false);
     }
@@ -672,7 +700,7 @@ export const UserScannerPage = () => {
       await load({ hydrateSelection: true, notifyAutoRuns: false });
       toast.success("Profil silindi");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Profil silinemedi");
+      toast.error(toApiErrorMessage(error, "Profil silinemedi"));
     } finally {
       setIsSavingAutomation(false);
     }
@@ -900,7 +928,7 @@ export const UserScannerPage = () => {
       setSelectedSymbols((prev) => Array.from(new Set([...(prev || []).map((value) => String(value || "").toUpperCase()), symbol])));
       toast.success(`${symbol} watchlist'e eklendi`);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Watchlist güncellenemedi");
+      toast.error(toApiErrorMessage(error, "Watchlist güncellenemedi"));
     }
   };
 
@@ -928,7 +956,7 @@ export const UserScannerPage = () => {
       window.URL.revokeObjectURL(blobUrl);
       toast.success(`Scanner günlük rapor ${format.toUpperCase()} hazır`);
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Scanner rapor export başarısız");
+      toast.error(toApiErrorMessage(error, "Scanner rapor export başarısız"));
     }
   };
 
@@ -961,7 +989,7 @@ export const UserScannerPage = () => {
       }
       toast.success("Scanner çalıştırıldı");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Scanner çalıştırılamadı");
+      toast.error(toApiErrorMessage(error, "Scanner çalıştırılamadı"));
     } finally {
       setIsRunning(false);
     }
@@ -1010,7 +1038,7 @@ export const UserScannerPage = () => {
         await saveActiveProfile({ autoEnabled: true, withToast: false });
       }
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Preset çalıştırılamadı");
+      toast.error(toApiErrorMessage(error, "Preset çalıştırılamadı"));
     } finally {
       setIsRunning(false);
     }

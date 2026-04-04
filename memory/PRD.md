@@ -19171,3 +19171,18 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `/api/bot-profiles`, `/api/user/dashboard`, `/api/user/portfolio`, `/api/user/performance` çağrıları 200 doğrulandı (preview).
 - Frontend build: `CI=true yarn build` PASS.
 
+## 2026-04-04 — Scanner Runtime Overlay Fix (Object Child Crash) ✅
+
+### Kök neden
+- Scanner ekranında API hata cevabı `detail` alanı bazı durumlarda obje/dizi (Pydantic validation şekli: `type/loc/msg/input/url`) dönüyor.
+- Bu payload `toast.error(detail)` ile doğrudan React child olarak render edilmeye çalışılınca runtime overlay oluşuyordu:
+  - `Objects are not valid as a React child ...`
+
+### Uygulanan fix
+- `UserScannerPage.jsx` içine `toApiErrorMessage()` eklendi.
+- Tüm `toast.error(error?.response?.data?.detail || ...)` çağrıları güvenli string parse ile güncellendi.
+- Obje/dizi detail artık insan-okur metne çevrilip gösteriliyor; React object child crash yolu kapatıldı.
+
+### Doğrulama
+- `CI=true yarn build` PASS.
+
