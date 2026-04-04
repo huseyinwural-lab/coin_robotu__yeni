@@ -19484,3 +19484,26 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - İşareti kaldırınca grid tekrar gizlenir PASS
   - data-testid doğrulamaları PASS
 
+## 2026-04-04 — Eski Bot Kur Ekranı Aktifleştirme + Canonical 12 Strateji Bağlantısı ✅
+
+### Uygulanan değişiklikler
+- Route güncellemesi:
+  - `/user/bot-profiles` artık redirect değil, doğrudan `BotProfilesPage` açıyor.
+  - `/user/pro-bot-profiles` aynı ekranı açmaya devam ediyor.
+- `BotProfilesPage.jsx` güncellendi:
+  - Strateji select artık `/api/user/canonical-strategies` kaynağından besleniyor.
+  - Sadece admin canonical registry’de `is_enabled=true` + `in_production_path=true` olan stratejiler (öncelik sıralı, max 12) listeleniyor.
+  - Strateji değişiminde aktif template eşleşmesi otomatik deneniyor.
+  - Eşleşme yoksa bot create sırasında canonical stratejiden user template otomatik üretilip bağlanıyor (`strategy_template_id`).
+  - Varsayılan sembol seçimi artık sabit `BTC/ETH` ile gelmiyor; `all_market_symbols` akışına uygun boş başlangıç.
+- Wizard korunarak akış bağlandı:
+  - `/user/strategies?step=1` ekranındaki buton artık doğrudan eski bot ekranına gider:
+    - `/user/bot-profiles?strategy_id=...`
+
+### Doğrulama
+- Frontend lint: **PASS** (`BotProfilesPage.jsx`, `UserStrategyBotWizardPage.jsx`, `App.js`)
+- Frontend test ajanı: kod tarafı gereksinimler PASS; preview otomasyonunda login sonrası `session_device_mismatch` nedeniyle route doğrulaması bloklandı (ortam/auth kısıtı).
+- Manuel API kontrolü:
+  - `POST /api/auth/login/user` -> 200
+  - `GET /api/auth/me` -> 401 `session_device_mismatch` (preview test ortamı cihaz oturumu kısıtı)
+
