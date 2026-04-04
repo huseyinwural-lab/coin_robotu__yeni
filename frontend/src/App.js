@@ -115,7 +115,7 @@ const HomeRedirect = () => {
   if (adminRoles.has(String(user.role || "").toLowerCase())) {
     return <Navigate to="/admin/dashboard" replace />;
   }
-  return <Navigate to="/user/dashboard" replace />;
+  return <Navigate to="/user/strategies" replace />;
 };
 
 const ExecuteToTradeRedirect = () => {
@@ -136,7 +136,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          <Route path="/dashboard" element={<Navigate to="/user/dashboard" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/user/strategies" replace />} />
           <Route path="/portfolio" element={<Navigate to="/user/portfolio" replace />} />
           <Route path="/trades" element={<Navigate to="/user/trades" replace />} />
           <Route path="/scanner" element={<Navigate to="/user/scanner" replace />} />

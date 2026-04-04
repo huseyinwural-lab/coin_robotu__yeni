@@ -19210,3 +19210,48 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `404 Cannot POST` yok
 - Build: `CI=true yarn build` PASS.
 
+## 2026-04-04 — Consumer Wizard Dönüşümü (Strateji → Bot → Başlat) ✅
+
+### Uygulanan ürün değişikliği
+- Varsayılan user akışı **Wizard** moduna alındı:
+  - Home redirect artık `/user/strategies`
+  - `/dashboard` redirect artık `/user/strategies`
+- Yeni sayfa: `UserStrategyBotWizardPage.jsx`
+  - 3 adım: `1) Strateji Seç/Kur 2) Bot Ayarla 3) Onayla ve Başlat`
+  - Header’da `Profesyonel Görünüm` toggle
+- Strateji havuzu:
+  - 12 hazır strateji kartı (aktif template’lerden)
+  - Hazır strateji parametre override
+  - Custom logical builder (EMA, RSI, MACD, BB, ADX)
+- User seviyesinde template oluşturma:
+  - Yeni endpoint: `POST /api/user/strategy-templates`
+  - User custom/override template’i kaydedip bota attach edebiliyor.
+- Bot lifecycle basitleştirme:
+  - Wizard Step2: sadece bot adı, cüzdan/borsa, bütçe, semboller
+  - Step3: `Aktif Strateji: X` özeti + tek tık start
+  - İnsan-dili status: `Alındı / Satıldı / Bekleniyor`
+- Teknik hata çevirisi (5 kritik grup):
+  - Bakiye, API izni, Min tutar, Ağ hatası, Strateji geçersiz
+
+### Route & navigasyon güncellemeleri
+- `/user/strategies` -> Wizard
+- `/user/bot-profiles` -> `/user/strategies?step=2` redirect
+- Profesyonel ekranlar korunarak ayrı route:
+  - `/user/pro-strategies`
+  - `/user/pro-bot-profiles`
+- Sidebar `Strategy` grubu wizard-first olacak şekilde güncellendi.
+
+### Doğrulama
+- Backend testleri PASS:
+  - `POST /api/user/strategy-templates` 200
+  - `GET /api/strategy-templates` yeni template görünür
+  - `POST /api/bot-profiles` 200
+  - `POST /api/bot-profiles/{id}/start` 200
+- Frontend E2E testleri PASS (5/5):
+  - Wizard route/stepper
+  - Step1 strategy modes + param edit
+  - Step2 bot config
+  - Step3 start flow + human status
+  - Professional View toggle route geçişleri
+- Build: `CI=true yarn build` PASS.
+
