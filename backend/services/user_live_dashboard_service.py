@@ -1,10 +1,12 @@
 import csv
 import io
 import json
+import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from models import (
@@ -31,6 +33,7 @@ WINDOW_MAP = {
 }
 
 REJECT_STATUSES = {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}
+logger = logging.getLogger(__name__)
 
 
 def _safe_float(value, default: float = 0.0) -> float:
@@ -251,13 +254,21 @@ def _execution_rows(db: Session, user_id: str, since: datetime) -> list[Executio
 
 
 def _live_rows(db: Session, user_id: str, since: datetime) -> list[LiveExecutionLog]:
-    return (
-        db.query(LiveExecutionLog)
-        .filter(LiveExecutionLog.user_id == user_id, LiveExecutionLog.created_at >= since)
-        .order_by(LiveExecutionLog.created_at.desc())
-        .limit(1000)
-        .all()
-    )
+    try:
+        return (
+            db.query(LiveExecutionLog)
+            .filter(LiveExecutionLog.user_id == user_id, LiveExecutionLog.created_at >= since)
+            .order_by(LiveExecutionLog.created_at.desc())
+            .limit(1000)
+            .all()
+        )
+    except ProgrammingError:
+        logger.warning(
+            "LIVE_EXECUTION_LOGS_TABLE_MISSING_FALLBACK",
+            extra={"user_id": user_id, "since": since.isoformat()},
+        )
+        db.rollback()
+        return []
 
 
 def build_user_live_execution_quality(db: Session, user_id: str, *, window: str = "24h") -> dict:
