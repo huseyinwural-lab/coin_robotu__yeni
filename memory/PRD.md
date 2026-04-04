@@ -19678,3 +19678,42 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - visibleConnectionProfiles filtrelemesi
   - Scanner timeframe seti (3m/15m/1h/4h/1d)
 
+## 2026-04-05 — Diagnostics Refactor (A Plan) + Global Aktivasyon Bayrağı ✅
+
+### Uygulanan hedefler
+- Diagnostics artık Exchange Settings sayfasının eski karmaşık test bloğunu kullanmıyor; yeni bağımsız sayfa akışı kuruldu.
+- Üstte sadece iki büyük sekme var: `BINANCE` ve `BYBIT`.
+- Binance seçildiğinde iki panel yan yana gösteriliyor: `Spot` ve `Futures`.
+- Her panelde ayrı `Revalidate` butonu + Yeşil/Kırmızı status light var.
+- BYBIT için A planı uygulandı: UI + state hazır, API akışı devre dışı.
+  - Panel üstünde `Coming Soon / Setup Required` overlay gösteriliyor.
+
+### Settings -> Diagnostics veri akışı
+- Diagnostics panel verisi doğrudan `/api/user/exchange-connections` üzerinden alınıyor.
+- Exchange Settings’te kaydedilen Spot/Futures bağlantıları Diagnostics panellerine otomatik akıyor.
+- Kullanıcı Diagnostics içinde tekrar key girmiyor.
+
+### Global Aktivasyon Bayrağı (DB kalıcılık)
+- `POST /api/user/exchange-connections/{id}/revalidate` sonrası backend’de market bazlı kalıcı bayrak yazılıyor:
+  - `is_binance_spot_active`
+  - `is_binance_futures_active`
+- Bayraklar DB’de `readiness_snapshot.global_activation_flags` altında tutuluyor.
+- Response modeline eklendi:
+  - `global_activation_flag_key`
+  - `global_activation_active`
+
+### Symbol loop fix
+- Eski Diagnostics test bloğundaki `Trade Symbol Selection` paneli yeni Diagnostics sayfasında yok.
+- Böylece sürekli yükleniyor/listeleniyor döngüsünü tetikleyen akış Diagnostics yüzeyinden kaldırıldı.
+
+### Teknik doğrulama
+- Backend lint: PASS
+- Frontend lint: PASS
+- Local API doğrulama:
+  - Spot revalidate sonrası `is_binance_spot_active = true` doğrulandı
+  - Futures revalidate sonrası (451/izin durumuna bağlı) `is_binance_futures_active = false` doğrulandı
+  - Connection listesinde global flag alanları döndüğü doğrulandı
+- Frontend test agent:
+  - UI otomasyonunda auth persistence blok var
+  - Code-level doğrulama: 5/5 gereksinim implementasyonu PASS
+
