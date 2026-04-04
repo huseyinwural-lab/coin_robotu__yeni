@@ -20,6 +20,15 @@ const MARKET_TYPE_OPTIONS = [
 const INDICATOR_OPTIONS = [
   { value: "rsi", label: "RSI" },
   { value: "ema", label: "EMA" },
+  { value: "ma", label: "MA - Moving Average" },
+  { value: "boll", label: "BOLL - Bollinger Bands" },
+  { value: "vol", label: "Vol - Volume" },
+];
+
+const BOLL_LINE_OPTIONS = [
+  { value: "upper", label: "BOLL Upper" },
+  { value: "mid", label: "BOLL Mid" },
+  { value: "lower", label: "BOLL Lower" },
 ];
 
 const toFriendlyError = (error, fallback = "Tarama çalıştırılamadı") => {
@@ -35,23 +44,52 @@ const toFriendlyError = (error, fallback = "Tarama çalıştırılamadı") => {
   return error?.message || fallback;
 };
 
-const buildQueryExpression = ({ indicator, operator, threshold, rhsType, indicatorPeriod }) => {
+const buildQueryExpression = ({
+  indicator,
+  operator,
+  threshold,
+  rhsType,
+  indicatorPeriod1,
+  indicatorPeriod2,
+  enablePeriod2,
+  bollLine,
+}) => {
   const normalizedOperator = operator === "<" ? "<" : ">";
-  const normalizedPeriod = Math.max(2, Number.parseInt(String(indicatorPeriod || ""), 10) || (indicator === "rsi" ? 14 : 50));
-  const field = `${indicator === "rsi" ? "rsi" : "ema"}${normalizedPeriod}`;
+
+  const parsePeriod = (raw, fallback) => Math.max(2, Number.parseInt(String(raw || ""), 10) || fallback);
+  const period1 = parsePeriod(indicatorPeriod1, indicator === "rsi" ? 14 : 50);
+  const period2 = parsePeriod(indicatorPeriod2, indicator === "rsi" ? 7 : 20);
+
+  const buildField = (period) => {
+    if (indicator === "rsi") return `rsi${period}`;
+    if (indicator === "ema") return `ema${period}`;
+    if (indicator === "ma") return `sma${period}`;
+    if (indicator === "boll") {
+      const line = ["upper", "mid", "lower"].includes(bollLine) ? bollLine : "upper";
+      return `boll_${line}${period}`;
+    }
+    return "volume";
+  };
+
+  const field1 = buildField(period1);
+  const canUsePeriod2 = Boolean(enablePeriod2) && indicator !== "vol";
+  if (canUsePeriod2) {
+    const field2 = buildField(period2);
+    return `${field1} ${normalizedOperator} ${field2}`;
+  }
 
   if (rhsType === "close") {
-    return `${field} ${normalizedOperator} close`;
+    return `${field1} ${normalizedOperator} close`;
   }
   if (rhsType === "last_price") {
-    return `${field} ${normalizedOperator} last_price`;
+    return `${field1} ${normalizedOperator} last_price`;
   }
 
   const numericThreshold = Number(threshold);
   if (Number.isNaN(numericThreshold)) {
     throw new Error("Karşılaştırma değeri sayısal olmalı");
   }
-  return `${field} ${normalizedOperator} ${numericThreshold}`;
+  return `${field1} ${normalizedOperator} ${numericThreshold}`;
 };
 
 export const UserSimpleScannerPage = () => {
@@ -60,7 +98,10 @@ export const UserSimpleScannerPage = () => {
   const [exchange, setExchange] = useState("binance");
   const [marketType, setMarketType] = useState("spot");
   const [indicator, setIndicator] = useState("rsi");
-  const [indicatorPeriod, setIndicatorPeriod] = useState("14");
+  const [indicatorPeriod1, setIndicatorPeriod1] = useState("14");
+  const [enablePeriod2, setEnablePeriod2] = useState(false);
+  const [indicatorPeriod2, setIndicatorPeriod2] = useState("7");
+  const [bollLine, setBollLine] = useState("upper");
   const [operator, setOperator] = useState(">");
   const [rhsType, setRhsType] = useState("number");
   const [threshold, setThreshold] = useState("70");
@@ -78,18 +119,23 @@ export const UserSimpleScannerPage = () => {
         operator,
         threshold,
         rhsType,
-        indicatorPeriod,
+        indicatorPeriod1,
+        indicatorPeriod2,
+        enablePeriod2,
+        bollLine,
       });
     } catch {
       return "-";
     }
-  }, [indicator, operator, threshold, rhsType, indicatorPeriod]);
+  }, [indicator, operator, threshold, rhsType, indicatorPeriod1, indicatorPeriod2, enablePeriod2, bollLine]);
 
   const thresholdPlaceholder = useMemo(() => {
+    if (indicator === "rsi") return "örn: 70";
+    if (indicator === "vol") return "örn: 1000000";
     if (rhsType === "close") return "kapanış ile kıyas";
     if (rhsType === "last_price") return "anlık fiyat ile kıyas";
     return "örn: 43000";
-  }, [rhsType]);
+  }, [indicator, rhsType]);
 
   const runSimpleScan = useCallback(async ({ silent = false } = {}) => {
     setIsRunning(true);
@@ -99,7 +145,10 @@ export const UserSimpleScannerPage = () => {
         operator,
         threshold,
         rhsType,
-        indicatorPeriod,
+        indicatorPeriod1,
+        indicatorPeriod2,
+        enablePeriod2,
+        bollLine,
       });
       setLastRunQueryExpression(expression);
 
@@ -134,7 +183,7 @@ export const UserSimpleScannerPage = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [exchange, marketType, indicator, operator, threshold, rhsType, indicatorPeriod]);
+  }, [exchange, marketType, indicator, operator, threshold, rhsType, indicatorPeriod1, indicatorPeriod2, enablePeriod2, bollLine]);
 
   useEffect(() => {
     if (!autoRefreshEnabled) return undefined;
@@ -147,7 +196,40 @@ export const UserSimpleScannerPage = () => {
   }, [autoRefreshEnabled, autoRefreshMinutes, runSimpleScan]);
 
   useEffect(() => {
-    setIndicatorPeriod(indicator === "rsi" ? "14" : "50");
+    if (indicator === "rsi") {
+      setIndicatorPeriod1("14");
+      setIndicatorPeriod2("7");
+      setRhsType("number");
+      setThreshold("70");
+      return;
+    }
+    if (indicator === "ema") {
+      setIndicatorPeriod1("50");
+      setIndicatorPeriod2("20");
+      setRhsType("close");
+      setThreshold("0");
+      return;
+    }
+    if (indicator === "ma") {
+      setIndicatorPeriod1("50");
+      setIndicatorPeriod2("20");
+      setRhsType("close");
+      setThreshold("0");
+      return;
+    }
+    if (indicator === "boll") {
+      setIndicatorPeriod1("20");
+      setIndicatorPeriod2("10");
+      setBollLine("upper");
+      setRhsType("close");
+      setThreshold("0");
+      return;
+    }
+    setIndicatorPeriod1("14");
+    setIndicatorPeriod2("7");
+    setRhsType("number");
+    setThreshold("1000000");
+    setEnablePeriod2(false);
   }, [indicator]);
 
   return (
@@ -191,13 +273,37 @@ export const UserSimpleScannerPage = () => {
           </label>
 
           <label className="space-y-1" data-testid="simple-scanner-period-field">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Periyot</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Periyot 1</span>
             <Input
-              value={indicatorPeriod}
-              onChange={(event) => setIndicatorPeriod(event.target.value)}
+              value={indicatorPeriod1}
+              onChange={(event) => setIndicatorPeriod1(event.target.value)}
               placeholder={indicator === "rsi" ? "örn: 7, 14, 21" : "örn: 20, 50, 200"}
-              data-testid="simple-scanner-period-input"
+              disabled={indicator === "vol"}
+              data-testid="simple-scanner-period1-input"
             />
+          </label>
+
+          <label className="space-y-1" data-testid="simple-scanner-period2-field">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Periyot 2</span>
+            <div className="flex items-center gap-2">
+              <Input
+                value={indicatorPeriod2}
+                onChange={(event) => setIndicatorPeriod2(event.target.value)}
+                placeholder="örn: 50"
+                disabled={!enablePeriod2 || indicator === "vol"}
+                data-testid="simple-scanner-period2-input"
+              />
+              <label className="inline-flex items-center gap-1 text-xs text-slate-600" data-testid="simple-scanner-period2-enable-field">
+                <input
+                  type="checkbox"
+                  checked={enablePeriod2}
+                  onChange={(event) => setEnablePeriod2(event.target.checked)}
+                  disabled={indicator === "vol"}
+                  data-testid="simple-scanner-period2-enable-checkbox"
+                />
+                Periyot 2 aktif ✓
+              </label>
+            </div>
           </label>
 
           <label className="space-y-1" data-testid="simple-scanner-operator-field">
@@ -208,16 +314,31 @@ export const UserSimpleScannerPage = () => {
             </select>
           </label>
 
+          {indicator === "boll" && (
+            <label className="space-y-1" data-testid="simple-scanner-boll-line-field">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">BOLL Çizgisi</span>
+              <select className="h-10 w-full rounded border border-slate-300 px-3" value={bollLine} onChange={(event) => setBollLine(event.target.value)} data-testid="simple-scanner-boll-line-select">
+                {BOLL_LINE_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+            </label>
+          )}
+
           <label className="space-y-1" data-testid="simple-scanner-rhs-type-field">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Karşılaştır</span>
-            <select className="h-10 w-full rounded border border-slate-300 px-3" value={rhsType} onChange={(event) => setRhsType(event.target.value)} data-testid="simple-scanner-rhs-type-select">
+            <select
+              className="h-10 w-full rounded border border-slate-300 px-3"
+              value={rhsType}
+              onChange={(event) => setRhsType(event.target.value)}
+              disabled={enablePeriod2 && indicator !== "vol"}
+              data-testid="simple-scanner-rhs-type-select"
+            >
               <option value="number">Sabit Sayı</option>
               <option value="close">Kapanış (close)</option>
               <option value="last_price">Anlık Değer (last_price)</option>
             </select>
           </label>
 
-          {rhsType === "number" && (
+          {rhsType === "number" && !(enablePeriod2 && indicator !== "vol") && (
             <label className="space-y-1" data-testid="simple-scanner-threshold-field">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Değer</span>
               <Input value={threshold} onChange={(event) => setThreshold(event.target.value)} placeholder={thresholdPlaceholder} data-testid="simple-scanner-threshold-input" />

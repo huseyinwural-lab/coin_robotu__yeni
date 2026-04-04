@@ -21,7 +21,10 @@ ALLOWED_QUERY_FIELDS = {
     "last_price",
 }
 
-_DYNAMIC_FIELD_PATTERN = re.compile(r"^(rsi|ema)\d{1,3}$", re.IGNORECASE)
+_DYNAMIC_FIELD_PATTERN = re.compile(
+    r"^((rsi|ema|sma)\d{1,3}|boll_(upper|mid|lower)\d{1,3})$",
+    re.IGNORECASE,
+)
 ALLOWED_COMPARISON_OPERATORS = {"<", "<=", ">", ">=", "=", "!="}
 
 _TOKEN_PATTERN = re.compile(

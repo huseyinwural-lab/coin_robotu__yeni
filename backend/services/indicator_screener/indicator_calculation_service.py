@@ -1,4 +1,4 @@
-from statistics import fmean
+from statistics import fmean, pstdev
 
 
 class IndicatorCalculationError(ValueError):
@@ -65,6 +65,19 @@ def _fibonacci_levels(candles: list[dict], lookback: int = 100) -> dict[str, flo
     }
 
 
+def _bollinger(series: list[float], period: int, std_factor: float = 2.0) -> dict[str, float]:
+    if len(series) < period:
+        raise IndicatorCalculationError(f"BOLL({period}) için yetersiz candle verisi")
+    window = series[-period:]
+    mid = fmean(window)
+    std = pstdev(window)
+    return {
+        "mid": float(mid),
+        "upper": float(mid + (std * std_factor)),
+        "lower": float(mid - (std * std_factor)),
+    }
+
+
 def calculate_indicator_values(candles: list[dict]) -> dict[str, float]:
     if len(candles) < 60:
         raise IndicatorCalculationError("İndikatör hesaplaması için en az 60 kapalı candle gerekli")
@@ -72,6 +85,7 @@ def calculate_indicator_values(candles: list[dict]) -> dict[str, float]:
     closes = [_safe_float(candle.get("close")) for candle in candles]
     last_candle = candles[-1]
     fib = _fibonacci_levels(candles)
+    boll20 = _bollinger(closes, 20)
 
     return {
         "open": _safe_float(last_candle.get("open")),
@@ -85,6 +99,9 @@ def calculate_indicator_values(candles: list[dict]) -> dict[str, float]:
         "ema50": _ema(closes, 50),
         "sma20": _sma(closes, 20),
         "sma50": _sma(closes, 50),
+        "boll_upper20": boll20["upper"],
+        "boll_mid20": boll20["mid"],
+        "boll_lower20": boll20["lower"],
         "fibo_161_8": fib["fibo_161_8"],
         "fibo_127_2": fib["fibo_127_2"],
         "fibo_100": fib["fibo_100"],
@@ -112,5 +129,29 @@ def calculate_query_indicator_values(candles: list[dict], required_fields: set[s
             if period < 2:
                 raise IndicatorCalculationError("EMA periyodu 2 veya büyük olmalı")
             values[field] = _ema(closes, period)
+            continue
+        if field.startswith("sma") and field[3:].isdigit():
+            period = int(field[3:])
+            if period < 2:
+                raise IndicatorCalculationError("MA periyodu 2 veya büyük olmalı")
+            values[field] = _sma(closes, period)
+            continue
+        if field.startswith("boll_upper") and field[10:].isdigit():
+            period = int(field[10:])
+            if period < 2:
+                raise IndicatorCalculationError("BOLL periyodu 2 veya büyük olmalı")
+            values[field] = _bollinger(closes, period)["upper"]
+            continue
+        if field.startswith("boll_mid") and field[8:].isdigit():
+            period = int(field[8:])
+            if period < 2:
+                raise IndicatorCalculationError("BOLL periyodu 2 veya büyük olmalı")
+            values[field] = _bollinger(closes, period)["mid"]
+            continue
+        if field.startswith("boll_lower") and field[10:].isdigit():
+            period = int(field[10:])
+            if period < 2:
+                raise IndicatorCalculationError("BOLL periyodu 2 veya büyük olmalı")
+            values[field] = _bollinger(closes, period)["lower"]
             continue
     return values
