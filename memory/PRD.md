@@ -19412,3 +19412,17 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `ema21 > last_price` -> 200
 - Frontend lint/build PASS.
 
+## 2026-04-04 — Scanner/Indicator Menü Konum Düzeltmesi ✅
+
+- Kullanıcı geri bildirimiyle route yerleşimi düzeltildi:
+  - `Scanner` menüsü -> **eski detaylı scanner** (`/user/scanner`)
+  - `Indicator Screener` menüsü -> **yeni basit manuel koşul ekranı** (`/user/indicator-screener`)
+- Basit scanner içindeki `Profesyonel Görünüm` butonu `/user/scanner` route’una bağlandı.
+- `App.js` route mapping güncellendi; `indicator-screener` artık redirect değil doğrudan yeni sayfayı açıyor.
+
+### Doğrulama
+- Frontend testing agent sonucu: **PASS (3/3)**
+  - Scanner -> eski ekran
+  - Indicator Screener -> yeni basit ekran
+  - Basit ekrandan profesyonel görünüme geri dönüş doğru
+
