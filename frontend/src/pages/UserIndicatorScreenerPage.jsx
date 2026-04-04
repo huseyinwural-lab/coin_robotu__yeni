@@ -17,7 +17,7 @@ const defaultFilters = {
   exchange: "binance",
   market_type: "spot",
   timeframe: "15m",
-  query_expression: "rsi14 < 30",
+  query_expression: "",
   limit: 50,
 
   symbol_universe_mode: "all_exchange",
@@ -163,6 +163,8 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
   const [selectedRowKey, setSelectedRowKey] = useState("");
   const [selectorSymbols, setSelectorSymbols] = useState([]);
   const [symbolSearchInput, setSymbolSearchInput] = useState(defaultFilters.symbol_search);
+  const [manualRsiLessThan, setManualRsiLessThan] = useState("");
+  const [manualRsiGreaterThan, setManualRsiGreaterThan] = useState("");
   const [showSlowHint, setShowSlowHint] = useState(false);
   const runAbortControllerRef = useRef(null);
 
@@ -311,7 +313,8 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
     return "";
   };
 
-  const runQuery = async () => {
+  const runQuery = async (queryExpressionOverride = null) => {
+    const effectiveQueryExpression = queryExpressionOverride ?? filters.query_expression;
     const validationError = validateFiltersBeforeSubmit();
     if (validationError) {
       setRunError(validationError);
@@ -331,7 +334,7 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
         exchange: filters.exchange,
         market_type: filters.market_type,
         timeframe: filters.timeframe,
-        query_expression: filters.query_expression,
+        query_expression: effectiveQueryExpression,
         limit: Number(filters.limit),
         symbol_universe: ["whitelist_only", "custom_list"].includes(filters.symbol_universe_mode) ? (filters.symbol_whitelist || "") : "all",
         filter_payload: buildFilterPayload(),
@@ -556,10 +559,20 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
   };
 
   const applyStarterPreset = async (presetKey) => {
+    if (presetKey === "oversold_rsi") {
+      const customLess = String(manualRsiLessThan || "").trim();
+      if (customLess) {
+        const nextExpression = `rsi14 < ${customLess}`;
+        updateFilter("query_expression", nextExpression);
+        await runQuery(nextExpression);
+        return;
+      }
+    }
+
     const selected = presets.find((item) => item.preset_key === presetKey);
     if (selected) {
       applyPreset(selected);
-      await runQuery();
+      await runQuery(selected.query_expression);
       return;
     }
     const fallbackMap = {
@@ -567,8 +580,35 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
       breakout_volume: "close > ema20 AND volume > 1000000",
       trend_pullback: "close > ema50 AND rsi14 < 45",
     };
-    updateFilter("query_expression", fallbackMap[presetKey] || defaultFilters.query_expression);
-    await runQuery();
+    const fallbackExpression = fallbackMap[presetKey] || defaultFilters.query_expression;
+    updateFilter("query_expression", fallbackExpression);
+    await runQuery(fallbackExpression);
+  };
+
+  const applyManualRsiQuery = async (autoRun = false) => {
+    const lessValue = String(manualRsiLessThan || "").trim();
+    const greaterValue = String(manualRsiGreaterThan || "").trim();
+
+    const clauses = [];
+    if (greaterValue) {
+      clauses.push(`rsi14 > ${greaterValue}`);
+    }
+    if (lessValue) {
+      clauses.push(`rsi14 < ${lessValue}`);
+    }
+
+    if (!clauses.length) {
+      toast.error("RSI için en az bir küçük/büyük değeri girin.");
+      return;
+    }
+
+    const nextExpression = clauses.join(" AND ");
+    updateFilter("query_expression", nextExpression);
+    toast.success(`RSI query güncellendi: ${nextExpression}`);
+
+    if (autoRun) {
+      await runQuery(nextExpression);
+    }
   };
 
   const createSignalRule = () => {
@@ -739,6 +779,45 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-700">Query Expression</span>
             <Textarea value={filters.query_expression} onChange={(event) => updateFilter("query_expression", event.target.value)} className="min-h-12 border-emerald-300 bg-white text-slate-900" data-testid="user-indicator-screener-query-textarea" />
             <p className="text-xs text-slate-600" data-testid="user-indicator-screener-top-toolbar-query-helper">Query opsiyoneldir. Boş bırakırsanız sadece filtre katmanıyla tarama çalışır.</p>
+            <div className="mt-2 grid gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="user-indicator-screener-manual-rsi-grid">
+              <label className="space-y-1" data-testid="user-indicator-screener-manual-rsi-greater-field">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-900">RSI Büyük (&gt;)</span>
+                <Input
+                  value={manualRsiGreaterThan}
+                  onChange={(event) => setManualRsiGreaterThan(event.target.value)}
+                  placeholder="örn 40"
+                  className="h-9 border-emerald-300 bg-white"
+                  data-testid="user-indicator-screener-manual-rsi-greater-input"
+                />
+              </label>
+              <label className="space-y-1" data-testid="user-indicator-screener-manual-rsi-less-field">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-900">RSI Küçük (&lt;)</span>
+                <Input
+                  value={manualRsiLessThan}
+                  onChange={(event) => setManualRsiLessThan(event.target.value)}
+                  placeholder="örn 65"
+                  className="h-9 border-emerald-300 bg-white"
+                  data-testid="user-indicator-screener-manual-rsi-less-input"
+                />
+              </label>
+              <Button
+                type="button"
+                className={buttonClass.secondary}
+                onClick={() => applyManualRsiQuery(false)}
+                data-testid="user-indicator-screener-manual-rsi-apply-button"
+              >
+                Query’ye Uygula
+              </Button>
+              <Button
+                type="button"
+                className={buttonClass.primary}
+                onClick={() => applyManualRsiQuery(true)}
+                disabled={isRunning}
+                data-testid="user-indicator-screener-manual-rsi-run-button"
+              >
+                Uygula + Tara
+              </Button>
+            </div>
           </label>
           <div className="flex flex-wrap items-end gap-2" data-testid="user-indicator-screener-top-toolbar-actions">
             <Button className={buttonClass.primary} onClick={runQuery} disabled={isRunning} data-testid="user-indicator-screener-run-button">{isRunning ? "Running..." : "Run Scan"}</Button>
@@ -1014,7 +1093,7 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
               <div className="mt-4 grid gap-2 sm:grid-cols-3" data-testid="user-indicator-screener-starter-pack-grid">
                 <article className="rounded border border-emerald-200 bg-emerald-50 p-2" data-testid="user-indicator-screener-starter-card-oversold">
                   <p className="text-xs font-semibold text-emerald-900">Starter: Oversold RSI</p>
-                  <p className="text-[11px] text-emerald-800">rsi14 &lt; 30 + hızlı tarama</p>
+                  <p className="text-[11px] text-emerald-800">manual RSI küçük değeri girildiyse onu kullanır, yoksa preset değeriyle çalışır</p>
                   <Button size="sm" className="mt-2 w-full" onClick={() => applyStarterPreset("oversold_rsi")} data-testid="user-indicator-screener-starter-run-button-oversold">Run</Button>
                 </article>
                 <article className="rounded border border-emerald-200 bg-emerald-50 p-2" data-testid="user-indicator-screener-starter-card-breakout">
