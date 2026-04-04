@@ -19340,3 +19340,43 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `ema34 < last_price` -> 200
 - Frontend lint PASS, Python lint PASS, `CI=true yarn build` PASS.
 
+## 2026-04-04 — Scanner Genişletme (MA/BOLL/Vol + Periyot2 Tick) ✅
+
+### Uygulanan ekler
+- İndikatör listesi genişletildi:
+  - RSI
+  - EMA
+  - MA (Moving Average)
+  - BOLL (Bollinger Bands)
+  - Vol (Volume)
+- Periyot akışı güncellendi:
+  - `Periyot 1` manuel input
+  - `Periyot 2` manuel input + checkbox (`Periyot 2 aktif ✓`)
+  - Periyot2 aktifken kıyas `field(period1) op field(period2)` şeklinde çalışır
+- RSI için değer alanı korunup netleştirildi:
+  - `Karşılaştır = Sabit Sayı` modunda değer inputu görünür (`rsi7 > 70` gibi)
+- Karşılaştır seçenekleri korunup geliştirildi:
+  - Sabit Sayı
+  - Kapanış (close)
+  - Anlık Değer (last_price)
+- BOLL için çizgi seçimi eklendi:
+  - Upper / Mid / Lower
+
+### Backend query motor genişletmesi
+- Parser destekleri:
+  - Dinamik `rsiN`, `emaN`, `smaN`
+  - Dinamik `boll_upperN`, `boll_midN`, `boll_lowerN`
+  - Alan-alan kıyas (`ema50 < ema200`, `boll_upper20 > close`)
+- Hesaplama destekleri:
+  - Dinamik SMA
+  - Dinamik Bollinger (upper/mid/lower)
+
+### Doğrulama
+- Backend API testleri PASS:
+  - `rsi7 > 70` -> 200
+  - `ema50 < ema200` -> 200
+  - `sma20 > sma50` -> 200
+  - `boll_upper20 > close` -> 200
+  - `volume > 1000000` -> 200
+- Frontend lint/build PASS (`CI=true yarn build`).
+
