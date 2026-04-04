@@ -19549,3 +19549,31 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `exchange_connection_id` zorunluluk PASS
   - Runtime selected cüzdan alanları PASS
 
+## 2026-04-04 — Wizard Ekranı Tam Kaldırma (Çakışma Önleme) ✅
+
+### Kullanıcı talebi
+- `/user/strategies` wizard ekranı tamamen kaldırılacak; bot akışı tek ekran `Bot Kur` üzerinden yürüyecek.
+
+### Uygulanan değişiklik
+- `App.js`
+  - Home redirect: `/user/strategies` -> `/user/bot-profiles`
+  - `/dashboard` redirect: `/user/bot-profiles`
+  - `/user/strategies` route artık wizard component değil, direkt `/user/bot-profiles` redirect
+  - `UserStrategyBotWizardPage` import kaldırıldı
+- `PanelLayout.jsx`
+  - Sidebar’dan `Wizard (Strateji+Bot)` menüsü kaldırıldı
+  - `Bot Kur` menüsü korundu
+- `BotProfilesPage.jsx`
+  - Header’daki `Wizard Moduna Dön` butonu kaldırıldı
+- `StrategyTemplatesPage.jsx`
+  - `Wizard Moduna Dön` butonu -> `Bot Kur` ve hedef `/user/bot-profiles`
+- `StrategyTemplateDetailPage.jsx`
+  - Back butonları `/user/strategies` yerine `/user/pro-strategies`
+
+### Test doğrulaması
+- Frontend test ajanı: **PASS (4/4)**
+  - Sidebar wizard menüsü yok PASS
+  - Bot Kur linki PASS
+  - `/user/strategies` -> `/user/bot-profiles` redirect PASS
+  - `/dashboard` -> `/user/bot-profiles` redirect PASS
+
