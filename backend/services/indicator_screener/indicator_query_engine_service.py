@@ -381,7 +381,15 @@ def _build_result_row(
     executable: bool,
     executable_reasons: list[str],
     stale_data: bool,
+    query_fields: set[str],
 ) -> dict:
+    condition_metric_values: dict[str, float] = {}
+    for field in sorted(set(query_fields or set())):
+        if field in indicator_values:
+            condition_metric_values[field] = round(_safe_float(indicator_values.get(field), 0.0), 8)
+        elif field == "last_price":
+            condition_metric_values[field] = round(_safe_float(metadata.get("last_price"), _safe_float(indicator_values.get("close"), 0.0)), 8)
+
     return {
         "index": index,
         "exchange": exchange,
@@ -392,6 +400,7 @@ def _build_result_row(
         "high": round(float(indicator_values["high"]), 8),
         "low": round(float(indicator_values["low"]), 8),
         "close": round(float(indicator_values["close"]), 8),
+        "scan_price": round(float(indicator_values["close"]), 8),
         "last_price": round(_safe_float(metadata.get("last_price"), _safe_float(indicator_values.get("close"), 0.0)), 8),
         "volume": round(float(indicator_values["volume"]), 8),
         "rsi14": round(float(indicator_values["rsi14"]), 6),
@@ -406,6 +415,7 @@ def _build_result_row(
         "fibo_78_6": round(float(indicator_values["fibo_78_6"]), 8),
         "matched_rules": matched_rules,
         "matched_fields": sorted(set(matched_fields)),
+        "condition_metric_values": condition_metric_values,
         "updated_at": market_payload.get("last_candle_time"),
         "evaluated_at": market_payload.get("evaluated_at"),
         "data_source": market_payload.get("data_source"),
@@ -681,6 +691,7 @@ def run_indicator_query_engine(
                             executable=result["executable"],
                             executable_reasons=result["executable_reasons"],
                             stale_data=result["stale_data"],
+                            query_fields=query_fields,
                         )
                     )
             except (MarketDataProviderError, IndicatorCalculationError, QueryParseError):

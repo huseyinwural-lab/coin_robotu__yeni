@@ -17,6 +17,16 @@ const MARKET_TYPE_OPTIONS = [
   { value: "futures", label: "Futures" },
 ];
 
+const TIMEFRAME_OPTIONS = [
+  { value: "3m", label: "3m" },
+  { value: "5m", label: "5m" },
+  { value: "15m", label: "15m" },
+  { value: "1h", label: "1h" },
+  { value: "4h", label: "4h" },
+  { value: "1d", label: "1d" },
+  { value: "3d", label: "3d" },
+];
+
 const toFriendlyError = (error, fallback = "Tarama çalıştırılamadı") => {
   const detail = error?.response?.data?.detail;
   if (typeof detail === "string" && detail.trim()) return detail;
@@ -50,11 +60,46 @@ const normalizeConditionExpression = (rawCondition) => {
   return normalized;
 };
 
+const extractConditionTokens = (expression) => {
+  const matches = String(expression || "").toLowerCase().match(/(rsi\d{1,3}|ema\d{1,3}|sma\d{1,3}|last_price|close|open|high|low|volume)/g) || [];
+  return Array.from(new Set(matches));
+};
+
+const formatNumber = (value, digits = 6) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "-";
+  return num.toFixed(digits).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+};
+
+const buildConditionSummary = (row, queryExpression) => {
+  const tokens = extractConditionTokens(queryExpression);
+  const conditionMetricValues = row?.condition_metric_values || {};
+  const tokenValues = tokens
+    .map((token) => {
+      const value = Object.prototype.hasOwnProperty.call(conditionMetricValues, token)
+        ? conditionMetricValues[token]
+        : row?.[token];
+      if (value === null || value === undefined || value === "") return null;
+      return `${token.toUpperCase()}:${formatNumber(value)}`;
+    })
+    .filter(Boolean);
+
+  const matchedRule = Array.isArray(row?.matched_rules) && row.matched_rules.length > 0
+    ? row.matched_rules.join(" | ")
+    : queryExpression;
+
+  return {
+    rule: matchedRule || "-",
+    tokenLabel: tokenValues.length > 0 ? tokenValues.join(" · ") : "-",
+  };
+};
+
 export const UserSimpleScannerPage = () => {
   const navigate = useNavigate();
 
   const [exchange, setExchange] = useState("binance");
   const [marketType, setMarketType] = useState("spot");
+  const [timeframe, setTimeframe] = useState("15m");
   const [manualCondition, setManualCondition] = useState("rsi14 > 70");
   const [autoRefreshMinutes, setAutoRefreshMinutes] = useState("1");
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
@@ -80,7 +125,7 @@ export const UserSimpleScannerPage = () => {
       const payload = {
         exchange,
         market_type: marketType,
-        timeframe: "15m",
+        timeframe,
         query_expression: expression,
         symbol_universe: "all",
         limit: 60,
@@ -108,7 +153,7 @@ export const UserSimpleScannerPage = () => {
     } finally {
       setIsRunning(false);
     }
-  }, [exchange, marketType, manualCondition]);
+  }, [exchange, marketType, manualCondition, timeframe]);
 
   useEffect(() => {
     if (!autoRefreshEnabled) return undefined;
@@ -126,7 +171,7 @@ export const UserSimpleScannerPage = () => {
           <div data-testid="simple-scanner-header-copy">
             <h1 className="text-4xl font-black tracking-tight text-slate-900" data-testid="simple-scanner-title">Basit Scanner</h1>
             <p className="mt-1 text-sm text-slate-600" data-testid="simple-scanner-subtitle">
-              1) Borsa 2) Spot/Futures 3) Manuel Koşul 4) Run 5) Sonuç + Grafik
+              1) Borsa 2) Spot/Futures 3) Periyot 4) Manuel Koşul 5) Run 6) Sonuç + Grafik
             </p>
           </div>
           <Button type="button" variant="outline" onClick={() => navigate("/user/scanner")} data-testid="simple-scanner-pro-view-button">
@@ -152,13 +197,20 @@ export const UserSimpleScannerPage = () => {
             </select>
           </label>
 
+          <label className="space-y-1" data-testid="simple-scanner-timeframe-field">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">3. Zaman Aralığı</span>
+            <select className="h-10 w-full rounded border border-slate-300 px-3" value={timeframe} onChange={(event) => setTimeframe(event.target.value)} data-testid="simple-scanner-timeframe-select">
+              {TIMEFRAME_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
+          </label>
+
           <label className="space-y-1" data-testid="simple-scanner-auto-refresh-field">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Otomatik Güncelleme (dk)</span>
             <Input value={autoRefreshMinutes} onChange={(event) => setAutoRefreshMinutes(event.target.value)} placeholder="1/3/5/10" data-testid="simple-scanner-auto-refresh-minutes-input" />
           </label>
 
           <label className="space-y-1 sm:col-span-2 lg:col-span-3" data-testid="simple-scanner-condition-field">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">3. Koşul (manuel)</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Koşul (manuel)</span>
             <Input value={manualCondition} onChange={(event) => setManualCondition(event.target.value)} placeholder="örn: rsi14 > 70 veya ema21 > güncel fiyat" data-testid="simple-scanner-condition-input" />
             <p className="text-xs text-slate-500" data-testid="simple-scanner-condition-helper">
               Örnekler: <strong>RSI14&gt;70</strong>, <strong>EMA21&gt;GÜNCEL FİYAT</strong>, <strong>SMA20&gt;SMA50</strong>
@@ -169,7 +221,7 @@ export const UserSimpleScannerPage = () => {
         <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="simple-scanner-run-row">
           <Button type="button" onClick={runSimpleScan} disabled={isRunning} data-testid="simple-scanner-run-button">
             <Play className="mr-2 h-4 w-4" />
-            {isRunning ? "Çalışıyor..." : "4. Run"}
+            {isRunning ? "Çalışıyor..." : "5. Run"}
           </Button>
           <Button
             type="button"
@@ -180,6 +232,7 @@ export const UserSimpleScannerPage = () => {
             {autoRefreshEnabled ? "Auto: Açık" : "Auto: Kapalı"}
           </Button>
           <p className="text-xs text-slate-500" data-testid="simple-scanner-query-preview">Query: {liveQueryPreview}</p>
+          <p className="text-xs text-slate-500" data-testid="simple-scanner-timeframe-preview">Periyot: {timeframe}</p>
           <p className="text-xs text-slate-500" data-testid="simple-scanner-last-run-query">Son Run: {lastRunQueryExpression || "-"}</p>
           <p className="text-xs text-slate-500" data-testid="simple-scanner-last-updated-at">Son güncelleme: {lastUpdatedAt || "-"}</p>
         </div>
@@ -196,10 +249,10 @@ export const UserSimpleScannerPage = () => {
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-2 py-2" data-testid="simple-scanner-col-symbol">Symbol</th>
-                <th className="px-2 py-2" data-testid="simple-scanner-col-close">Close</th>
-                <th className="px-2 py-2" data-testid="simple-scanner-col-last-price">Anlık</th>
-                <th className="px-2 py-2" data-testid="simple-scanner-col-rsi">RSI</th>
-                <th className="px-2 py-2" data-testid="simple-scanner-col-ema">EMA</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-timeframe">Periyot</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-scan-price">Tarama Fiyatı</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-last-price">Anlık Fiyat</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-condition-summary">Koşul Özeti</th>
                 <th className="px-2 py-2" data-testid="simple-scanner-col-score">Skor</th>
                 <th className="px-2 py-2" data-testid="simple-scanner-col-chart">Grafik</th>
               </tr>
@@ -207,20 +260,24 @@ export const UserSimpleScannerPage = () => {
             <tbody>
               {rows.map((row, index) => {
                 const symbol = String(row?.symbol || "").toUpperCase();
+                const conditionSummary = buildConditionSummary(row, lastRunQueryExpression || liveQueryPreview);
                 return (
                   <tr key={`${symbol}-${index}`} className="border-b border-slate-100" data-testid={`simple-scanner-row-${index}`}>
                     <td className="px-2 py-2 font-semibold text-slate-900" data-testid={`simple-scanner-row-symbol-${index}`}>{symbol}</td>
-                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-close-${index}`}>{row?.close}</td>
-                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-last-price-${index}`}>{row?.last_price}</td>
-                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-rsi-${index}`}>rsi7:{row?.rsi7} · rsi14:{row?.rsi14}</td>
-                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-ema-${index}`}>ema20:{row?.ema20} · ema50:{row?.ema50}</td>
-                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-score-${index}`}>{row?.signal_score}</td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-timeframe-${index}`}>{row?.timeframe || timeframe}</td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-scan-price-${index}`}>{formatNumber(row?.scan_price ?? row?.close, 8)}</td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-last-price-${index}`}>{formatNumber(row?.last_price, 8)}</td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-condition-summary-${index}`}>
+                      <div className="font-medium text-slate-900" data-testid={`simple-scanner-row-condition-rule-${index}`}>{conditionSummary.rule}</div>
+                      <div className="text-xs text-slate-500" data-testid={`simple-scanner-row-condition-tokens-${index}`}>{conditionSummary.tokenLabel}</div>
+                    </td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-score-${index}`}>{formatNumber(row?.signal_score, 4)}</td>
                     <td className="px-2 py-2" data-testid={`simple-scanner-row-chart-cell-${index}`}>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => navigate(`/user/chart?symbol=${encodeURIComponent(symbol)}&tf=15m`)}
+                        onClick={() => navigate(`/user/chart?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(row?.timeframe || timeframe)}`)}
                         data-testid={`simple-scanner-open-chart-button-${index}`}
                       >
                         <LineChart className="mr-1 h-4 w-4" />

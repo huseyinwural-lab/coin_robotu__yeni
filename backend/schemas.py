@@ -2742,6 +2742,7 @@ class IndicatorScreenerRowResponse(BaseModel):
     high: float
     low: float
     close: float
+    scan_price: float
     volume: float
     rsi14: float
     rsi7: float
@@ -2755,6 +2756,7 @@ class IndicatorScreenerRowResponse(BaseModel):
     fibo_78_6: float
     matched_rules: list[str]
     matched_fields: list[str]
+    condition_metric_values: dict[str, float] = Field(default_factory=dict)
     updated_at: str | None
     evaluated_at: str | None
     data_source: str | None
