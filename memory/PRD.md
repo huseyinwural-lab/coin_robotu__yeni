@@ -19577,3 +19577,28 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `/user/strategies` -> `/user/bot-profiles` redirect PASS
   - `/dashboard` -> `/user/bot-profiles` redirect PASS
 
+## 2026-04-04 — Bot Cüzdan Alanı Sadeleştirme (Spot/Futures) ✅
+
+### Kullanıcı geri bildirimi
+- Exchange kilitli görünümü ve market type tek spot davranışı düzeltilsin.
+- Kullanılacak cüzdan listesindeki fazlalıklar temizlensin.
+- Bot ekranı sadece Spot/Futures cüzdanlarını PnL/Portfolio verisiyle tutarlı göstersin.
+
+### Yapılan güncelleme
+- `BotProfilesPage.jsx` güncellendi:
+  - Exchange select kilidi kaldırıldı.
+  - Market Type select artık dinamik ve mevcut cüzdan market tiplerinden (spot/futures) besleniyor.
+  - Kullanılacak Cüzdan listesi artık sade:
+    - `SPOT CÜZDAN (..)`
+    - `FUTURES CÜZDAN (..)`
+  - Çoklu/tekrarlı account label kalabalığı kaldırıldı (market bazlı tekil seçenek).
+  - Cüzdan etiket bakiyeleri `/api/user/portfolio` alanlarından alınır:
+    - `spot_wallet_balance`
+    - `futures_wallet_balance`
+
+### Kontrol sonucu
+- Backend doğrulama: **PASS**
+  - `/api/user/portfolio` -> total/spot/futures alanları mevcut ve dolu
+  - `/api/user/exchange-connections` -> canlı spot/futures bağlantıları mevcut
+  - Bot ekranı filtre mantığı spot/futures ayrımı için backend verisiyle uyumlu
+
