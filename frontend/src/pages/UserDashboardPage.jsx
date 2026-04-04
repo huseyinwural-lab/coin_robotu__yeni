@@ -97,7 +97,7 @@ export const UserDashboardPage = () => {
       setIsLoading(true);
     }
     try {
-      const [dashboardRes, portfolioRes, performanceRes, riskPoliciesRes, modeRes, botsRes, signalsRes, cardsRes] = await Promise.all([
+      const settled = await Promise.allSettled([
         apiClient.get("/user/dashboard"),
         apiClient.get("/user/portfolio"),
         apiClient.get("/user/performance"),
@@ -107,15 +107,67 @@ export const UserDashboardPage = () => {
         apiClient.get("/user/signals", { params: { limit: 50 } }),
         apiClient.get("/user/decision-cards", { params: { limit: 12 } }),
       ]);
-      setDashboard(dashboardRes.data);
-      setPortfolio(portfolioRes.data);
-      setPerformance(performanceRes.data);
-      setRiskPolicies(riskPoliciesRes.data || []);
-      setSignalMode(modeRes.data || null);
-      setBotProfiles(botsRes.data || []);
-      setRecentSignals(signalsRes.data || []);
-      const cards = cardsRes?.data?.items || [];
+
+      const endpointNames = [
+        "user_dashboard",
+        "user_portfolio",
+        "user_performance",
+        "risk_policies",
+        "signal_mode",
+        "bot_profiles",
+        "user_signals",
+        "decision_cards",
+      ];
+      const failedEndpoints = [];
+      const readData = (index, fallback) => {
+        const result = settled[index];
+        if (result?.status === "fulfilled") {
+          return result.value?.data ?? fallback;
+        }
+        failedEndpoints.push(endpointNames[index]);
+        return fallback;
+      };
+
+      const dashboardData = readData(0, {
+        bot_count: 0,
+        running_bot_count: 0,
+        risk_policy_count: 0,
+        current_capital: 0,
+        available_balance: 0,
+        open_positions_count: 0,
+        pending_signals_count: 0,
+        heartbeat: null,
+      });
+      const portfolioData = readData(1, {
+        current_capital: 0,
+        available_balance: 0,
+        execution_mode: "mocked",
+        closed_pnl: 0,
+      });
+      const performanceData = readData(2, {
+        win_rate: 0,
+        closed_trades: 0,
+      });
+      const riskPoliciesData = readData(3, []);
+      const signalModeData = readData(4, { mode: "ASSISTED" });
+      const botProfilesData = readData(5, []);
+      const recentSignalsData = readData(6, []);
+      const decisionCardsData = readData(7, { items: [] });
+
+      setDashboard(dashboardData);
+      setPortfolio(portfolioData);
+      setPerformance(performanceData);
+      setRiskPolicies(riskPoliciesData || []);
+      setSignalMode(signalModeData || null);
+      setBotProfiles(botProfilesData || []);
+      setRecentSignals(recentSignalsData || []);
+      const cards = decisionCardsData?.items || [];
       setDecisionCards(cards);
+
+      if (failedEndpoints.length > 0 && !silent) {
+        toast.error(`Bazı dashboard kaynakları yüklenemedi: ${failedEndpoints.join(", ")}`);
+      }
+
       if (cards.length > 0) {
         const symbolToUse = selectedDecisionSymbol || cards[0].symbol;
         setSelectedDecisionSymbol(symbolToUse);
@@ -129,6 +181,10 @@ export const UserDashboardPage = () => {
       } else {
         setSelectedDecisionSymbol("");
         setSymbolExplainability(null);
+      }
+    } catch (error) {
+      if (!silent) {
+        toast.error(error?.response?.data?.detail || "Dashboard yüklenemedi");
       }
     } finally {
       if (!silent) {

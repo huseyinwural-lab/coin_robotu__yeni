@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 
 from core.bot_runtime_engine import bind_bot_runtime, heartbeat_bot_runtime, initialize_bot_runtime, set_bot_runtime_state
 from db import redis_client
 from models import BotProfile, ExecutionMetric, PaperPosition, PendingSignal, RiskPolicy, SignalEvent, UserExchangeConnection, UserScannerResult, UserScannerSymbolSelection
 from services.strategy_template_resolution_service import resolve_effective_strategy_config
+
+logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -24,6 +27,87 @@ def _json_safe(value):
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     return str(value)
+
+
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
+    snapshot = getattr(bot, "symbol_resolution_snapshot", {}) or {}
+    strategy_template_ids = [
+        str(value).strip()
+        for value in list(snapshot.get("strategy_template_ids") or [])
+        if str(value).strip()
+    ]
+    return {
+        "id": bot.id,
+        "name": bot.name,
+        "exchange": bot.exchange,
+        "market_type": bot.market_type,
+        "strategy_type": bot.strategy_type,
+        "strategy_template_id": getattr(bot, "strategy_template_id", None),
+        "strategy_template_ids": strategy_template_ids,
+        "risk_adaptive_confirmed": bool(snapshot.get("risk_adaptive_confirmed")),
+        "symbols": list(bot.symbols or []),
+        "leverage": _safe_int(getattr(bot, "leverage", 1), 1),
+        "is_enabled": bool(getattr(bot, "is_enabled", True)),
+        "is_running": bool(getattr(bot, "is_running", False)),
+        "symbol_source_type": str(getattr(bot, "symbol_source_type", "manual") or "manual"),
+        "scanner_id": getattr(bot, "scanner_id", None),
+        "status": "ERROR",
+        "mode": str(snapshot.get("preferred_mode") or "live_ready_disabled"),
+        "strategy_id": None,
+        "risk_profile_id": None,
+        "execution_profile_id": None,
+        "last_heartbeat": _now_iso(),
+        "runtime_context": {"error": "summary_fallback", "reason": reason},
+        "symbol_source": "manual",
+        "symbol_source_summary": {
+            "ok": False,
+            "source_type": str(getattr(bot, "symbol_source_type", "manual") or "manual"),
+            "scanner_id": getattr(bot, "scanner_id", None),
+            "symbols": list(bot.symbols or []),
+            "summary": "fallback",
+            "last_resolution_time": _now_iso(),
+            "resolution_status": "failed",
+        },
+        "binding_validation": {
+            "strategy_bound": False,
+            "risk_bound": False,
+            "execution_bound": False,
+            "symbols_resolved": False,
+        },
+        "compatibility": {
+            "parity": "unknown",
+            "market_strategy_compatible": False,
+            "execution_profile_source": None,
+            "risk_source": None,
+        },
+        "pnl": 0.0,
+        "today_pnl": 0.0,
+        "risk_exposure": 0.0,
+        "bot_risk_contribution": {
+            "exposure": 0.0,
+            "avg_leverage": 1.0,
+            "direction_mix": {"long": 0, "short": 0},
+        },
+        "active_positions": 0,
+        "last_signal": None,
+        "last_signal_at": None,
+        "strategy_name": None,
+        "last_action": "ERROR",
+        "anomaly_flag": True,
+        "dynamic_parameters": {
+            "position_size_multiplier": 0.5,
+            "risk_multiplier": 0.5,
+            "regime_adjustment": "fallback",
+        },
+        "health": "ERROR",
+    }
 
 
 def _resolve_bindings(db, bot: BotProfile) -> dict:
@@ -231,7 +315,7 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "strategy_template_ids": strategy_template_ids,
         "risk_adaptive_confirmed": bool(snapshot.get("risk_adaptive_confirmed")),
         "symbols": list(bot.symbols or []),
-        "leverage": int(getattr(bot, "leverage", 1) or 1),
+        "leverage": _safe_int(getattr(bot, "leverage", 1), 1),
         "is_enabled": bool(getattr(bot, "is_enabled", True)),
         "is_running": bool(getattr(bot, "is_running", False)),
         "symbol_source_type": str(getattr(bot, "symbol_source_type", "manual") or "manual"),
@@ -349,7 +433,14 @@ def list_bot_runtime_summaries(db, *, user_id: str) -> list[dict]:
         .order_by(BotProfile.updated_at.desc())
         .all()
     )
-    return [build_bot_runtime_summary(db, row) for row in rows]
+    items = []
+    for row in rows:
+        try:
+            items.append(build_bot_runtime_summary(db, row))
+        except Exception as exc:
+            logger.exception("BOT_RUNTIME_SUMMARY_FAILED", extra={"bot_id": row.id, "user_id": user_id})
+            items.append(_fallback_bot_runtime_summary(row, reason=str(exc)))
+    return items
 
 
 def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
