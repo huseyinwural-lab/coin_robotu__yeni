@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiClient } from "@/lib/api";
 
+const ADVISORY_CHECK_KEYWORDS = ["risk", "strategy", "bot", "drift"];
+
 export const AdminExecutionReadinessPage = () => {
   const [gate, setGate] = useState(null);
   const [readiness, setReadiness] = useState(null);
@@ -82,8 +84,6 @@ export const AdminExecutionReadinessPage = () => {
   }, [targetMode]);
 
   const deployBlocked = !gate?.deploy_allowed;
-  const ADVISORY_CHECK_KEYWORDS = ["risk", "strategy", "bot", "drift"];
-
   const isAdvisoryCheck = useCallback((check) => {
     const key = String(check?.check_key || "").toLowerCase();
     const title = String(check?.title || "").toLowerCase();

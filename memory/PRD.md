@@ -19155,3 +19155,19 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - execution guard 423 blokajı yerine soft akış doğrulandı.
 - Frontend test ajanı: Admin login `ERR_ABORTED` (preview dalgalanması) nedeniyle tam UI akışı bloklandı.
 
+## 2026-04-04 — User Dashboard 500 Crash Hardening ✅
+
+### Kök neden ve düzeltme
+- Kullanıcı dashboard yüklemesinde tek endpoint 500 olduğunda (`Promise.all`) tüm sayfa runtime crash veriyordu.
+- `bot_runtime_service.py` içinde `list_bot_runtime_summaries` artık satır bazlı fail-safe çalışıyor:
+  - Bozuk tek bot kaydı tüm `/api/bot-profiles` listesini 500’e düşürmüyor.
+  - Hatalı satır fallback summary ile `health=ERROR` olarak döndürülüyor.
+- `UserDashboardPage.jsx` yükleme akışı `Promise.all` -> `Promise.allSettled` geçirildi:
+  - Tek endpoint patlasa bile sayfa render olmaya devam ediyor.
+  - Hangi kaynakların fail ettiği kullanıcıya kısa toast ile bildiriliyor.
+  - Global try/catch ile uncaught runtime crash yolu kapatıldı.
+
+### Doğrulama
+- `/api/bot-profiles`, `/api/user/dashboard`, `/api/user/portfolio`, `/api/user/performance` çağrıları 200 doğrulandı (preview).
+- Frontend build: `CI=true yarn build` PASS.
+
