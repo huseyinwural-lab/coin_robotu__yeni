@@ -1106,6 +1106,7 @@ def validate_exchange_credentials_for_user(
         permissions: list[str] | None = None,
         hint: str | None = None,
         latency_ms: float | None = None,
+        account_snapshot: dict | None = None,
     ) -> None:
         if requested_connection is None:
             return
@@ -1140,6 +1141,16 @@ def validate_exchange_credentials_for_user(
                 "is_reconnecting": is_reconnecting,
             }
         )
+        if account_snapshot:
+            snapshot.update(
+                {
+                    "available_balance": account_snapshot.get("available_balance"),
+                    "wallet_balance": account_snapshot.get("wallet_balance"),
+                    "open_order_margin": account_snapshot.get("open_order_margin"),
+                    "unrealized_pnl": account_snapshot.get("unrealized_pnl"),
+                    "last_sync_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         if latency_ms is not None:
             try:
                 normalized_latency = round(float(latency_ms), 2)
@@ -1171,6 +1182,65 @@ def validate_exchange_credentials_for_user(
         if permissions is not None:
             requested_connection.permission_snapshot = permissions
         requested_connection.updated_at = datetime.now(timezone.utc)
+
+    def _extract_account_snapshot(raw_payload: dict, market_type: str) -> dict:
+        payload = raw_payload if isinstance(raw_payload, dict) else {}
+
+        def _to_float(value):
+            try:
+                return round(float(value), 8)
+            except (TypeError, ValueError):
+                return None
+
+        if market_type == "spot":
+            balances = payload.get("balances") if isinstance(payload.get("balances"), list) else []
+            usdt_row = next(
+                (
+                    row
+                    for row in balances
+                    if isinstance(row, dict) and str(row.get("asset") or "").upper() == "USDT"
+                ),
+                {},
+            )
+            free_balance = _to_float(usdt_row.get("free"))
+            locked_balance = _to_float(usdt_row.get("locked"))
+            wallet_balance = None
+            if free_balance is not None or locked_balance is not None:
+                wallet_balance = round(float(free_balance or 0.0) + float(locked_balance or 0.0), 8)
+            return {
+                "available_balance": free_balance,
+                "wallet_balance": wallet_balance,
+                "open_order_margin": locked_balance,
+                "unrealized_pnl": None,
+            }
+
+        assets = payload.get("assets") if isinstance(payload.get("assets"), list) else []
+        usdt_asset = next(
+            (
+                row
+                for row in assets
+                if isinstance(row, dict) and str(row.get("asset") or "").upper() == "USDT"
+            ),
+            {},
+        )
+        available_balance = _to_float(
+            usdt_asset.get("availableBalance") if usdt_asset else payload.get("availableBalance")
+        )
+        wallet_balance = _to_float(
+            usdt_asset.get("walletBalance") if usdt_asset else payload.get("totalWalletBalance")
+        )
+        open_order_margin = _to_float(
+            usdt_asset.get("openOrderInitialMargin") if usdt_asset else payload.get("totalOpenOrderInitialMargin")
+        )
+        unrealized_pnl = _to_float(
+            usdt_asset.get("unrealizedProfit") if usdt_asset else payload.get("totalUnrealizedProfit")
+        )
+        return {
+            "available_balance": available_balance,
+            "wallet_balance": wallet_balance,
+            "open_order_margin": open_order_margin,
+            "unrealized_pnl": unrealized_pnl,
+        }
 
     def _validation_failure(
         reason_codes: list[str],
@@ -1325,6 +1395,8 @@ def validate_exchange_credentials_for_user(
         http_status = 403 if "ip_restriction" in reason_codes or "missing_trade_permission" in reason_codes else 400
         return _validation_failure(reason_codes, http_status, latency_ms=elapsed_ms)
 
+    account_snapshot = _extract_account_snapshot(payload if isinstance(payload, dict) else {}, requested_market_type)
+
     permissions = _normalize_permissions(payload, requested_market_type, requested_environment)
     if requested_market_type == "spot":
         can_trade = bool(payload.get("canTrade", True))
@@ -1346,6 +1418,7 @@ def validate_exchange_credentials_for_user(
             status_code=403,
             hint=_validation_hint(["missing_trade_permission"]),
             latency_ms=elapsed_ms,
+            account_snapshot=account_snapshot,
         )
         _record_permission_snapshot_and_drift(
             db,
@@ -1366,6 +1439,10 @@ def validate_exchange_credentials_for_user(
             "reason_codes": ["missing_trade_permission"],
             "capability_match": capability_match,
             "assignment_autofixed": assignment_autofixed,
+            "available_balance": account_snapshot.get("available_balance"),
+            "wallet_balance": account_snapshot.get("wallet_balance"),
+            "open_order_margin": account_snapshot.get("open_order_margin"),
+            "unrealized_pnl": account_snapshot.get("unrealized_pnl"),
         }, 403
 
     _record_permission_snapshot_and_drift(
@@ -1384,6 +1461,7 @@ def validate_exchange_credentials_for_user(
         permissions=permissions,
         status_code=200,
         latency_ms=elapsed_ms,
+        account_snapshot=account_snapshot,
     )
     logger.info(
         "exchange_validation_success",
@@ -1409,6 +1487,10 @@ def validate_exchange_credentials_for_user(
         "reason_codes": [],
         "capability_match": capability_match,
         "assignment_autofixed": assignment_autofixed,
+        "available_balance": account_snapshot.get("available_balance"),
+        "wallet_balance": account_snapshot.get("wallet_balance"),
+        "open_order_margin": account_snapshot.get("open_order_margin"),
+        "unrealized_pnl": account_snapshot.get("unrealized_pnl"),
     }, 200
 
 

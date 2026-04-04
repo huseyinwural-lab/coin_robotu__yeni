@@ -50,6 +50,37 @@ def _active_policy(db: Session, user_id: str) -> RiskPolicy | None:
     )
 
 
+def _ensure_default_policy_if_missing(db: Session, user_id: str) -> None:
+    existing = db.query(RiskPolicy.id).filter(RiskPolicy.user_id == user_id).first()
+    if existing:
+        return
+
+    default_policy = RiskPolicy(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        name="Starter Safe (Auto)",
+        position_size_pct=1.0,
+        atr_stop_multiplier=1.8,
+        risk_reward_ratio=1.8,
+        daily_loss_cutoff_pct=3.0,
+        max_open_positions=2,
+        max_leverage=2,
+        spread_limit_bps=25,
+        slippage_limit_bps=35,
+        min_liquidity_usdt=150000,
+        version_group_id=str(uuid.uuid4()),
+        version_num=1,
+        lifecycle_state="active",
+        is_active=True,
+        activated_at=_now(),
+        activated_by=user_id,
+        status_reason="auto_seed_for_user",
+        metadata_json={"auto_seed": True},
+    )
+    db.add(default_policy)
+    db.commit()
+
+
 def _policy_preview(row: RiskPolicy, payload: RiskPolicyPreviewRequest) -> dict:
     projected_position_size = round(10000 * (float(row.position_size_pct or 0.0) / 100.0), 4)
     daily_loss_cutoff_hit = float(payload.current_daily_pnl_pct or 0.0) >= float(row.daily_loss_cutoff_pct or 0.0)
@@ -79,6 +110,7 @@ def _policy_status_reason(row: RiskPolicy, active_row: RiskPolicy | None) -> str
 
 @router.get("", response_model=list[RiskPolicyResponse])
 def list_risk_policies(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    _ensure_default_policy_if_missing(db, current_user.id)
     query = db.query(RiskPolicy)
     if not is_admin_role(current_user.role):
         query = query.filter(RiskPolicy.user_id == current_user.id)

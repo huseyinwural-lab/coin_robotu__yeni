@@ -33,6 +33,22 @@ const initialForm = {
 
 const pretty = (value) => JSON.stringify(value || {}, null, 2);
 const promotionFlow = ["DRAFT", "VALIDATED", "BACKTEST_PASSED", "ACTIVE", "DEPRECATED", "ROLLED_BACK"];
+const STRATEGY_TYPE_OPTIONS = [
+  "trend_following",
+  "mean_reversion",
+  "breakout",
+  "volatility_expansion",
+  "volatility_breakout",
+  "low_vol_scalping",
+  "scalping",
+  "momentum_ignition",
+  "volume_profile_reclaim",
+  "range_rotation",
+  "funding_rate_carry",
+  "basis_arbitrage",
+  "orderflow_imbalance",
+  "news_sentiment_reaction",
+];
 
 const fetchTemplateJson = async (path, { method = "GET", body = null, timeoutMs = 30000 } = {}) => {
   const controller = new AbortController();
@@ -311,7 +327,17 @@ export const StrategyTemplatesPage = () => {
                 <p className="mb-2 text-xs uppercase tracking-widest text-slate-500">Basic</p>
                 <Input placeholder="Template adı" value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} data-testid="strategy-form-name-input" required />
                 <Input className="mt-2" placeholder="Template code" value={form.template_code} onChange={(event) => setForm((prev) => ({ ...prev, template_code: event.target.value }))} data-testid="strategy-form-code-input" />
-                <Input className="mt-2" placeholder="Strategy type" value={form.strategy_type} onChange={(event) => setForm((prev) => ({ ...prev, strategy_type: event.target.value }))} data-testid="strategy-form-type-input" required />
+                <select
+                  className="mt-2 h-10 w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  value={form.strategy_type}
+                  onChange={(event) => setForm((prev) => ({ ...prev, strategy_type: event.target.value }))}
+                  data-testid="strategy-form-type-input"
+                  required
+                >
+                  {STRATEGY_TYPE_OPTIONS.map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
                 <Input className="mt-2" placeholder="Backtest result ref" value={form.backtest_result_ref} onChange={(event) => setForm((prev) => ({ ...prev, backtest_result_ref: event.target.value }))} data-testid="strategy-form-backtest-ref-input" />
               </div>
               <div>

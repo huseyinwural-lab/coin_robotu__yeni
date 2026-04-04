@@ -297,6 +297,14 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
     };
   }, [selectedConnectionProfile]);
 
+  const shouldHideMockWallet = useMemo(() => {
+    const health = String(selectedConnectionProfile?.connection_health || "").toLowerCase();
+    if (health !== "online") {
+      return true;
+    }
+    return !Boolean(selectedConnectionProfile?.can_trade_effective);
+  }, [selectedConnectionProfile]);
+
   const selectedRateLimitState = useMemo(() => {
     const snapshot = selectedConnectionProfile?.readiness_snapshot || {};
     return {
@@ -575,6 +583,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
 
     setIsConnectionSaving(true);
     try {
+      let savedConnection = null;
       const payload = {
         account_label: connectionForm.account_label.trim(),
         exchange: connectionForm.exchange,
@@ -586,16 +595,25 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
       };
 
       if (editingConnectionId) {
-        await apiClient.put(`/user/exchange-connections/${editingConnectionId}`, payload);
+        const { data } = await apiClient.put(`/user/exchange-connections/${editingConnectionId}`, payload);
+        savedConnection = data || null;
         toast.success("Connection profili güncellendi");
       } else {
-        await apiClient.post("/user/exchange-connections", payload);
+        const { data } = await apiClient.post("/user/exchange-connections", payload);
+        savedConnection = data || null;
         toast.success("Connection profili oluşturuldu");
       }
 
       resetConnectionEditor();
       setConnectionErrors({});
       await loadAll();
+
+      const hasFreshCredentials = Boolean(connectionForm.api_key) && Boolean(connectionForm.api_secret);
+      if (savedConnection?.id && hasFreshCredentials) {
+        await apiClient.post(`/user/exchange-connections/${savedConnection.id}/revalidate`);
+        await loadAll();
+        toast.success("Profil doğrulandı, cüzdan snapshot güncellendi");
+      }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Connection profili kaydedilemedi");
     } finally {
@@ -939,13 +957,18 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
       {activeTab === "overview" && (
         <div className="space-y-4" data-testid="user-overview-tab-content">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6" data-testid="user-overview-metrics-grid">
-            <MetricCard label="Güncel Ana Para" value={portfolioOverview?.current_capital ?? "-"} tone="orange" testId="user-overview-current-capital" />
-            <MetricCard label="Kullanılabilir" value={portfolioOverview?.available_balance ?? "-"} tone="blue" testId="user-overview-available-balance" />
-            <MetricCard label="Açık Pozisyon" value={portfolioOverview?.open_position_balance ?? "-"} tone="orange" testId="user-overview-open-balance" />
-            <MetricCard label="Kapanmış PnL" value={portfolioOverview?.closed_pnl ?? "-"} tone="blue" testId="user-overview-closed-pnl" />
-            <MetricCard label="Compounding" value={String(portfolioOverview?.compounding_enabled ?? false)} tone="orange" testId="user-overview-compounding" />
-            <MetricCard label="Sonraki Baz" value={portfolioOverview?.next_base_capital ?? "-"} tone="blue" testId="user-overview-next-base" />
+            <MetricCard label="Güncel Ana Para" value={shouldHideMockWallet ? "-" : (portfolioOverview?.current_capital ?? "-")} tone="orange" testId="user-overview-current-capital" />
+            <MetricCard label="Kullanılabilir" value={shouldHideMockWallet ? "-" : (portfolioOverview?.available_balance ?? "-")} tone="blue" testId="user-overview-available-balance" />
+            <MetricCard label="Açık Pozisyon" value={shouldHideMockWallet ? "-" : (portfolioOverview?.open_position_balance ?? "-")} tone="orange" testId="user-overview-open-balance" />
+            <MetricCard label="Kapanmış PnL" value={shouldHideMockWallet ? "-" : (portfolioOverview?.closed_pnl ?? "-")} tone="blue" testId="user-overview-closed-pnl" />
+            <MetricCard label="Compounding" value={shouldHideMockWallet ? "-" : String(portfolioOverview?.compounding_enabled ?? false)} tone="orange" testId="user-overview-compounding" />
+            <MetricCard label="Sonraki Baz" value={shouldHideMockWallet ? "-" : (portfolioOverview?.next_base_capital ?? "-")} tone="blue" testId="user-overview-next-base" />
           </div>
+          {shouldHideMockWallet && (
+            <p className="text-xs text-amber-300" data-testid="user-overview-mock-wallet-hidden-note">
+              Live cüzdan doğrulanmadan test/paper bakiye metrikleri gizlenir.
+            </p>
+          )}
 
           <section className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-overview-system-health-dashboard">
             <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-overview-system-health-header">
@@ -1182,6 +1205,11 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
               </div>
               <p className="mt-3 text-xs text-slate-400" data-testid="user-exchange-account-last-sync">last_sync: {formatConnectionTime(selectedAccountSnapshot.last_sync_time)}</p>
               <p className="text-xs text-slate-400" data-testid="user-exchange-account-stale-state">state: {selectedAccountSnapshot.stale_state ? "stale" : "synced"}</p>
+              {selectedAccountSnapshot.wallet_equity === null && (
+                <p className="mt-2 text-xs text-amber-300" data-testid="user-exchange-account-missing-wallet-hint">
+                  Cüzdan verisi yok. Profile Revalidate çalıştırın veya key/permission kontrol edin.
+                </p>
+              )}
             </div>
             <div className="border border-slate-800 bg-slate-900 p-4" data-testid="user-exchange-security-panel">
               <p className="text-xs uppercase tracking-widest text-slate-500">Credential Security</p>

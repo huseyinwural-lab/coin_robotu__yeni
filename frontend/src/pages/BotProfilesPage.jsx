@@ -24,6 +24,29 @@ const initialForm = {
   risk_adaptive_confirmed: false,
 };
 
+const STRATEGY_TYPE_OPTIONS = [
+  "trend_following",
+  "mean_reversion",
+  "volatility_breakout",
+  "low_vol_scalping",
+  "scalping",
+  "momentum_ignition",
+  "volume_profile_reclaim",
+  "range_rotation",
+  "funding_rate_carry",
+  "basis_arbitrage",
+  "orderflow_imbalance",
+  "news_sentiment_reaction",
+];
+
+const TEMPLATE_BUNDLE_PRESETS = [
+  { key: "momentum", label: "Momentum Bundle", strategy_types: ["trend_following", "volatility_breakout", "momentum_ignition"] },
+  { key: "neutral", label: "Neutral / Mean-Revert", strategy_types: ["mean_reversion", "range_rotation", "volume_profile_reclaim"] },
+  { key: "market_making", label: "Scalp + Flow", strategy_types: ["scalping", "low_vol_scalping", "orderflow_imbalance"] },
+  { key: "carry_arb", label: "Carry / Arbitrage", strategy_types: ["funding_rate_carry", "basis_arbitrage"] },
+  { key: "event_driven", label: "Event Driven", strategy_types: ["news_sentiment_reaction", "momentum_ignition"] },
+];
+
 export const BotProfilesPage = () => {
   const [items, setItems] = useState([]);
   const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
@@ -42,6 +65,22 @@ export const BotProfilesPage = () => {
   const [symbolSource, setSymbolSource] = useState("crypto");
   const [symbolMode, setSymbolMode] = useState("all_market_symbols");
   const [selectedSymbols, setSelectedSymbols] = useState(["BTCUSDT", "ETHUSDT"]);
+  const [selectedBundleKey, setSelectedBundleKey] = useState("");
+
+  const parseApiErrorMessage = (error, fallback) => {
+    const detail = error?.response?.data?.detail;
+    if (Array.isArray(detail)) {
+      const text = detail.map((item) => item?.msg || item?.message || "").filter(Boolean).join(", ");
+      if (text) return text;
+    }
+    if (typeof detail === "string" && detail.trim()) {
+      return detail;
+    }
+    if (detail && typeof detail === "object") {
+      return detail.message || detail.code || fallback;
+    }
+    return fallback;
+  };
 
   const fetchItems = async () => {
     try {
@@ -74,6 +113,13 @@ export const BotProfilesPage = () => {
       volatility_breakout: "Agresif / Kırılım",
       low_vol_scalping: "Düşük Volatilite / Scalping",
       scalping: "Düşük Volatilite / Scalping",
+      momentum_ignition: "Momentum / Ignition",
+      volume_profile_reclaim: "Volume Profile / Reclaim",
+      range_rotation: "Range Rotation",
+      funding_rate_carry: "Funding Carry",
+      basis_arbitrage: "Basis Arbitrage",
+      orderflow_imbalance: "Orderflow Imbalance",
+      news_sentiment_reaction: "News Sentiment",
     }),
     [],
   );
@@ -85,6 +131,13 @@ export const BotProfilesPage = () => {
       mean_reversion: 0.8,
       low_vol_scalping: 0.75,
       scalping: 0.8,
+      momentum_ignition: 1.1,
+      volume_profile_reclaim: 0.9,
+      range_rotation: 0.85,
+      funding_rate_carry: 0.7,
+      basis_arbitrage: 0.65,
+      orderflow_imbalance: 1.05,
+      news_sentiment_reaction: 1.25,
     }),
     [],
   );
@@ -115,6 +168,19 @@ export const BotProfilesPage = () => {
     () => activeTemplateOptions.filter((item) => (form.strategy_template_ids || []).includes(item.id)),
     [activeTemplateOptions, form.strategy_template_ids],
   );
+
+  const templateBundleOptions = useMemo(() => {
+    return TEMPLATE_BUNDLE_PRESETS
+      .map((bundle) => {
+        const matches = (activeTemplateOptions || []).filter((item) => bundle.strategy_types.includes(item.strategy_type));
+        return {
+          ...bundle,
+          templateIds: matches.map((item) => item.id).slice(0, 12),
+          count: matches.length,
+        };
+      })
+      .filter((bundle) => bundle.count > 0);
+  }, [activeTemplateOptions]);
 
   const correlationWarnings = useMemo(() => {
     const types = new Set(selectedBasketTemplates.map((item) => item.strategy_type));
@@ -185,6 +251,22 @@ export const BotProfilesPage = () => {
     fetchItems();
   }, []);
 
+  useEffect(() => {
+    if (!activeTemplateOptions.length) return;
+    setForm((prev) => {
+      if (prev.template_id || (prev.strategy_template_ids || []).length > 0) {
+        return prev;
+      }
+      const first = activeTemplateOptions[0];
+      return {
+        ...prev,
+        template_id: first.id,
+        strategy_template_ids: [first.id],
+        strategy_type: first.strategy_type || prev.strategy_type,
+      };
+    });
+  }, [activeTemplateOptions]);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -201,6 +283,12 @@ export const BotProfilesPage = () => {
     }
     if (parsedSymbols.length === 0) {
       nextErrors.symbols = "En az bir sembol girin.";
+    }
+    if (String(form.symbol_source_type || "manual") === "scanner" && !String(form.scanner_id || "").trim()) {
+      nextErrors.scanner_id = "Scanner source için scanner_id zorunlu.";
+    }
+    if (!(form.template_id || (form.strategy_template_ids || []).length > 0)) {
+      nextErrors.template_id = "En az bir aktif template seçin.";
     }
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
@@ -236,17 +324,19 @@ export const BotProfilesPage = () => {
       }
       setEditingId(null);
       setForm(initialForm);
+      setSelectedBundleKey("");
       setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
       setSymbolMode("all_market_symbols");
       setFormErrors({});
       fetchItems();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Bot profili işlemi başarısız");
+      toast.error(parseApiErrorMessage(error, "Bot profili işlemi başarısız"));
     }
   };
 
   const onEdit = (item) => {
     setEditingId(item.id);
+    setSelectedBundleKey("");
     setForm({
       ...item,
       symbols: (item.symbols || []).join(","),
@@ -261,6 +351,22 @@ export const BotProfilesPage = () => {
     setSymbolMode("manual_selection");
     setSelectedSymbols(item.symbols || []);
     setFormErrors({});
+  };
+
+  const applyTemplateBundle = () => {
+    const selectedBundle = templateBundleOptions.find((item) => item.key === selectedBundleKey);
+    if (!selectedBundle || (selectedBundle.templateIds || []).length === 0) {
+      toast.error("Seçili bundle için aktif template bulunamadı");
+      return;
+    }
+    const firstTemplate = (activeTemplateOptions || []).find((item) => item.id === selectedBundle.templateIds[0]);
+    setForm((prev) => ({
+      ...prev,
+      strategy_template_ids: selectedBundle.templateIds,
+      template_id: selectedBundle.templateIds[0] || "",
+      strategy_type: firstTemplate?.strategy_type || prev.strategy_type,
+    }));
+    toast.success(`${selectedBundle.label} uygulandı`);
   };
 
   const toggleRunning = async (item) => {
@@ -382,6 +488,7 @@ export const BotProfilesPage = () => {
             <option value="scanner">scanner</option>
           </select>
           {String(form.symbol_source_type || "manual") === "scanner" && <Input className="mt-2" value={form.scanner_id || ""} onChange={(event) => setForm((prev) => ({ ...prev, scanner_id: event.target.value }))} placeholder="scanner_id" data-testid="bot-form-scanner-id-input" />}
+          {formErrors.scanner_id && <p className="form-error-text" data-testid="bot-form-scanner-id-error">{formErrors.scanner_id}</p>}
         </div>
 
         <div className="form-group" data-testid="bot-form-group-strategy">
@@ -396,9 +503,9 @@ export const BotProfilesPage = () => {
             aria-describedby="bot-form-strategy-helper"
             required
           >
-            <option value="trend_following">trend_following</option>
-            <option value="mean_reversion">mean_reversion</option>
-            <option value="volatility_breakout">volatility_breakout</option>
+            {STRATEGY_TYPE_OPTIONS.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
           </select>
           <p className="form-helper-text" id="bot-form-strategy-helper" data-testid="bot-form-strategy-helper">Botun sinyal üretim metodunu seçin.</p>
         </div>
@@ -422,6 +529,32 @@ export const BotProfilesPage = () => {
             ))}
           </select>
           <p className="form-helper-text" data-testid="bot-form-template-helper">Aktif template’lerden otomatik listelenir (max 12).</p>
+          {formErrors.template_id && <p className="form-error-text" data-testid="bot-form-template-error">{formErrors.template_id}</p>}
+
+          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="bot-form-template-bundle-row">
+            <select
+              value={selectedBundleKey}
+              onChange={(event) => setSelectedBundleKey(event.target.value)}
+              className="h-10 min-w-52 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="bot-form-template-bundle-select"
+            >
+              <option value="">Bundle seç</option>
+              {templateBundleOptions.map((bundle) => (
+                <option key={bundle.key} value={bundle.key}>
+                  {bundle.label} ({bundle.count})
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={applyTemplateBundle}
+              disabled={!selectedBundleKey}
+              data-testid="bot-form-template-bundle-apply-button"
+            >
+              Bundle Uygula
+            </Button>
+          </div>
 
           <label className="mt-2 block text-xs text-slate-300" htmlFor="bot-form-template-multi-select" data-testid="bot-form-template-multi-label">
             Basket Mode (çoklu strateji seçimi)
@@ -514,6 +647,7 @@ export const BotProfilesPage = () => {
               onClick={() => {
                 setEditingId(null);
                 setForm(initialForm);
+                setSelectedBundleKey("");
                 setSelectedSymbols(["BTCUSDT", "ETHUSDT"]);
                 setSymbolMode("all_market_symbols");
                 setFormErrors({});

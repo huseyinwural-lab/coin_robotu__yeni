@@ -90,7 +90,7 @@ const userMenuGroups = [
     items: [
       { to: "/user/exchange-settings", label: "Exchange Settings", icon: Globe, testId: "nav-user-exchange-settings-link" },
       { to: "/user/risk-policy", label: "Risk Policy", icon: ShieldAlert, testId: "nav-risk-policies-link" },
-      { to: "/user/settings", label: "Profile / API Keys / Risk", icon: Settings2, testId: "nav-user-settings-link" },
+      { to: "/user/exchange-settings", label: "Profile / API Keys / Risk", icon: Settings2, testId: "nav-user-settings-link" },
       { to: "/user/mfa-settings", label: "MFA", icon: ShieldAlert, testId: "nav-user-mfa-settings-link" },
     ],
   },

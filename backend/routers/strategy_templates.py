@@ -183,6 +183,9 @@ def clone_strategy_template_version(template_id: str, payload: StrategyTemplateC
 @router.post("/{template_id}/activate", response_model=StrategyTemplateResponse)
 def activate_strategy_template(template_id: str, payload: StrategyTemplateReasonRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     template = _get_template_or_404(db, template_id)
+    current_state = str(template.lifecycle_state or "").upper()
+    if current_state not in {"BACKTEST_PASSED", "ACTIVE"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="backtest_pass_required_before_activate")
     _set_active_template(db, template)
     db.commit()
     db.refresh(template)

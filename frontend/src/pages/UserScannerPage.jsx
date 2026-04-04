@@ -1105,7 +1105,7 @@ export const UserScannerPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
 
-      <div className="col-span-12" data-testid="user-scanner-chart-panel-col">
+      <div className="order-11 col-span-12" data-testid="user-scanner-chart-panel-col">
         <UserMarketChartPanel
           symbol={chartSymbol}
           initialTimeframe={chartTimeframe}

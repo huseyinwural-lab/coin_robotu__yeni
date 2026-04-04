@@ -38,6 +38,8 @@ export const UserPortfolioPage = () => {
     [performance, portfolio],
   );
 
+  const hideMockWallet = String(portfolio?.execution_mode || "").toLowerCase() === "mocked";
+
   if (isLoading) {
     return <LoadingSkeleton rows={5} testId="user-portfolio-loading-skeleton" />;
   }
@@ -52,6 +54,11 @@ export const UserPortfolioPage = () => {
       </header>
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-portfolio-summary-grid">
+        {hideMockWallet && (
+          <p className="col-span-12 text-xs text-amber-300" data-testid="user-portfolio-mock-wallet-hidden-note">
+            Live cüzdan bağlı değil. Test/paper bakiye metrikleri gizlendi.
+          </p>
+        )}
         <div className="col-span-12 flex flex-wrap gap-2" data-testid="user-portfolio-tab-group">
           {[
             ["overview", "Overview"],
@@ -69,12 +76,12 @@ export const UserPortfolioPage = () => {
             </button>
           ))}
         </div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Capital" value={portfolio?.current_capital ?? "-"} tone="orange" testId="user-portfolio-current-capital" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Balance" value={portfolio?.available_balance ?? "-"} tone="blue" testId="user-portfolio-available-balance" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Open Notional" value={portfolio?.open_notional ?? "-"} tone="orange" testId="user-portfolio-open-notional" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Open Pos" value={portfolio?.open_positions_count ?? "-"} tone="blue" testId="user-portfolio-open-count" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Closed PnL" value={portfolio?.closed_pnl ?? "-"} tone="orange" testId="user-portfolio-closed-pnl" /></div>
-        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Compounding" value={portfolio?.compounding_enabled ? "ON" : "OFF"} tone="blue" testId="user-portfolio-compounding" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Capital" value={hideMockWallet ? "-" : (portfolio?.current_capital ?? "-")} tone="orange" testId="user-portfolio-current-capital" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Balance" value={hideMockWallet ? "-" : (portfolio?.available_balance ?? "-")} tone="blue" testId="user-portfolio-available-balance" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Open Notional" value={hideMockWallet ? "-" : (portfolio?.open_notional ?? "-")} tone="orange" testId="user-portfolio-open-notional" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Open Pos" value={hideMockWallet ? "-" : (portfolio?.open_positions_count ?? "-")} tone="blue" testId="user-portfolio-open-count" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Closed PnL" value={hideMockWallet ? "-" : (portfolio?.closed_pnl ?? "-")} tone="orange" testId="user-portfolio-closed-pnl" /></div>
+        <div className="col-span-6 md:col-span-4 xl:col-span-2"><MetricCard label="Compounding" value={hideMockWallet ? "-" : (portfolio?.compounding_enabled ? "ON" : "OFF")} tone="blue" testId="user-portfolio-compounding" /></div>
       </div>
 
       {activeTab !== "reports" && <div className="col-span-12 lg:col-span-8" data-testid="user-portfolio-chart-col">

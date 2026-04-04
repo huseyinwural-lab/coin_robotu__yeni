@@ -270,8 +270,8 @@ function App() {
             <Route path="chart" element={<UserChartPage />} />
             <Route path="bot-profiles" element={<BotProfilesPage />} />
             <Route path="bots" element={<Navigate to="/user/bot-profiles" replace />} />
-            <Route path="risk-policy" element={<Navigate to="/user/settings" replace />} />
-            <Route path="risk-policies" element={<Navigate to="/user/settings" replace />} />
+            <Route path="risk-policy" element={<RiskPoliciesPage />} />
+            <Route path="risk-policies" element={<RiskPoliciesPage />} />
             <Route path="strategies" element={<StrategyTemplatesPage />} />
             <Route path="strategies/:templateId" element={<StrategyTemplateDetailPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />
