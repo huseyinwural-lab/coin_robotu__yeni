@@ -54,6 +54,18 @@ export const UserPortfolioPage = () => {
       </header>
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-portfolio-summary-grid">
+        <div className="col-span-12 grid gap-2" data-testid="user-portfolio-wallet-stack">
+          <div data-testid="user-portfolio-total-wallet-balance-card">
+            <MetricCard label="Toplam Cüzdan Bakiyesi" value={portfolio?.total_wallet_balance ?? 0} tone="orange" testId="user-portfolio-total-wallet-balance" />
+          </div>
+          <div data-testid="user-portfolio-spot-wallet-balance-card">
+            <MetricCard label="Spot Bakiyesi" value={portfolio?.spot_wallet_balance ?? 0} tone="blue" testId="user-portfolio-spot-wallet-balance" />
+          </div>
+          <div data-testid="user-portfolio-futures-wallet-balance-card">
+            <MetricCard label="Futures Bakiyesi" value={portfolio?.futures_wallet_balance ?? 0} tone="orange" testId="user-portfolio-futures-wallet-balance" />
+          </div>
+        </div>
+
         {hideMockWallet && (
           <p className="col-span-12 text-xs text-amber-300" data-testid="user-portfolio-mock-wallet-hidden-note">
             Live cüzdan bağlı değil. Test/paper bakiye metrikleri gizlendi.

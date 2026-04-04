@@ -41,7 +41,32 @@ def build_user_portfolio_snapshot(db: Session, user_id: str) -> dict:
         current_capital = 0.0
         available_balance = 0.0
 
+    all_connections = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id)
+        .order_by(UserExchangeConnection.updated_at.desc())
+        .all()
+    )
+
+    spot_wallet_balance = 0.0
+    futures_wallet_balance = 0.0
+    for row in all_connections:
+        snapshot = row.readiness_snapshot if isinstance(row.readiness_snapshot, dict) else {}
+        wallet_value = _safe_float(snapshot.get("wallet_balance"))
+        if wallet_value <= 0:
+            wallet_value = _safe_float(snapshot.get("available_balance"))
+        market = str(row.market_type or "spot").lower()
+        if market == "futures":
+            futures_wallet_balance += wallet_value
+        else:
+            spot_wallet_balance += wallet_value
+
+    total_wallet_balance = round(spot_wallet_balance + futures_wallet_balance, 8)
+
     return {
+        "total_wallet_balance": total_wallet_balance,
+        "spot_wallet_balance": round(spot_wallet_balance, 8),
+        "futures_wallet_balance": round(futures_wallet_balance, 8),
         "current_capital": current_capital,
         "available_balance": available_balance,
         "execution_mode": execution_mode,

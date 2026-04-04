@@ -12,6 +12,7 @@ const initialForm = {
   name: "",
   exchange: "binance",
   market_type: "spot",
+  exchange_connection_id: "",
   symbols: "",
   strategy_type: "",
   mode: "live_ready_disabled",
@@ -72,6 +73,7 @@ export const BotProfilesPage = () => {
   const [userRisk, setUserRisk] = useState(null);
   const [templates, setTemplates] = useState([]);
   const [canonicalStrategies, setCanonicalStrategies] = useState([]);
+  const [exchangeConnections, setExchangeConnections] = useState([]);
   const [selectedBot, setSelectedBot] = useState(null);
   const [detailTab, setDetailTab] = useState("overview");
   const [botStatus, setBotStatus] = useState(null);
@@ -104,12 +106,13 @@ export const BotProfilesPage = () => {
 
   const fetchItems = async () => {
     try {
-      const [profilesRes, strategyPerfRes, templatesRes, riskRes, canonicalRes] = await Promise.all([
+      const [profilesRes, strategyPerfRes, templatesRes, riskRes, canonicalRes, connectionsRes] = await Promise.all([
         apiClient.get("/bot-profiles"),
         apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
         apiClient.get("/strategy-templates"),
         apiClient.get("/user/live/risk"),
         apiClient.get("/user/canonical-strategies"),
+        apiClient.get("/user/exchange-connections"),
       ]);
       const nextItems = profilesRes.data || [];
       setItems(nextItems);
@@ -117,6 +120,7 @@ export const BotProfilesPage = () => {
       setTemplates(templatesRes.data || []);
       setUserRisk(riskRes.data || null);
       setCanonicalStrategies(canonicalRes.data || []);
+      setExchangeConnections(connectionsRes.data || []);
       setSelectedBot((prev) => {
         if (!prev?.id) return prev;
         return nextItems.find((item) => item.id === prev.id) || null;
@@ -395,6 +399,9 @@ export const BotProfilesPage = () => {
     if (String(form.symbol_source_type || "manual") === "scanner" && !String(form.scanner_id || "").trim()) {
       nextErrors.scanner_id = "Scanner source için scanner_id zorunlu.";
     }
+    if (!String(form.exchange_connection_id || "").trim()) {
+      nextErrors.exchange_connection_id = "Bot için cüzdan seçimi zorunlu.";
+    }
     if (!String(form.strategy_type || "").trim()) {
       nextErrors.strategy_type = "Canonical strateji seçimi zorunlu.";
     }
@@ -405,11 +412,17 @@ export const BotProfilesPage = () => {
     }
 
     const strategyTemplateId = await ensureStrategyTemplateId();
+    const selectedConnection = exchangeConnections.find((item) => item.id === form.exchange_connection_id);
+    if (!selectedConnection) {
+      toast.error("Seçilen cüzdan bulunamadı");
+      return;
+    }
 
     const payload = {
       name: form.name.trim(),
-      exchange: form.exchange,
-      market_type: form.market_type,
+      exchange_connection_id: form.exchange_connection_id,
+      exchange: selectedConnection.exchange,
+      market_type: selectedConnection.market_type,
       symbol_source_type: form.symbol_source_type || 'manual',
       scanner_id: form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null,
       symbols: parsedSymbols,
@@ -450,6 +463,7 @@ export const BotProfilesPage = () => {
     setForm({
       ...item,
       symbols: (item.symbols || []).join(","),
+      exchange_connection_id: item.selected_exchange_connection_id || "",
       mode: item.mode || "live_ready_disabled",
       symbol_source_type: item.symbol_source_type || item.symbol_source || "manual",
       scanner_id: item.scanner_id || item.symbol_source_summary?.scanner_id || "",
@@ -553,10 +567,11 @@ export const BotProfilesPage = () => {
             aria-label="Exchange"
             aria-describedby="bot-form-exchange-helper"
             required
+            disabled
           >
             <option value="binance">binance</option>
           </select>
-          <p className="form-helper-text" id="bot-form-exchange-helper" data-testid="bot-form-exchange-helper">Botun işlem yapacağı borsayı seçin.</p>
+          <p className="form-helper-text" id="bot-form-exchange-helper" data-testid="bot-form-exchange-helper">Cüzdan seçiminden otomatik gelir.</p>
         </div>
 
         <div className="form-group" data-testid="bot-form-group-market-type">
@@ -570,11 +585,42 @@ export const BotProfilesPage = () => {
             aria-label="Market Type"
             aria-describedby="bot-form-market-type-helper"
             required
+            disabled
           >
             <option value="spot">spot</option>
             <option value="futures">futures</option>
           </select>
-          <p className="form-helper-text" id="bot-form-market-type-helper" data-testid="bot-form-market-type-helper">Spot veya futures işlem tipini belirleyin.</p>
+          <p className="form-helper-text" id="bot-form-market-type-helper" data-testid="bot-form-market-type-helper">Seçilen cüzdana göre otomatik gelir.</p>
+        </div>
+
+        <div className="form-group" data-testid="bot-form-group-wallet-connection">
+          <label className="form-label" htmlFor="bot-form-wallet-connection-select" data-testid="bot-form-wallet-connection-label">Kullanılacak Cüzdan</label>
+          <select
+            id="bot-form-wallet-connection-select"
+            value={form.exchange_connection_id || ""}
+            onChange={(event) => {
+              const connectionId = event.target.value;
+              const selectedConnection = (exchangeConnections || []).find((item) => item.id === connectionId);
+              setForm((prev) => ({
+                ...prev,
+                exchange_connection_id: connectionId,
+                exchange: selectedConnection?.exchange || prev.exchange,
+                market_type: selectedConnection?.market_type || prev.market_type,
+              }));
+            }}
+            className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            data-testid="bot-form-wallet-connection-select"
+            required
+          >
+            <option value="">Cüzdan seçin (zorunlu)</option>
+            {(exchangeConnections || []).map((connection) => (
+              <option key={connection.id} value={connection.id}>
+                {connection.account_label} · {connection.exchange} · {connection.market_type}
+              </option>
+            ))}
+          </select>
+          <p className="form-helper-text" data-testid="bot-form-wallet-connection-helper">Bot sadece seçtiğiniz cüzdan bağlantısını kullanır.</p>
+          {formErrors.exchange_connection_id && <p className="form-error-text" data-testid="bot-form-wallet-connection-error">{formErrors.exchange_connection_id}</p>}
         </div>
 
         <div className="form-group" data-testid="bot-form-group-symbols">

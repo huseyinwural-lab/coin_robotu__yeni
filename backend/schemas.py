@@ -316,6 +316,7 @@ class BotProfileBase(BaseModel):
 
 
 class BotProfileCreate(BotProfileBase):
+    exchange_connection_id: str | None = None
     mode: str | None = "live_ready_disabled"
     strategy_template_ids: list[str] = Field(default_factory=list)
     risk_adaptive_confirmed: bool = False
@@ -325,6 +326,7 @@ class BotProfileUpdate(BaseModel):
     name: str
     exchange: str
     market_type: str
+    exchange_connection_id: str | None = None
     symbol_source_type: str = "manual"
     scanner_id: str | None = None
     symbols: list[str]
@@ -380,6 +382,8 @@ class BotRuntimeStatusResponse(BaseModel):
     is_running: bool = False
     symbol_source_type: str = "manual"
     scanner_id: str | None = None
+    selected_exchange_connection_id: str | None = None
+    selected_exchange_connection_label: str | None = None
     status: str
     mode: str
     strategy_id: str | None = None
@@ -2220,6 +2224,9 @@ class UserPortfolioMapResponse(BaseModel):
 
 
 class UserPortfolioSnapshotResponse(BaseModel):
+    total_wallet_balance: float = 0
+    spot_wallet_balance: float = 0
+    futures_wallet_balance: float = 0
     current_capital: float
     available_balance: float
     execution_mode: str = "live"

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, is_admin_role
-from models import BotProfile, User
+from models import BotProfile, User, UserExchangeConnection
 from schemas import BotProfileCreate, BotProfileResponse, BotProfileUpdate, BotRuntimeActionResponse, BotRuntimeDetailResponse, BotRuntimePerformanceResponse, BotRuntimeStatusResponse
 from services.audit_service import create_audit_log
 from services.bot_runtime_service import (
@@ -43,6 +43,7 @@ def create_bot_profile(
     db: Session = Depends(get_db),
 ):
     payload_data = payload.model_dump()
+    exchange_connection_id = str(payload_data.pop("exchange_connection_id", "") or "").strip()
     preferred_mode = str(payload_data.pop("mode", "live_ready_disabled") or "live_ready_disabled").strip()
     selected_template_ids = [
         str(value).strip()
@@ -52,6 +53,23 @@ def create_bot_profile(
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
     if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
         preferred_mode = "live_ready_disabled"
+
+    if not exchange_connection_id:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="exchange_connection_required")
+
+    selected_connection = (
+        db.query(UserExchangeConnection)
+        .filter(
+            UserExchangeConnection.id == exchange_connection_id,
+            UserExchangeConnection.user_id == current_user.id,
+        )
+        .first()
+    )
+    if selected_connection is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
+
+    payload_data["exchange"] = selected_connection.exchange
+    payload_data["market_type"] = selected_connection.market_type
 
     if not payload_data.get("strategy_template_id") and selected_template_ids:
         payload_data["strategy_template_id"] = selected_template_ids[0]
@@ -63,6 +81,9 @@ def create_bot_profile(
         "strategy_template_ids": selected_template_ids,
         "basket_mode_enabled": len(selected_template_ids) > 1,
         "risk_adaptive_confirmed": risk_adaptive_confirmed,
+        "selected_exchange_connection_id": selected_connection.id,
+        "selected_exchange_connection_label": selected_connection.account_label,
+        "selected_exchange_market_type": selected_connection.market_type,
     }
     db.add(bot_profile)
     db.commit()
@@ -92,6 +113,7 @@ def update_bot_profile(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot profile not found")
 
     payload_data = payload.model_dump()
+    exchange_connection_id = str(payload_data.pop("exchange_connection_id", "") or "").strip()
     preferred_mode = str(payload_data.pop("mode", "live_ready_disabled") or "live_ready_disabled").strip()
     selected_template_ids = [
         str(value).strip()
@@ -101,6 +123,23 @@ def update_bot_profile(
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
     if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
         preferred_mode = "live_ready_disabled"
+
+    if not exchange_connection_id:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="exchange_connection_required")
+
+    selected_connection = (
+        db.query(UserExchangeConnection)
+        .filter(
+            UserExchangeConnection.id == exchange_connection_id,
+            UserExchangeConnection.user_id == bot_profile.user_id,
+        )
+        .first()
+    )
+    if selected_connection is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
+
+    payload_data["exchange"] = selected_connection.exchange
+    payload_data["market_type"] = selected_connection.market_type
 
     if not payload_data.get("strategy_template_id") and selected_template_ids:
         payload_data["strategy_template_id"] = selected_template_ids[0]
@@ -114,6 +153,9 @@ def update_bot_profile(
         "strategy_template_ids": selected_template_ids,
         "basket_mode_enabled": len(selected_template_ids) > 1,
         "risk_adaptive_confirmed": risk_adaptive_confirmed,
+        "selected_exchange_connection_id": selected_connection.id,
+        "selected_exchange_connection_label": selected_connection.account_label,
+        "selected_exchange_market_type": selected_connection.market_type,
     }
 
     db.commit()

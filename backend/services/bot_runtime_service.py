@@ -58,6 +58,8 @@ def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
         "is_running": bool(getattr(bot, "is_running", False)),
         "symbol_source_type": str(getattr(bot, "symbol_source_type", "manual") or "manual"),
         "scanner_id": getattr(bot, "scanner_id", None),
+        "selected_exchange_connection_id": str(snapshot.get("selected_exchange_connection_id") or "") or None,
+        "selected_exchange_connection_label": str(snapshot.get("selected_exchange_connection_label") or "") or None,
         "status": "ERROR",
         "mode": str(snapshot.get("preferred_mode") or "live_ready_disabled"),
         "strategy_id": None,
@@ -118,19 +120,34 @@ def _resolve_bindings(db, bot: BotProfile) -> dict:
         .order_by(RiskPolicy.updated_at.desc())
         .first()
     )
-    connection = (
-        db.query(UserExchangeConnection)
-        .filter(UserExchangeConnection.user_id == bot.user_id)
-        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
-        .first()
-    )
+    snapshot = getattr(bot, "symbol_resolution_snapshot", {}) or {}
+    selected_connection_id = str(snapshot.get("selected_exchange_connection_id") or "").strip()
+
+    connection_query = db.query(UserExchangeConnection).filter(UserExchangeConnection.user_id == bot.user_id)
+    connection = None
+    if selected_connection_id:
+        connection = connection_query.filter(UserExchangeConnection.id == selected_connection_id).first()
+
+    if connection is None:
+        connection = (
+            connection_query.order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc()).first()
+        )
+
+    execution_source = connection.account_label if connection else "default"
+    if selected_connection_id and connection and connection.id == selected_connection_id:
+        execution_source = f"selected:{connection.account_label}"
+    elif selected_connection_id and connection:
+        execution_source = f"fallback_default:{connection.account_label}"
+
     return {
         "strategy_id": resolved_template.get("template_code") or bot.strategy_type,
         "strategy_resolution": resolved_template,
         "risk_profile_id": risk_policy.id if risk_policy else None,
         "risk_source": "user_active_policy" if risk_policy else "default",
         "execution_profile_id": connection.id if connection else None,
-        "execution_profile_source": connection.account_label if connection else "default",
+        "execution_profile_source": execution_source,
+        "selected_exchange_connection_id": selected_connection_id or (connection.id if connection else None),
+        "selected_exchange_connection_label": connection.account_label if connection else None,
     }
 
 
@@ -320,6 +337,8 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "is_running": bool(getattr(bot, "is_running", False)),
         "symbol_source_type": str(getattr(bot, "symbol_source_type", "manual") or "manual"),
         "scanner_id": getattr(bot, "scanner_id", None),
+        "selected_exchange_connection_id": str(snapshot.get("selected_exchange_connection_id") or "") or None,
+        "selected_exchange_connection_label": str(snapshot.get("selected_exchange_connection_label") or "") or None,
         "status": runtime.get("status", "IDLE"),
         "mode": mode_value,
         "strategy_id": runtime.get("strategy_id"),
@@ -456,7 +475,12 @@ def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
         runtime["mode"] = preferred_mode
         runtime.setdefault("runtime_context", {})["preferred_mode"] = preferred_mode
         return {**runtime, "binding_ok": False}
-    bot.symbol_resolution_snapshot = _json_safe(symbol_resolution)
+    bot.symbol_resolution_snapshot = _json_safe(
+        {
+            **(getattr(bot, "symbol_resolution_snapshot", {}) or {}),
+            "last_symbol_resolution": symbol_resolution,
+        }
+    )
     runtime = bind_bot_runtime(
         redis_client,
         bot=bot,
