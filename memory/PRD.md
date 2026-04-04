@@ -19281,3 +19281,30 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - Professional view butonu çalışıyor
 - Build: `CI=true yarn build` PASS.
 
+## 2026-04-04 — Scanner Basitleştirme (6 Adımlı Akış) ✅
+
+### Kullanıcı talebine göre sade akış
+- Yeni sade ekran: `UserSimpleScannerPage.jsx`
+- Akış birebir sadeleştirildi:
+  1. Borsa seç (Binance / Bybit)
+  2. Spot / Futures seç
+  3. İndikatör seç (RSI / EMA)
+  4. Koşul gir (örn `rsi7 > 70`, `ema50 < close`)
+  5. Run
+  6. Liste + satır bazlı `Grafik` butonu
+
+### Teknik değişiklik
+- Route değişti:
+  - `/user/scanner` -> yeni sade scanner
+  - `/user/pro-scanner` -> eski detaylı scanner (Professional)
+  - `/user/indicator-screener` -> `/user/scanner`
+- Basit scanner run endpoint:
+  - `POST /api/user/indicator-screener/run`
+- Query preview canlı hesaplanıyor (run’a basmadan güncel):
+  - RSI ve EMA koşullarına göre dinamik expression.
+
+### Doğrulama
+- Backend run kontratı doğrulandı: örnek `rsi7 > 70` çağrısı 200 ve satır döndü.
+- Frontend lint PASS, build PASS.
+- Frontend test ajanı ilk turda core elementleri ve run akışını PASS verdi; ikinci turda preview auth/session dalgalanması nedeniyle bloklandı (bilinen ortam sorunu).
+
