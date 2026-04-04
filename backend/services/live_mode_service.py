@@ -102,6 +102,22 @@ class BinanceFuturesLiveAdapter:
         return hmac.new(secret.encode(), query.encode(), hashlib.sha256).hexdigest()
 
     @staticmethod
+    def _build_signed_query(params: dict | None) -> str:
+        pairs: list[tuple[str, object]] = []
+        for key, value in (params or {}).items():
+            if value is None:
+                continue
+            if isinstance(value, (list, tuple)):
+                for item in value:
+                    pairs.append((str(key), item))
+            else:
+                pairs.append((str(key), value))
+
+        pairs.append(("timestamp", int(time.time() * 1000)))
+        pairs.append(("recvWindow", 10000))
+        return urlencode(pairs, doseq=True)
+
+    @staticmethod
     def _timeout(name: str, fallback: float) -> float:
         policy = get_connection_reliability_policy()
         timeout_policy = policy.get("http_timeouts") or {}
@@ -287,8 +303,7 @@ class BinanceFuturesLiveAdapter:
         *,
         environment: str = "live",
     ) -> tuple[dict, int, dict]:
-        params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
-        query = urlencode(params)
+        query = self._build_signed_query(params)
         signature = self._signature(api_secret, query)
         futures_rest = self._futures_rest(environment)
         url = f"{futures_rest}{endpoint}?{query}&signature={signature}"
@@ -310,8 +325,7 @@ class BinanceFuturesLiveAdapter:
         *,
         environment: str = "live",
     ) -> tuple[dict, int, dict]:
-        params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
-        query = urlencode(params)
+        query = self._build_signed_query(params)
         signature = self._signature(api_secret, query)
         spot_rest = self._spot_rest(environment)
         url = f"{spot_rest}{endpoint}?{query}&signature={signature}"
@@ -333,8 +347,7 @@ class BinanceFuturesLiveAdapter:
         *,
         environment: str = "live",
     ) -> tuple[dict, int]:
-        params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
-        query = urlencode(params)
+        query = self._build_signed_query(params)
         signature = self._signature(api_secret, query)
         futures_rest = self._futures_rest(environment)
         url = f"{futures_rest}{endpoint}?{query}&signature={signature}"
@@ -356,8 +369,7 @@ class BinanceFuturesLiveAdapter:
         *,
         environment: str = "live",
     ) -> tuple[dict, int]:
-        params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
-        query = urlencode(params)
+        query = self._build_signed_query(params)
         signature = self._signature(api_secret, query)
         spot_rest = self._spot_rest(environment)
         url = f"{spot_rest}{endpoint}?{query}&signature={signature}"
@@ -380,8 +392,7 @@ class BinanceFuturesLiveAdapter:
         spot: bool = False,
         environment: str = "live",
     ) -> tuple[dict, int]:
-        params = {**params, "timestamp": int(time.time() * 1000), "recvWindow": 5000}
-        query = urlencode(params)
+        query = self._build_signed_query(params)
         signature = self._signature(api_secret, query)
         base_url = self._spot_rest(environment) if spot else self._futures_rest(environment)
         url = f"{base_url}{endpoint}?{query}&signature={signature}"
