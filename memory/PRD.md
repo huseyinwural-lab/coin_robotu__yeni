@@ -19641,3 +19641,40 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - Row içinde `scan_price`, `timeframe`, `matched_rules`, `condition_metric_values` doğrulandı
 - Frontend preview E2E doğrulaması: auth/session/login kısıtı nedeniyle bloklu (infra/auth side issue), ancak kod ve backend sözleşmesi güncel.
 
+## 2026-04-04 — Exchange Settings Canlı Cüzdan Geçişi + Auto Default Temizliği + Spot/Futures Durum Işıkları ✅
+
+### Uygulanan kapsam (tek tur backend+frontend)
+- Manuel/fallback metrikler kaldırıldı; Exchange Overview artık canlı cüzdan alanlarına bağlı:
+  - `Spot Cüzdan` -> `spot_wallet_balance`
+  - `Futures Cüzdan` -> `futures_wallet_balance`
+  - `Toplam Cüzdan` -> `total_wallet_balance`
+- `default` auto profilin sistemde tekrar oluşması kapatıldı:
+  - Legacy bootstrap akışı kaldırıldı
+  - `list/get/create/update/set-default/delete` akışlarında auto-default cleanup eklendi
+  - Otomatik üretilmiş `default*` profiller listeden/DB’den temizleniyor
+- Active Profile Summary bölümü Spot/Futures ayrı sağlık ışığına geçirildi:
+  - Spot light (yeşil/kırmızı)
+  - Futures light (yeşil/kırmızı)
+  - `online + can_trade_effective` => yeşil, aksi kırmızı
+
+### Scanner ek güncellemesi (istenen set)
+- Time interval seti iki scanner yüzeyinde eşitlendi:
+  - `3m, 15m, 1h, 4h, 1d`
+- `5m` ve `3d` kaldırıldı.
+- Backend query-engine’de timeframe allowlist enforce edildi (`invalid_timeframe` state).
+
+### Teknik doğrulama
+- Backend lint: PASS
+- Frontend lint: PASS
+- Local API testleri:
+  - `/api/user/exchange-connections` sonrası `default` profile temizliği doğrulandı
+  - `/api/user/portfolio` -> spot/futures/total değerleri doğrulandı
+  - `/api/user/indicator-screener/run`:
+    - `timeframe=5m` -> `invalid_timeframe`
+    - `timeframe=3m` -> başarıyla işlendi
+- Frontend test agent code-level doğrulama: PASS (4/4)
+  - Yeni overview kartları
+  - Spot/Futures ayrı status light
+  - visibleConnectionProfiles filtrelemesi
+  - Scanner timeframe seti (3m/15m/1h/4h/1d)
+
