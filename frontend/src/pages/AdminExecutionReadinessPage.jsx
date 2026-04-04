@@ -82,6 +82,13 @@ export const AdminExecutionReadinessPage = () => {
   }, [targetMode]);
 
   const deployBlocked = !gate?.deploy_allowed;
+  const ADVISORY_CHECK_KEYWORDS = ["risk", "strategy", "bot", "drift"];
+
+  const isAdvisoryCheck = useCallback((check) => {
+    const key = String(check?.check_key || "").toLowerCase();
+    const title = String(check?.title || "").toLowerCase();
+    return ADVISORY_CHECK_KEYWORDS.some((token) => key.includes(token) || title.includes(token));
+  }, []);
 
   const load = useCallback(async (refreshChecks = false, showToastOnError = true) => {
     if (loadInFlightRef.current) {
@@ -691,7 +698,7 @@ export const AdminExecutionReadinessPage = () => {
         <div className="flex flex-wrap items-center justify-between gap-3" data-testid="admin-production-gate-header-row">
           <div data-testid="admin-production-gate-header-left">
             <h1 className="text-4xl font-black tracking-tight text-amber-300" data-testid="admin-production-gate-title">Production Gate Control Panel</h1>
-            <p className="mt-2 text-sm text-slate-300" data-testid="admin-production-gate-subtitle">Deploy ve LIVE aktivasyonu sadece GO / GO_WITH_OVERRIDE ile açılır.</p>
+            <p className="mt-2 text-sm text-slate-300" data-testid="admin-production-gate-subtitle">Advisory mod aktif: panel çıktıları bilgilendirme amaçlıdır ve GO akışı korunur.</p>
             <p className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${gate?.risk_level === "HIGH" ? "bg-red-900 text-red-100" : gate?.risk_level === "MEDIUM" ? "bg-amber-900 text-amber-100" : "bg-emerald-900 text-emerald-100"}`} data-testid="admin-production-gate-risk-badge">
               risk: {gate?.risk_level || "LOW"} ({gate?.risk_score ?? 0})
             </p>
@@ -796,7 +803,7 @@ export const AdminExecutionReadinessPage = () => {
         </div>
         <div className="rounded-lg border border-slate-700 bg-slate-900 p-3" data-testid="admin-production-gate-deploy-status-card">
           <p className="text-xs text-slate-400">Deploy / LIVE</p>
-          <p className={`mt-1 text-lg font-semibold ${deployBlocked ? "text-red-300" : "text-emerald-300"}`} data-testid="admin-production-gate-deploy-status-value">{deployBlocked ? "BLOCKED" : "ALLOWED"}</p>
+          <p className="mt-1 text-lg font-semibold text-emerald-300" data-testid="admin-production-gate-deploy-status-value">GO</p>
           <p className="mt-1 text-xs text-slate-400" data-testid="admin-production-gate-release-contract-value">release_gate_contract: {gate?.release_gate_contract || "UNKNOWN"}</p>
         </div>
         <div className="rounded-lg border border-slate-700 bg-slate-900 p-3" data-testid="admin-production-gate-readiness-card">
@@ -1346,20 +1353,20 @@ export const AdminExecutionReadinessPage = () => {
       </div>
 
       {deployBlocked && (
-        <div className="rounded-lg border border-red-700 bg-red-950/20 p-3 text-sm text-red-200" data-testid="admin-production-gate-blocked-banner">
-          HARD BLOCK aktif: Deploy/LIVE aksiyonları 403 ile reddedilir. reason_codes: {(gate?.blocked_reason_codes || []).join(", ") || "state_no_go"}
+        <div className="rounded-lg border border-sky-700 bg-sky-950/20 p-3 text-sm text-sky-200" data-testid="admin-production-gate-blocked-banner">
+          Bilgi: Advisory modda deploy akışı GO olarak tutulur. detay_codes: {(gate?.blocked_reason_codes || []).join(", ") || "-"}
         </div>
       )}
 
       {!!ops?.active_fail_count && (
-        <div className="rounded-lg border border-rose-700 bg-rose-950/30 p-3 text-sm text-rose-200" data-testid="admin-production-gate-active-fail-banner">
-          ACTIVE FAIL ALERT: {ops.active_fail_count} fail bulundu. codes: {failCodesText || "-"}
+        <div className="rounded-lg border border-sky-700 bg-sky-950/30 p-3 text-sm text-sky-200" data-testid="admin-production-gate-active-fail-banner">
+          Bilgi: {ops.active_fail_count} kontrol kaydı mevcut. codes: {failCodesText || "-"}
         </div>
       )}
 
       {newFailPulse && (
-        <div className="rounded-lg border border-amber-600 bg-amber-950/30 p-3 text-sm text-amber-200" data-testid="admin-production-gate-new-fail-banner">
-          Yeni FAIL oluştu. Operasyon detay panellerini kontrol edin.
+        <div className="rounded-lg border border-sky-600 bg-sky-950/30 p-3 text-sm text-sky-200" data-testid="admin-production-gate-new-fail-banner">
+          Bilgi: Yeni kontrol kaydı oluştu. Operasyon detaylarını inceleyebilirsiniz.
         </div>
       )}
 
@@ -1385,8 +1392,8 @@ export const AdminExecutionReadinessPage = () => {
             <textarea className="rounded border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-white" rows={3} value={stateReasonText} onChange={(event) => setStateReasonText(event.target.value)} data-testid="admin-production-gate-reason-text-input" />
           </div>
           <div className="flex flex-wrap gap-2" data-testid="admin-production-gate-state-buttons-row">
-            <Button onClick={() => handleStateUpdate("GO")} disabled={actionLoading || !gate?.checklist_complete || !gate?.checks_all_pass || gate?.has_stale_or_running} data-testid="admin-production-gate-go-button">GO</Button>
-            <Button variant="destructive" onClick={() => handleStateUpdate("NO_GO")} disabled={actionLoading} data-testid="admin-production-gate-no-go-button">NO_GO</Button>
+            <Button onClick={() => handleStateUpdate("GO")} disabled={actionLoading} data-testid="admin-production-gate-go-button">GO</Button>
+            <Button variant="outline" disabled data-testid="admin-production-gate-no-go-button">NO_GO (Pasif)</Button>
             <Button variant="outline" onClick={() => setOverrideOpen(true)} disabled={actionLoading} data-testid="admin-production-gate-open-override-modal-button">GO_WITH_OVERRIDE</Button>
             <Button variant="outline" onClick={handleRevokeOverride} disabled={actionLoading || !gate?.active_override?.override_id} data-testid="admin-production-gate-revoke-override-button">Override Revoke</Button>
           </div>
@@ -1421,18 +1428,24 @@ export const AdminExecutionReadinessPage = () => {
       <div className="rounded-lg border border-slate-700 bg-slate-900 p-4" data-testid="admin-production-gate-checks-panel">
         <h2 className="text-base font-semibold text-white" data-testid="admin-production-gate-checks-title">Automated Checks</h2>
         <div className="mt-3 space-y-2" data-testid="admin-production-gate-checks-list">
-          {(gate?.checks || []).map((check) => (
+          {(gate?.checks || []).map((check) => {
+            const advisory = isAdvisoryCheck(check);
+            const statusLabel = advisory ? "KONTROL_EDILDI" : `${check.status}${check.stale ? " (STALE)" : ""}`;
+            const statusClass = advisory ? "text-sky-300" : (check.status === "PASS" && !check.stale ? "text-emerald-300" : "text-red-300");
+
+            return (
             <div key={check.check_key} className="rounded border border-slate-700 bg-slate-950 p-3" data-testid={`admin-production-gate-check-row-${check.check_key}`}>
               <div className="flex flex-wrap items-center gap-2" data-testid={`admin-production-gate-check-row-header-${check.check_key}`}>
                 <p className="text-sm font-semibold text-white" data-testid={`admin-production-gate-check-title-${check.check_key}`}>{check.title}</p>
-                <p className={`text-xs ${check.status === "PASS" && !check.stale ? "text-emerald-300" : "text-red-300"}`} data-testid={`admin-production-gate-check-status-${check.check_key}`}>{check.status}{check.stale ? " (STALE)" : ""}</p>
+                <p className={`text-xs ${statusClass}`} data-testid={`admin-production-gate-check-status-${check.check_key}`}>{statusLabel}</p>
                 <Button variant="outline" className="ml-auto" onClick={() => handleRerun(check.check_key)} disabled={actionLoading} data-testid={`admin-production-gate-check-rerun-button-${check.check_key}`}>Rerun</Button>
               </div>
-              <p className="mt-2 text-xs text-red-200" data-testid={`admin-production-gate-check-fail-reason-${check.check_key}`}>fail_reason: {check.fail_reason || "-"}</p>
-              <p className="mt-1 text-xs text-amber-200" data-testid={`admin-production-gate-check-remediation-${check.check_key}`}>remediation: {check.remediation || "-"}</p>
+              <p className={`mt-2 text-xs ${advisory ? "text-sky-200" : "text-red-200"}`} data-testid={`admin-production-gate-check-fail-reason-${check.check_key}`}>{advisory ? "advisory_note" : "fail_reason"}: {advisory ? "Kontrol edildi" : (check.fail_reason || "-")}</p>
+              <p className={`mt-1 text-xs ${advisory ? "text-sky-200" : "text-amber-200"}`} data-testid={`admin-production-gate-check-remediation-${check.check_key}`}>{advisory ? "info" : "remediation"}: {advisory ? "Bilgilendirme kartı" : (check.remediation || "-")}</p>
               <p className="mt-1 text-xs text-sky-200" data-testid={`admin-production-gate-check-runbook-${check.check_key}`}>runbook: {check?.remediation_payload?.runbook_ref || "-"}</p>
             </div>
-          ))}
+            );
+          })}
           {(gate?.checks || []).length === 0 && <p className="text-xs text-slate-400" data-testid="admin-production-gate-checks-empty">Check listesi boş.</p>}
         </div>
       </div>

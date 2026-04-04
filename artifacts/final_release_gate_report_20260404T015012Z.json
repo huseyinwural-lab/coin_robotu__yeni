@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_10",
-  "generated_at": "2026-04-04T01:51:20.054884+00:00",
-  "run_id": "20260404T015112Z",
+  "generated_at": "2026-04-04T01:50:19.818784+00:00",
+  "run_id": "20260404T015012Z",
   "final_decision": "NO_GO",
   "artifact_status": {
     "prod_env_preflight": {
@@ -41,7 +41,7 @@
       "raw_status": null
     },
     "production_gate_snapshot": {
-      "path": "/app/artifacts/final/production_gate_snapshot_20260404T015112Z.json",
+      "path": "/app/artifacts/final/production_gate_snapshot_20260404T015012Z.json",
       "exists": true,
       "status": "PASS",
       "raw_status": {
@@ -50,21 +50,21 @@
         "effective_state": "GO",
         "release_gate_contract": "GO",
         "has_stale_or_running": false,
-        "updated_at": "2026-04-04T01:50:28.289431Z",
+        "updated_at": "2026-04-03T20:19:09.042305Z",
         "fresh": true,
         "source": "live_api",
-        "run_snapshot_path": "/app/artifacts/final/production_gate_snapshot_20260404T015112Z.json",
+        "run_snapshot_path": "/app/artifacts/final/production_gate_snapshot_20260404T015012Z.json",
         "snapshot_write_ok": true,
         "snapshot_write_error": null
       }
     },
     "production_gate_snapshot_consistency": {
-      "path": "/app/artifacts/final/production_gate_snapshot_20260404T015112Z.json",
+      "path": "/app/artifacts/final/production_gate_snapshot_20260404T015012Z.json",
       "exists": true,
       "status": "PASS",
       "raw_status": {
         "matched": true,
-        "snapshot_sha256": "a883b94ad3e6d80cd550a3662d024112f4964d6295205bedbdece1b25db49b3a",
+        "snapshot_sha256": "774eaa9198e357cf51f1d24fe9052a60d9de2f05b572b2a296b6b01380473288",
         "disk_effective_state": "GO",
         "disk_deploy_allowed": true,
         "memory_effective_state": "GO",

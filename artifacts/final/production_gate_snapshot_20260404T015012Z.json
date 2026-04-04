@@ -57,7 +57,7 @@
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-04T01:50:28.288711Z",
+      "last_run_at": "2026-04-03T20:19:09.042275Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -78,7 +78,7 @@
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-04T01:50:28.288711Z",
+      "last_run_at": "2026-04-03T20:19:09.042275Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -99,7 +99,7 @@
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-04T01:50:28.288711Z",
+      "last_run_at": "2026-04-03T20:19:09.042275Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -122,7 +122,7 @@
         "policy_bypass_applied": true,
         "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-04T01:50:28.288711Z",
+      "last_run_at": "2026-04-03T20:19:09.042275Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -148,7 +148,7 @@
         "policy_bypass_applied": true,
         "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-04T01:50:28.288711Z",
+      "last_run_at": "2026-04-03T20:19:09.042275Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -165,175 +165,18 @@
     "fail_rate": 0.0,
     "flapping": 0.0,
     "override_usage": 0.0,
-    "stale_checks": 0.0
+    "stale_checks": 1.0
   },
   "risk_explanation": [
-    "Risk remains low based on current telemetry"
+    "Stale checks impacting decision confidence"
   ],
   "risk_model_version": "v2-explainable",
   "flapping_checks": [],
   "policy_bypass_applied": true,
   "policy_blocking_mode": "FORCED_GO",
-  "updated_at": "2026-04-04T01:50:28.289431Z",
+  "updated_at": "2026-04-03T20:19:09.042305Z",
   "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
   "audit_history": [
-    {
-      "id": "12293945-e3ce-4301-a0d8-f005d3e7df45",
-      "action": "PRODUCTION_GATE_CHECK_RERUN_ALL",
-      "severity": "warning",
-      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
-      "actor_role": "super_admin",
-      "details": {
-        "previous_state": "GO",
-        "next_state": "GO",
-        "reason_code": "CHECK_RERUN",
-        "reason_text": "rerun::all",
-        "expiry": "2026-04-01T22:51:04.252073+00:00",
-        "request_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "session_id": null,
-        "route": "/api/phase4/admin/production-gate/checks/rerun",
-        "method": "POST",
-        "environment": "prod",
-        "correlation_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "is_test_event": false
-      },
-      "created_at": "2026-04-04T01:50:37.955233Z"
-    },
-    {
-      "id": "d8fdd22b-d743-416d-a2d2-16780c6718d4",
-      "action": "PRODUCTION_GATE_CHECK_EVENT",
-      "severity": "warning",
-      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
-      "actor_role": "super_admin",
-      "details": {
-        "previous_state": "GO",
-        "next_state": "GO",
-        "reason_code": "FINAL_RELEASE_GATE_NO_GO",
-        "reason_text": "release_gate_contract::FAIL",
-        "expiry": "2026-04-01T22:51:04.252073+00:00",
-        "check_key": "release_gate_contract",
-        "status": "FAIL",
-        "run_id": "run-21301af1-f812-438b-939e-89bd6681c029",
-        "latency_ms": 3469.895,
-        "flapping": false,
-        "request_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "session_id": null,
-        "route": "/api/phase4/admin/production-gate/checks/rerun",
-        "method": "POST",
-        "environment": "prod",
-        "correlation_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "is_test_event": false
-      },
-      "created_at": "2026-04-04T01:50:36.686868Z"
-    },
-    {
-      "id": "5b94f206-e514-415e-bfd9-8e7be355b920",
-      "action": "PRODUCTION_GATE_CHECK_EVENT",
-      "severity": "warning",
-      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
-      "actor_role": "super_admin",
-      "details": {
-        "previous_state": "GO",
-        "next_state": "GO",
-        "reason_code": "RAW_STATUS=NO_GO",
-        "reason_text": "final_release_gate::FAIL",
-        "expiry": "2026-04-01T22:51:04.252073+00:00",
-        "check_key": "final_release_gate",
-        "status": "FAIL",
-        "run_id": "run-21301af1-f812-438b-939e-89bd6681c029",
-        "latency_ms": 3469.895,
-        "flapping": false,
-        "request_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "session_id": null,
-        "route": "/api/phase4/admin/production-gate/checks/rerun",
-        "method": "POST",
-        "environment": "prod",
-        "correlation_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "is_test_event": false
-      },
-      "created_at": "2026-04-04T01:50:35.426631Z"
-    },
-    {
-      "id": "5acfecdc-4fe3-4b62-91bf-a8ce6adbde49",
-      "action": "PRODUCTION_GATE_CHECK_EVENT",
-      "severity": "info",
-      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
-      "actor_role": "super_admin",
-      "details": {
-        "previous_state": "GO",
-        "next_state": "GO",
-        "reason_code": "CHECK_OK",
-        "reason_text": "prod_env_preflight::PASS",
-        "expiry": "2026-04-01T22:51:04.252073+00:00",
-        "check_key": "prod_env_preflight",
-        "status": "PASS",
-        "run_id": "run-21301af1-f812-438b-939e-89bd6681c029",
-        "latency_ms": 3469.895,
-        "flapping": false,
-        "request_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "session_id": null,
-        "route": "/api/phase4/admin/production-gate/checks/rerun",
-        "method": "POST",
-        "environment": "prod",
-        "correlation_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "is_test_event": false
-      },
-      "created_at": "2026-04-04T01:50:34.172721Z"
-    },
-    {
-      "id": "d0a7afbc-6e41-44d3-a668-62311c731056",
-      "action": "PRODUCTION_GATE_CHECK_EVENT",
-      "severity": "info",
-      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
-      "actor_role": "super_admin",
-      "details": {
-        "previous_state": "GO",
-        "next_state": "GO",
-        "reason_code": "CHECK_OK",
-        "reason_text": "secret_readiness::PASS",
-        "expiry": "2026-04-01T22:51:04.252073+00:00",
-        "check_key": "secret_readiness",
-        "status": "PASS",
-        "run_id": "run-21301af1-f812-438b-939e-89bd6681c029",
-        "latency_ms": 3469.895,
-        "flapping": false,
-        "request_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "session_id": null,
-        "route": "/api/phase4/admin/production-gate/checks/rerun",
-        "method": "POST",
-        "environment": "prod",
-        "correlation_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "is_test_event": false
-      },
-      "created_at": "2026-04-04T01:50:32.867812Z"
-    },
-    {
-      "id": "554480d6-b135-4c43-8ddf-7ad83953df74",
-      "action": "PRODUCTION_GATE_CHECK_EVENT",
-      "severity": "info",
-      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
-      "actor_role": "super_admin",
-      "details": {
-        "previous_state": "GO",
-        "next_state": "GO",
-        "reason_code": "CHECK_OK",
-        "reason_text": "prod_env_resolution::PASS",
-        "expiry": "2026-04-01T22:51:04.252073+00:00",
-        "check_key": "prod_env_resolution",
-        "status": "PASS",
-        "run_id": "run-21301af1-f812-438b-939e-89bd6681c029",
-        "latency_ms": 3469.895,
-        "flapping": false,
-        "request_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "session_id": null,
-        "route": "/api/phase4/admin/production-gate/checks/rerun",
-        "method": "POST",
-        "environment": "prod",
-        "correlation_id": "209f1ac0-67df-45af-886c-6e616a4ebf92",
-        "is_test_event": false
-      },
-      "created_at": "2026-04-04T01:50:31.575921Z"
-    },
     {
       "id": "05e19e24-b339-43ac-9385-6a350e976ad6",
       "action": "PRODUCTION_GATE_CHECK_RERUN_ALL",
@@ -1182,6 +1025,151 @@
         "is_test_event": false
       },
       "created_at": "2026-04-02T00:26:41.666238Z"
+    },
+    {
+      "id": "76e34ac8-983a-415f-8475-14f13977fd80",
+      "action": "PRODUCTION_GATE_CHECK_EVENT",
+      "severity": "info",
+      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+      "actor_role": "super_admin",
+      "details": {
+        "previous_state": "GO",
+        "next_state": "GO",
+        "reason_code": "CHECK_OK",
+        "reason_text": "secret_readiness::PASS",
+        "expiry": "2026-04-01T22:51:04.252073+00:00",
+        "check_key": "secret_readiness",
+        "status": "PASS",
+        "run_id": "run-088e4020-51de-45b6-91ba-95db41cd9e8f",
+        "latency_ms": 987.771,
+        "flapping": false,
+        "request_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST",
+        "environment": "prod",
+        "correlation_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+        "is_test_event": false
+      },
+      "created_at": "2026-04-02T00:26:40.406691Z"
+    },
+    {
+      "id": "136940d7-c25b-4405-ae6a-0fb56d1fb85a",
+      "action": "PRODUCTION_GATE_CHECK_EVENT",
+      "severity": "info",
+      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+      "actor_role": "super_admin",
+      "details": {
+        "previous_state": "GO",
+        "next_state": "GO",
+        "reason_code": "CHECK_OK",
+        "reason_text": "prod_env_resolution::PASS",
+        "expiry": "2026-04-01T22:51:04.252073+00:00",
+        "check_key": "prod_env_resolution",
+        "status": "PASS",
+        "run_id": "run-088e4020-51de-45b6-91ba-95db41cd9e8f",
+        "latency_ms": 987.771,
+        "flapping": false,
+        "request_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/checks/rerun",
+        "method": "POST",
+        "environment": "prod",
+        "correlation_id": "eedf1948-0ad8-4525-89e6-565fffc0479e",
+        "is_test_event": false
+      },
+      "created_at": "2026-04-02T00:26:39.172436Z"
+    },
+    {
+      "id": "16bba7ff-2220-4582-b2f2-4f58d5beb6fd",
+      "action": "PRODUCTION_GATE_MODE_TRANSITION",
+      "severity": "warning",
+      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+      "actor_role": "super_admin",
+      "details": {
+        "previous_state": "LIVE",
+        "next_state": "LIVE",
+        "requested_mode": "LIVE",
+        "reason_code": "MODE_TRANSITION",
+        "reason_text": "standard baseline",
+        "expiry": null,
+        "request_id": "12f4338d-ba4e-492d-abd8-e5dd432b8bf0",
+        "session_id": null,
+        "route": "/api/admin/live-trading/control-layer/execution-mode",
+        "method": "POST",
+        "environment": "prod",
+        "correlation_id": "12f4338d-ba4e-492d-abd8-e5dd432b8bf0",
+        "is_test_event": false
+      },
+      "created_at": "2026-04-02T00:26:24.321092Z"
+    },
+    {
+      "id": "258d402a-643c-41ed-882e-2887a3fd3719",
+      "action": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "severity": "info",
+      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+      "actor_role": "super_admin",
+      "details": {
+        "previous_state": "GO",
+        "next_state": "GO",
+        "reason_code": "GATE_ALLOWED",
+        "reason_text": "standard baseline",
+        "expiry": null,
+        "action_type": "admin_live_trading_execution_mode",
+        "request_id": "12f4338d-ba4e-492d-abd8-e5dd432b8bf0",
+        "session_id": null,
+        "route": "/api/admin/live-trading/control-layer/execution-mode",
+        "method": "POST",
+        "environment": "prod",
+        "correlation_id": "12f4338d-ba4e-492d-abd8-e5dd432b8bf0",
+        "is_test_event": false
+      },
+      "created_at": "2026-04-02T00:26:20.409475Z"
+    },
+    {
+      "id": "b61805b9-aa9b-4f74-9e6a-797effa9eb56",
+      "action": "PRODUCTION_GATE_ACTION_ALLOWED",
+      "severity": "info",
+      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+      "actor_role": "super_admin",
+      "details": {
+        "previous_state": "GO",
+        "next_state": "GO",
+        "reason_code": "GATE_ALLOWED",
+        "reason_text": "phase4_live_config_enable",
+        "expiry": null,
+        "action_type": "phase4_live_config_enable",
+        "request_id": "7d98b201-5d3e-464e-ba7f-d08b298eb5bb",
+        "session_id": null,
+        "route": "/api/phase4/live-config",
+        "method": "PUT",
+        "environment": "prod",
+        "correlation_id": "7d98b201-5d3e-464e-ba7f-d08b298eb5bb",
+        "is_test_event": false
+      },
+      "created_at": "2026-04-02T00:25:11.466360Z"
+    },
+    {
+      "id": "8a0e2217-69ef-4e25-8b65-d7c00d41b791",
+      "action": "PRODUCTION_GATE_STATE_CHANGED",
+      "severity": "info",
+      "actor_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
+      "actor_role": "super_admin",
+      "details": {
+        "previous_state": "GO",
+        "next_state": "GO",
+        "reason_code": "FINAL_APPROVAL",
+        "reason_text": "standard baseline",
+        "expiry": "2026-04-01T22:51:04.252073+00:00",
+        "request_id": "829ba5a2-6359-4ac4-b788-0cba8363a301",
+        "session_id": null,
+        "route": "/api/phase4/admin/production-gate/state",
+        "method": "POST",
+        "environment": "prod",
+        "correlation_id": "829ba5a2-6359-4ac4-b788-0cba8363a301",
+        "is_test_event": false
+      },
+      "created_at": "2026-04-02T00:25:06.672850Z"
     }
   ]
 }
