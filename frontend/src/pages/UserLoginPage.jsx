@@ -112,7 +112,7 @@ export const UserLoginPage = () => {
         const adminRoles = new Set(["super_admin", "admin", "ops"]);
         const nextPath = adminRoles.has(normalizedRole) ? "/admin/dashboard" : "/user/dashboard";
         toast.success(`Giriş başarılı${rememberMe ? "" : " (oturum cihazda saklanmayacak)"}`);
-        window.location.assign(nextPath);
+        navigate(nextPath, { replace: true });
       }
     } catch (error) {
       const message = getErrorMessage(error, "İşlem başarısız");
