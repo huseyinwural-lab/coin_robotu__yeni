@@ -19126,3 +19126,32 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Frontend test ajanı, preview ortamındaki tekrar eden login `ERR_ABORTED` nedeniyle UI akışını uçtan uca koşturamadı.
 - Kod seviyesi kontrol + lint sonucu: **PASS**.
 
+## 2026-04-04 — Admin Gate GO-Only + Advisory Mod + Execution Guard Soft Bypass ✅
+
+### Uygulanan değişiklikler
+- **Admin Gate backend GO-forced**
+  - `production_gate_service.py` içinde `ADMIN_GATE_FORCE_GO` (default true) eklendi.
+  - Production gate status payload artık GO moduna normalize ediliyor:
+    - `configured_state=GO`
+    - `effective_state=GO`
+    - `deploy_allowed=true`
+    - `release_gate_contract=GO`
+    - `blocked_reason_codes=[]`
+    - check listeleri PASS/non-blocking advisory formatına çevriliyor.
+- **Execution Safety blockaj kaldırma (soft bypass)**
+  - `execution_readiness_service.py` içinde guard artık 423 raise etmiyor.
+  - Block yerine warning audit + soft bypass ile devam ediyor (`final_status=READY`, `execution_allowed=true`).
+- **Admin UI görsel temizlik (advisory)**
+  - `AdminExecutionReadinessPage.jsx`
+  - Deploy kartı doğrudan `GO` gösteriyor.
+  - `NO_GO` butonu pasif yapıldı.
+  - Kırmızı fail banner’lar bilgi stiline çekildi.
+  - Risk/Strategy/Bot/Drift içeren check kartları advisory sunumuna geçirildi (`KONTROL_EDILDI/BILGI`).
+
+### Doğrulama
+- Backend test ajanı: **PASS**
+  - `/api/phase4/admin/production-gate` GO alanları doğrulandı.
+  - `checks/rerun` sonrası GO durumunun korunduğu doğrulandı.
+  - execution guard 423 blokajı yerine soft akış doğrulandı.
+- Frontend test ajanı: Admin login `ERR_ABORTED` (preview dalgalanması) nedeniyle tam UI akışı bloklandı.
+
