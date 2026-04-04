@@ -65,6 +65,7 @@ import { UserAlertCenterPage } from "@/pages/UserAlertCenterPage";
 import { UserSettingsPage } from "@/pages/UserSettingsPage";
 import { UserActivityLogPage } from "@/pages/UserActivityLogPage";
 import { UserScannerPage } from "@/pages/UserScannerPage";
+import { UserSimpleScannerPage } from "@/pages/UserSimpleScannerPage";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import UserStrategyBotWizardPage from "@/pages/UserStrategyBotWizardPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
@@ -259,8 +260,9 @@ function App() {
             <Route path="execution" element={<UserExecutionPage />} />
             <Route path="alerts" element={<UserAlertCenterPage />} />
             <Route path="activity-log" element={<UserActivityLogPage />} />
-            <Route path="scanner" element={<UserScannerPage />} />
-            <Route path="indicator-screener" element={<Navigate to="/user/scanner?section=screener" replace />} />
+            <Route path="scanner" element={<UserSimpleScannerPage />} />
+            <Route path="pro-scanner" element={<UserScannerPage />} />
+            <Route path="indicator-screener" element={<Navigate to="/user/scanner" replace />} />
             <Route path="signals" element={<UserSignalsPage />} />
             <Route path="signal" element={<Navigate to="/user/signals" replace />} />
             <Route path="symbol/:symbol" element={<UserSymbolDecisionDetailPage />} />
