@@ -32,7 +32,7 @@ const clearAuthSession = () => {
   localStorage.removeItem(AUTH_USER_KEY);
 };
 
-const authFetchJson = async (path, { method = "GET", body = null, token = null, timeoutMs = 30000 } = {}) => {
+const authFetchJson = async (path, { method = "GET", body = null, token = null, timeoutMs = 45000 } = {}) => {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -195,17 +195,45 @@ export const AuthProvider = ({ children }) => {
     setAuthToken(null);
     const panelPath = panel === "admin" ? "/auth/login/admin" : panel === "user" ? "/auth/login/user" : "/auth/login";
     let data;
-    try {
-      const response = await apiClient.post(panelPath, { email, password }, { timeout: 30000 });
-      data = response.data;
-    } catch (error) {
+    let lastError = null;
+    const isNetworkLikeError = (error) => {
       const code = String(error?.code || "").toUpperCase();
       const message = String(error?.message || "").toLowerCase();
-      const isNetworkLike = code === "ERR_NETWORK" || code === "ERR_ABORTED" || String(error?.name || "").toLowerCase() === "aborterror" || message.includes("network") || message.includes("canceled") || message.includes("aborted");
-      if (!isNetworkLike) {
-        throw error;
+      return (
+        code === "ERR_NETWORK" ||
+        code === "ERR_ABORTED" ||
+        code === "ERR_CANCELED" ||
+        String(error?.name || "").toLowerCase() === "aborterror" ||
+        message.includes("network") ||
+        message.includes("canceled") ||
+        message.includes("aborted")
+      );
+    };
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await apiClient.post(panelPath, { email, password }, { timeout: 45000 });
+        data = response.data;
+        break;
+      } catch (error) {
+        if (!isNetworkLikeError(error)) {
+          throw error;
+        }
+        lastError = error;
+        try {
+          data = await authFetchJson(panelPath, { method: "POST", body: { email, password }, timeoutMs: 45000 });
+          break;
+        } catch (fallbackError) {
+          lastError = fallbackError;
+        }
+        if (attempt < 2) {
+          await new Promise((resolve) => window.setTimeout(resolve, 400 + attempt * 300));
+        }
       }
-      data = await authFetchJson(panelPath, { method: "POST", body: { email, password }, timeoutMs: 30000 });
+    }
+
+    if (!data) {
+      throw lastError || new Error("login_request_failed");
     }
     if (data?.mfa_required) {
       return {

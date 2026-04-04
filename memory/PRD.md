@@ -19076,3 +19076,34 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Sonraki adım
 - P1: Tam paket CI (`pytest` full + build + secret scan) tek komutta release gate dry-run.
 
+## 2026-04-04 — User Surface Gap Fix Batch (Routing, Wallet, Bot, Strategy) ✅
+
+### Kapatılan kalemler
+- Routing düzeltmeleri:
+  - `risk-policy` / `risk-policies` artık settings’e redirect etmiyor; doğrudan `RiskPoliciesPage` açılıyor.
+  - `Profile / API Keys / Risk` menüsü `UserExchangeSettingsPage` rotasına alındı.
+- Risk Policy boş gelme koruması:
+  - `GET /api/risk-policies` çağrısında policy yoksa kullanıcı için otomatik default policy seedleniyor.
+- Exchange cüzdan snapshot görünürlüğü:
+  - Revalidate akışında readiness snapshot’a `available_balance`, `wallet_balance`, `open_order_margin`, `unrealized_pnl` alanları eklendi.
+  - Connection save sonrası key/secret girilmişse otomatik revalidate tetikleniyor.
+- Test cüzdanı görünümü:
+  - Live doğrulama yokken mock/test bakiye metrikleri user ekranlarında gizleniyor (`UserExchangeSettingsPage`, `UserPortfolioPage`).
+- Bot create akışı:
+  - Frontend guard: template seçimi zorunlu, scanner source için `scanner_id` zorunlu.
+  - Aktif template’ten otomatik başlangıç seçimi + daha net API hata mesajı.
+- 12 strateji ve toplu seçim:
+  - Bot strategy dropdown 12+ tipe genişletildi.
+  - Template bundle select/apply eklendi (Momentum, Neutral, Scalp+Flow, Carry/Arb, Event Driven).
+  - Backend seed template seti 12+ strateji koduna genişletildi.
+- Lifecycle sıkılaştırma:
+  - `POST /api/strategy-templates/{id}/activate` artık `BACKTEST_PASSED` önkoşuluna bağlı.
+- Scanner chart yerleşimi:
+  - Chart panel grid order düzenlendi.
+
+### Doğrulama
+- Backend regression subagent: **6/6 PASS**
+  - login, risk policy count, template seed count, exchange snapshot contract, bot create, lifecycle gate.
+- Frontend build: `CI=true yarn build` → **PASS**.
+- Preview frontend testleri auth/CDN dalgalı; login akışına ek retry/timeout sertleştirmesi uygulandı (`AuthContext.jsx`, `UserLoginPage.jsx`).
+
