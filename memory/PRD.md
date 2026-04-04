@@ -19460,3 +19460,27 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `/api/user/exchange-connections` -> canlı bağlantılar güncel
 - UI otomasyon denemeleri preview auth/session dalgalanması (`ERR_ABORTED` / device-mismatch akışı) nedeniyle tam tamamlanamadı.
 
+## 2026-04-04 — Wizard Step1 Parametre Düzenleme Opsiyonel Checkbox ✅
+
+### Kullanıcı talebi
+- `Parametreleri Düzenle` alanı zorunlu görünmesin; isteyen kullanıcı onay tiki ile açsın.
+
+### Uygulanan değişiklik
+- Dosya: `frontend/src/pages/UserStrategyBotWizardPage.jsx`
+- Hazır strateji paneline yeni onay tiki eklendi:
+  - `wizard-ready-strategy-override-toggle-checkbox`
+  - Başlık: `Parametreleri Düzenle (İsteğe Bağlı)`
+- Parametre grid’i artık koşullu render:
+  - Checkbox kapalıysa grid gizli
+  - Checkbox açıksa grid görünür
+- Template payload tarafında da uyum sağlandı:
+  - Checkbox kapalıysa override değerleri uygulanmıyor (default parametrelerle devam)
+
+### Doğrulama
+- Frontend test ajanı sonucu: **PASS**
+  - Checkbox görünürlük testi PASS
+  - İlk durumda grid gizli PASS
+  - İşaretleyince grid görünür PASS
+  - İşareti kaldırınca grid tekrar gizlenir PASS
+  - data-testid doğrulamaları PASS
+
