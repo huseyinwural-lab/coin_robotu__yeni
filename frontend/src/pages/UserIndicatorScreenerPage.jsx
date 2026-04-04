@@ -882,7 +882,7 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
                 <label className="space-y-1" data-testid="user-indicator-screener-timeframe-field">
                   <span className="text-xs text-slate-600">Timeframe</span>
                   <select value={filters.timeframe} onChange={(event) => updateFilter("timeframe", event.target.value)} className="h-9 w-full rounded border border-slate-300 bg-white px-2 text-sm" data-testid="user-indicator-screener-timeframe-select">
-                    <option value="5m" data-testid="user-indicator-screener-timeframe-option-5m">5m</option>
+                    <option value="3m" data-testid="user-indicator-screener-timeframe-option-3m">3m</option>
                     <option value="15m" data-testid="user-indicator-screener-timeframe-option-15m">15m</option>
                     <option value="1h" data-testid="user-indicator-screener-timeframe-option-1h">1h</option>
                     <option value="4h" data-testid="user-indicator-screener-timeframe-option-4h">4h</option>
