@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from models import UserIndicatorSavedQuery, UserIndicatorWatchlist
 from services.indicator_screener.indicator_calculation_service import IndicatorCalculationError, calculate_query_indicator_values
-from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
+from services.indicator_screener.market_data_provider import ALLOWED_TIMEFRAMES, BinanceMarketDataProvider, MarketDataProviderError
 from services.indicator_screener.query_parser import QueryParseError, collect_query_fields, evaluate_query_ast, parse_query_expression
 
 
@@ -455,6 +455,30 @@ def run_indicator_query_engine(
     safe_limit = max(1, min(int(limit or DEFAULT_RESULT_LIMIT), MAX_RESULT_LIMIT))
     normalized_exchange = (exchange or "binance").strip().lower()
     normalized_timeframe = (timeframe or "15m").strip().lower()
+
+    if normalized_timeframe not in ALLOWED_TIMEFRAMES:
+        return {
+            "matched_symbols": [],
+            "evaluated_count": 0,
+            "match_count": 0,
+            "query_valid": False,
+            "query_error": f"unsupported_timeframe:{normalized_timeframe}",
+            "calculation_timestamp": calculation_timestamp,
+            "rows": [],
+            "evaluated_symbols": [],
+            "skipped_symbols": [],
+            "limit": safe_limit,
+            "universe_mode": "all_tradable",
+            "universe_count": 0,
+            "exchange": normalized_exchange,
+            "market_type": (market_type or "spot").strip().lower(),
+            "timeframe": normalized_timeframe,
+            "applied_filters": {},
+            "active_filter_chips": [],
+            "result_state": "invalid_timeframe",
+            "filter_error": None,
+            "warnings": [],
+        }
 
     payload = _build_filter_payload(symbol_universe, filter_payload, market_type, safe_limit)
     filter_error = _validate_filter_payload(payload)

@@ -19,12 +19,10 @@ const MARKET_TYPE_OPTIONS = [
 
 const TIMEFRAME_OPTIONS = [
   { value: "3m", label: "3m" },
-  { value: "5m", label: "5m" },
   { value: "15m", label: "15m" },
   { value: "1h", label: "1h" },
   { value: "4h", label: "4h" },
   { value: "1d", label: "1d" },
-  { value: "3d", label: "3d" },
 ];
 
 const toFriendlyError = (error, fallback = "Tarama çalıştırılamadı") => {

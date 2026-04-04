@@ -8,7 +8,6 @@ from core.users.user_exchange_connector import (
     credential_fingerprint,
     decrypt_exchange_secret,
     encrypt_exchange_secret,
-    get_or_create_user_exchange_setting,
     mask_secret,
     upsert_user_exchange_connection,
 )
@@ -46,6 +45,56 @@ def _default_readiness_snapshot(db: Session, user_id: str, exchange: str, market
         "reason_codes": reason_codes,
         "snapshot_at": _now().isoformat(),
     }
+
+
+_AUTO_DEFAULT_LABEL_CANDIDATES = {
+    "default",
+    "default binance spot live",
+    "default binance / spot / live",
+    "default-binance-spot-live",
+    "default_binance_spot_live",
+}
+
+
+def _normalize_label(label: str | None) -> str:
+    value = str(label or "").strip().lower().replace("_", " ").replace("-", " ").replace("/", " ")
+    return " ".join(value.split())
+
+
+def _is_auto_default_profile(row: UserExchangeConnection) -> bool:
+    label = _normalize_label(getattr(row, "account_label", ""))
+    return label in _AUTO_DEFAULT_LABEL_CANDIDATES
+
+
+def _cleanup_auto_default_profiles(db: Session, *, user_id: str) -> None:
+    rows = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id)
+        .order_by(UserExchangeConnection.updated_at.desc())
+        .all()
+    )
+    if not rows:
+        return
+
+    removable = [row for row in rows if _is_auto_default_profile(row)]
+    if removable:
+        for row in removable:
+            db.delete(row)
+        db.commit()
+
+    remaining = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id)
+        .order_by(UserExchangeConnection.updated_at.desc())
+        .all()
+    )
+    if not remaining:
+        return
+
+    if not any(bool(item.is_default) for item in remaining):
+        remaining[0].is_default = True
+        remaining[0].updated_at = _now()
+        db.commit()
 
 
 def _parse_snapshot_time(value) -> datetime | None:
@@ -340,31 +389,6 @@ def _serialize_connection(row: UserExchangeConnection) -> dict:
     }
 
 
-def _bootstrap_from_legacy(db: Session, user_id: str) -> None:
-    existing = db.query(UserExchangeConnection).filter(UserExchangeConnection.user_id == user_id).first()
-    if existing is not None:
-        return
-
-    legacy = get_or_create_user_exchange_setting(db, user_id)
-    row = UserExchangeConnection(
-        id=str(uuid.uuid4()),
-        user_id=user_id,
-        account_label="default",
-        exchange=(legacy.exchange or "binance").strip().lower(),
-        market_type="spot",
-        environment=(legacy.mode or "live").strip().lower(),
-        is_default=True,
-        readiness_snapshot={},
-        permission_snapshot=legacy.permissions_snapshot or [],
-        api_key_encrypted=legacy.api_key_encrypted or "",
-        api_secret_encrypted=legacy.api_secret_encrypted or "",
-        created_at=_now(),
-        updated_at=_now(),
-    )
-    db.add(row)
-    db.commit()
-
-
 def _sync_legacy_default(db: Session, row: UserExchangeConnection) -> None:
     api_key = decrypt_exchange_secret(row.api_key_encrypted).strip()
     api_secret = decrypt_exchange_secret(row.api_secret_encrypted).strip()
@@ -379,7 +403,7 @@ def _sync_legacy_default(db: Session, row: UserExchangeConnection) -> None:
 
 
 def list_user_exchange_connections(db: Session, user_id: str) -> list[dict]:
-    _bootstrap_from_legacy(db, user_id)
+    _cleanup_auto_default_profiles(db, user_id=user_id)
     rows = (
         db.query(UserExchangeConnection)
         .filter(UserExchangeConnection.user_id == user_id)
@@ -390,7 +414,7 @@ def list_user_exchange_connections(db: Session, user_id: str) -> list[dict]:
 
 
 def get_user_exchange_connection(db: Session, *, user_id: str, connection_id: str) -> dict:
-    _bootstrap_from_legacy(db, user_id)
+    _cleanup_auto_default_profiles(db, user_id=user_id)
     row = (
         db.query(UserExchangeConnection)
         .filter(UserExchangeConnection.user_id == user_id, UserExchangeConnection.id == connection_id)
@@ -515,7 +539,7 @@ def create_user_exchange_connection(
     permission_snapshot: list[str] | None,
     readiness_snapshot: dict | None,
 ) -> dict:
-    _bootstrap_from_legacy(db, user_id)
+    _cleanup_auto_default_profiles(db, user_id=user_id)
     clean_label = (account_label or "").strip()
     if not clean_label:
         raise ValueError("account_label_required")
@@ -586,6 +610,7 @@ def update_user_exchange_connection(
     permission_snapshot: list[str] | None,
     readiness_snapshot: dict | None,
 ) -> dict:
+    _cleanup_auto_default_profiles(db, user_id=user_id)
     row = (
         db.query(UserExchangeConnection)
         .filter(UserExchangeConnection.id == connection_id, UserExchangeConnection.user_id == user_id)
@@ -648,6 +673,7 @@ def update_user_exchange_connection(
 
 
 def set_default_user_exchange_connection(db: Session, *, user_id: str, connection_id: str) -> dict:
+    _cleanup_auto_default_profiles(db, user_id=user_id)
     row = (
         db.query(UserExchangeConnection)
         .filter(UserExchangeConnection.id == connection_id, UserExchangeConnection.user_id == user_id)
@@ -671,6 +697,7 @@ def set_default_user_exchange_connection(db: Session, *, user_id: str, connectio
 
 
 def delete_user_exchange_connection(db: Session, *, user_id: str, connection_id: str) -> dict:
+    _cleanup_auto_default_profiles(db, user_id=user_id)
     row = (
         db.query(UserExchangeConnection)
         .filter(UserExchangeConnection.id == connection_id, UserExchangeConnection.user_id == user_id)

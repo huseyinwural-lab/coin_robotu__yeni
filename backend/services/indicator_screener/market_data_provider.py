@@ -6,7 +6,7 @@ import requests
 from db import redis_client
 
 
-ALLOWED_TIMEFRAMES = {"3m", "5m", "15m", "1h", "4h", "1d", "3d"}
+ALLOWED_TIMEFRAMES = {"3m", "15m", "1h", "4h", "1d"}
 STABLE_ASSETS = {
     "USDT",
     "USDC",

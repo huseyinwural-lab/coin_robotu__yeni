@@ -32,6 +32,30 @@ const fallbackVenue = {
 
 const USER_EXCHANGE_SYMBOL_STORAGE_KEY = "user-exchange-selected-symbol-v1";
 
+const AUTO_DEFAULT_LABEL_CANDIDATES = new Set([
+  "default",
+  "default binance spot live",
+  "default binance / spot / live",
+  "default-binance-spot-live",
+  "default_binance_spot_live",
+]);
+
+const normalizeProfileLabel = (label) => String(label || "")
+  .trim()
+  .toLowerCase()
+  .replaceAll("_", " ")
+  .replaceAll("-", " ")
+  .replaceAll("/", " ")
+  .replace(/\s+/g, " ");
+
+const isAutoDefaultProfile = (profile) => {
+  const label = normalizeProfileLabel(profile?.account_label);
+  if (!AUTO_DEFAULT_LABEL_CANDIDATES.has(label)) return false;
+  return String(profile?.exchange || "").toLowerCase() === "binance"
+    && String(profile?.market_type || "").toLowerCase() === "spot"
+    && String(profile?.environment || "").toLowerCase() === "live";
+};
+
 const normalizeSymbolSelection = (symbols) => {
   if (!Array.isArray(symbols)) {
     return [];
@@ -94,6 +118,11 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
   const [symbolSelectorSelection, setSymbolSelectorSelection] = useState([]);
   const [selectedSymbol, setSelectedSymbol] = useState("");
 
+  const visibleConnectionProfiles = useMemo(
+    () => (connectionProfiles || []).filter((item) => !isAutoDefaultProfile(item)),
+    [connectionProfiles],
+  );
+
   const exchangeOptions = useMemo(() => {
     const list = [...new Set(venueOptions.map((item) => item.exchange))];
     return list.length ? list : [fallbackVenue.exchange];
@@ -123,7 +152,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
 
   const connectionHealthOverview = useMemo(() => {
     const summary = { total: 0, online: 0, degraded: 0, offline: 0, unknown: 0 };
-    for (const profile of connectionProfiles || []) {
+    for (const profile of visibleConnectionProfiles || []) {
       summary.total += 1;
       const health = String(profile?.connection_health || "unknown").toLowerCase();
       if (health === "online") summary.online += 1;
@@ -132,17 +161,34 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
       else summary.unknown += 1;
     }
     return summary;
-  }, [connectionProfiles]);
+  }, [visibleConnectionProfiles]);
+
+  const getMarketProfileStatus = useCallback((marketType) => {
+    const forMarket = (visibleConnectionProfiles || []).filter((item) => String(item?.market_type || "").toLowerCase() === marketType);
+    const preferred = forMarket.find((item) => item.is_default) || forMarket[0] || null;
+    const active = Boolean(
+      preferred
+      && String(preferred?.connection_health || "").toLowerCase() === "online"
+      && Boolean(preferred?.can_trade_effective)
+    );
+    return {
+      profile: preferred,
+      active,
+    };
+  }, [visibleConnectionProfiles]);
+
+  const spotProfileStatus = useMemo(() => getMarketProfileStatus("spot"), [getMarketProfileStatus]);
+  const futuresProfileStatus = useMemo(() => getMarketProfileStatus("futures"), [getMarketProfileStatus]);
 
   const selectedConnectionProfile = useMemo(() => {
-    if (!connectionProfiles.length) {
+    if (!visibleConnectionProfiles.length) {
       return null;
     }
 
-    const activeExplicit = connectionProfiles.find((item) => item.id === activeProfileId);
+    const activeExplicit = visibleConnectionProfiles.find((item) => item.id === activeProfileId);
     if (activeExplicit) return activeExplicit;
 
-    const exactDefault = connectionProfiles.find(
+    const exactDefault = visibleConnectionProfiles.find(
       (item) => item.is_default
         && item.exchange === selectedVenue.exchange
         && item.market_type === selectedVenue.market_type
@@ -150,28 +196,28 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
     );
     if (exactDefault) return exactDefault;
 
-    const exactAny = connectionProfiles.find(
+    const exactAny = visibleConnectionProfiles.find(
       (item) => item.exchange === selectedVenue.exchange
         && item.market_type === selectedVenue.market_type
         && item.environment === selectedVenue.environment,
     );
     if (exactAny) return exactAny;
 
-    return connectionProfiles.find((item) => item.is_default) || connectionProfiles[0] || null;
-  }, [activeProfileId, connectionProfiles, selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type]);
+    return visibleConnectionProfiles.find((item) => item.is_default) || visibleConnectionProfiles[0] || null;
+  }, [activeProfileId, selectedVenue.environment, selectedVenue.exchange, selectedVenue.market_type, visibleConnectionProfiles]);
 
   const actionRequiredProfiles = useMemo(
-    () => (connectionProfiles || []).filter((item) => Boolean(item?.action_required)),
-    [connectionProfiles],
+    () => (visibleConnectionProfiles || []).filter((item) => Boolean(item?.action_required)),
+    [visibleConnectionProfiles],
   );
 
   useEffect(() => {
-    if (!connectionProfiles.length) return;
-    const preferred = connectionProfiles.find((item) => item.is_default) || connectionProfiles[0];
+    if (!visibleConnectionProfiles.length) return;
+    const preferred = visibleConnectionProfiles.find((item) => item.is_default) || visibleConnectionProfiles[0];
     if (preferred && preferred.id !== activeProfileId) {
       setActiveProfileId(preferred.id);
     }
-  }, [activeProfileId, connectionProfiles]);
+  }, [activeProfileId, visibleConnectionProfiles]);
 
   useEffect(() => {
     if (!selectedConnectionProfile) return;
@@ -297,14 +343,6 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
     };
   }, [selectedConnectionProfile]);
 
-  const shouldHideMockWallet = useMemo(() => {
-    const health = String(selectedConnectionProfile?.connection_health || "").toLowerCase();
-    if (health !== "online") {
-      return true;
-    }
-    return !Boolean(selectedConnectionProfile?.can_trade_effective);
-  }, [selectedConnectionProfile]);
-
   const selectedRateLimitState = useMemo(() => {
     const snapshot = selectedConnectionProfile?.readiness_snapshot || {};
     return {
@@ -327,7 +365,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
           },
         }),
         apiClient.get("/user-risk/settings"),
-        apiClient.get("/user-risk/overview"),
+        apiClient.get("/user/portfolio"),
         apiClient.get("/venues/options"),
         apiClient.get("/user/exchange-connections"),
       ]);
@@ -934,7 +972,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
               onChange={(event) => setActiveProfileId(event.target.value)}
               data-testid="user-exchange-active-profile-selector"
             >
-              {(connectionProfiles || []).map((item) => (
+              {(visibleConnectionProfiles || []).map((item) => (
                 <option key={item.id} value={item.id}>{item.account_label} · {item.exchange}/{item.market_type}/{item.environment}</option>
               ))}
             </select>
@@ -942,9 +980,22 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
           </div>
           <div className="rounded border border-slate-700 bg-slate-950 p-3" data-testid="user-exchange-active-profile-summary-card">
             <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-exchange-active-profile-summary-title">Active Profile Summary</p>
-            <p className="mt-2 text-sm font-semibold text-slate-100" data-testid="user-exchange-active-profile-summary-label">{selectedConnectionProfile?.account_label || "-"}</p>
-            <p className="text-xs text-slate-400" data-testid="user-exchange-active-profile-summary-meta">{selectedConnectionProfile?.exchange || "-"} / {selectedConnectionProfile?.market_type || "-"} / {selectedConnectionProfile?.environment || "-"}</p>
-            <p className="mt-1 text-xs text-slate-400" data-testid="user-exchange-active-profile-summary-status">status: {selectedConnectionProfile?.connection_health || "unknown"}</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2" data-testid="user-exchange-active-profile-status-grid">
+              <div className="rounded border border-slate-700 bg-slate-900 p-2" data-testid="user-exchange-active-profile-spot-status-card">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-block h-2.5 w-2.5 rounded-full ${spotProfileStatus.active ? "bg-emerald-400" : "bg-rose-500"}`} data-testid="user-exchange-active-profile-spot-status-light" />
+                  <p className="text-xs font-semibold text-slate-100" data-testid="user-exchange-active-profile-spot-status-label">Spot</p>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400" data-testid="user-exchange-active-profile-spot-status-profile">{spotProfileStatus.profile?.account_label || "profil yok"}</p>
+              </div>
+              <div className="rounded border border-slate-700 bg-slate-900 p-2" data-testid="user-exchange-active-profile-futures-status-card">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-block h-2.5 w-2.5 rounded-full ${futuresProfileStatus.active ? "bg-emerald-400" : "bg-rose-500"}`} data-testid="user-exchange-active-profile-futures-status-light" />
+                  <p className="text-xs font-semibold text-slate-100" data-testid="user-exchange-active-profile-futures-status-label">Futures</p>
+                </div>
+                <p className="mt-1 text-[11px] text-slate-400" data-testid="user-exchange-active-profile-futures-status-profile">{futuresProfileStatus.profile?.account_label || "profil yok"}</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -956,19 +1007,11 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
 
       {activeTab === "overview" && (
         <div className="space-y-4" data-testid="user-overview-tab-content">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6" data-testid="user-overview-metrics-grid">
-            <MetricCard label="Güncel Ana Para" value={shouldHideMockWallet ? "-" : (portfolioOverview?.current_capital ?? "-")} tone="orange" testId="user-overview-current-capital" />
-            <MetricCard label="Kullanılabilir" value={shouldHideMockWallet ? "-" : (portfolioOverview?.available_balance ?? "-")} tone="blue" testId="user-overview-available-balance" />
-            <MetricCard label="Açık Pozisyon" value={shouldHideMockWallet ? "-" : (portfolioOverview?.open_position_balance ?? "-")} tone="orange" testId="user-overview-open-balance" />
-            <MetricCard label="Kapanmış PnL" value={shouldHideMockWallet ? "-" : (portfolioOverview?.closed_pnl ?? "-")} tone="blue" testId="user-overview-closed-pnl" />
-            <MetricCard label="Compounding" value={shouldHideMockWallet ? "-" : String(portfolioOverview?.compounding_enabled ?? false)} tone="orange" testId="user-overview-compounding" />
-            <MetricCard label="Sonraki Baz" value={shouldHideMockWallet ? "-" : (portfolioOverview?.next_base_capital ?? "-")} tone="blue" testId="user-overview-next-base" />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="user-overview-metrics-grid">
+            <MetricCard label="Spot Cüzdan" value={portfolioOverview?.spot_wallet_balance ?? 0} tone="blue" testId="user-overview-spot-wallet-balance" />
+            <MetricCard label="Futures Cüzdan" value={portfolioOverview?.futures_wallet_balance ?? 0} tone="orange" testId="user-overview-futures-wallet-balance" />
+            <MetricCard label="Toplam Cüzdan" value={portfolioOverview?.total_wallet_balance ?? 0} tone="orange" testId="user-overview-total-wallet-balance" />
           </div>
-          {shouldHideMockWallet && (
-            <p className="text-xs text-amber-300" data-testid="user-overview-mock-wallet-hidden-note">
-              Live cüzdan doğrulanmadan test/paper bakiye metrikleri gizlenir.
-            </p>
-          )}
 
           <section className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-overview-system-health-dashboard">
             <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-overview-system-health-header">
@@ -1152,7 +1195,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
             </div>
 
             <div className="space-y-2" data-testid="user-connection-profiles-list">
-              {connectionProfiles.map((connection) => (
+              {visibleConnectionProfiles.map((connection) => (
                 <article key={connection.id} className="flex flex-wrap items-center justify-between gap-2 border border-slate-700 bg-slate-950 p-3" data-testid={`user-connection-profile-row-${connection.id}`}>
                   <div data-testid={`user-connection-profile-info-${connection.id}`}>
                     <p className="text-sm font-semibold text-slate-100" data-testid={`user-connection-profile-label-${connection.id}`}>{connection.account_label}{connection.is_default ? " (default)" : ""}</p>
@@ -1188,7 +1231,7 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
                   </div>
                 </article>
               ))}
-              {connectionProfiles.length === 0 && (
+              {visibleConnectionProfiles.length === 0 && (
                 <p className="text-sm text-slate-400" data-testid="user-connection-profiles-empty">Henüz connection profili yok.</p>
               )}
             </div>
