@@ -73,6 +73,11 @@ export const BotProfilesPage = () => {
   const [templates, setTemplates] = useState([]);
   const [canonicalStrategies, setCanonicalStrategies] = useState([]);
   const [exchangeConnections, setExchangeConnections] = useState([]);
+  const [portfolioBalances, setPortfolioBalances] = useState({
+    total_wallet_balance: 0,
+    spot_wallet_balance: 0,
+    futures_wallet_balance: 0,
+  });
   const [selectedBot, setSelectedBot] = useState(null);
   const [detailTab, setDetailTab] = useState("overview");
   const [botStatus, setBotStatus] = useState(null);
@@ -105,13 +110,14 @@ export const BotProfilesPage = () => {
 
   const fetchItems = async () => {
     try {
-      const [profilesRes, strategyPerfRes, templatesRes, riskRes, canonicalRes, connectionsRes] = await Promise.all([
+      const [profilesRes, strategyPerfRes, templatesRes, riskRes, canonicalRes, connectionsRes, portfolioRes] = await Promise.all([
         apiClient.get("/bot-profiles"),
         apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
         apiClient.get("/strategy-templates"),
         apiClient.get("/user/live/risk"),
         apiClient.get("/user/canonical-strategies"),
         apiClient.get("/user/exchange-connections"),
+        apiClient.get("/user/portfolio"),
       ]);
       const nextItems = profilesRes.data || [];
       setItems(nextItems);
@@ -120,6 +126,11 @@ export const BotProfilesPage = () => {
       setUserRisk(riskRes.data || null);
       setCanonicalStrategies(canonicalRes.data || []);
       setExchangeConnections(connectionsRes.data || []);
+      setPortfolioBalances(portfolioRes.data || {
+        total_wallet_balance: 0,
+        spot_wallet_balance: 0,
+        futures_wallet_balance: 0,
+      });
       setSelectedBot((prev) => {
         if (!prev?.id) return prev;
         return nextItems.find((item) => item.id === prev.id) || null;
@@ -248,6 +259,48 @@ export const BotProfilesPage = () => {
     [canonicalStrategyOptions, form.strategy_type],
   );
 
+  const walletConnectionOptions = useMemo(() => {
+    const liveBinanceConnections = (exchangeConnections || [])
+      .filter((item) => String(item?.exchange || "").toLowerCase() === "binance")
+      .filter((item) => String(item?.environment || "live").toLowerCase() === "live")
+      .sort((a, b) => {
+        const aDefault = a?.is_default ? 1 : 0;
+        const bDefault = b?.is_default ? 1 : 0;
+        if (aDefault !== bDefault) return bDefault - aDefault;
+        return String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""));
+      });
+
+    const pickByMarket = (marketType) =>
+      liveBinanceConnections.find((item) => String(item?.market_type || "").toLowerCase() === marketType) || null;
+
+    const spotConn = pickByMarket("spot");
+    const futuresConn = pickByMarket("futures");
+
+    const options = [];
+    if (spotConn) {
+      options.push({
+        id: spotConn.id,
+        exchange: spotConn.exchange,
+        market_type: "spot",
+        label: `SPOT CÜZDAN (${Number(portfolioBalances?.spot_wallet_balance || 0).toFixed(2)})`,
+      });
+    }
+    if (futuresConn) {
+      options.push({
+        id: futuresConn.id,
+        exchange: futuresConn.exchange,
+        market_type: "futures",
+        label: `FUTURES CÜZDAN (${Number(portfolioBalances?.futures_wallet_balance || 0).toFixed(2)})`,
+      });
+    }
+    return options;
+  }, [exchangeConnections, portfolioBalances?.futures_wallet_balance, portfolioBalances?.spot_wallet_balance]);
+
+  const availableMarketTypes = useMemo(
+    () => Array.from(new Set(walletConnectionOptions.map((item) => String(item.market_type || "spot").toLowerCase()))),
+    [walletConnectionOptions],
+  );
+
   useEffect(() => {
     const loadDetail = async () => {
       if (!selectedBot?.id) return;
@@ -317,6 +370,28 @@ export const BotProfilesPage = () => {
       };
     });
   }, [activeTemplateOptions, canonicalStrategyOptions, location.search]);
+
+  useEffect(() => {
+    if (!availableMarketTypes.length) return;
+    setForm((prev) => {
+      const nextMarketType = availableMarketTypes.includes(String(prev.market_type || "").toLowerCase())
+        ? prev.market_type
+        : availableMarketTypes[0];
+
+      const selectedWallet = walletConnectionOptions.find((item) => item.id === prev.exchange_connection_id) || null;
+      const selectedMatchesMarket = selectedWallet && String(selectedWallet.market_type || "") === String(nextMarketType || "");
+
+      if (selectedMatchesMarket && nextMarketType === prev.market_type) {
+        return prev;
+      }
+      return {
+        ...prev,
+        market_type: nextMarketType,
+        exchange_connection_id: selectedMatchesMarket ? prev.exchange_connection_id : "",
+        exchange: selectedMatchesMarket ? prev.exchange : "binance",
+      };
+    });
+  }, [availableMarketTypes, walletConnectionOptions]);
 
   const createUserTemplateFromCanonical = async (canonicalStrategy) => {
     const entryRules = canonicalStrategy?.entry_long?.rules || ["canonical_entry_signal"];
@@ -411,7 +486,7 @@ export const BotProfilesPage = () => {
     }
 
     const strategyTemplateId = await ensureStrategyTemplateId();
-    const selectedConnection = exchangeConnections.find((item) => item.id === form.exchange_connection_id);
+    const selectedConnection = walletConnectionOptions.find((item) => item.id === form.exchange_connection_id);
     if (!selectedConnection) {
       toast.error("Seçilen cüzdan bulunamadı");
       return;
@@ -561,7 +636,6 @@ export const BotProfilesPage = () => {
             aria-label="Exchange"
             aria-describedby="bot-form-exchange-helper"
             required
-            disabled
           >
             <option value="binance">binance</option>
           </select>
@@ -573,16 +647,26 @@ export const BotProfilesPage = () => {
           <select
             id="bot-form-market-type-select"
             value={form.market_type}
-            onChange={(event) => setForm((prev) => ({ ...prev, market_type: event.target.value }))}
+            onChange={(event) => {
+              const nextMarket = event.target.value;
+              const selectedWallet = (walletConnectionOptions || []).find((item) => item.id === form.exchange_connection_id) || null;
+              const walletMatches = selectedWallet && String(selectedWallet.market_type || "") === String(nextMarket || "");
+              setForm((prev) => ({
+                ...prev,
+                market_type: nextMarket,
+                exchange_connection_id: walletMatches ? prev.exchange_connection_id : "",
+              }));
+            }}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             data-testid="bot-form-market-type-select"
             aria-label="Market Type"
             aria-describedby="bot-form-market-type-helper"
             required
-            disabled
           >
-            <option value="spot">spot</option>
-            <option value="futures">futures</option>
+            {availableMarketTypes.length === 0 && <option value="spot">spot</option>}
+            {availableMarketTypes.map((market) => (
+              <option key={market} value={market}>{market}</option>
+            ))}
           </select>
           <p className="form-helper-text" id="bot-form-market-type-helper" data-testid="bot-form-market-type-helper">Seçilen cüzdana göre otomatik gelir.</p>
         </div>
@@ -594,7 +678,7 @@ export const BotProfilesPage = () => {
             value={form.exchange_connection_id || ""}
             onChange={(event) => {
               const connectionId = event.target.value;
-              const selectedConnection = (exchangeConnections || []).find((item) => item.id === connectionId);
+              const selectedConnection = (walletConnectionOptions || []).find((item) => item.id === connectionId);
               setForm((prev) => ({
                 ...prev,
                 exchange_connection_id: connectionId,
@@ -607,9 +691,9 @@ export const BotProfilesPage = () => {
             required
           >
             <option value="">Cüzdan seçin (zorunlu)</option>
-            {(exchangeConnections || []).map((connection) => (
+            {(walletConnectionOptions || []).map((connection) => (
               <option key={connection.id} value={connection.id}>
-                {connection.account_label} · {connection.exchange} · {connection.market_type}
+                {connection.label}
               </option>
             ))}
           </select>
