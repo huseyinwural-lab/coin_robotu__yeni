@@ -14,6 +14,7 @@ from models import (
     RiskExposureGroup,
     RiskOrchestratorPolicy,
     User,
+    UserOnboardingProfile,
     UserScannerAutomationConfig,
     UserScannerAutomationProfile,
     UserRole,
@@ -61,6 +62,106 @@ def _seed_admin(db: Session):
         actor_role=admin.role.value,
         details={"email": admin.email},
     )
+
+
+def _upsert_platform_account(
+    db: Session,
+    *,
+    email: str,
+    password: str,
+    role: UserRole,
+    audit_action: str,
+) -> None:
+    normalized_email = str(email or "").strip().lower()
+    normalized_password = str(password or "").strip()
+    if not normalized_email or not normalized_password:
+        return
+
+    now_ts = datetime.now(timezone.utc)
+    user = db.query(User).filter(User.email == normalized_email).first()
+    if user is None:
+        user = User(
+            email=normalized_email,
+            password_hash=hash_password(normalized_password),
+            role=role,
+            is_active=True,
+            approval_status="approved",
+            approval_requested_at=now_ts,
+            approved_at=now_ts,
+        )
+        db.add(user)
+        db.flush()
+    else:
+        user.password_hash = hash_password(normalized_password)
+        user.role = role
+        user.is_active = True
+        user.approval_status = "approved"
+        if user.approval_requested_at is None:
+            user.approval_requested_at = now_ts
+        user.approved_at = now_ts
+        user.disabled_at = None
+
+    profile = db.query(UserOnboardingProfile).filter(UserOnboardingProfile.user_id == user.id).first()
+    if profile is None:
+        profile = UserOnboardingProfile(
+            user_id=user.id,
+            full_name=("Canary Admin" if role != UserRole.USER else "Review User"),
+            email_verified=True,
+            kyc_status="verified",
+            leverage_permission=True,
+            futures_capability=True,
+            spot_capability=True,
+            trading_eligibility=True,
+            precheck_reasons=[],
+        )
+        db.add(profile)
+    else:
+        profile.email_verified = True
+        profile.kyc_status = "verified"
+        profile.leverage_permission = True
+        profile.futures_capability = True
+        profile.spot_capability = True
+        profile.trading_eligibility = True
+        profile.precheck_reasons = []
+
+    db.flush()
+    create_audit_log(
+        db,
+        action=audit_action,
+        entity_type="user",
+        entity_id=user.id,
+        actor_user_id=user.id,
+        actor_role=user.role.value,
+        details={"email": user.email},
+        commit=False,
+    )
+
+
+def _seed_platform_test_accounts(db: Session):
+    admin_email = (settings.bootstrap_admin_email or "").strip()
+    admin_password = (settings.bootstrap_admin_password or "").strip()
+    review_email = (settings.review_user_bootstrap_email or "").strip()
+    review_password = (settings.review_user_bootstrap_password or "").strip()
+
+    if admin_email.endswith("@platform.local") and admin_password:
+        _upsert_platform_account(
+            db,
+            email=admin_email,
+            password=admin_password,
+            role=UserRole.SUPER_ADMIN,
+            audit_action="platform_admin_seed_sync",
+        )
+
+    if review_email.endswith("@platform.local") and review_password:
+        _upsert_platform_account(
+            db,
+            email=review_email,
+            password=review_password,
+            role=UserRole.USER,
+            audit_action="platform_review_user_seed_sync",
+        )
+
+    db.commit()
 
 
 def _seed_admin_control(db: Session):
@@ -319,6 +420,7 @@ def seed_default_admin():
     try:
         seed_steps = [
             _seed_admin,
+            _seed_platform_test_accounts,
             _seed_admin_control,
             _seed_execution_policies,
             _seed_exposure_groups,

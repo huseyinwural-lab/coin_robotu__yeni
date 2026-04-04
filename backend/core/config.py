@@ -58,6 +58,8 @@ class Settings:
     ]
     bootstrap_admin_email: str | None = optional_env("ADMIN_BOOTSTRAP_EMAIL")
     bootstrap_admin_password: str | None = optional_env("ADMIN_BOOTSTRAP_PASSWORD")
+    review_user_bootstrap_email: str | None = optional_env("REVIEW_USER_BOOTSTRAP_EMAIL")
+    review_user_bootstrap_password: str | None = optional_env("REVIEW_USER_BOOTSTRAP_PASSWORD")
     scaling_weight_pnl_stability: float = float(os.environ.get("SCALING_WEIGHT_PNL_STABILITY", "0.25"))
     scaling_weight_slippage_impact: float = float(os.environ.get("SCALING_WEIGHT_SLIPPAGE_IMPACT", "0.25"))
     scaling_weight_execution_quality: float = float(os.environ.get("SCALING_WEIGHT_EXECUTION_QUALITY", "0.25"))
