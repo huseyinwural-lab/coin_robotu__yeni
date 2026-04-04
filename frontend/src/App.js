@@ -67,7 +67,6 @@ import { UserActivityLogPage } from "@/pages/UserActivityLogPage";
 import { UserScannerPage } from "@/pages/UserScannerPage";
 import { UserSimpleScannerPage } from "@/pages/UserSimpleScannerPage";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
-import UserStrategyBotWizardPage from "@/pages/UserStrategyBotWizardPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
 import { UserSymbolDecisionDetailPage } from "@/pages/UserSymbolDecisionDetailPage";
 import { UserReportsPage } from "@/pages/UserReportsPage";
@@ -116,7 +115,7 @@ const HomeRedirect = () => {
   if (adminRoles.has(String(user.role || "").toLowerCase())) {
     return <Navigate to="/admin/dashboard" replace />;
   }
-  return <Navigate to="/user/strategies" replace />;
+  return <Navigate to="/user/bot-profiles" replace />;
 };
 
 const ExecuteToTradeRedirect = () => {
@@ -137,7 +136,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          <Route path="/dashboard" element={<Navigate to="/user/strategies" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/user/bot-profiles" replace />} />
           <Route path="/portfolio" element={<Navigate to="/user/portfolio" replace />} />
           <Route path="/trades" element={<Navigate to="/user/trades" replace />} />
           <Route path="/scanner" element={<Navigate to="/user/scanner" replace />} />
@@ -276,7 +275,7 @@ function App() {
             <Route path="bots" element={<Navigate to="/user/bot-profiles" replace />} />
             <Route path="risk-policy" element={<RiskPoliciesPage />} />
             <Route path="risk-policies" element={<RiskPoliciesPage />} />
-            <Route path="strategies" element={<UserStrategyBotWizardPage />} />
+            <Route path="strategies" element={<Navigate to="/user/bot-profiles" replace />} />
             <Route path="pro-strategies" element={<StrategyTemplatesPage />} />
             <Route path="strategies/:templateId" element={<StrategyTemplateDetailPage />} />
             <Route path="backtest-insights" element={<BacktestInsightsPage />} />

@@ -256,8 +256,8 @@ export const StrategyTemplatesPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="strategy-templates-description">Versioned, doğrulanabilir ve runtime resolution destekli strategy asset merkezi.</p>
         {!isAdmin && (
           <div className="mt-3">
-            <Button type="button" variant="outline" onClick={() => navigate("/user/strategies")} data-testid="strategy-templates-open-wizard-button">
-              Wizard Moduna Dön
+          <Button type="button" variant="outline" onClick={() => navigate("/user/bot-profiles")} data-testid="strategy-templates-open-bot-profiles-button">
+            Bot Kur
             </Button>
           </div>
         )}

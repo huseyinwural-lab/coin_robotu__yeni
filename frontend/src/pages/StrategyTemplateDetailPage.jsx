@@ -87,7 +87,7 @@ export const StrategyTemplateDetailPage = () => {
             <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="strategy-template-detail-title">Strategy Template Detail</h2>
             <p className="mt-2 text-sm text-slate-400" data-testid="strategy-template-detail-description">Scanner, backtest, bot ve execution compatibility bağlarını tek sayfada gösterir.</p>
           </div>
-          <Button variant="outline" onClick={() => navigate('/user/strategies')} data-testid="strategy-template-detail-back-button">Back</Button>
+          <Button variant="outline" onClick={() => navigate('/user/pro-strategies')} data-testid="strategy-template-detail-back-button">Back</Button>
         </div>
       </header>
       {loading && <p className="text-sm text-slate-400" data-testid="strategy-template-detail-loading">loading...</p>}
@@ -95,7 +95,7 @@ export const StrategyTemplateDetailPage = () => {
         <article className="border border-rose-500/40 bg-rose-500/10 p-4" data-testid="strategy-template-detail-error-panel">
           <p className="text-sm text-rose-200" data-testid="strategy-template-detail-error-message">{loadError || "Template detayı bulunamadı"}</p>
           <div className="mt-3">
-            <Button variant="outline" onClick={() => navigate('/user/strategies')} data-testid="strategy-template-detail-error-back-button">Listeye dön</Button>
+            <Button variant="outline" onClick={() => navigate('/user/pro-strategies')} data-testid="strategy-template-detail-error-back-button">Listeye dön</Button>
           </div>
         </article>
       )}
