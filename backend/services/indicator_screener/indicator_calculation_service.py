@@ -90,3 +90,27 @@ def calculate_indicator_values(candles: list[dict]) -> dict[str, float]:
         "fibo_100": fib["fibo_100"],
         "fibo_78_6": fib["fibo_78_6"],
     }
+
+
+def calculate_query_indicator_values(candles: list[dict], required_fields: set[str] | None = None) -> dict[str, float]:
+    values = calculate_indicator_values(candles)
+    if not required_fields:
+        return values
+
+    closes = [_safe_float(candle.get("close")) for candle in candles]
+    for field in {str(item or "").strip().lower() for item in required_fields}:
+        if not field or field in values:
+            continue
+        if field.startswith("rsi") and field[3:].isdigit():
+            period = int(field[3:])
+            if period < 2:
+                raise IndicatorCalculationError("RSI periyodu 2 veya büyük olmalı")
+            values[field] = _rsi(closes, period)
+            continue
+        if field.startswith("ema") and field[3:].isdigit():
+            period = int(field[3:])
+            if period < 2:
+                raise IndicatorCalculationError("EMA periyodu 2 veya büyük olmalı")
+            values[field] = _ema(closes, period)
+            continue
+    return values

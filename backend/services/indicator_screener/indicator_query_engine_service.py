@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from models import UserIndicatorSavedQuery, UserIndicatorWatchlist
-from services.indicator_screener.indicator_calculation_service import IndicatorCalculationError, calculate_indicator_values
+from services.indicator_screener.indicator_calculation_service import IndicatorCalculationError, calculate_query_indicator_values
 from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
-from services.indicator_screener.query_parser import QueryParseError, evaluate_query_ast, parse_query_expression
+from services.indicator_screener.query_parser import QueryParseError, collect_query_fields, evaluate_query_ast, parse_query_expression
 
 
 def _utc_now_iso() -> str:
@@ -392,6 +392,7 @@ def _build_result_row(
         "high": round(float(indicator_values["high"]), 8),
         "low": round(float(indicator_values["low"]), 8),
         "close": round(float(indicator_values["close"]), 8),
+        "last_price": round(_safe_float(metadata.get("last_price"), _safe_float(indicator_values.get("close"), 0.0)), 8),
         "volume": round(float(indicator_values["volume"]), 8),
         "rsi14": round(float(indicator_values["rsi14"]), 6),
         "rsi7": round(float(indicator_values["rsi7"]), 6),
@@ -474,12 +475,14 @@ def run_indicator_query_engine(
         }
 
     query_ast = None
+    query_fields: set[str] = set()
     query_valid = True
     query_error = None
     stripped_query = (query_expression or "").strip()
     if stripped_query:
         try:
             query_ast = parse_query_expression(stripped_query)
+            query_fields = collect_query_fields(query_ast)
         except QueryParseError as exc:
             query_valid = False
             query_error = str(exc)
@@ -598,11 +601,13 @@ def run_indicator_query_engine(
             timeframe=normalized_timeframe,
             candle_limit=90,
         )
-        indicator_values = calculate_indicator_values(market_payload.get("candles", []))
+        indicator_values = calculate_query_indicator_values(market_payload.get("candles", []), query_fields)
+        query_values = dict(indicator_values)
+        query_values["last_price"] = _safe_float(metadata.get("last_price"), _safe_float(indicator_values.get("close"), 0.0))
         if query_ast is None:
             query_match, matched_rules, matched_fields = True, [], []
         else:
-            query_match, matched_rules, matched_fields = evaluate_query_ast(query_ast, indicator_values)
+            query_match, matched_rules, matched_fields = evaluate_query_ast(query_ast, query_values)
 
         signal_score, confidence, rr_estimate = _score_row(indicator_values, metadata)
         freshness_mins = _freshness_minutes(market_payload.get("last_candle_time"))

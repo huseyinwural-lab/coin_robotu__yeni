@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Play, Settings2 } from "lucide-react";
 import { toast } from "sonner";
@@ -35,28 +35,21 @@ const toFriendlyError = (error, fallback = "Tarama çalıştırılamadı") => {
   return error?.message || fallback;
 };
 
-const buildQueryExpression = ({ indicator, operator, threshold, rhsType, rsiPeriod, emaPeriod }) => {
+const buildQueryExpression = ({ indicator, operator, threshold, rhsType, indicatorPeriod }) => {
   const normalizedOperator = operator === "<" ? "<" : ">";
+  const normalizedPeriod = Math.max(2, Number.parseInt(String(indicatorPeriod || ""), 10) || (indicator === "rsi" ? 14 : 50));
+  const field = `${indicator === "rsi" ? "rsi" : "ema"}${normalizedPeriod}`;
 
-  if (indicator === "rsi") {
-    const period = Number(rsiPeriod) === 7 ? 7 : 14;
-    const numericThreshold = Number(threshold);
-    if (Number.isNaN(numericThreshold)) {
-      throw new Error("RSI değeri sayısal olmalı");
-    }
-    const field = period === 7 ? "rsi7" : "rsi14";
-    return `${field} ${normalizedOperator} ${numericThreshold}`;
-  }
-
-  const period = Number(emaPeriod) === 20 ? 20 : 50;
-  const field = period === 20 ? "ema20" : "ema50";
   if (rhsType === "close") {
     return `${field} ${normalizedOperator} close`;
+  }
+  if (rhsType === "last_price") {
+    return `${field} ${normalizedOperator} last_price`;
   }
 
   const numericThreshold = Number(threshold);
   if (Number.isNaN(numericThreshold)) {
-    throw new Error("EMA karşılaştırma değeri sayısal olmalı");
+    throw new Error("Karşılaştırma değeri sayısal olmalı");
   }
   return `${field} ${normalizedOperator} ${numericThreshold}`;
 };
@@ -67,16 +60,17 @@ export const UserSimpleScannerPage = () => {
   const [exchange, setExchange] = useState("binance");
   const [marketType, setMarketType] = useState("spot");
   const [indicator, setIndicator] = useState("rsi");
-  const [rsiPeriod, setRsiPeriod] = useState("14");
-  const [emaPeriod, setEmaPeriod] = useState("50");
+  const [indicatorPeriod, setIndicatorPeriod] = useState("14");
   const [operator, setOperator] = useState(">");
   const [rhsType, setRhsType] = useState("number");
   const [threshold, setThreshold] = useState("70");
+  const [autoRefreshMinutes, setAutoRefreshMinutes] = useState("1");
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [rows, setRows] = useState([]);
   const [lastRunQueryExpression, setLastRunQueryExpression] = useState("");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
 
-  const isRsi = indicator === "rsi";
   const liveQueryPreview = useMemo(() => {
     try {
       return buildQueryExpression({
@@ -84,21 +78,20 @@ export const UserSimpleScannerPage = () => {
         operator,
         threshold,
         rhsType,
-        rsiPeriod,
-        emaPeriod,
+        indicatorPeriod,
       });
     } catch {
       return "-";
     }
-  }, [indicator, operator, threshold, rhsType, rsiPeriod, emaPeriod]);
+  }, [indicator, operator, threshold, rhsType, indicatorPeriod]);
 
   const thresholdPlaceholder = useMemo(() => {
-    if (isRsi) return "örn: 70";
     if (rhsType === "close") return "kapanış ile kıyas";
+    if (rhsType === "last_price") return "anlık fiyat ile kıyas";
     return "örn: 43000";
-  }, [isRsi, rhsType]);
+  }, [rhsType]);
 
-  const runSimpleScan = async () => {
+  const runSimpleScan = useCallback(async ({ silent = false } = {}) => {
     setIsRunning(true);
     try {
       const expression = buildQueryExpression({
@@ -106,8 +99,7 @@ export const UserSimpleScannerPage = () => {
         operator,
         threshold,
         rhsType,
-        rsiPeriod,
-        emaPeriod,
+        indicatorPeriod,
       });
       setLastRunQueryExpression(expression);
 
@@ -131,13 +123,32 @@ export const UserSimpleScannerPage = () => {
 
       const { data } = await apiClient.post("/user/indicator-screener/run", payload);
       setRows(data?.rows || []);
-      toast.success(`Tarama tamamlandı: ${data?.match_count || 0} sonuç`);
+      setLastUpdatedAt(new Date().toISOString());
+      if (!silent) {
+        toast.success(`Tarama tamamlandı: ${data?.match_count || 0} sonuç`);
+      }
     } catch (error) {
-      toast.error(toFriendlyError(error));
+      if (!silent) {
+        toast.error(toFriendlyError(error));
+      }
     } finally {
       setIsRunning(false);
     }
-  };
+  }, [exchange, marketType, indicator, operator, threshold, rhsType, indicatorPeriod]);
+
+  useEffect(() => {
+    if (!autoRefreshEnabled) return undefined;
+    const minutes = Math.max(1, Number.parseInt(String(autoRefreshMinutes || ""), 10) || 1);
+    const intervalMs = minutes * 60 * 1000;
+    const timer = window.setInterval(() => {
+      runSimpleScan({ silent: true });
+    }, intervalMs);
+    return () => window.clearInterval(timer);
+  }, [autoRefreshEnabled, autoRefreshMinutes, runSimpleScan]);
+
+  useEffect(() => {
+    setIndicatorPeriod(indicator === "rsi" ? "14" : "50");
+  }, [indicator]);
 
   return (
     <section className="mx-auto w-full max-w-6xl space-y-4 p-4 sm:p-6" data-testid="simple-scanner-page">
@@ -181,17 +192,12 @@ export const UserSimpleScannerPage = () => {
 
           <label className="space-y-1" data-testid="simple-scanner-period-field">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Periyot</span>
-            {isRsi ? (
-              <select className="h-10 w-full rounded border border-slate-300 px-3" value={rsiPeriod} onChange={(event) => setRsiPeriod(event.target.value)} data-testid="simple-scanner-rsi-period-select">
-                <option value="7">RSI 7</option>
-                <option value="14">RSI 14</option>
-              </select>
-            ) : (
-              <select className="h-10 w-full rounded border border-slate-300 px-3" value={emaPeriod} onChange={(event) => setEmaPeriod(event.target.value)} data-testid="simple-scanner-ema-period-select">
-                <option value="20">EMA 20</option>
-                <option value="50">EMA 50</option>
-              </select>
-            )}
+            <Input
+              value={indicatorPeriod}
+              onChange={(event) => setIndicatorPeriod(event.target.value)}
+              placeholder={indicator === "rsi" ? "örn: 7, 14, 21" : "örn: 20, 50, 200"}
+              data-testid="simple-scanner-period-input"
+            />
           </label>
 
           <label className="space-y-1" data-testid="simple-scanner-operator-field">
@@ -202,22 +208,26 @@ export const UserSimpleScannerPage = () => {
             </select>
           </label>
 
-          {!isRsi && (
-            <label className="space-y-1" data-testid="simple-scanner-rhs-type-field">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Karşılaştır</span>
-              <select className="h-10 w-full rounded border border-slate-300 px-3" value={rhsType} onChange={(event) => setRhsType(event.target.value)} data-testid="simple-scanner-rhs-type-select">
-                <option value="number">Sabit Sayı</option>
-                <option value="close">Kapanış</option>
-              </select>
-            </label>
-          )}
+          <label className="space-y-1" data-testid="simple-scanner-rhs-type-field">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Karşılaştır</span>
+            <select className="h-10 w-full rounded border border-slate-300 px-3" value={rhsType} onChange={(event) => setRhsType(event.target.value)} data-testid="simple-scanner-rhs-type-select">
+              <option value="number">Sabit Sayı</option>
+              <option value="close">Kapanış (close)</option>
+              <option value="last_price">Anlık Değer (last_price)</option>
+            </select>
+          </label>
 
-          {(isRsi || rhsType === "number") && (
+          {rhsType === "number" && (
             <label className="space-y-1" data-testid="simple-scanner-threshold-field">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">4. Değer</span>
               <Input value={threshold} onChange={(event) => setThreshold(event.target.value)} placeholder={thresholdPlaceholder} data-testid="simple-scanner-threshold-input" />
             </label>
           )}
+
+          <label className="space-y-1" data-testid="simple-scanner-auto-refresh-field">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Otomatik Güncelleme (dk)</span>
+            <Input value={autoRefreshMinutes} onChange={(event) => setAutoRefreshMinutes(event.target.value)} placeholder="1/3/5/10" data-testid="simple-scanner-auto-refresh-minutes-input" />
+          </label>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2" data-testid="simple-scanner-run-row">
@@ -225,8 +235,17 @@ export const UserSimpleScannerPage = () => {
             <Play className="mr-2 h-4 w-4" />
             {isRunning ? "Çalışıyor..." : "5. Run"}
           </Button>
+          <Button
+            type="button"
+            variant={autoRefreshEnabled ? "default" : "outline"}
+            onClick={() => setAutoRefreshEnabled((prev) => !prev)}
+            data-testid="simple-scanner-auto-refresh-toggle-button"
+          >
+            {autoRefreshEnabled ? "Auto: Açık" : "Auto: Kapalı"}
+          </Button>
           <p className="text-xs text-slate-500" data-testid="simple-scanner-query-preview">Query: {liveQueryPreview}</p>
           <p className="text-xs text-slate-500" data-testid="simple-scanner-last-run-query">Son Run: {lastRunQueryExpression || "-"}</p>
+          <p className="text-xs text-slate-500" data-testid="simple-scanner-last-updated-at">Son güncelleme: {lastUpdatedAt || "-"}</p>
         </div>
       </div>
 
@@ -242,6 +261,7 @@ export const UserSimpleScannerPage = () => {
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-2 py-2" data-testid="simple-scanner-col-symbol">Symbol</th>
                 <th className="px-2 py-2" data-testid="simple-scanner-col-close">Close</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-last-price">Anlık</th>
                 <th className="px-2 py-2" data-testid="simple-scanner-col-rsi">RSI</th>
                 <th className="px-2 py-2" data-testid="simple-scanner-col-ema">EMA</th>
                 <th className="px-2 py-2" data-testid="simple-scanner-col-score">Skor</th>
@@ -255,6 +275,7 @@ export const UserSimpleScannerPage = () => {
                   <tr key={`${symbol}-${index}`} className="border-b border-slate-100" data-testid={`simple-scanner-row-${index}`}>
                     <td className="px-2 py-2 font-semibold text-slate-900" data-testid={`simple-scanner-row-symbol-${index}`}>{symbol}</td>
                     <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-close-${index}`}>{row?.close}</td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-last-price-${index}`}>{row?.last_price}</td>
                     <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-rsi-${index}`}>rsi7:{row?.rsi7} · rsi14:{row?.rsi14}</td>
                     <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-ema-${index}`}>ema20:{row?.ema20} · ema50:{row?.ema50}</td>
                     <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-score-${index}`}>{row?.signal_score}</td>
@@ -275,7 +296,7 @@ export const UserSimpleScannerPage = () => {
               })}
               {rows.length === 0 && (
                 <tr data-testid="simple-scanner-empty-row">
-                  <td colSpan={6} className="px-2 py-6 text-center text-sm text-slate-500" data-testid="simple-scanner-empty-message">
+                  <td colSpan={7} className="px-2 py-6 text-center text-sm text-slate-500" data-testid="simple-scanner-empty-message">
                     Henüz sonuç yok. Üstten koşulu girip Run yap.
                   </td>
                 </tr>

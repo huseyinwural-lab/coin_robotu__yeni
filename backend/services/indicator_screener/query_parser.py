@@ -18,8 +18,10 @@ ALLOWED_QUERY_FIELDS = {
     "fibo_127_2",
     "fibo_100",
     "fibo_78_6",
+    "last_price",
 }
 
+_DYNAMIC_FIELD_PATTERN = re.compile(r"^(rsi|ema)\d{1,3}$", re.IGNORECASE)
 ALLOWED_COMPARISON_OPERATORS = {"<", "<=", ">", ">=", "=", "!="}
 
 _TOKEN_PATTERN = re.compile(
@@ -30,6 +32,11 @@ _TOKEN_PATTERN = re.compile(
 
 class QueryParseError(ValueError):
     pass
+
+
+def _is_supported_field(field_name: str) -> bool:
+    lowered = str(field_name or "").strip().lower()
+    return lowered in ALLOWED_QUERY_FIELDS or bool(_DYNAMIC_FIELD_PATTERN.match(lowered))
 
 
 @dataclass
@@ -128,7 +135,7 @@ class _Parser:
         field_name = field_token.value.lower()
         if field_name.upper() in {"AND", "OR"}:
             raise QueryParseError(f"Alan adı beklenirken '{field_token.value}' bulundu.")
-        if field_name not in ALLOWED_QUERY_FIELDS:
+        if not _is_supported_field(field_name):
             raise QueryParseError(f"Desteklenmeyen alan adı: '{field_token.value}'")
 
         operator_token = self._consume()
@@ -137,17 +144,27 @@ class _Parser:
             raise QueryParseError(f"Desteklenmeyen operatör: '{operator}'")
 
         value_token = self._consume()
+        value_raw = str(value_token.value or "").strip().lower()
+        value_type = "number"
+        rhs_field = None
         try:
-            value = float(value_token.value)
-        except ValueError as exc:
-            raise QueryParseError(f"Sayısal değer bekleniyordu, '{value_token.value}' alındı.") from exc
+            value = float(value_raw)
+            comparison_text = f"{field_name} {operator} {value:g}"
+        except ValueError:
+            if not _is_supported_field(value_raw):
+                raise QueryParseError(f"Sayısal değer veya alan adı bekleniyordu, '{value_token.value}' alındı.")
+            value_type = "field"
+            rhs_field = value_raw
+            value = 0.0
+            comparison_text = f"{field_name} {operator} {rhs_field}"
 
-        comparison_text = f"{field_name} {operator} {value:g}"
         return {
             "type": "comparison",
             "field": field_name,
             "operator": operator,
             "value": value,
+            "value_type": value_type,
+            "rhs_field": rhs_field,
             "text": comparison_text,
         }
 
@@ -156,6 +173,24 @@ def parse_query_expression(query_expression: str) -> dict:
     tokens = tokenize_query_expression(query_expression)
     parser = _Parser(tokens)
     return parser.parse()
+
+
+def collect_query_fields(ast: dict | None) -> set[str]:
+    if not ast:
+        return set()
+
+    node_type = ast.get("type")
+    if node_type == "comparison":
+        fields = {str(ast.get("field") or "").lower()}
+        rhs_field = ast.get("rhs_field")
+        if rhs_field:
+            fields.add(str(rhs_field).lower())
+        return {item for item in fields if item}
+
+    if node_type == "logical":
+        return collect_query_fields(ast.get("left")) | collect_query_fields(ast.get("right"))
+
+    return set()
 
 
 def _compare(lhs: float, operator: str, rhs: float) -> bool:
@@ -180,9 +215,20 @@ def evaluate_query_ast(ast: dict, values: dict[str, float]) -> tuple[bool, list[
         field = ast["field"]
         if field not in values:
             raise QueryParseError(f"Alan değeri bulunamadı: {field}")
-        result = _compare(float(values[field]), ast["operator"], float(ast["value"]))
+
+        rhs_value = float(ast["value"])
+        rhs_field = ast.get("rhs_field")
+        if ast.get("value_type") == "field":
+            if rhs_field not in values:
+                raise QueryParseError(f"Karşılaştırma alanı bulunamadı: {rhs_field}")
+            rhs_value = float(values[rhs_field])
+
+        result = _compare(float(values[field]), ast["operator"], rhs_value)
         if result:
-            return True, [ast["text"]], [field]
+            matched_fields = [field]
+            if rhs_field:
+                matched_fields.append(rhs_field)
+            return True, [ast["text"]], matched_fields
         return False, [], []
 
     if node_type == "logical":
