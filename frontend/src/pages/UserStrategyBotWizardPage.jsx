@@ -96,6 +96,7 @@ export default function UserStrategyBotWizardPage() {
   const [canonicalStrategies, setCanonicalStrategies] = useState([]);
   const [selectedReadyTemplateId, setSelectedReadyTemplateId] = useState("");
   const [readyStrategyOverrides, setReadyStrategyOverrides] = useState({});
+  const [readyOverrideEnabledByTemplate, setReadyOverrideEnabledByTemplate] = useState({});
   const [customBuilder, setCustomBuilder] = useState(defaultCustomBuilder);
   const [savedCustomTemplate, setSavedCustomTemplate] = useState(null);
   const [exchangeConnections, setExchangeConnections] = useState([]);
@@ -115,6 +116,11 @@ export default function UserStrategyBotWizardPage() {
   const selectedReadyTemplate = useMemo(
     () => readyTemplates.find((item) => item.id === selectedReadyTemplateId) || null,
     [readyTemplates, selectedReadyTemplateId],
+  );
+
+  const isReadyOverrideEnabled = useMemo(
+    () => Boolean(readyOverrideEnabledByTemplate[selectedReadyTemplateId]),
+    [readyOverrideEnabledByTemplate, selectedReadyTemplateId],
   );
 
   const editableReadyParams = useMemo(() => {
@@ -249,7 +255,7 @@ export default function UserStrategyBotWizardPage() {
       throw new Error("READY_TEMPLATE_REQUIRED");
     }
 
-    const overrides = readyStrategyOverrides[selectedReadyTemplate.id] || {};
+    const overrides = isReadyOverrideEnabled ? (readyStrategyOverrides[selectedReadyTemplate.id] || {}) : {};
     const mergedParams = {
       ema_fast: 20,
       ema_slow: 50,
@@ -426,15 +432,33 @@ export default function UserStrategyBotWizardPage() {
 
               {selectedReadyTemplate && (
                 <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4" data-testid="wizard-ready-strategy-override-panel">
-                  <p className="text-sm font-semibold text-slate-800" data-testid="wizard-ready-strategy-override-title">Parametreleri Düzenle</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2" data-testid="wizard-ready-strategy-override-grid">
-                    {Object.entries(editableReadyParams).slice(0, 8).map(([key, value]) => (
-                      <label key={key} className="space-y-1" data-testid={`wizard-ready-param-field-${key}`}>
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{key}</span>
-                        <Input value={String(value ?? "")} onChange={(event) => handleReadyParamChange(key, event.target.value)} data-testid={`wizard-ready-param-input-${key}`} />
-                      </label>
-                    ))}
-                  </div>
+                  <label className="inline-flex cursor-pointer items-center gap-2" data-testid="wizard-ready-strategy-override-toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={isReadyOverrideEnabled}
+                      onChange={(event) => {
+                        setReadyOverrideEnabledByTemplate((prev) => ({
+                          ...prev,
+                          [selectedReadyTemplate.id]: event.target.checked,
+                        }));
+                      }}
+                      data-testid="wizard-ready-strategy-override-toggle-checkbox"
+                    />
+                    <span className="text-sm font-semibold text-slate-800" data-testid="wizard-ready-strategy-override-title">
+                      Parametreleri Düzenle (İsteğe Bağlı)
+                    </span>
+                  </label>
+
+                  {isReadyOverrideEnabled && (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2" data-testid="wizard-ready-strategy-override-grid">
+                      {Object.entries(editableReadyParams).slice(0, 8).map(([key, value]) => (
+                        <label key={key} className="space-y-1" data-testid={`wizard-ready-param-field-${key}`}>
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{key}</span>
+                          <Input value={String(value ?? "")} onChange={(event) => handleReadyParamChange(key, event.target.value)} data-testid={`wizard-ready-param-input-${key}`} />
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </>
