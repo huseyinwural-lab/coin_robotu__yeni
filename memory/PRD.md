@@ -19442,3 +19442,21 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `POST /api/auth/login/user` -> 200
   - `GET /api/user/scanner/presets?active_only=true` -> 200 (preset listesi dönüyor)
 
+## 2026-04-04 — Dashboard Snapshot Test Bakiye Temizliği + Binance Key Doğrulaması ✅
+
+### Uygulanan düzeltme
+- `build_user_portfolio_snapshot` güncellendi:
+  - canlı trade ready değilse dashboard/portfolio bakiye alanları artık **0** (test/paper sabit bakiye gösterimi kaldırıldı)
+  - canlı trade ready ise cüzdan snapshot bakiyesi öncelikleniyor.
+
+### Anahtar bağlantısı (gizli değerler maskeli)
+- Admin: Binance spot + futures credential upsert/approve/verify/probe akışı tetiklendi.
+- User: Binance LIVE SPOT + LIVE FUTURES bağlantıları upsert edildi, revalidate çalıştırıldı.
+
+### Doğrulama
+- API ile doğrulama:
+  - `/api/user/portfolio` -> current/available canlı bakiye ile dönüyor (sabit test bakiye yok)
+  - `/api/user/dashboard` -> current/available canlı bakiye ile dönüyor
+  - `/api/user/exchange-connections` -> canlı bağlantılar güncel
+- UI otomasyon denemeleri preview auth/session dalgalanması (`ERR_ABORTED` / device-mismatch akışı) nedeniyle tam tamamlanamadı.
+
