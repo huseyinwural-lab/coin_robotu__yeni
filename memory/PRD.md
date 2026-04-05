@@ -20466,3 +20466,28 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Spot bağlantılarda online/tradeable durum görüldü.
 - Futures tarafında canlı doğrulama şu an `invalid_key` nedeniyle aktiflenemiyor (key permission/region/mainnet uyumu kontrolü gerekli).
 
+## 2026-04-05 — Phase6 CI Path Stabilizasyonu (APP_ROOT-aware) ✅
+
+### Problem
+- CI logunda Phase6 script, `/app` sabit path ve lokal backend varsayımı nedeniyle `backend_not_ready url=http://127.0.0.1:8001` ile düşüyordu.
+
+### Düzeltme
+- `scripts/verify_phase6_security.sh` artık APP_ROOT-aware:
+  - `frontend/.env` ve `backend/.env` okumaları `APP_ROOT` bazlı yapılıyor.
+  - `/app` hardcode path’ler kaldırıldı.
+
+### Doğrulama
+- `pytest -q backend/tests/test_iteration165_prod_gate_smoke.py::TestVerifyPhase6SecurityScript::test_security_script_passes` ✅ PASS
+- `bash scripts/verify_phase6_security.sh` ✅ PASS (`missing_count: 0`)
+
+## 2026-04-05 — Phase8 Son Durum (Canary)
+
+### Durum
+- `admin login` ✅
+- `user login` ✅
+- `exchange settings update` ✅
+- `exchange validate` ❌ `http=400 invalid_key` (futures live key doğrulama reddi)
+
+### Yorum
+- Bu artık script/akış bug’ı değil; exchange tarafı key validity/permission (veya region/IP) konusu.
+

@@ -106,7 +106,8 @@ def read_frontend_backend_url() -> str:
     env_value = str(os.environ.get('REACT_APP_BACKEND_URL') or '').strip()
     if env_value:
         return env_value
-    env = Path('/app/frontend/.env')
+    app_root = Path(str(os.environ.get('APP_ROOT') or '/app')).resolve()
+    env = app_root / 'frontend' / '.env'
     if not env.exists():
         return ''
     for raw in env.read_text(encoding='utf-8').splitlines():
@@ -165,8 +166,10 @@ ADMIN_PASSWORD="${TEST_ADMIN_PASSWORD:-CanaryAdmin123!}"
 JWT_SECRET_VALUE="${JWT_SECRET:-}"
 if [[ -z "$JWT_SECRET_VALUE" ]]; then
   JWT_SECRET_VALUE="$(python - <<'PY'
+import os
 from pathlib import Path
-env = Path('/app/backend/.env')
+app_root = Path(str(os.environ.get('APP_ROOT') or '/app')).resolve()
+env = app_root / 'backend' / '.env'
 if env.exists():
     for raw in env.read_text(encoding='utf-8').splitlines():
         line = raw.strip()
@@ -199,6 +202,7 @@ import requests
 backend_url = os.environ['BACKEND_URL']
 admin_email = os.environ['ADMIN_EMAIL']
 admin_password = os.environ['ADMIN_PASSWORD']
+app_root = Path(str(os.environ.get('APP_ROOT') or '/app')).resolve()
 
 session = requests.Session()
 device_header = "phase6-jwt-rotation-device"
@@ -229,7 +233,7 @@ for _ in range(30):
 if not health_ready:
     jwt_secret_value = str(os.environ.get("JWT_SECRET") or "").strip().strip('"').strip("'")
     if not jwt_secret_value:
-        env_file = Path('/app/backend/.env')
+        env_file = app_root / 'backend' / '.env'
         if env_file.exists():
             for raw in env_file.read_text(encoding='utf-8').splitlines():
                 line = raw.strip()
@@ -295,7 +299,7 @@ new_probe = request_with_retry(
 
 jwt_secret_value = str(os.environ.get("JWT_SECRET") or "").strip().strip('"').strip("'")
 if not jwt_secret_value:
-    env_file = Path('/app/backend/.env')
+    env_file = app_root / 'backend' / '.env'
     if env_file.exists():
         for raw in env_file.read_text(encoding='utf-8').splitlines():
             line = raw.strip()
