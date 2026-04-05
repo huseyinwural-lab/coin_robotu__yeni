@@ -34,6 +34,8 @@ WINDOW_MAP = {
 
 REJECT_STATUSES = {"REJECTED", "FAILED", "CANCELLED", "EXPIRED"}
 logger = logging.getLogger(__name__)
+_TRADE_PROJECTION_SYNC_CACHE: dict[str, datetime] = {}
+_TRADE_PROJECTION_SYNC_TTL_SECONDS = 30
 
 
 def _safe_float(value, default: float = 0.0) -> float:
@@ -60,6 +62,25 @@ def _avg(values: list[float]) -> float:
     if not values:
         return 0.0
     return sum(values) / len(values)
+
+
+def _should_sync_trade_projection(user_id: str, *, force: bool = False) -> bool:
+    if force:
+        _TRADE_PROJECTION_SYNC_CACHE[user_id] = datetime.now(timezone.utc)
+        return True
+
+    now = datetime.now(timezone.utc)
+    last = _TRADE_PROJECTION_SYNC_CACHE.get(user_id)
+    if last is None:
+        _TRADE_PROJECTION_SYNC_CACHE[user_id] = now
+        return True
+
+    elapsed = (now - last).total_seconds()
+    if elapsed >= _TRADE_PROJECTION_SYNC_TTL_SECONDS:
+        _TRADE_PROJECTION_SYNC_CACHE[user_id] = now
+        return True
+
+    return False
 
 
 def _pagination(limit: int | None, offset: int | None, *, default_limit: int = 50, max_limit: int = 500) -> tuple[int, int]:
@@ -559,7 +580,17 @@ def sync_user_trade_projection(db: Session, *, user_id: str) -> dict:
 
 
 def build_user_trade_projection_list(db: Session, user_id: str, *, limit: int = 120) -> list[dict]:
-    sync_user_trade_projection(db, user_id=user_id)
+    latest_projection_row = (
+        db.query(UserTradeProjection.updated_at)
+        .filter(UserTradeProjection.user_id == user_id)
+        .order_by(UserTradeProjection.updated_at.desc())
+        .first()
+    )
+    latest_updated_at = latest_projection_row[0] if latest_projection_row else None
+    latest_is_fresh = bool(latest_updated_at and ((datetime.now(timezone.utc) - latest_updated_at).total_seconds() <= 300))
+
+    if (not latest_is_fresh) and _should_sync_trade_projection(user_id):
+        sync_user_trade_projection(db, user_id=user_id)
     rows = db.query(UserTradeProjection).filter(UserTradeProjection.user_id == user_id).order_by(UserTradeProjection.updated_at.desc()).limit(limit).all()
     return [
         {
@@ -620,7 +651,17 @@ def build_user_trade_pending_orders(db: Session, user_id: str, *, limit: int = 8
 
 
 def build_user_trade_detail(db: Session, user_id: str, trade_id: str) -> dict:
-    sync_user_trade_projection(db, user_id=user_id)
+    latest_projection_row = (
+        db.query(UserTradeProjection.updated_at)
+        .filter(UserTradeProjection.user_id == user_id)
+        .order_by(UserTradeProjection.updated_at.desc())
+        .first()
+    )
+    latest_updated_at = latest_projection_row[0] if latest_projection_row else None
+    latest_is_fresh = bool(latest_updated_at and ((datetime.now(timezone.utc) - latest_updated_at).total_seconds() <= 300))
+
+    if (not latest_is_fresh) and _should_sync_trade_projection(user_id):
+        sync_user_trade_projection(db, user_id=user_id)
     row = db.query(UserTradeProjection).filter(UserTradeProjection.user_id == user_id, UserTradeProjection.trade_id == trade_id).first()
     if row is None:
         raise ValueError("trade_not_found")

@@ -1591,7 +1591,13 @@ def _closed_pnl_proxy(db: Session, user_id: str) -> float:
 
 def _open_position_balance_proxy(db: Session, user_id: str) -> float:
     positions = db.query(PaperPosition).filter(PaperPosition.user_id == user_id, PaperPosition.status == "open").all()
-    return round(sum(float(item.position_size or 0) * float(item.entry_price or 0) for item in positions), 2)
+    total = 0.0
+    for item in positions:
+        quantity = getattr(item, "quantity", None)
+        if quantity is None:
+            quantity = getattr(item, "position_size", 0)
+        total += float(quantity or 0) * float(getattr(item, "entry_price", 0) or 0)
+    return round(total, 2)
 
 
 def user_portfolio_overview(db: Session, user_id: str) -> dict:

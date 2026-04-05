@@ -678,8 +678,8 @@ def user_positions(
 ):
     rows = list_user_positions(db, current_user.id, include_closed=include_closed)
     hedge_suggestion = evaluate_hedge_suggestion(db, user_id=current_user.id, volatility=4.0)
-    readiness = evaluate_execution_readiness(db, user_id=current_user.id)
-    execution_mode = str(readiness.get("mode") or "MOCKED").lower()
+    live_enabled = str(os.getenv("LIVE_TRADING_ENABLED", "false") or "false").strip().lower() in {"1", "true", "yes"}
+    execution_mode = "live" if live_enabled else "mock"
     return [
         PositionStateResponse(
             position_id=row.position_id,
