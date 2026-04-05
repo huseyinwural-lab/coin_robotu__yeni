@@ -194,10 +194,10 @@ class TestVerifyPhase6SecurityScript:
             capture_output=True,
             text=True,
             timeout=180,
-            cwd="/app",
+            cwd=str(REPO_ROOT),
             env={
                 **os.environ,
-                "APP_ROOT": "/app",
+                "APP_ROOT": str(REPO_ROOT),
                 "TEST_ADMIN_EMAIL": ADMIN_EMAIL,
                 "TEST_ADMIN_PASSWORD": ADMIN_PASSWORD,
             },

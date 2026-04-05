@@ -20354,3 +20354,25 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Not
 - `verify_phase8_canary.sh` mevcut ortamda exchange key/secret eksikliği nedeniyle fail veriyor; bu kod bug’ı değil env/secret hazırlık gereksinimidir.
 
+## 2026-04-05 — Phase8 Canary Script Session Header Güçlendirmesi ✅
+
+### Problem
+- `verify_phase8_canary.sh` akışında admin token ile çağrılarda `X-Session-Device` header/cookie taşınmıyordu.
+- Remote/preview senaryoda admin session katı doğrulama nedeniyle `pending approvals` gibi adımlarda kırılma oluşabiliyordu.
+
+### Düzeltme
+- `/app/scripts/verify_phase8_canary.sh`
+  - JWT içinden `device_id` decode eden `extract_device_id_from_token` fonksiyonu eklendi.
+  - `request_json` fonksiyonu token varsa otomatik:
+    - `Authorization: Bearer ...`
+    - `X-Session-Device: <device_id>`
+    - `--cookie device_id=<device_id>`
+    gönderecek şekilde güncellendi.
+
+### Doğrulama
+- Dummy key ile canary dry-run:
+  - `PASS: admin login`
+  - `PASS: user login`
+  - `PASS: exchange settings`
+  - Sonraki fail noktası artık beklenen `invalid_key` (400) — yani user approval/session kırığı kapanmış durumda.
+

@@ -89,6 +89,26 @@ print(((data.get("access_token") or "").strip()))
 PY
 }
 
+extract_device_id_from_token() {
+  local token="$1"
+  python - <<PY
+import base64
+import json
+token='''${token}'''.strip()
+if not token or token.count('.') < 2:
+    print('')
+    raise SystemExit
+payload = token.split('.')[1]
+payload += '=' * (-len(payload) % 4)
+try:
+    data = json.loads(base64.urlsafe_b64decode(payload).decode())
+except Exception:
+    print('')
+    raise SystemExit
+print(str(data.get('device_id') or '').strip())
+PY
+}
+
 request_json() {
   local method="$1"
   local url="$2"
@@ -96,13 +116,20 @@ request_json() {
   local token="${4:-}"
   local out="$5"
   local headers=(-H "Content-Type: application/json")
+  local cookie_args=()
   if [[ -n "${token}" ]]; then
     headers+=(-H "Authorization: Bearer ${token}")
+    local token_device
+    token_device="$(extract_device_id_from_token "${token}")"
+    if [[ -n "${token_device}" ]]; then
+      headers+=(-H "X-Session-Device: ${token_device}")
+      cookie_args=(--cookie "device_id=${token_device}")
+    fi
   fi
   if [[ "${method}" == "GET" ]]; then
-    curl -sS -o "${out}" -w '%{http_code}' "${headers[@]}" "${url}"
+    curl -sS -o "${out}" -w '%{http_code}' "${headers[@]}" "${cookie_args[@]}" "${url}"
   else
-    curl -sS -o "${out}" -w '%{http_code}' -X "${method}" "${headers[@]}" -d "${body}" "${url}"
+    curl -sS -o "${out}" -w '%{http_code}' -X "${method}" "${headers[@]}" "${cookie_args[@]}" -d "${body}" "${url}"
   fi
 }
 
