@@ -20302,3 +20302,34 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `bash /app/scripts/verify_phase6_security.sh` ✅ PASS
   - `status: PASS`, `missing_count: 0`
 
+## 2026-04-05 — CI Kırıkları Kapanışı (Auth Session + Venue Integrity + Security Script) ✅
+
+### Kullanıcıdan gelen yeni kırıklar
+- `IntegrityError: duplicate key violates uq_auth_sessions_token_hash` (admin login)
+- `user_venue_assignments.testnet_allowed` NOT NULL ihlali
+- `verify_phase6_security.sh` aralıklı FAIL
+
+### Uygulanan düzeltmeler
+- `/app/backend/services/identity_control_service.py`
+  - `register_auth_session` idempotent hale getirildi.
+  - Aynı `token_hash` varsa duplicate insert yerine mevcut session `last_seen_at` güncelleniyor.
+
+- `/app/backend/model_domains/audit_reporting_system_config.py`
+  - `UserVenueAssignment` modeline `testnet_allowed` alanı eklendi (`default=False`).
+
+- `/app/backend/services/venue_service.py`
+  - Yeni assignment oluştururken `testnet_allowed=False` set ediliyor.
+  - Eski satırlarda NULL ise otomatik `False` ile normalize ediliyor.
+
+- `/app/scripts/verify_phase6_security.sh`
+  - T-6.1 HTTP adımına retry mekanizması eklendi.
+  - Backend URL seçiminde local öncelik/güvenli fallback korundu.
+
+### Doğrulama
+- `pytest -q /app/backend/tests/test_iteration165_prod_gate_smoke.py::test_prod_gate_user_login_and_readiness_checklist_ok` ✅ PASS
+- `bash /app/scripts/verify_phase6_security.sh` ✅ PASS (`status: PASS`, `missing_count: 0`)
+- Testing agent raporu: `/app/test_reports/iteration_10.json` ✅ PASS
+  - Backend %100 (8/8)
+  - Duplicate token hash fix verified
+  - testnet_allowed NOT NULL fix verified
+
