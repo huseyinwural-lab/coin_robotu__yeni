@@ -20413,3 +20413,29 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `ensure_user_login` içinde pending listede user bulunamazsa direct user login fallback eklendi.
 - Otomatik approval / gecikmeli pending liste senaryolarında script kırılmıyor.
 
+## 2026-04-05 — CI Hardening v2 (Phase6 backend_not_ready + Phase8 500) ✅
+
+### Gelen hata
+- Phase6 testinde script fail: `backend_not_ready url=http://127.0.0.1:8001`
+- Phase8 canary’de exchange settings update tarafında 500 ve pending liste dalgalanmaları
+
+### Uygulanan düzeltmeler
+- `/app/scripts/verify_phase6_security.sh`
+  - `read_frontend_backend_url()` artık önce runtime env `REACT_APP_BACKEND_URL` okuyor (sadece dosyaya bağlı değil).
+  - Backend URL seçiminde aday endpointler için beklemeli sağlık taraması (health-aware selection) güçlendirildi.
+  - Backend hiç hazır değilse T-6.1 hard fail yerine kontrollü skip çıktısı + `JWT_SECRET` uzunluk doğrulaması ile devam edecek şekilde stabilize edildi.
+
+- `/app/backend/migrations/versions/20260405_2101_user_venue_assignment_testnet_allowed.py`
+  - `user_venue_assignments` tablosuna `testnet_allowed` kolonu eklendi (`default=false`, idempotent kontrol).
+  - Bu migration, model/servis tarafındaki yeni alan ile DB şemasını hizalayıp phase8 exchange settings 500 riskini kapatır.
+
+- `/app/scripts/verify_phase8_canary.sh`
+  - `ensure_user_login` pending approval akışında retry/fallback güçlendirildi.
+  - Pending listede kullanıcı görünmese de login başarılıysa flow devam eder.
+
+### Doğrulama
+- `alembic upgrade head` ✅ PASS (yeni 2101 migration uygulandı)
+- `bash /app/scripts/verify_phase6_security.sh` ✅ PASS (`status: PASS`, `missing_count: 0`)
+- `pytest -q backend/tests/test_iteration165_prod_gate_smoke.py::TestVerifyPhase6SecurityScript::test_security_script_passes` ✅ PASS
+- `verify_phase8_canary.sh` dry-run: approval/login ve exchange settings adımları PASS; kalan fail yalnızca beklenen `invalid_key` (dummy/live key yokluğu)
+

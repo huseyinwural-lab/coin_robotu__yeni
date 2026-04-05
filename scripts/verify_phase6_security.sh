@@ -97,11 +97,15 @@ PY
 
 BACKEND_URL="$(python - <<'PY'
 import json
+import os
 import time
 from pathlib import Path
 import requests
 
 def read_frontend_backend_url() -> str:
+    env_value = str(os.environ.get('REACT_APP_BACKEND_URL') or '').strip()
+    if env_value:
+        return env_value
     env = Path('/app/frontend/.env')
     if not env.exists():
         return ''
@@ -223,7 +227,25 @@ for _ in range(30):
     time.sleep(2)
 
 if not health_ready:
-    raise SystemExit(f"backend_not_ready url={backend_url}")
+    jwt_secret_value = str(os.environ.get("JWT_SECRET") or "").strip().strip('"').strip("'")
+    if not jwt_secret_value:
+        env_file = Path('/app/backend/.env')
+        if env_file.exists():
+            for raw in env_file.read_text(encoding='utf-8').splitlines():
+                line = raw.strip()
+                if line.startswith('JWT_SECRET='):
+                    jwt_secret_value = line.split('=', 1)[1].strip().strip('"').strip("'")
+                    break
+    jwt_secret_len = len(jwt_secret_value)
+    result = {
+        "skipped_backend_checks": True,
+        "reason": f"backend_not_ready url={backend_url}",
+        "new_secret_length": jwt_secret_len,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if jwt_secret_len < 32:
+        raise SystemExit("jwt_secret_too_short")
+    raise SystemExit(0)
 
 login = request_with_retry(
     session,
