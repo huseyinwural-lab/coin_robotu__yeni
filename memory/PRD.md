@@ -19800,3 +19800,64 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Frontend test agent: code-level PASS (4/4)
   - delete button görünümü, label, onClick wiring, backend endpoint doğrulandı.
 
+## 2026-04-05 — Bot Profile Yönetimi V2 Refactor (Sadece Bot Alanı) ✅
+
+### Uygulanan kapsam
+- **Exchange & Market Integration**
+  - Exchange dropdown: `binance`, `bybit`
+  - Market Type: `spot`, `futures`
+  - Diagnostics bağımlılığı: seçilen combo için `global_activation_flag` + `can_trade_effective` kontrolü eklendi.
+  - LIVE-READY için Passive/bağlantı yok durumunda create disable + uyarı metni.
+
+- **Wallet & PNL Binding**
+  - Bot formuna cüzdan seçimi zorunlu akış eklendi (LIVE-READY için zorunlu, MOCK için opsiyonel).
+  - Seçilen exchange+market filtreli wallet listesi gösteriliyor.
+  - Wallet canlı kutu: `Kullanılabilir Bakiye`, `PNL`, `Diagnostics Flag`.
+  - Bakiye <= 0 ise LIVE-READY kilitleniyor (MOCK açık kalıyor).
+
+- **Dynamic Symbol Presets**
+  - Preset listeleri eklendi:
+    - `top_50`, `top_100`, `all_symbols`, `custom_list`
+  - `Preset Uygula` ile semboller otomatik dolduruluyor.
+  - Futures seçiliyken futures universe üzerinden filtreli liste çekiliyor.
+  - Custom list, kayıtlı watchlist kaynağından çekiliyor (`/symbol-selector/watchlists`).
+
+- **Centralized Risk Policy**
+  - Risk policy dropdown eklendi.
+  - Seçilen policy özeti (leverage/risk/SL) gösteriliyor.
+  - Bot create/update payload’ına `risk_policy_id` + `risk_policy_snapshot` enjekte ediliyor.
+  - Backend snapshot’a `selected_risk_policy_id/name` yazılıyor.
+
+- **Strategy & Template Logic**
+  - Strategy listesi yalnızca admin-driven canonical stratejilerden besleniyor.
+  - `Create from Template` toggle eklendi; kapalıyken template alanı gizli.
+
+- **Execution Mode Cleanup**
+  - UI mode sadece:
+    - `live_ready`
+    - `mock`
+  - Bybit seçildiğinde LIVE-READY devre dışı (Aşama B kuralı: Bybit için MOCK açık).
+
+### Backend uyarlamaları (Bot alanı)
+- `schemas.py`
+  - `BotProfileCreate/Update`: `risk_policy_id`, `risk_policy_snapshot`
+  - `BotRuntimeStatusResponse`: `selected_risk_policy_id`, `selected_risk_policy_name`
+- `bot_profiles.py`
+  - LIVE-READY için `exchange_connection_required` korunuyor
+  - MOCK modunda connection opsiyonel hale getirildi
+  - risk policy snapshot’tan leverage enjeksiyonu eklendi
+- `bot_runtime_service.py`
+  - yeni mode seti (`live_ready`, `mock`) normalize edildi
+  - selected risk policy alanları response’a eklendi
+
+### Test & doğrulama
+- Lint:
+  - Frontend PASS
+  - Backend PASS
+- Backend curl/local doğrulama:
+  - LIVE-READY + connection yok -> 422
+  - BYBIT + MOCK -> 200
+  - BINANCE + LIVE-READY + connection -> 200
+- Frontend test agent (code-level): **PASS 7/7**
+  - Exchange/Market, wallet+diagnostics, symbol presets, risk policy, template toggle, mode cleanup, bybit kuralı doğrulandı.
+
