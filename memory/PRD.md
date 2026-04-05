@@ -20076,3 +20076,65 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - "no_runtime_crash" doğrulandı
   - Bug fix doğrulaması: **VERIFIED**
 
+## 2026-04-05 — User Menüler Deploy Readiness Audit + Fix (Redeploy Hazırlığı) ✅
+
+### Kullanıcı checklist isteği
+- Eksik env var
+- UI problemi
+- Eksik API key
+- DB deploy bağlantısı
+- Dependency doğruluğu
+- Ağır kütüphane riski
+- Preview vs production fark etkisi
+- Health check
+- Secrets güncelleme yöntemi
+- İşlem tipi: first deploy / redeploy / replace
+
+### Bu tur yapılan teknik düzeltmeler
+- `/app/backend/services/live_mode_service.py`
+  - `PaperPosition.position_size` kaynaklı hata düzeltildi; `quantity` fallback eklendi.
+
+- `/app/backend/services/user_live_dashboard_service.py`
+  - Trade projection sync için TTL tabanlı throttle + fresh veri kontrolü eklendi.
+  - Sonuç: `/api/user/trades` cold-path gecikmesi kapatıldı.
+
+- `/app/backend/services/position_management_service.py`
+  - Position sync optimize edildi (open-only sync + fresh-check + TTL).
+  - Redis fiyat okuması request-pathte opsiyonel hale getirildi (`POSITION_PRICE_FROM_REDIS`, default false).
+
+- `/app/backend/routers/user_execution.py`
+  - `user_positions` endpointinden ağır readiness call çıkarıldı; hızlı mode belirleme eklendi.
+
+- `/app/frontend/src/components/PanelLayout.jsx`
+  - Duplicate key warning fix: nav key artık `testId || to-label`.
+
+- `/app/frontend/src/pages/UserExchangeSettingsPage.jsx`
+  - Duplicate key riskleri için unique key pattern (`id-index`) uygulandı.
+
+- `/etc/supervisor/conf.d/supervisord.conf`
+  - `[program:mongodb]` kaldırıldı, supervisor `reread/update` ile process grubu temizlendi.
+
+- `/app/backend/.env`
+  - `CORS_ORIGINS` canlı domainler ile genişletildi: `https://cb.infyra.de`, `https://cbi.infyra.de`.
+
+### Doğrulama
+- Lint PASS:
+  - Python: `live_mode_service.py`, `position_management_service.py`, `user_live_dashboard_service.py`, `user_execution.py`
+  - JS: `PanelLayout.jsx`, `UserExchangeSettingsPage.jsx`
+
+- Endpoint doğrulama (external preview URL):
+  - `/api/health` 200 (~0.12s)
+  - `/api/ready` 200 (~2.11s)
+  - `/api/user/trades` 200 (~1.59s)
+  - `/api/user/execution/positions` 200 (~2.33s)
+
+- Testing agent retest: `/app/test_reports/iteration_6.json`
+  - Verdict: **PASS**
+  - `/api/user/trades`: **59s → 1.46s**
+  - duplicate key warning: **PASS (yok)**
+  - backend/frontend success: **100% / 100%**
+
+### Operasyon notları
+- DB katmanı PostgreSQL-only çalışıyor (`DB_ENGINE=postgresql` startup log doğrulandı).
+- `MONGO_URL`/`DB_NAME` env anahtarları sistemde korunuyor (platform/protected key uyumu), fakat runtime erişim PostgreSQL üzerinde.
+
