@@ -259,17 +259,31 @@ log "T-6.2 Admin credential temizliği taraması"
 tmp_admin_scan="$(mktemp)"
 deprecated_admin_password_key="DEFAULT_ADMIN_""PASSWORD"
 legacy_admin_password_marker="Admin""12345!"
-rg -n "${deprecated_admin_password_key}|${legacy_admin_password_marker}" "$APP_ROOT" \
-  --glob '!**/.git/**' \
-  --glob '!**/node_modules/**' \
-  --glob '!**/*test*.py' \
-  --glob '!**/backend_test_*.py' \
-  --glob '!**/test_result.md' \
-  --glob '!**/backend/tests/**' \
-  --glob '!**/docs/**' \
-  --glob '!**/memory/**' \
-  --glob '!**/test_reports/**' \
-  --glob '!**/artifacts/**' > "$tmp_admin_scan" || true
+if command -v rg >/dev/null 2>&1; then
+  rg -n "${deprecated_admin_password_key}|${legacy_admin_password_marker}" "$APP_ROOT" \
+    --glob '!**/.git/**' \
+    --glob '!**/node_modules/**' \
+    --glob '!**/*test*.py' \
+    --glob '!**/backend_test_*.py' \
+    --glob '!**/test_result.md' \
+    --glob '!**/backend/tests/**' \
+    --glob '!**/docs/**' \
+    --glob '!**/memory/**' \
+    --glob '!**/test_reports/**' \
+    --glob '!**/artifacts/**' > "$tmp_admin_scan" || true
+else
+  grep -RInE "${deprecated_admin_password_key}|${legacy_admin_password_marker}" "$APP_ROOT" \
+    --exclude-dir=.git \
+    --exclude-dir=node_modules \
+    --exclude-dir=backend/tests \
+    --exclude-dir=docs \
+    --exclude-dir=memory \
+    --exclude-dir=test_reports \
+    --exclude-dir=artifacts \
+    --exclude='*test*.py' \
+    --exclude='backend_test_*.py' \
+    --exclude='test_result.md' > "$tmp_admin_scan" || true
+fi
 mv "$tmp_admin_scan" "${ARTIFACT_DIR}/faz6_admin_credential_scan.log"
 if [[ -s "${ARTIFACT_DIR}/faz6_admin_credential_scan.log" ]]; then
   fail "aktif kod/config içinde admin credential izi bulundu"

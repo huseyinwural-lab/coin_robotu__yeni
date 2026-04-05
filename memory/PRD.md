@@ -20285,3 +20285,20 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `mfa_settings_default_off`: PASS
   - `verify_totp_setup_no_auto_enable`: PASS
 
+## 2026-04-05 — CI Script Uyumluluk Fix (`rg` bağımlılığı) ✅
+
+### Hata
+- CI ortamında `scripts/verify_phase6_security.sh` çalışırken:
+  - `line 262: rg: command not found`
+  - Script FAIL oluyordu.
+
+### Düzeltme
+- `/app/scripts/verify_phase6_security.sh`
+  - Admin credential tarama adımına tool fallback eklendi:
+    - `rg` varsa `rg` kullan.
+    - `rg` yoksa `grep -RInE` ile eşdeğer taramaya düş.
+
+### Doğrulama
+- `bash /app/scripts/verify_phase6_security.sh` ✅ PASS
+  - `status: PASS`, `missing_count: 0`
+
