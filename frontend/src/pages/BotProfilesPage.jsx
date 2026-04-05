@@ -784,7 +784,8 @@ export const BotProfilesPage = () => {
   };
 
   const toggleRunning = async (item) => {
-    const endpoint = item.status === "RUNNING" ? "stop" : "start";
+    const isRunning = String(item?.status || "").toUpperCase() === "RUNNING" || Boolean(item?.is_running);
+    const endpoint = isRunning ? "stop" : "start";
     const expectedState = endpoint === "start" ? "RUNNING" : "STOPPED";
     try {
       await apiClient.post(`/bot-profiles/${item.id}/${endpoint}`);
@@ -1174,7 +1175,11 @@ export const BotProfilesPage = () => {
                 <TableCell data-testid={`bot-table-strategy-${item.id}`}>{item.strategy_id || item.strategy_type}</TableCell>
                 <TableCell data-testid={`bot-table-status-${item.id}`}>{item.status || (item.is_running ? "RUNNING" : "IDLE")}</TableCell>
                 <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "live_ready"}</TableCell>
-                <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbol_source_summary?.summary || (item.symbols || []).join(", ")}</TableCell>
+                <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>
+                  {Array.isArray(item.symbols) && item.symbols.length > 0
+                    ? `${item.symbols.slice(0, 8).join(", ")}${item.symbols.length > 8 ? ` +${item.symbols.length - 8}` : ""}`
+                    : (item.symbol_source_summary?.summary || "-")}
+                </TableCell>
                 {!LEGACY_TOP_FORM && <TableCell data-testid={`bot-table-parity-${item.id}`}>{parity ? `${parity.backtest?.win_rate ?? 0} / ${parity.live?.win_rate ?? 0} / ${parity.deviation_pct ?? 0}%` : "-"}</TableCell>}
                 {!LEGACY_TOP_FORM && <TableCell data-testid={`bot-table-health-${item.id}`}>{item.health || "HEALTHY"}</TableCell>}
                 {!LEGACY_TOP_FORM && <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.last_heartbeat || (item.is_running ? "running" : "stopped")}</TableCell>}
@@ -1187,11 +1192,11 @@ export const BotProfilesPage = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      className={`bg-transparent ${item.status === "RUNNING" ? "border-red-400 text-red-300" : "border-green-400 text-green-300"}`}
+                      className={`bg-transparent ${(String(item?.status || "").toUpperCase() === "RUNNING" || item?.is_running) ? "border-red-400 text-red-300" : "border-green-400 text-green-300"}`}
                       onClick={() => toggleRunning(item)}
                       data-testid={`bot-table-toggle-running-${item.id}`}
                     >
-                      {item.status === "RUNNING" ? "Stop" : "Start"}
+                      {(String(item?.status || "").toUpperCase() === "RUNNING" || item?.is_running) ? "Stop" : "Start"}
                     </Button>
                     <Button
                       size="sm"
