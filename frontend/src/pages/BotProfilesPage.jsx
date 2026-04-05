@@ -492,11 +492,14 @@ export const BotProfilesPage = () => {
   useEffect(() => {
     setForm((prev) => {
       const exists = walletConnectionOptions.some((item) => item.id === prev.exchange_connection_id);
-      if (exists && prev.mode === "live_ready") return prev;
+      const fallbackConnectionId = exists
+        ? prev.exchange_connection_id
+        : String(walletConnectionOptions[0]?.id || "");
+      if (fallbackConnectionId === prev.exchange_connection_id && prev.mode === "live_ready") return prev;
       return {
         ...prev,
         mode: "live_ready",
-        exchange_connection_id: exists ? prev.exchange_connection_id : "",
+        exchange_connection_id: fallbackConnectionId,
       };
     });
   }, [walletConnectionOptions]);

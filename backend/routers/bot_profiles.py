@@ -53,8 +53,8 @@ def create_bot_profile(
         if str(value).strip()
     ]
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
-    if preferred_mode != "live_ready":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="mock_mode_removed_live_ready_required")
+    # Sistem genelinde tek mod: live_ready
+    preferred_mode = "live_ready"
 
 
 
@@ -62,17 +62,18 @@ def create_bot_profile(
         payload_data["leverage"] = max(1, int(risk_policy_snapshot.get("max_leverage") or 1))
 
     selected_connection = None
+    connection_query = db.query(UserExchangeConnection).filter(UserExchangeConnection.user_id == current_user.id)
     if exchange_connection_id:
-        selected_connection = (
-            db.query(UserExchangeConnection)
-            .filter(
-                UserExchangeConnection.id == exchange_connection_id,
-                UserExchangeConnection.user_id == current_user.id,
-            )
-            .first()
-        )
+        selected_connection = connection_query.filter(UserExchangeConnection.id == exchange_connection_id).first()
         if selected_connection is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
+
+    if selected_connection is None:
+        selected_connection = (
+            connection_query
+            .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+            .first()
+        )
 
     if selected_connection is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="exchange_connection_required")
@@ -136,8 +137,8 @@ def update_bot_profile(
         if str(value).strip()
     ]
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
-    if preferred_mode != "live_ready":
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="mock_mode_removed_live_ready_required")
+    # Sistem genelinde tek mod: live_ready
+    preferred_mode = "live_ready"
 
 
 
@@ -145,20 +146,21 @@ def update_bot_profile(
         payload_data["leverage"] = max(1, int(risk_policy_snapshot.get("max_leverage") or 1))
 
     selected_connection = None
+    connection_query = db.query(UserExchangeConnection).filter(UserExchangeConnection.user_id == bot_profile.user_id)
     if not exchange_connection_id:
         exchange_connection_id = str((bot_profile.symbol_resolution_snapshot or {}).get("selected_exchange_connection_id") or "").strip()
 
     if exchange_connection_id:
-        selected_connection = (
-            db.query(UserExchangeConnection)
-            .filter(
-                UserExchangeConnection.id == exchange_connection_id,
-                UserExchangeConnection.user_id == bot_profile.user_id,
-            )
-            .first()
-        )
+        selected_connection = connection_query.filter(UserExchangeConnection.id == exchange_connection_id).first()
         if selected_connection is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
+
+    if selected_connection is None:
+        selected_connection = (
+            connection_query
+            .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+            .first()
+        )
 
     if selected_connection is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="exchange_connection_required")
