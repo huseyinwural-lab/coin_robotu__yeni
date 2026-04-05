@@ -5066,6 +5066,7 @@ class VenueHealthSummaryResponse(BaseModel):
 
 class ExchangeSettingsUpdateRequest(BaseModel):
     exchange: str = "binance"
+    market_type: str = "spot"
     mode: str = "live"
     api_key: str
     api_secret: str

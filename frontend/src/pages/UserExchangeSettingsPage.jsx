@@ -729,14 +729,19 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
     event.preventDefault();
     setIsSaving(true);
     try {
-      const { data } = await apiClient.put("/phase4/exchange-settings", form);
+      const { data } = await apiClient.put("/phase4/exchange-settings", {
+        ...form,
+        exchange: selectedVenue.exchange,
+        mode: selectedVenue.environment,
+        market_type: selectedVenue.market_type,
+      });
       setSettings(data);
       setForm(() => ({
         ...initialForm,
         exchange: selectedVenue.exchange,
         mode: selectedVenue.environment,
       }));
-      toast.success("API key bilgileri şifreli olarak kaydedildi");
+      toast.success("API key bilgileri kaydedildi ve Diagnostics bağlantısına senkronlandı");
       await loadAll();
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Ayarlar kaydedilemedi");
@@ -1713,6 +1718,15 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
             ))}
           </select>
           <p className="form-helper-text" data-testid="user-exchange-settings-exchange-helper">Ana bağlantı için kullanılacak borsa.</p>
+        </div>
+        <div className="form-group" data-testid="user-exchange-settings-market-type-group">
+          <label className="form-label" htmlFor="user-exchange-settings-market-type-select" data-testid="user-exchange-settings-market-type-label">Market Type</label>
+          <select id="user-exchange-settings-market-type-select" value={selectedVenue.market_type} onChange={(event) => onMarketTypeChange(event.target.value)} className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-exchange-settings-market-type-select" aria-label="Market Type">
+            {marketTypeOptions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+          <p className="form-helper-text" data-testid="user-exchange-settings-market-type-helper">Kaydettiğiniz key bu market paneline (Diagnostics) otomatik akar.</p>
         </div>
         <div className="form-group" data-testid="user-exchange-settings-environment-group">
           <label className="form-label" htmlFor="user-exchange-settings-environment-select" data-testid="user-exchange-settings-environment-label">Environment</label>

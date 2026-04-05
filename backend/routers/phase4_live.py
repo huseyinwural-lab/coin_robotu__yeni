@@ -6,10 +6,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from core.users.user_exchange_connector import credential_fingerprint, mask_secret
+from core.users.user_exchange_connector import credential_fingerprint, encrypt_exchange_secret, mask_secret
 from db import get_db, redis_client
 from deps import get_current_user, require_admin, require_super_admin
-from models import AdminControl, User
+from models import AdminControl, User, UserExchangeConnection
 from schemas import (
     ExchangeSettingsResponse,
     ExchangeSettingsUpdateRequest,
@@ -74,6 +74,7 @@ from services.live_mode_service import (
     resolve_runtime_credentials,
     run_controlled_test_order,
     save_exchange_settings,
+    validate_exchange_credentials_for_user,
     update_alert_policy,
     trigger_close_all_positions,
     trigger_stop_all_bots,
@@ -113,6 +114,83 @@ from services.identity_control_service import get_or_create_identity_profile
 
 router = APIRouter(prefix="/phase4", tags=["phase4_live"])
 logger = logging.getLogger(__name__)
+
+
+def _normalize_market_type(value: str | None) -> str:
+    market = str(value or "spot").strip().lower()
+    return "futures" if market == "futures" else "spot"
+
+
+def _sync_settings_credentials_to_connection(
+    *,
+    db: Session,
+    user_id: str,
+    exchange: str,
+    market_type: str,
+    environment: str,
+    api_key: str,
+    api_secret: str,
+) -> UserExchangeConnection:
+    normalized_exchange = str(exchange or "binance").strip().lower()
+    normalized_market_type = _normalize_market_type(market_type)
+    normalized_environment = str(environment or "live").strip().lower()
+
+    existing = (
+        db.query(UserExchangeConnection)
+        .filter(
+            UserExchangeConnection.user_id == user_id,
+            UserExchangeConnection.exchange == normalized_exchange,
+            UserExchangeConnection.market_type == normalized_market_type,
+            UserExchangeConnection.environment == normalized_environment,
+        )
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+
+    if existing is not None:
+        existing.api_key_encrypted = encrypt_exchange_secret(str(api_key or "").strip())
+        existing.api_secret_encrypted = encrypt_exchange_secret(str(api_secret or "").strip())
+        existing.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    base_label = f"SETTINGS {normalized_exchange.upper()} {normalized_market_type.upper()} {normalized_environment.upper()}"
+    next_label = base_label
+    suffix = 2
+    while (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id, UserExchangeConnection.account_label == next_label)
+        .first()
+        is not None
+    ):
+        next_label = f"{base_label} #{suffix}"
+        suffix += 1
+
+    has_any = db.query(UserExchangeConnection).filter(UserExchangeConnection.user_id == user_id).count() > 0
+    row = UserExchangeConnection(
+        user_id=user_id,
+        account_label=next_label,
+        exchange=normalized_exchange,
+        market_type=normalized_market_type,
+        environment=normalized_environment,
+        is_default=not has_any,
+        readiness_snapshot={
+            "exchange": normalized_exchange,
+            "market_type": normalized_market_type,
+            "environment": normalized_environment,
+            "source": "phase4_exchange_settings_sync",
+        },
+        permission_snapshot=[],
+        api_key_encrypted=encrypt_exchange_secret(str(api_key or "").strip()),
+        api_secret_encrypted=encrypt_exchange_secret(str(api_secret or "").strip()),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
 MODE_TRANSITION_PHRASES = {
     "LIVE": "SWITCH TO LIVE",
     "SIM": "SWITCH TO SIM",
@@ -344,6 +422,8 @@ def update_exchange_settings(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    normalized_market_type = _normalize_market_type(payload.market_type)
+
     settings_row = save_exchange_settings(
         db,
         user_id=current_user.id,
@@ -352,6 +432,30 @@ def update_exchange_settings(
         api_key=payload.api_key,
         api_secret=payload.api_secret,
     )
+
+    synced_connection = _sync_settings_credentials_to_connection(
+        db=db,
+        user_id=current_user.id,
+        exchange=payload.exchange,
+        market_type=normalized_market_type,
+        environment=payload.mode,
+        api_key=payload.api_key,
+        api_secret=payload.api_secret,
+    )
+
+    validation_status_code = None
+    try:
+        _, validation_status_code = validate_exchange_credentials_for_user(
+            db,
+            current_user.id,
+            exchange=payload.exchange,
+            market_type=normalized_market_type,
+            environment=payload.mode,
+            connection_id=synced_connection.id,
+        )
+    except Exception:
+        validation_status_code = None
+
     create_audit_log(
         db,
         action="phase4_exchange_settings_updated",
@@ -361,9 +465,12 @@ def update_exchange_settings(
         actor_role=current_user.role.value,
         details={
             "exchange": settings_row.exchange,
+            "market_type": normalized_market_type,
             "mode": settings_row.mode,
             "masked_api_key": mask_secret(payload.api_key),
             "credential_fingerprint": credential_fingerprint(payload.api_key, payload.api_secret),
+            "synced_connection_id": synced_connection.id,
+            "sync_validation_status_code": validation_status_code,
         },
     )
     return ExchangeSettingsResponse(**exchange_settings_view(settings_row))
