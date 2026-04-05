@@ -20515,3 +20515,18 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - High-risk + kısa override reason: ✅ beklenen şekilde bloklanıyor
   - High-risk + yeterli override reason: ✅ geçiyor
 
+## 2026-04-05 — User MFA İlk Başlangıç Pasif
+
+### Talep
+- Kullanıcı tarafında MFA, ilk başlangıç/login akışında pasif olmalı.
+
+### Uygulanan Değişiklik
+- Dosya: `/app/backend/services/mfa_service.py`
+- Fonksiyon: `start_mfa_challenge_if_required`
+- Değişiklik: `force_challenge=True` olsa bile, **privileged olmayan** kullanıcıda MFA henüz aktif/deploy edilmemişse (`pref.is_enabled=False` ve `totp_ready=False`) challenge üretilmiyor (`None` dönüyor).
+
+### Doğrulama
+- `POST /api/auth/login/user` ile `review.user@platform.local` giriş testi:
+  - `mfa_required: false` ✅
+  - Login token dönüşü başarılı ✅
+

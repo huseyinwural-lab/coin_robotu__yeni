@@ -491,6 +491,9 @@ def start_mfa_challenge_if_required(
     totp_ready = _totp_ready(pref)
 
     if force_challenge:
+        if not role_is_privileged and not pref.is_enabled and not totp_ready:
+            return None
+
         if role_is_privileged and not totp_ready:
             return {
                 "mfa_required": True,
