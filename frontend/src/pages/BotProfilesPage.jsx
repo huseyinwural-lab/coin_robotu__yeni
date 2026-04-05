@@ -642,9 +642,6 @@ export const BotProfilesPage = () => {
     if (!String(form.strategy_type || "").trim()) {
       nextErrors.strategy_type = "Canonical strateji seçimi zorunlu.";
     }
-    if (!String(form.risk_policy_id || "").trim()) {
-      nextErrors.risk_policy_id = "Risk policy seçimi zorunlu.";
-    }
     if (String(form.mode || "mock") === "live_ready" && liveReadyBlockedReason) {
       nextErrors.mode = liveReadyBlockedReason;
     }
@@ -684,7 +681,7 @@ export const BotProfilesPage = () => {
         leverage: Number(selectedRiskPolicy?.max_leverage || 1),
         is_enabled: Boolean(form.is_enabled),
         risk_adaptive_confirmed: false,
-        risk_policy_id: form.risk_policy_id,
+        risk_policy_id: form.risk_policy_id || null,
         risk_policy_snapshot: selectedRiskPolicy
           ? {
             id: selectedRiskPolicy.id,
@@ -983,14 +980,13 @@ export const BotProfilesPage = () => {
         </div>
 
         <div className="form-group" data-testid="bot-form-group-risk-policy">
-          <label className="form-label" htmlFor="bot-form-risk-policy-select" data-testid="bot-form-risk-policy-label">Risk Policy</label>
+          <label className="form-label" htmlFor="bot-form-risk-policy-select" data-testid="bot-form-risk-policy-label">Risk Policy (Opsiyonel)</label>
           <select
             id="bot-form-risk-policy-select"
             value={form.risk_policy_id || ""}
             onChange={(event) => setForm((prev) => ({ ...prev, risk_policy_id: event.target.value }))}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             data-testid="bot-form-risk-policy-select"
-            required
           >
             <option value="">Risk policy seçin</option>
             {riskPolicyOptions.map((item) => (
