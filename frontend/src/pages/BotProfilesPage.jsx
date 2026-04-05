@@ -17,8 +17,8 @@ const initialForm = {
   symbols: "",
   strategy_type: "",
   mode: "live_ready",
-  symbol_source_type: "manual",
-  scanner_id: "",
+  symbol_source_type: "scanner",
+  scanner_id: "default",
   symbol_preset: "top_50",
   custom_watchlist_id: "",
   use_template: false,
@@ -50,6 +50,8 @@ const SYMBOL_PRESET_OPTIONS = [
   { value: "all_symbols", label: "All Symbols" },
   { value: "custom_list", label: "Custom Selection" },
 ];
+
+const LEGACY_TOP_FORM = true;
 
 const toNum = (value) => {
   const num = Number(value);
@@ -620,7 +622,11 @@ export const BotProfilesPage = () => {
       const watchSymbols = (selectedWatchlist.symbols || []).map((item) => String(item || "").toUpperCase()).filter(Boolean);
       setSelectedSymbols(watchSymbols);
       setSymbolMode("manual_selection");
-      setForm((prev) => ({ ...prev, symbol_source_type: "manual" }));
+      setForm((prev) => ({
+        ...prev,
+        symbol_source_type: LEGACY_TOP_FORM ? "scanner" : "manual",
+        scanner_id: LEGACY_TOP_FORM ? "default" : prev.scanner_id,
+      }));
       return;
     }
 
@@ -643,7 +649,11 @@ export const BotProfilesPage = () => {
 
       setSelectedSymbols(symbols);
       setSymbolMode(preset === "all_symbols" ? "all_market_symbols" : "manual_selection");
-      setForm((prev) => ({ ...prev, symbol_source_type: "manual" }));
+      setForm((prev) => ({
+        ...prev,
+        symbol_source_type: LEGACY_TOP_FORM ? "scanner" : "manual",
+        scanner_id: LEGACY_TOP_FORM ? "default" : prev.scanner_id,
+      }));
       toast.success(`${symbols.length} sembol yüklendi`);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Preset sembol listesi yüklenemedi");
@@ -669,7 +679,7 @@ export const BotProfilesPage = () => {
     if (parsedSymbols.length === 0) {
       nextErrors.symbols = "En az bir sembol girin.";
     }
-    if (String(form.symbol_source_type || "manual") === "scanner" && !String(form.scanner_id || "").trim()) {
+    if ((LEGACY_TOP_FORM || String(form.symbol_source_type || "manual") === "scanner") && !String(form.scanner_id || "").trim()) {
       nextErrors.scanner_id = "Scanner source için scanner_id zorunlu.";
     }
     if (String(form.mode || "live_ready") === "live_ready" && !String(form.exchange_connection_id || "").trim()) {
@@ -705,8 +715,8 @@ export const BotProfilesPage = () => {
         exchange_connection_id: form.exchange_connection_id || null,
         exchange: selectedConnection?.exchange || form.exchange,
         market_type: selectedConnection?.market_type || form.market_type,
-        symbol_source_type: form.symbol_source_type || 'manual',
-        scanner_id: form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null,
+        symbol_source_type: LEGACY_TOP_FORM ? 'scanner' : (form.symbol_source_type || 'manual'),
+        scanner_id: LEGACY_TOP_FORM ? (form.scanner_id || 'default') : (form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null),
         symbols: parsedSymbols,
         strategy_type: form.strategy_type,
         strategy_template_id: strategyTemplateId,
@@ -757,8 +767,8 @@ export const BotProfilesPage = () => {
       symbols: (item.symbols || []).join(","),
       exchange_connection_id: item.selected_exchange_connection_id || "",
       mode: "live_ready",
-      symbol_source_type: item.symbol_source_type || item.symbol_source || "manual",
-      scanner_id: item.scanner_id || item.symbol_source_summary?.scanner_id || "",
+      symbol_source_type: LEGACY_TOP_FORM ? "scanner" : (item.symbol_source_type || item.symbol_source || "manual"),
+      scanner_id: item.scanner_id || item.symbol_source_summary?.scanner_id || "default",
       template_id: item.strategy_template_id || item.template_id || "",
       strategy_template_ids: item.strategy_template_ids || (item.strategy_template_id ? [item.strategy_template_id] : []),
       use_template: Boolean(item.strategy_template_id),
@@ -825,7 +835,7 @@ export const BotProfilesPage = () => {
     <section className="space-y-4" data-testid="bot-profiles-page">
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="bot-profiles-header">
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="bot-profiles-title">Bot Profile Yönetimi</h2>
-        <p className="mt-2 text-sm text-slate-400" data-testid="bot-profiles-description">Eski bot ekranı aktif. Strateji seçimi admin canonical 12 listeyle çalışır.</p>
+        <p className="mt-2 text-sm text-slate-400" data-testid="bot-profiles-description">Eski bot ekranı aktif. Üst form legacy moda sabitlendi.</p>
       </header>
 
       <form onSubmit={handleSubmit} className="grid gap-3 border border-slate-800 bg-slate-900 p-4 md:grid-cols-2" data-testid="bot-profile-form">
@@ -844,7 +854,7 @@ export const BotProfilesPage = () => {
           {formErrors.name && <p className="form-error-text" id="bot-form-name-error" data-testid="bot-form-name-error">{formErrors.name}</p>}
         </div>
 
-        <div className="form-group" data-testid="bot-form-group-exchange">
+        {!LEGACY_TOP_FORM && <div className="form-group" data-testid="bot-form-group-exchange">
           <label className="form-label" htmlFor="bot-form-exchange-select" data-testid="bot-form-exchange-label">Exchange</label>
           <select
             id="bot-form-exchange-select"
@@ -869,7 +879,7 @@ export const BotProfilesPage = () => {
             ))}
           </select>
           <p className="form-helper-text" id="bot-form-exchange-helper" data-testid="bot-form-exchange-helper">Exchange + market seçimi Diagnostics global flag ile doğrulanır.</p>
-        </div>
+        </div>}
 
         <div className="form-group" data-testid="bot-form-group-market-type">
           <label className="form-label" htmlFor="bot-form-market-type-select" data-testid="bot-form-market-type-label">Market Type</label>
@@ -896,7 +906,7 @@ export const BotProfilesPage = () => {
           <p className="form-helper-text" id="bot-form-market-type-helper" data-testid="bot-form-market-type-helper">Spot/Futures seçimi cüzdanı ve preset listeleri otomatik filtreler.</p>
         </div>
 
-        <div className="form-group" data-testid="bot-form-group-wallet-connection">
+        {!LEGACY_TOP_FORM && <div className="form-group" data-testid="bot-form-group-wallet-connection">
           <label className="form-label" htmlFor="bot-form-wallet-connection-select" data-testid="bot-form-wallet-connection-label">Kullanılacak Cüzdan</label>
           <select
             id="bot-form-wallet-connection-select"
@@ -932,7 +942,18 @@ export const BotProfilesPage = () => {
               <p className="mt-1 text-amber-300" data-testid="bot-form-wallet-read-balance-warning">{readBalancePermissionWarning}</p>
             )}
           </div>
-        </div>
+        </div>}
+
+        {LEGACY_TOP_FORM && (
+          <div className="form-group" data-testid="bot-form-group-legacy-binding-summary">
+            <label className="form-label" data-testid="bot-form-legacy-binding-label">Legacy Binding</label>
+            <div className="rounded border border-slate-700/70 bg-slate-950/60 p-2 text-xs text-slate-300" data-testid="bot-form-legacy-binding-box">
+              <p data-testid="bot-form-legacy-binding-source">Symbol Source: <strong>scanner</strong> (default)</p>
+              <p data-testid="bot-form-legacy-binding-scanner">Scanner ID: <strong>{form.scanner_id || "default"}</strong></p>
+              <p data-testid="bot-form-legacy-binding-wallet">Cüzdan: <strong>{selectedWalletConnection?.label || "otomatik"}</strong></p>
+            </div>
+          </div>
+        )}
 
         <div className="form-group" data-testid="bot-form-group-symbols">
           <label className="form-label" htmlFor="bot-form-symbols-input" data-testid="bot-form-symbols-label">Symbols</label>
@@ -988,7 +1009,7 @@ export const BotProfilesPage = () => {
           {formErrors.symbols && <p className="form-error-text" id="bot-form-symbols-error" data-testid="bot-form-symbols-error">{formErrors.symbols}</p>}
         </div>
 
-        <div className="form-group" data-testid="bot-form-group-symbol-source">
+        {!LEGACY_TOP_FORM && <div className="form-group" data-testid="bot-form-group-symbol-source">
           <label className="form-label" htmlFor="bot-form-symbol-source-select" data-testid="bot-form-symbol-source-label">Symbol Source</label>
           <select id="bot-form-symbol-source-select" value={form.symbol_source_type || "manual"} onChange={(event) => setForm((prev) => ({ ...prev, symbol_source_type: event.target.value }))} className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="bot-form-symbol-source-select">
             <option value="manual">manual</option>
@@ -996,7 +1017,7 @@ export const BotProfilesPage = () => {
           </select>
           {String(form.symbol_source_type || "manual") === "scanner" && <Input className="mt-2" value={form.scanner_id || ""} onChange={(event) => setForm((prev) => ({ ...prev, scanner_id: event.target.value }))} placeholder="scanner_id" data-testid="bot-form-scanner-id-input" />}
           {formErrors.scanner_id && <p className="form-error-text" data-testid="bot-form-scanner-id-error">{formErrors.scanner_id}</p>}
-        </div>
+        </div>}
 
         <div className="form-group" data-testid="bot-form-group-strategy">
           <label className="form-label" htmlFor="bot-form-strategy-select" data-testid="bot-form-strategy-label">Strategy</label>
@@ -1028,7 +1049,7 @@ export const BotProfilesPage = () => {
           {formErrors.strategy_type && <p className="form-error-text" data-testid="bot-form-strategy-error">{formErrors.strategy_type}</p>}
         </div>
 
-        <div className="form-group" data-testid="bot-form-group-risk-policy">
+        {!LEGACY_TOP_FORM && <div className="form-group" data-testid="bot-form-group-risk-policy">
           <label className="form-label" htmlFor="bot-form-risk-policy-select" data-testid="bot-form-risk-policy-label">Risk Policy (Opsiyonel)</label>
           <select
             id="bot-form-risk-policy-select"
@@ -1049,9 +1070,9 @@ export const BotProfilesPage = () => {
             </p>
           )}
           {formErrors.risk_policy_id && <p className="form-error-text" data-testid="bot-form-risk-policy-error">{formErrors.risk_policy_id}</p>}
-        </div>
+        </div>}
 
-        <div className="form-group" data-testid="bot-form-group-template">
+        {!LEGACY_TOP_FORM && <div className="form-group" data-testid="bot-form-group-template">
           <div className="flex items-center gap-2">
             <input
               id="bot-form-template-toggle"
@@ -1083,9 +1104,9 @@ export const BotProfilesPage = () => {
               <p className="form-helper-text" data-testid="bot-form-template-helper">Toggle açıksa template seçimi zorunlu olur.</p>
             </>
           )}
-        </div>
+        </div>}
 
-        <div className="form-group" data-testid="bot-form-group-mode">
+        {!LEGACY_TOP_FORM && <div className="form-group" data-testid="bot-form-group-mode">
           <label className="form-label" htmlFor="bot-form-mode-select" data-testid="bot-form-mode-label">Mode</label>
           <select id="bot-form-mode-select" value={form.mode} onChange={(event) => setForm((prev) => ({ ...prev, mode: event.target.value }))} className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="bot-form-mode-select" disabled>
             {BOT_MODE_OPTIONS.map((item) => (
@@ -1096,7 +1117,7 @@ export const BotProfilesPage = () => {
           </select>
           <p className="form-helper-text" data-testid="bot-form-mode-helper">Sistem genelinde sadece LIVE-READY mod aktiftir.</p>
           {formErrors.mode && <p className="form-error-text" data-testid="bot-form-mode-error">{formErrors.mode}</p>}
-        </div>
+        </div>}
 
         <div className="flex gap-2 md:col-span-2">
           <Button className="bg-orange-500 text-black hover:bg-orange-600" type="submit" data-testid="bot-form-submit-button" disabled={Boolean(liveReadyBlockedReason)} title={liveReadyBlockedReason || ""}>
