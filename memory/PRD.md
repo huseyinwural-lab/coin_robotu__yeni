@@ -20255,3 +20255,33 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `ruff check /app/backend/tests/test_deploy_readiness_retest_v2.py` ✅ PASS
 - `bash /app/scripts/verify_phase6_security.sh` ✅ PASS
 
+## 2026-04-05 — MFA Basit Aç/Kapat Revizyonu (Sadece MFA Scope) ✅
+
+### Kullanıcı talebi
+- MFA akışı basitleştirilsin: kullanıcı isterse açsın isterse kapatsın.
+- İlk kurulumda MFA kesinlikle kapalı gelsin.
+- Scope dışına çıkılmasın (yalnız MFA alanı).
+
+### Uygulanan değişiklikler
+- `/app/backend/services/mfa_service.py`
+  - `verify_totp_setup` sonrası otomatik enable kaldırıldı.
+  - Yeni davranış: TOTP doğrulansa bile `pref.is_enabled = False` (kullanıcı açıkça açana kadar kapalı).
+
+- `/app/frontend/src/pages/MfaSettingsPage.jsx`
+  - Yeni "Basit Aç / Kapat" paneli eklendi.
+  - Yeni buton: `data-testid="mfa-simple-toggle-button"`
+  - Akış:
+    - Açıkken: tek tıkla `PUT /auth/mfa/settings` ile kapatır.
+    - Kapalıyken: TOTP kurulu+doğrulanmışsa açar; değilse setup/verify yönlendirici mesaj verir.
+  - Hint metni eklendi: "İlk kurulumda MFA kapalı gelir..."
+
+### Doğrulama
+- Lint PASS:
+  - Python: `mfa_service.py`
+  - JS: `MfaSettingsPage.jsx`
+- Testing agent PASS: `/app/test_reports/iteration_9.json`
+  - Backend %100 (6/6)
+  - Frontend %100 (3/3)
+  - `mfa_settings_default_off`: PASS
+  - `verify_totp_setup_no_auto_enable`: PASS
+
