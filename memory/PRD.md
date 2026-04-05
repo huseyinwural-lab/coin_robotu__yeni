@@ -19928,3 +19928,47 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Not
 - Preview UI otomasyonunda kullanıcı auth yönlendirme/persistence sorunu zaman zaman bloklayıcı olabiliyor; scanner gereksinimleri code-level doğrulanmıştır.
 
+## 2026-04-05 — Live Cüzdan Tutarlılık Hotfix (Diagnostics / Portfolio / Bot Profiles) ✅
+
+### Kullanıcıdan gelen canlı hata
+- Diagnostics panelinde Spot/Futures cüzdan değerleri görünmesine rağmen:
+  - Portfolio üst kartları (spot/futures) 0 kalıyordu.
+  - Bot Profile cüzdan seçiminde yanlış/eksik bağlantılar görünüyor veya yanlış Diagnostics flag yansıyordu.
+  - Exchange Settings tarafında bazı profiller görünmüyor hissi oluşuyordu.
+
+### Uygulanan düzeltmeler
+- Backend: `/app/backend/core/users/user_portfolio_engine.py`
+  - `_pick_wallet_connection` seçim mantığı güncellendi.
+  - Wallet selection artık tek bir kaynağa kör bağlı değil; market/environment eşleşen bağlantılarda skorlayarak seçim yapıyor.
+  - Kritik düzeltme: skorlamada wallet varlığı (`wallet_score`) readiness'ten önce değerlendiriliyor.
+  - Sonuç: canlıda balance taşıyan bağlantı varsa `spot_wallet_balance` / `futures_wallet_balance` artık 0'a düşmüyor.
+
+- Backend: `/app/backend/routers/phase4_live.py`
+  - `_sync_settings_credentials_to_connection` existing connection güncellemesinde `readiness_snapshot.source = phase4_exchange_settings_sync` ve sync metadata korunumu eklendi.
+
+- Frontend: `/app/frontend/src/pages/BotProfilesPage.jsx`
+  - Cüzdan kaynağı filtresi yalnız `settings`-etiketine kilitli olmaktan çıkarıldı.
+  - Exchange+market+live scoped bağlantılar, Diagnostics ile uyumlu skorlamayla sıralanıyor (online/can_trade, balance, settings-sync, default, updated).
+  - `comboActivationState` hesaplaması güçlendirildi: `(online && can_trade_effective) OR global_activation_active`.
+  - Wallet option label’ı account label ile zenginleştirildi.
+
+- Frontend: `/app/frontend/src/pages/UserExchangeSettingsPage.jsx`
+  - Auto-default filtre sonrası liste boş kalıyorsa fallback olarak tüm profiller gösteriliyor.
+
+### Test/Doğrulama
+- Lint:
+  - Python PASS (`user_portfolio_engine.py`, `phase4_live.py`)
+  - JS PASS (`BotProfilesPage.jsx`, `UserExchangeSettingsPage.jsx`)
+- Lokal API doğrulama (127.0.0.1 backend):
+  - `GET /api/user/portfolio` artık spot/futures bakiyelerini sıfır yerine bağlantı snapshot'ından taşıyor.
+  - Örnek çıktı: `spot_wallet_balance=82.63766118`, `futures_wallet_balance=70.0`, `total_wallet_balance=152.63766118`.
+- Test ajan raporu: `/app/test_reports/iteration_1.json`
+  - Kritik RCA doğrulandı; ana scoring kök nedeni kapatıldı.
+- Pytest doğrulama:
+  - `test_wallet_portfolio_consistency.py` içinden ilgili senaryolar PASS (2 test).
+
+### Operasyonel RCA (kullanıcıya net)
+- Hata adımı: Bot oluşturma akışında **Bot Kur** ekranına geçildiğinde cüzdan kaynağı seçimi.
+- Tetikleyen nokta: **Kullanılacak Cüzdan** dropdown açılışı ve ardından **Oluştur** akışında Live-Ready blok kontrolü.
+- İkincil etki: Portfolio ekranı cüzdan kartları, seçimde yanlış bağlantı tercih edildiği için 0 gösteriyordu.
+

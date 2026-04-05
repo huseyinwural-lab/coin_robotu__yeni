@@ -49,7 +49,7 @@ def _pick_wallet_connection(rows: list[UserExchangeConnection], market_type: str
         settings_score = 1 if _is_settings_synced_connection(row) else 0
         default_score = 1 if row.is_default else 0
         updated_score = row.updated_at or datetime.min.replace(tzinfo=timezone.utc)
-        return readiness_score, wallet_score, settings_score, default_score, updated_score
+        return wallet_score, readiness_score, settings_score, default_score, updated_score
 
     filtered.sort(key=_score, reverse=True)
     return filtered[0]

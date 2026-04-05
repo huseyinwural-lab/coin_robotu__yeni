@@ -118,10 +118,11 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
   const [symbolSelectorSelection, setSymbolSelectorSelection] = useState([]);
   const [selectedSymbol, setSelectedSymbol] = useState("");
 
-  const visibleConnectionProfiles = useMemo(
-    () => (connectionProfiles || []).filter((item) => !isAutoDefaultProfile(item)),
-    [connectionProfiles],
-  );
+  const visibleConnectionProfiles = useMemo(() => {
+    const allProfiles = connectionProfiles || [];
+    const nonAutoDefault = allProfiles.filter((item) => !isAutoDefaultProfile(item));
+    return nonAutoDefault.length > 0 ? nonAutoDefault : allProfiles;
+  }, [connectionProfiles]);
 
   const exchangeOptions = useMemo(() => {
     const list = [...new Set(venueOptions.map((item) => item.exchange))];
