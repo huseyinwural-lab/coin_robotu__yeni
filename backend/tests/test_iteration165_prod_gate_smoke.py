@@ -198,6 +198,7 @@ class TestVerifyPhase6SecurityScript:
             env={
                 **os.environ,
                 "APP_ROOT": str(REPO_ROOT),
+                "REACT_APP_BACKEND_URL": BASE_URL,
                 "TEST_ADMIN_EMAIL": ADMIN_EMAIL,
                 "TEST_ADMIN_PASSWORD": ADMIN_PASSWORD,
             },

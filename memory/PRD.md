@@ -20480,6 +20480,12 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `pytest -q backend/tests/test_iteration165_prod_gate_smoke.py::TestVerifyPhase6SecurityScript::test_security_script_passes` ✅ PASS
 - `bash scripts/verify_phase6_security.sh` ✅ PASS (`missing_count: 0`)
 
+### Ek CI sertleştirme
+- `backend/tests/test_iteration165_prod_gate_smoke.py`
+  - `test_security_script_passes` içinde subprocess env'e `REACT_APP_BACKEND_URL=BASE_URL` enjekte edildi.
+  - Böylece CI'da local `127.0.0.1:8001` hazır olmasa bile script remote backend URL ile çalışabilir.
+  - `backend_not_ready` kaynaklı flaky fail riski azaltıldı.
+
 ## 2026-04-05 — Phase8 Son Durum (Canary)
 
 ### Durum
