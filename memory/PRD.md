@@ -19893,3 +19893,38 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Not
 - Yerel auth doğrulama sırasında ortam kaynaklı PostgreSQL SSL kesinti logları görüldü (`SSL connection has been closed unexpectedly`), bu Bot Profile kod değişikliğinden bağımsız altyapı bağlantı sorunu olarak kaydedildi.
 
+## 2026-04-05 — Scanner Şeffaflık Güncellemesi (Minimal Set + Aktif Tarama Kriterleri) ✅
+
+### Amaç
+- Kullanıcı "Scanner şu an neye göre tarıyor?" sorusunu ekrandan net görebilsin.
+- Boş Minimal Set kutuları yerine query ve sonuçtan gelen canlı değerler görünsün.
+
+### Uygulanan değişiklikler
+- `UserIndicatorScreenerPage.jsx`
+  - Query parser eklendi: `parseActiveCriteriaFromQuery(query_expression)`
+    - `rsi14 < x`, `rsi14 > x`, `volume > x` otomatik parse edilir.
+  - Query değiştiğinde Minimal Set otomatik senkron:
+    - `RSI Küçük (<)` inputu query eşiğine çekilir
+    - `RSI Büyük (>)` inputu query eşiğine çekilir
+    - `Volume Min (>)` inputu query’de varsa otomatik güncellenir
+  - Minimal Set alanına canlı değer satırları eklendi:
+    - RSI canlı/threshold göstergeleri
+    - Volume canlı göstergesi
+  - Header’a yeni kutu eklendi:
+    - `Aktif Tarama Kriterleri`
+    - İçerik: `RSI-Min`, `Volume-Min`, `TF`, `Son match (symbol + RSI14 + Vol)`
+  - Var olan kutular korunmuştur:
+    - `Query Summary`
+    - `Applied Filter Snapshot`
+
+### Test
+- Frontend lint: PASS
+- Frontend test agent (code-level): PASS (4/4)
+  - Minimal Set senkronu
+  - Canlı değer satırları
+  - Aktif Tarama Kriterleri kutusu
+  - Query Summary/Applied Snapshot korunumu
+
+### Not
+- Preview UI otomasyonunda kullanıcı auth yönlendirme/persistence sorunu zaman zaman bloklayıcı olabiliyor; scanner gereksinimleri code-level doğrulanmıştır.
+
