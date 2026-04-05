@@ -20018,3 +20018,36 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Bilinen durum
 - Preview ortamında auth/session dalgalanması (infra kaynaklı) devam edebilir; signals fix bu sorundan bağımsızdır.
 
+## 2026-04-05 — BotProfiles & ExchangeSettings Dayanıklılık Revizyonu (Canlı Eşitleme İçin) ✅
+
+### Kullanıcı kaynaklı canlı sorun
+- Bot Kur ekranında tek endpoint hatasında tüm ekranın "Bot listesi yüklenemedi" ile düşmesi.
+- Exchange Settings/Diagnostics online görünmesine rağmen bakiye 0 olduğunda kullanıcıya yönlendirici uyarı eksikliği.
+- Preview ve canlı arasında kısmi endpoint kırılmalarında davranış farkı.
+
+### Uygulanan düzeltmeler
+- `/app/frontend/src/pages/BotProfilesPage.jsx`
+  - `fetchItems` yapısı `Promise.all` → `Promise.allSettled` geçirildi.
+  - Servis bazlı ayrık yükleme: bir servis patlasa bile diğerleri render olmaya devam eder.
+  - Toast mesajı artık spesifik: hangi servis fail oldu + hata detayı.
+  - Wallet kutusuna `online + 0 bakiye` durumunda akıllı uyarı eklendi:
+    - "API yetkilerinizi (Read Balance) kontrol edin ve Diagnostics > Revalidate çalıştırın."
+
+- `/app/frontend/src/pages/UserExchangeSettingsPage.jsx`
+  - `loadAll` yapısı `Promise.all` → `Promise.allSettled` geçirildi.
+  - Partial failure toleransı: başarı dönen servisler ekranda kalır.
+  - Servis adı bazlı spesifik hata toastları eklendi (örn. Portfolio, Permission, Readiness).
+  - Overview + Account Snapshot içine `online + 0 bakiye` için Read Balance uyarısı eklendi.
+
+### Test ve doğrulama
+- JS lint PASS (`BotProfilesPage.jsx`, `UserExchangeSettingsPage.jsx`).
+- Testing agent PASS: `/app/test_reports/iteration_3.json`
+  - Promise.allSettled davranışı doğrulandı.
+  - Servis-adlı toast formatı doğrulandı.
+  - Read Balance uyarısı koşulları UI’da doğrulandı.
+
+### PostgreSQL-only notu
+- Uygulama kodu PostgreSQL-only çalışmaktadır.
+- Repo içi supervisor konfigürasyonu da PostgreSQL programı içerir (`deploy/supervisor_control_plane.conf`).
+- Platformun read-only runtime supervisor dosyasında görülen Mongo programı uygulama mantığında kullanılmamaktadır.
+
