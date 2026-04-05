@@ -20051,3 +20051,28 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Repo içi supervisor konfigürasyonu da PostgreSQL programı içerir (`deploy/supervisor_control_plane.conf`).
 - Platformun read-only runtime supervisor dosyasında görülen Mongo programı uygulama mantığında kullanılmamaktadır.
 
+## 2026-04-05 — Bot Kur Runtime Crash Fix (LIVE-READY / Oluştur) ✅
+
+### Hata
+- Kullanıcı akışı: **Bot Kur > Oluştur (LIVE-READY)**
+- Frontend stack: `createUserTemplateFromCanonical -> ensureStrategyTemplateId -> handleSubmit`
+- Sorun: `/api/user/strategy-templates` 500 döndüğünde promise zinciri dışarı fırlıyor ve **uncaught runtime error** oluşuyordu.
+
+### Uygulanan düzeltme
+- Dosya: `/app/frontend/src/pages/BotProfilesPage.jsx`
+  - `createUserTemplateFromCanonical` içine kontrollü hata sarımı eklendi (`Template oluşturma hatası: ...`).
+  - `ensureStrategyTemplateId` içine `try/catch` eklendi; template oluşturma fail olursa warning toast verip `null` fallback ile devam ediyor.
+  - `handleSubmit` akışı `ensureStrategyTemplateId` dahil olacak şekilde güvenli `try/catch` içinde çalıştırıldı.
+  - Canonical template adlandırması güvenli hale getirildi (`canonicalCode - Bot`) — `undefined/None` kaynaklı isim kirliliği azaltıldı.
+
+### Sonuç
+- Artık template oluşturma servisinde 500 olsa bile sayfa çökmez.
+- `use_template=true` ise template zorunluluğu korunur; `use_template=false` senaryosunda template olmadan bot oluşturma akışı devam edebilir.
+
+### Test
+- Lint: `BotProfilesPage.jsx` PASS.
+- Testing agent raporu: `/app/test_reports/iteration_4.json`
+  - Frontend %100 PASS
+  - "no_runtime_crash" doğrulandı
+  - Bug fix doğrulaması: **VERIFIED**
+
