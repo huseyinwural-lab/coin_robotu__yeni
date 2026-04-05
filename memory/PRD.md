@@ -19739,3 +19739,10 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - Preview auth persistence sorunu nedeniyle canlı UI akışı bloklu
   - Code-level doğrulama: 4/4 gereksinim implementasyonu PASS
 
+### Ek görünürlük düzeltmesi (kullanıcı geri bildirimi sonrası)
+- Mini Wallet/PNL satırı artık **sadece online iken değil, her durumda** görünür (değer yoksa `-`).
+- Connection eşlemesi sadece `live` ile sınırlı değil:
+  - Öncelik: `live`
+  - Fallback: aynı exchange/market için mevcut diğer environment kayıtları
+- Böylece panelde “Bağlantı bulunamadı” yerine varsa fallback profile maplenir ve kullanıcı satırları her zaman görür.
+
