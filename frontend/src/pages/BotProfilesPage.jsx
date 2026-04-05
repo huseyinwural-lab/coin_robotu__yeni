@@ -468,6 +468,17 @@ export const BotProfilesPage = () => {
     });
   }, [walletConnectionOptions]);
 
+  useEffect(() => {
+    if (!riskPolicyOptions.length) return;
+    setForm((prev) => {
+      if (String(prev.risk_policy_id || "").trim()) return prev;
+      return {
+        ...prev,
+        risk_policy_id: String(riskPolicyOptions[0]?.id || ""),
+      };
+    });
+  }, [riskPolicyOptions]);
+
   const createUserTemplateFromCanonical = async (canonicalStrategy) => {
     const canonicalCode = String(canonicalStrategy?.strategy_id || "canonical_strategy").trim();
     const entryRules = canonicalStrategy?.entry_long?.rules || ["canonical_entry_signal"];
@@ -667,8 +678,8 @@ export const BotProfilesPage = () => {
         strategy_type: form.strategy_type,
         strategy_template_id: strategyTemplateId,
         strategy_template_ids: form.use_template && strategyTemplateId ? [strategyTemplateId] : [],
-        timeframe: form.timeframe,
-        trend_timeframe: form.trend_timeframe,
+        timeframe: form.timeframe || "15m",
+        trend_timeframe: form.trend_timeframe || "1h",
         mode: form.mode || "mock",
         leverage: Number(selectedRiskPolicy?.max_leverage || 1),
         is_enabled: Boolean(form.is_enabled),
@@ -708,6 +719,7 @@ export const BotProfilesPage = () => {
   const onEdit = (item) => {
     setEditingId(item.id);
     setForm({
+      ...initialForm,
       ...item,
       symbols: (item.symbols || []).join(","),
       exchange_connection_id: item.selected_exchange_connection_id || "",
@@ -719,6 +731,8 @@ export const BotProfilesPage = () => {
       use_template: Boolean(item.strategy_template_id),
       risk_adaptive_confirmed: false,
       risk_policy_id: item.selected_risk_policy_id || item.risk_policy_id || "",
+      timeframe: item.timeframe || "15m",
+      trend_timeframe: item.trend_timeframe || "1h",
     });
     setSymbolSource("crypto");
     setSymbolMode("manual_selection");
@@ -853,7 +867,7 @@ export const BotProfilesPage = () => {
             }}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             data-testid="bot-form-wallet-connection-select"
-            required
+            required={String(form.mode || "mock") === "live_ready"}
           >
             <option value="">Cüzdan seçin (zorunlu)</option>
             {(walletConnectionOptions || []).map((connection) => (
