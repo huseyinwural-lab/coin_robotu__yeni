@@ -469,6 +469,7 @@ export const BotProfilesPage = () => {
   }, [walletConnectionOptions]);
 
   const createUserTemplateFromCanonical = async (canonicalStrategy) => {
+    const canonicalCode = String(canonicalStrategy?.strategy_id || "canonical_strategy").trim();
     const entryRules = canonicalStrategy?.entry_long?.rules || ["canonical_entry_signal"];
     const exitRules = canonicalStrategy?.exit_long?.rules || ["canonical_exit_signal"];
     const defaultParams = {
@@ -483,9 +484,9 @@ export const BotProfilesPage = () => {
     };
 
     const payload = {
-      name: `${canonicalStrategy.name} - Bot`,
-      template_code: canonicalStrategy.strategy_id,
-      strategy_type: canonicalStrategy.strategy_id,
+      name: `${canonicalCode} - Bot`,
+      template_code: canonicalCode,
+      strategy_type: canonicalCode,
       indicator_schema: {
         indicators: ["ema", "rsi", "macd", "bb", "adx"],
         timeframe: "15m",
@@ -506,8 +507,13 @@ export const BotProfilesPage = () => {
       reason_note: "bot_profiles_attach_canonical_strategy",
     };
 
-    const { data } = await apiClient.post("/user/strategy-templates", payload);
-    return data;
+    try {
+      const { data } = await apiClient.post("/user/strategy-templates", payload);
+      return data;
+    } catch (error) {
+      const message = parseApiErrorMessage(error, "Template servisine ulaşılamadı");
+      throw new Error(`Template oluşturma hatası: ${message}`);
+    }
   };
 
   const ensureStrategyTemplateId = async () => {
@@ -528,8 +534,14 @@ export const BotProfilesPage = () => {
       return null;
     }
 
-    const createdTemplate = await createUserTemplateFromCanonical(selectedCanonicalStrategy);
-    return createdTemplate?.id || null;
+    try {
+      const createdTemplate = await createUserTemplateFromCanonical(selectedCanonicalStrategy);
+      return createdTemplate?.id || null;
+    } catch (error) {
+      const message = error?.message || "Template otomatik oluşturulamadı";
+      toast.warning(`${message}. Template olmadan devam ediliyor.`);
+      return null;
+    }
   };
 
   const loadCustomWatchlists = useCallback(async () => {
@@ -631,49 +643,50 @@ export const BotProfilesPage = () => {
       return;
     }
 
-    const strategyTemplateId = await ensureStrategyTemplateId();
-    if (form.use_template && !strategyTemplateId) {
-      toast.error("Template seçimi zorunlu");
-      return;
-    }
-    const selectedConnection = walletConnectionOptions.find((item) => item.id === form.exchange_connection_id);
-    if (String(form.mode || "mock") === "live_ready" && !selectedConnection) {
-      toast.error("Seçilen cüzdan bulunamadı");
-      return;
-    }
-
-    const payload = {
-      name: form.name.trim(),
-      exchange_connection_id: form.exchange_connection_id || null,
-      exchange: selectedConnection?.exchange || form.exchange,
-      market_type: selectedConnection?.market_type || form.market_type,
-      symbol_source_type: form.symbol_source_type || 'manual',
-      scanner_id: form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null,
-      symbols: parsedSymbols,
-      strategy_type: form.strategy_type,
-      strategy_template_id: strategyTemplateId,
-      strategy_template_ids: form.use_template && strategyTemplateId ? [strategyTemplateId] : [],
-      timeframe: form.timeframe,
-      trend_timeframe: form.trend_timeframe,
-      mode: form.mode || "mock",
-      leverage: Number(selectedRiskPolicy?.max_leverage || 1),
-      is_enabled: Boolean(form.is_enabled),
-      risk_adaptive_confirmed: false,
-      risk_policy_id: form.risk_policy_id,
-      risk_policy_snapshot: selectedRiskPolicy
-        ? {
-          id: selectedRiskPolicy.id,
-          name: selectedRiskPolicy.name,
-          max_leverage: selectedRiskPolicy.max_leverage,
-          position_size_pct: selectedRiskPolicy.position_size_pct,
-          daily_loss_cutoff_pct: selectedRiskPolicy.daily_loss_cutoff_pct,
-          atr_stop_multiplier: selectedRiskPolicy.atr_stop_multiplier,
-          risk_reward_ratio: selectedRiskPolicy.risk_reward_ratio,
-        }
-        : {},
-    };
-
     try {
+      const strategyTemplateId = await ensureStrategyTemplateId();
+      if (form.use_template && !strategyTemplateId) {
+        toast.error("Template seçimi zorunlu");
+        return;
+      }
+
+      const selectedConnection = walletConnectionOptions.find((item) => item.id === form.exchange_connection_id);
+      if (String(form.mode || "mock") === "live_ready" && !selectedConnection) {
+        toast.error("Seçilen cüzdan bulunamadı");
+        return;
+      }
+
+      const payload = {
+        name: form.name.trim(),
+        exchange_connection_id: form.exchange_connection_id || null,
+        exchange: selectedConnection?.exchange || form.exchange,
+        market_type: selectedConnection?.market_type || form.market_type,
+        symbol_source_type: form.symbol_source_type || 'manual',
+        scanner_id: form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null,
+        symbols: parsedSymbols,
+        strategy_type: form.strategy_type,
+        strategy_template_id: strategyTemplateId,
+        strategy_template_ids: form.use_template && strategyTemplateId ? [strategyTemplateId] : [],
+        timeframe: form.timeframe,
+        trend_timeframe: form.trend_timeframe,
+        mode: form.mode || "mock",
+        leverage: Number(selectedRiskPolicy?.max_leverage || 1),
+        is_enabled: Boolean(form.is_enabled),
+        risk_adaptive_confirmed: false,
+        risk_policy_id: form.risk_policy_id,
+        risk_policy_snapshot: selectedRiskPolicy
+          ? {
+            id: selectedRiskPolicy.id,
+            name: selectedRiskPolicy.name,
+            max_leverage: selectedRiskPolicy.max_leverage,
+            position_size_pct: selectedRiskPolicy.position_size_pct,
+            daily_loss_cutoff_pct: selectedRiskPolicy.daily_loss_cutoff_pct,
+            atr_stop_multiplier: selectedRiskPolicy.atr_stop_multiplier,
+            risk_reward_ratio: selectedRiskPolicy.risk_reward_ratio,
+          }
+          : {},
+      };
+
       if (editingId) {
         await apiClient.put(`/bot-profiles/${editingId}`, payload);
         toast.success("Bot profili güncellendi");

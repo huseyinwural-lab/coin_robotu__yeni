@@ -1,0 +1,73 @@
+{
+  "summary": "Frontend-only testing of BotProfilesPage handleSubmit error handling for createUserTemplateFromCanonical and ensureStrategyTemplateId. Bug fix verified - no uncaught runtime crash occurs when template creation fails.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/frontend/src/pages/BotProfilesPage.jsx"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BotProfilesPage.jsx:519-545 - ensureStrategyTemplateId has proper try-catch block that catches errors from createUserTemplateFromCanonical",
+    "BotProfilesPage.jsx:540-543 - Error is caught, toast.warning is shown with message, and null is returned (no throw)",
+    "BotProfilesPage.jsx:646-705 - handleSubmit is wrapped in try-catch, handles null strategyTemplateId gracefully",
+    "BotProfilesPage.jsx:648-651 - If use_template is true but no template ID, shows error toast and returns early (no crash)",
+    "BotProfilesPage.jsx:668 - strategyTemplateId can be null and is safely used in payload",
+    "BotProfilesPage.jsx:703-705 - Outer catch block handles any remaining errors with toast.error"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only testing)",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "email": "review.user@platform.local",
+    "password": "ReviewUser123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug fix for uncaught runtime crash in BotProfilesPage handleSubmit verified. The ensureStrategyTemplateId function now has proper error handling that catches errors from createUserTemplateFromCanonical, shows a warning toast, and returns null to allow the flow to continue without a template. No PAGE ERROR events were logged during testing.",
+  "feature_verification": {
+    "ensureStrategyTemplateId_error_handling": {
+      "status": "VERIFIED",
+      "code_location": "lines 519-545",
+      "description": "Function has try-catch block that catches errors from createUserTemplateFromCanonical, shows toast.warning, and returns null instead of throwing"
+    },
+    "handleSubmit_null_template_handling": {
+      "status": "VERIFIED",
+      "code_location": "lines 646-705",
+      "description": "handleSubmit handles null strategyTemplateId gracefully - if use_template is true but no ID, shows error toast and returns; otherwise continues with null template ID in payload"
+    },
+    "createUserTemplateFromCanonical_error_propagation": {
+      "status": "VERIFIED",
+      "code_location": "lines 471-517",
+      "description": "Function throws Error with descriptive message when API call fails, which is caught by ensureStrategyTemplateId"
+    },
+    "LIVE_READY_mode_validation": {
+      "status": "VERIFIED",
+      "description": "LIVE-READY mode is properly blocked when no valid exchange connection exists, showing appropriate warning message"
+    }
+  },
+  "ui_test_results": {
+    "login": "PASSED - Successfully logged in with review.user@platform.local",
+    "bot_profiles_page_load": "PASSED - Page loaded with all form elements",
+    "form_validation": "PASSED - Form validation works correctly, shows appropriate error messages",
+    "submit_button_state": "PASSED - Submit button is disabled when LIVE-READY mode is selected without valid connection",
+    "mock_mode_submit": "PASSED - Submit button is enabled in MOCK mode",
+    "no_runtime_crash": "PASSED - No PAGE ERROR events logged during testing"
+  },
+  "bug_verification": {
+    "original_bug": "Frontend runtime crash (Axios 500) in createUserTemplateFromCanonical -> ensureStrategyTemplateId -> handleSubmit flow",
+    "fix_status": "VERIFIED",
+    "fix_description": "ensureStrategyTemplateId now has proper try-catch that catches errors from createUserTemplateFromCanonical, shows warning toast, and returns null to allow fallback flow",
+    "test_method": "Code review + UI testing with Playwright",
+    "test_result": "No uncaught runtime errors observed during form submission flow"
+  }
+}
