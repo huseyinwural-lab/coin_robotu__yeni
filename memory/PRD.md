@@ -19772,3 +19772,31 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `PUT /api/phase4/exchange-settings` (spot/futures) -> 200
   - `GET /api/user/exchange-connections` -> ilgili spot/futures connection’larda `has_api_key=true`, `has_api_secret=true`
 
+## 2026-04-05 — Risk Policy Yönetimi: Sil Butonu (Hard Delete) ✅
+
+### Kullanıcı talebi
+- `Risk Policy Yönetimi` tablosundaki aksiyon alanına `Sil` butonu eklensin.
+- Silme hard delete olsun.
+
+### Uygulanan değişiklik
+- Frontend (`/app/frontend/src/pages/RiskPoliciesPage.jsx`)
+  - Her satıra yeni `Sil` butonu eklendi:
+    - `data-testid`: `risk-table-delete-{id}`
+  - `deletePolicy(item)` akışı eklendi:
+    - confirm dialog
+    - `DELETE /risk-policies/{id}` çağrısı
+    - düzenleme/preview/history state cleanup
+    - liste refresh + toast
+- Backend (`/app/backend/routers/risk_policies.py`)
+  - Yeni endpoint eklendi:
+    - `DELETE /api/risk-policies/{policy_id}`
+  - Yetki kontrolü `_authorized_risk_query` ile korunuyor.
+  - Silinen policy aktifse, kullanıcıdaki en güncel policy replacement olarak active atanıyor.
+  - Audit log yazılıyor (`risk_policy_deleted`).
+
+### Test
+- Backend local API test: PASS
+  - create policy -> delete policy -> listede yok doğrulandı.
+- Frontend test agent: code-level PASS (4/4)
+  - delete button görünümü, label, onClick wiring, backend endpoint doğrulandı.
+
