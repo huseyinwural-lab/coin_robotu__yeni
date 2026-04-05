@@ -10,6 +10,7 @@ import os
 import subprocess
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 import requests
@@ -17,6 +18,8 @@ import requests
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
     BASE_URL = "https://trade-trace-engine.preview.emergentagent.com"
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "canary.admin@platform.local")
 ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "CanaryAdmin123!")
@@ -175,7 +178,12 @@ class TestVerifyPhase6SecurityScript:
         """
         Run verify_phase6_security.sh and verify it returns PASS.
         """
-        script_path = "/app/scripts/verify_phase6_security.sh"
+        script_candidates = [
+            os.environ.get("PHASE6_SECURITY_SCRIPT_PATH", "").strip(),
+            str(REPO_ROOT / "scripts" / "verify_phase6_security.sh"),
+            "/app/scripts/verify_phase6_security.sh",
+        ]
+        script_path = next((item for item in script_candidates if item and os.path.exists(item)), script_candidates[1])
         
         # Check script exists
         assert os.path.exists(script_path), f"Script not found: {script_path}"
@@ -213,7 +221,7 @@ class TestVerifyPhase6SecurityScript:
         """
         Verify that security script generates expected artifacts.
         """
-        artifact_dir = "/app/artifacts"
+        artifact_dir = str(REPO_ROOT / "artifacts")
         expected_files = [
             "faz6_security_summary.log",
             "faz6_security_closure_summary.json",
