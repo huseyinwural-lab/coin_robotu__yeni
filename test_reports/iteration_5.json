@@ -1,0 +1,96 @@
+{
+  "summary": "Deploy Readiness Checklist Testing - User Menu Endpoints. Backend APIs mostly working (20/23 tests passed). Health endpoints timeout on external calls but /api/health/ready works. Critical performance issue: /api/user/trades took 59s. UI pages load without crashes after partial-load revision.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/user/trades", "issue": "Extremely slow response - 59115ms (59 seconds). Timeout risk in production.", "priority": "CRITICAL"},
+      {"endpoint": "/api/health", "issue": "Timeout on external preview URL (10s timeout exceeded)", "priority": "HIGH"},
+      {"endpoint": "/api/health/live", "issue": "Timeout on external preview URL (10s timeout exceeded)", "priority": "HIGH"},
+      {"endpoint": "/api/ready", "issue": "Timeout on external preview URL (15s timeout exceeded)", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "/api/bot-profiles", "issue": "Slow response - 14773ms (14.7 seconds). Consider pagination or caching."},
+      {"endpoint": "/api/venues/access-check", "issue": "Slow response - 4868ms"},
+      {"endpoint": "/api/user/exchange-connections", "issue": "Slow response - 6255ms"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Signals Page", "issues": ["Page shows loading skeleton for extended time - may need loading state optimization"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_deploy_readiness_checklist.py",
+    "/app/test_reports/pytest/deploy_readiness_test.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Investigate /api/user/trades 59s response time - add pagination, caching, or query optimization",
+    "HIGH: Health endpoints (/api/health, /api/health/live, /api/ready) timing out - may need increased timeout or optimization",
+    "MEDIUM: Optimize /api/bot-profiles response time (14.7s)",
+    "LOW: Fix React console warning about duplicate keys in /user/exchange-settings route"
+  ],
+  "critical_code_review_comments": [
+    "user_live_dashboard_service.py:287 - LIVE_EXECUTION_LOGS_TABLE_MISSING_FALLBACK warning logged - table may be missing",
+    "React console warning: 'Encountered two children with the same key' for /user/exchange-settings route - duplicate key in navigation/routing"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_deploy_readiness_checklist.py"
+  ],
+  "success_rate": {
+    "backend": "87% (20/23 tests passed - 3 health endpoint timeouts)",
+    "frontend": "100% (all pages load without crashes)"
+  },
+  "test_credentials": {
+    "email": "review.user@platform.local",
+    "password": "ReviewUser123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Deploy readiness testing completed. Critical issue: /api/user/trades has 59s response time. Health endpoints timeout on external preview URL but work internally. All UI pages (Dashboard, Bot Profiles, Exchange Settings, Signals, Positions, Trades) load without crashes. Promise.allSettled partial-load revision working correctly.",
+  "deploy_readiness_checklist": {
+    "health_check": {
+      "/api/health": "TIMEOUT (external) - needs investigation",
+      "/api/health/live": "TIMEOUT (external) - needs investigation",
+      "/api/health/ready": "PASS (200)",
+      "/api/ready": "TIMEOUT (external) - needs investigation"
+    },
+    "user_critical_endpoints": {
+      "/api/auth/login": "PASS (200)",
+      "/api/user/execution/positions": "PASS (200, 2.2s)",
+      "/api/user/execution/intents": "PASS (200)",
+      "/api/user/execution/presets": "PASS (200)",
+      "/api/user/trades": "FAIL (59s timeout risk)",
+      "/api/bot-profiles": "PASS (200, 14.7s - slow)",
+      "/api/user/canonical-strategies": "PASS (200)",
+      "/api/strategy-templates": "PASS (200)",
+      "/api/risk-policies": "PASS (200)",
+      "/api/user/exchange-connections": "PASS (200, 6.2s)",
+      "/api/phase4/exchange-settings": "PASS (200)",
+      "/api/venues/options": "PASS (200, 5.1s)",
+      "/api/user/portfolio": "PASS (200, 2s)",
+      "/api/user/signals": "PASS (200, 2.4s)",
+      "/api/user/signal-mode": "PASS (200, 2.9s)",
+      "/api/user/live/summary": "PASS (200, 3.5s)",
+      "/api/user/live/positions": "PASS (200, 1.2s)",
+      "/api/user/live/performance": "PASS (200, 1.3s)",
+      "/api/user/live/strategy-performance": "PASS (200, 1.3s)"
+    },
+    "ui_pages": {
+      "Dashboard": "PASS - loads correctly",
+      "Bot Profiles": "PASS - form loads, no crash",
+      "Exchange Settings": "PASS - loads with partial data",
+      "Signals": "PASS - loads (slow data fetch)",
+      "Positions": "PASS - shows position table",
+      "Trades": "PASS - loads (slow data fetch)"
+    },
+    "performance_concerns": [
+      "/api/user/trades: 59115ms - CRITICAL",
+      "/api/bot-profiles: 14773ms - HIGH",
+      "/api/user/exchange-connections: 6255ms - MEDIUM",
+      "/api/venues/options: 5138ms - MEDIUM",
+      "/api/venues/access-check: 4868ms - MEDIUM"
+    ]
+  }
+}
