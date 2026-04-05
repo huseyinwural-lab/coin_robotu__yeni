@@ -145,6 +145,27 @@ const parseOptionalNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const parseActiveCriteriaFromQuery = (queryExpression) => {
+  const source = String(queryExpression || "").trim();
+  if (!source) {
+    return {
+      rsiMin: null,
+      rsiMax: null,
+      volumeMin: null,
+    };
+  }
+
+  const rsiMinMatch = source.match(/rsi14\s*<\s*(-?\d+(?:\.\d+)?)/i);
+  const rsiMaxMatch = source.match(/rsi14\s*>\s*(-?\d+(?:\.\d+)?)/i);
+  const volumeMinMatch = source.match(/volume\s*>\s*(-?\d+(?:\.\d+)?)/i);
+
+  return {
+    rsiMin: rsiMinMatch ? Number(rsiMinMatch[1]) : null,
+    rsiMax: rsiMaxMatch ? Number(rsiMaxMatch[1]) : null,
+    volumeMin: volumeMinMatch ? Number(volumeMinMatch[1]) : null,
+  };
+};
+
 export const UserIndicatorScreenerPage = ({ embedded = false }) => {
   const navigate = useNavigate();
   const [filters, setFilters] = useState(defaultFilters);
@@ -209,6 +230,25 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [symbolSearchInput]);
+
+  useEffect(() => {
+    const parsed = parseActiveCriteriaFromQuery(filters.query_expression);
+
+    if (parsed.rsiMax !== null) {
+      const nextValue = String(parsed.rsiMax);
+      setManualRsiGreaterThan((prev) => (prev === nextValue ? prev : nextValue));
+    }
+
+    if (parsed.rsiMin !== null) {
+      const nextValue = String(parsed.rsiMin);
+      setManualRsiLessThan((prev) => (prev === nextValue ? prev : nextValue));
+    }
+
+    if (parsed.volumeMin !== null) {
+      const nextValue = String(parsed.volumeMin);
+      setFilters((prev) => (String(prev.min_24h_volume || "") === nextValue ? prev : { ...prev, min_24h_volume: nextValue }));
+    }
+  }, [filters.query_expression]);
 
   const clearSingleFilter = (key) => {
     if (!(key in defaultFilters)) {
@@ -667,6 +707,27 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
   const appliedFilterSummary = meta?.applied_filters || buildFilterPayload();
   const querySummaryText = (filters.query_expression || "").trim() || "(query yok - filter-only mode)";
 
+  const parsedCriteria = useMemo(
+    () => parseActiveCriteriaFromQuery(filters.query_expression),
+    [filters.query_expression],
+  );
+
+  const leadingMatch = rows?.[0] || null;
+
+  const activeCriteria = useMemo(() => {
+    const volumeFromFilter = parseOptionalNumber(filters.min_24h_volume);
+    return {
+      timeframe: filters.timeframe || "-",
+      rsiMin: parsedCriteria.rsiMin ?? (manualRsiLessThan || "-"),
+      rsiMax: parsedCriteria.rsiMax ?? (manualRsiGreaterThan || "-"),
+      volumeMin: parsedCriteria.volumeMin ?? (volumeFromFilter ?? "-"),
+      query: querySummaryText,
+      matchedSymbol: leadingMatch?.symbol || "-",
+      matchedRsi14: leadingMatch ? numberCell(leadingMatch.rsi14, 2) : "-",
+      matchedVolume: leadingMatch ? numberCell(leadingMatch.volume_24h, 2) : "-",
+    };
+  }, [filters.min_24h_volume, filters.timeframe, leadingMatch, manualRsiGreaterThan, manualRsiLessThan, parsedCriteria.rsiMax, parsedCriteria.rsiMin, parsedCriteria.volumeMin, querySummaryText]);
+
   const stateCardMap = {
     loading: {
       title: "Tarama Çalışıyor",
@@ -779,7 +840,7 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-700">Query Expression</span>
             <Textarea value={filters.query_expression} onChange={(event) => updateFilter("query_expression", event.target.value)} className="min-h-12 border-emerald-300 bg-white text-slate-900" data-testid="user-indicator-screener-query-textarea" />
             <p className="text-xs text-slate-600" data-testid="user-indicator-screener-top-toolbar-query-helper">Query opsiyoneldir. Boş bırakırsanız sadece filtre katmanıyla tarama çalışır.</p>
-            <div className="mt-2 grid gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="user-indicator-screener-manual-rsi-grid">
+            <div className="mt-2 grid gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-2 sm:grid-cols-2 lg:grid-cols-5" data-testid="user-indicator-screener-manual-rsi-grid">
               <label className="space-y-1" data-testid="user-indicator-screener-manual-rsi-greater-field">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-900">RSI Büyük (&gt;)</span>
                 <Input
@@ -789,6 +850,7 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
                   className="h-9 border-emerald-300 bg-white"
                   data-testid="user-indicator-screener-manual-rsi-greater-input"
                 />
+                <p className="text-[10px] text-emerald-900" data-testid="user-indicator-screener-manual-rsi-greater-live-value">Canlı: {activeCriteria.matchedRsi14}</p>
               </label>
               <label className="space-y-1" data-testid="user-indicator-screener-manual-rsi-less-field">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-900">RSI Küçük (&lt;)</span>
@@ -799,6 +861,18 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
                   className="h-9 border-emerald-300 bg-white"
                   data-testid="user-indicator-screener-manual-rsi-less-input"
                 />
+                <p className="text-[10px] text-emerald-900" data-testid="user-indicator-screener-manual-rsi-less-live-value">Eşik: {activeCriteria.rsiMin}</p>
+              </label>
+              <label className="space-y-1" data-testid="user-indicator-screener-manual-volume-min-field">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-900">Volume Min (&gt;)</span>
+                <Input
+                  value={filters.min_24h_volume}
+                  onChange={(event) => updateFilter("min_24h_volume", event.target.value)}
+                  placeholder="örn 1000000"
+                  className="h-9 border-emerald-300 bg-white"
+                  data-testid="user-indicator-screener-manual-volume-min-input"
+                />
+                <p className="text-[10px] text-emerald-900" data-testid="user-indicator-screener-manual-volume-live-value">Canlı: {activeCriteria.matchedVolume}</p>
               </label>
               <Button
                 type="button"
@@ -826,7 +900,7 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
           </div>
         </div>
 
-        <div className="mt-3 grid gap-2 md:grid-cols-2" data-testid="user-indicator-screener-top-toolbar-secondary-strip">
+        <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="user-indicator-screener-top-toolbar-secondary-strip">
           <div className="rounded-md border border-emerald-200 bg-white/70 p-2" data-testid="user-indicator-screener-query-summary-box">
             <p className="text-xs font-semibold text-slate-700" data-testid="user-indicator-screener-query-summary-title">Query Summary</p>
             <p className="text-xs text-slate-700" data-testid="user-indicator-screener-query-summary-value">{querySummaryText}</p>
@@ -834,6 +908,11 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
           <div className="rounded-md border border-emerald-200 bg-white/70 p-2" data-testid="user-indicator-screener-applied-filter-summary-box">
             <p className="text-xs font-semibold text-slate-700" data-testid="user-indicator-screener-applied-filter-summary-title">Applied Filter Snapshot</p>
             <p className="text-xs text-slate-700" data-testid="user-indicator-screener-applied-filter-summary-value">market={appliedFilterSummary.market_participation} · universe={appliedFilterSummary.symbol_universe_mode} · sort={appliedFilterSummary.sort_by}/{appliedFilterSummary.sort_direction}</p>
+          </div>
+          <div className="rounded-md border border-emerald-200 bg-white/70 p-2" data-testid="user-indicator-screener-active-criteria-box">
+            <p className="text-xs font-semibold text-slate-700" data-testid="user-indicator-screener-active-criteria-title">Aktif Tarama Kriterleri</p>
+            <p className="text-xs text-slate-700" data-testid="user-indicator-screener-active-criteria-value">RSI-Min={activeCriteria.rsiMin} · Volume-Min={activeCriteria.volumeMin} · TF={activeCriteria.timeframe}</p>
+            <p className="text-[11px] text-slate-500" data-testid="user-indicator-screener-active-criteria-live-match">Son match: {activeCriteria.matchedSymbol} · RSI14={activeCriteria.matchedRsi14} · Vol={activeCriteria.matchedVolume}</p>
           </div>
         </div>
       </header>}
