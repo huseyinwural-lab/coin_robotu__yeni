@@ -6,7 +6,7 @@ from services.pipeline.cache_store import get_json, set_json
 
 
 BOT_RUNTIME_PREFIX = "bot:runtime"
-BOT_RUNTIME_ALLOWED_MODES = {"live_ready", "live_ready_disabled", "paper", "mock"}
+BOT_RUNTIME_ALLOWED_MODES = {"live_ready"}
 BOT_STATES = {"CREATED", "IDLE", "RUNNING", "PAUSED", "STOPPED", "ERROR"}
 
 
@@ -40,7 +40,7 @@ def build_bot_runtime_config(*, bot, strategy_id: str, risk_profile_id: str | No
         "execution_profile_id": execution_profile_id,
         "symbol_source": "manual",
         "symbol_source_ref": None,
-        "mode": "live_ready_disabled",
+        "mode": "live_ready",
         "status": "CREATED",
         "last_heartbeat": _now_iso(),
         "runtime_context": {
@@ -90,7 +90,7 @@ def bind_bot_runtime(cache, *, bot, strategy_id: str, risk_profile_id: str | Non
             "strategy_id": strategy_id,
             "risk_profile_id": risk_profile_id,
             "execution_profile_id": execution_profile_id,
-            "mode": mode if mode in BOT_RUNTIME_ALLOWED_MODES else runtime.get("mode", "live_ready_disabled"),
+            "mode": mode if mode in BOT_RUNTIME_ALLOWED_MODES else runtime.get("mode", "live_ready"),
         }
     )
     return save_bot_runtime(cache, runtime)
@@ -102,7 +102,7 @@ def set_bot_runtime_state(cache, *, bot_id: str, state: str, error: str | None =
         "strategy_id": None,
         "risk_profile_id": None,
         "execution_profile_id": None,
-        "mode": "live_ready_disabled",
+        "mode": "live_ready",
         "status": "CREATED",
         "runtime_context": {},
     }
@@ -114,7 +114,7 @@ def set_bot_runtime_state(cache, *, bot_id: str, state: str, error: str | None =
 
 
 def heartbeat_bot_runtime(cache, bot_id: str, *, patch: dict | None = None) -> dict:
-    runtime = load_bot_runtime(cache, bot_id) or {"bot_id": bot_id, "runtime_context": {}, "status": "IDLE", "mode": "live_ready_disabled"}
+    runtime = load_bot_runtime(cache, bot_id) or {"bot_id": bot_id, "runtime_context": {}, "status": "IDLE", "mode": "live_ready"}
     if patch:
         runtime.setdefault("runtime_context", {}).update(dict(patch))
     return save_bot_runtime(cache, runtime)

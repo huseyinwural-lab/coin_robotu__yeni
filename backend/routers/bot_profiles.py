@@ -46,18 +46,15 @@ def create_bot_profile(
     exchange_connection_id = str(payload_data.pop("exchange_connection_id", "") or "").strip()
     risk_policy_id = str(payload_data.pop("risk_policy_id", "") or "").strip() or None
     risk_policy_snapshot = payload_data.pop("risk_policy_snapshot", {}) or {}
-    preferred_mode = str(payload_data.pop("mode", "mock") or "mock").strip()
+    preferred_mode = str(payload_data.pop("mode", "live_ready") or "live_ready").strip().lower()
     selected_template_ids = [
         str(value).strip()
         for value in list(payload_data.pop("strategy_template_ids", []) or [])
         if str(value).strip()
     ]
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
-    if preferred_mode not in {"live_ready", "mock", "live_ready_disabled", "paper"}:
-        preferred_mode = "mock"
-
-    if preferred_mode in {"live_ready_disabled", "paper"}:
-        preferred_mode = "mock"
+    if preferred_mode != "live_ready":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="mock_mode_removed_live_ready_required")
 
 
 
@@ -77,7 +74,7 @@ def create_bot_profile(
         if selected_connection is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
 
-    if preferred_mode == "live_ready" and selected_connection is None:
+    if selected_connection is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="exchange_connection_required")
 
     if selected_connection is not None:
@@ -132,18 +129,15 @@ def update_bot_profile(
     exchange_connection_id = str(payload_data.pop("exchange_connection_id", "") or "").strip()
     risk_policy_id = str(payload_data.pop("risk_policy_id", "") or "").strip() or None
     risk_policy_snapshot = payload_data.pop("risk_policy_snapshot", {}) or {}
-    preferred_mode = str(payload_data.pop("mode", "mock") or "mock").strip()
+    preferred_mode = str(payload_data.pop("mode", "live_ready") or "live_ready").strip().lower()
     selected_template_ids = [
         str(value).strip()
         for value in list(payload_data.pop("strategy_template_ids", []) or [])
         if str(value).strip()
     ]
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
-    if preferred_mode not in {"live_ready", "mock", "live_ready_disabled", "paper"}:
-        preferred_mode = "mock"
-
-    if preferred_mode in {"live_ready_disabled", "paper"}:
-        preferred_mode = "mock"
+    if preferred_mode != "live_ready":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="mock_mode_removed_live_ready_required")
 
 
 
@@ -151,6 +145,9 @@ def update_bot_profile(
         payload_data["leverage"] = max(1, int(risk_policy_snapshot.get("max_leverage") or 1))
 
     selected_connection = None
+    if not exchange_connection_id:
+        exchange_connection_id = str((bot_profile.symbol_resolution_snapshot or {}).get("selected_exchange_connection_id") or "").strip()
+
     if exchange_connection_id:
         selected_connection = (
             db.query(UserExchangeConnection)
@@ -163,7 +160,7 @@ def update_bot_profile(
         if selected_connection is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
 
-    if preferred_mode == "live_ready" and selected_connection is None:
+    if selected_connection is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="exchange_connection_required")
 
     if selected_connection is not None:

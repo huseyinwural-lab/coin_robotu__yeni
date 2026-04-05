@@ -337,7 +337,7 @@ export default function UserStrategyBotWizardPage() {
         strategy_template_ids: [attachedTemplate.id],
         timeframe: (attachedTemplate.indicator_schema || {}).timeframe || "15m",
         trend_timeframe: "1h",
-        mode: "live_ready_disabled",
+        mode: "live_ready",
         leverage: 1,
         is_enabled: true,
         risk_adaptive_confirmed: false,

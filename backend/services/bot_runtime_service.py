@@ -63,7 +63,7 @@ def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
         "selected_risk_policy_id": str(snapshot.get("selected_risk_policy_id") or "") or None,
         "selected_risk_policy_name": str(snapshot.get("selected_risk_policy_name") or "") or None,
         "status": "ERROR",
-        "mode": str(snapshot.get("preferred_mode") or "mock"),
+        "mode": "live_ready",
         "strategy_id": None,
         "risk_profile_id": None,
         "execution_profile_id": None,
@@ -211,6 +211,14 @@ def _resolve_symbol_source(db, bot: BotProfile) -> dict:
 def _ensure_runtime(db, bot: BotProfile) -> dict:
     bindings = _resolve_bindings(db, bot)
     runtime = initialize_bot_runtime(redis_client, bot=bot, strategy_id=bindings["strategy_id"], risk_profile_id=bindings["risk_profile_id"], execution_profile_id=bindings["execution_profile_id"])
+    runtime = bind_bot_runtime(
+        redis_client,
+        bot=bot,
+        strategy_id=bindings["strategy_id"],
+        risk_profile_id=bindings["risk_profile_id"],
+        execution_profile_id=bindings["execution_profile_id"],
+        mode="live_ready",
+    )
     runtime.setdefault("runtime_context", {})["binding_sources"] = bindings
     runtime.setdefault("runtime_context", {})["strategy_resolution"] = bindings.get("strategy_resolution") or {}
     return runtime
@@ -274,12 +282,10 @@ def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution:
 def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     runtime = _ensure_runtime(db, bot)
     snapshot = getattr(bot, "symbol_resolution_snapshot", {}) or {}
-    preferred_mode = str(snapshot.get("preferred_mode") or "mock").strip()
-    if preferred_mode not in {"live_ready", "mock", "live_ready_disabled", "paper"}:
-        preferred_mode = "mock"
-    if preferred_mode in {"live_ready_disabled", "paper"}:
-        preferred_mode = "mock"
-    runtime_mode = str(runtime.get("mode") or "live_ready_disabled")
+    preferred_mode = str(snapshot.get("preferred_mode") or "live_ready").strip().lower()
+    if preferred_mode != "live_ready":
+        preferred_mode = "live_ready"
+    runtime_mode = "live_ready"
     mode_value = runtime_mode if str(runtime.get("status") or "").upper() == "RUNNING" else preferred_mode
     symbol_resolution = _resolve_symbol_source(db, bot)
     strategy_template_ids = [
@@ -478,11 +484,7 @@ def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
     symbol_resolution = _resolve_symbol_source(db, bot)
     strategy_resolution = dict(bindings.get("strategy_resolution") or {})
     strategy_ok = bool(strategy_resolution.get("validation_result", {}).get("runtime_eligible", True))
-    preferred_mode = str((getattr(bot, "symbol_resolution_snapshot", {}) or {}).get("preferred_mode") or "mock").strip()
-    if preferred_mode not in {"live_ready", "mock", "live_ready_disabled", "paper"}:
-        preferred_mode = "mock"
-    if preferred_mode in {"live_ready_disabled", "paper"}:
-        preferred_mode = "mock"
+    preferred_mode = "live_ready"
     if not bindings["strategy_id"] or not bindings["execution_profile_id"] or not symbol_resolution.get("ok") or not strategy_ok:
         runtime = set_bot_runtime_state(redis_client, bot_id=bot.id, state="ERROR", error="binding_failed")
         runtime["mode"] = preferred_mode

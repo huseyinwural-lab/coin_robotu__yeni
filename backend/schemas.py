@@ -319,7 +319,7 @@ class BotProfileCreate(BotProfileBase):
     exchange_connection_id: str | None = None
     risk_policy_id: str | None = None
     risk_policy_snapshot: dict = Field(default_factory=dict)
-    mode: str | None = "live_ready_disabled"
+    mode: str | None = "live_ready"
     strategy_template_ids: list[str] = Field(default_factory=list)
     risk_adaptive_confirmed: bool = False
 
@@ -341,7 +341,7 @@ class BotProfileUpdate(BaseModel):
     trend_timeframe: str
     leverage: int = Field(default=3, ge=1, le=25)
     is_enabled: bool
-    mode: str | None = "live_ready_disabled"
+    mode: str | None = "live_ready"
     risk_adaptive_confirmed: bool = False
 
 

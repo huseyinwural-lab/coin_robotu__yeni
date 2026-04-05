@@ -16,7 +16,7 @@ const initialForm = {
   risk_policy_id: "",
   symbols: "",
   strategy_type: "",
-  mode: "mock",
+  mode: "live_ready",
   symbol_source_type: "manual",
   scanner_id: "",
   symbol_preset: "top_50",
@@ -42,7 +42,6 @@ const MARKET_TYPE_OPTIONS = [
 
 const BOT_MODE_OPTIONS = [
   { value: "live_ready", label: "LIVE-READY" },
-  { value: "mock", label: "MOCK (Paper Trade)" },
 ];
 
 const SYMBOL_PRESET_OPTIONS = [
@@ -64,6 +63,7 @@ const parseApiErrorMessage = (error, fallback) => {
     if (!code) return "";
     if (code === "exchange_connection_required") return "LIVE-READY için Kullanılacak Cüzdan seçimi zorunlu.";
     if (code === "exchange_connection_not_found") return "Seçilen cüzdan bağlantısı bulunamadı.";
+    if (code === "mock_mode_removed_live_ready_required") return "MOCK/PAPER kaldırıldı. Sadece LIVE-READY kullanılabilir.";
     if (code === "authentication required" || code === "not authenticated") return "Oturum doğrulaması düştü. Lütfen tekrar giriş yapın.";
     if (code === "session_device_mismatch") return "Oturum cihaz doğrulaması uyuşmadı. Lütfen tekrar giriş yapın.";
     return "";
@@ -492,11 +492,10 @@ export const BotProfilesPage = () => {
   useEffect(() => {
     setForm((prev) => {
       const exists = walletConnectionOptions.some((item) => item.id === prev.exchange_connection_id);
-      const nextMode = String(prev.exchange || "").toLowerCase() === "bybit" && prev.mode === "live_ready" ? "mock" : prev.mode;
-      if (exists && nextMode === prev.mode) return prev;
+      if (exists && prev.mode === "live_ready") return prev;
       return {
         ...prev,
-        mode: nextMode,
+        mode: "live_ready",
         exchange_connection_id: exists ? prev.exchange_connection_id : "",
       };
     });
@@ -670,13 +669,13 @@ export const BotProfilesPage = () => {
     if (String(form.symbol_source_type || "manual") === "scanner" && !String(form.scanner_id || "").trim()) {
       nextErrors.scanner_id = "Scanner source için scanner_id zorunlu.";
     }
-    if (String(form.mode || "mock") === "live_ready" && !String(form.exchange_connection_id || "").trim()) {
+    if (String(form.mode || "live_ready") === "live_ready" && !String(form.exchange_connection_id || "").trim()) {
       nextErrors.exchange_connection_id = "Bot için cüzdan seçimi zorunlu.";
     }
     if (!String(form.strategy_type || "").trim()) {
       nextErrors.strategy_type = "Canonical strateji seçimi zorunlu.";
     }
-    if (String(form.mode || "mock") === "live_ready" && liveReadyBlockedReason) {
+    if (String(form.mode || "live_ready") === "live_ready" && liveReadyBlockedReason) {
       nextErrors.mode = liveReadyBlockedReason;
     }
     setFormErrors(nextErrors);
@@ -693,7 +692,7 @@ export const BotProfilesPage = () => {
       }
 
       const selectedConnection = walletConnectionOptions.find((item) => item.id === form.exchange_connection_id);
-      if (String(form.mode || "mock") === "live_ready" && !selectedConnection) {
+      if (String(form.mode || "live_ready") === "live_ready" && !selectedConnection) {
         toast.error("Seçilen cüzdan bulunamadı");
         return;
       }
@@ -711,7 +710,7 @@ export const BotProfilesPage = () => {
         strategy_template_ids: form.use_template && strategyTemplateId ? [strategyTemplateId] : [],
         timeframe: form.timeframe || "15m",
         trend_timeframe: form.trend_timeframe || "1h",
-        mode: form.mode || "mock",
+        mode: "live_ready",
         leverage: Number(selectedRiskPolicy?.max_leverage || 1),
         is_enabled: Boolean(form.is_enabled),
         risk_adaptive_confirmed: false,
@@ -754,7 +753,7 @@ export const BotProfilesPage = () => {
       ...item,
       symbols: (item.symbols || []).join(","),
       exchange_connection_id: item.selected_exchange_connection_id || "",
-      mode: item.mode === "live_ready_disabled" || item.mode === "paper" ? "mock" : (item.mode || "mock"),
+      mode: "live_ready",
       symbol_source_type: item.symbol_source_type || item.symbol_source || "manual",
       scanner_id: item.scanner_id || item.symbol_source_summary?.scanner_id || "",
       template_id: item.strategy_template_id || item.template_id || "",
@@ -853,7 +852,7 @@ export const BotProfilesPage = () => {
                 ...prev,
                 exchange: nextExchange,
                 exchange_connection_id: "",
-                mode: nextExchange === "bybit" ? "mock" : prev.mode,
+                mode: "live_ready",
               }));
             }}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -911,7 +910,7 @@ export const BotProfilesPage = () => {
             }}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             data-testid="bot-form-wallet-connection-select"
-            required={String(form.mode || "mock") === "live_ready"}
+            required
           >
             <option value="">Cüzdan seçin (zorunlu)</option>
             {(walletConnectionOptions || []).map((connection) => (
@@ -1085,14 +1084,14 @@ export const BotProfilesPage = () => {
 
         <div className="form-group" data-testid="bot-form-group-mode">
           <label className="form-label" htmlFor="bot-form-mode-select" data-testid="bot-form-mode-label">Mode</label>
-          <select id="bot-form-mode-select" value={form.mode} onChange={(event) => setForm((prev) => ({ ...prev, mode: event.target.value }))} className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="bot-form-mode-select">
+          <select id="bot-form-mode-select" value={form.mode} onChange={(event) => setForm((prev) => ({ ...prev, mode: event.target.value }))} className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="bot-form-mode-select" disabled>
             {BOT_MODE_OPTIONS.map((item) => (
-              <option key={item.value} value={item.value} disabled={item.value === "live_ready" && String(form.exchange || "").toLowerCase() === "bybit"}>
+              <option key={item.value} value={item.value}>
                 {item.label}
               </option>
             ))}
           </select>
-          <p className="form-helper-text" data-testid="bot-form-mode-helper">LIVE-READY gerçek emir iletir, MOCK sanal bakiye ile çalışır.</p>
+          <p className="form-helper-text" data-testid="bot-form-mode-helper">Sistem genelinde sadece LIVE-READY mod aktiftir.</p>
           {formErrors.mode && <p className="form-error-text" data-testid="bot-form-mode-error">{formErrors.mode}</p>}
         </div>
 
@@ -1152,7 +1151,7 @@ export const BotProfilesPage = () => {
                 <TableCell data-testid={`bot-table-parity-${item.id}`}>{parity ? `${parity.backtest?.win_rate ?? 0} / ${parity.live?.win_rate ?? 0} / ${parity.deviation_pct ?? 0}%` : "-"}</TableCell>
                 <TableCell data-testid={`bot-table-status-${item.id}`}>{item.status || (item.is_running ? "RUNNING" : "IDLE")}</TableCell>
                 <TableCell data-testid={`bot-table-health-${item.id}`}>{item.health || "HEALTHY"}</TableCell>
-                <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "mock"}</TableCell>
+                <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "live_ready"}</TableCell>
                 <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbol_source_summary?.summary || (item.symbols || []).join(", ")}</TableCell>
                 <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.last_heartbeat || (item.is_running ? "running" : "stopped")}</TableCell>
                 <TableCell>
