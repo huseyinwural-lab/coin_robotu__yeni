@@ -229,7 +229,7 @@ def _validate_approval_reason_requirements(*, action_key: str, approval_note: st
             min_len=APPROVAL_REASON_MIN_LEN,
             detail="approval_note_too_short",
         )
-    if action_key in HIGH_RISK_REASON_ACTIONS:
+    if action_key in HIGH_RISK_REASON_ACTIONS and normalized_override:
         normalized_override = _require_reason(
             normalized_override,
             min_len=OVERRIDE_REASON_MIN_LEN,

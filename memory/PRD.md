@@ -20497,3 +20497,21 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Yorum
 - Bu artık script/akış bug’ı değil; exchange tarafı key validity/permission (veya region/IP) konusu.
 
+## 2026-04-05 — P0 Hotfix (High-Risk Override Reason Opsiyonel)
+
+### Problem
+- Admin onay akışında high-risk aksiyonlar için `override_reason_required_for_high_risk_action` hatasıyla zorunlu alan blokajı oluşuyordu.
+
+### Uygulanan Değişiklik (yalnızca hedef dosya)
+- Dosya: `/app/backend/services/identity_control_service.py`
+- Fonksiyon: `_validate_approval_reason_requirements`
+- Değişiklik: `HIGH_RISK_REASON_ACTIONS` için override reason artık **opsiyonel**.
+  - Boşsa hata fırlatılmaz.
+  - Girilirse mevcut minimum uzunluk validasyonu korunur.
+
+### Doğrulama
+- Python smoke testi ile doğrulandı:
+  - High-risk + boş override reason: ✅ geçiyor
+  - High-risk + kısa override reason: ✅ beklenen şekilde bloklanıyor
+  - High-risk + yeterli override reason: ✅ geçiyor
+
