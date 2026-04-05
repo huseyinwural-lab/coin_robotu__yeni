@@ -57,6 +57,21 @@ const toNum = (value) => {
   return Number.isFinite(num) ? num : 0;
 };
 
+const parseApiErrorMessage = (error, fallback) => {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    const text = detail.map((item) => item?.msg || item?.message || "").filter(Boolean).join(", ");
+    if (text) return text;
+  }
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (detail && typeof detail === "object") {
+    return detail.message || detail.code || fallback;
+  }
+  return fallback;
+};
+
 const getConnectionSourceMeta = (connection) => {
   const snapshot = connection?.readiness_snapshot && typeof connection.readiness_snapshot === "object"
     ? connection.readiness_snapshot
@@ -130,22 +145,7 @@ export const BotProfilesPage = () => {
   const [symbolMode, setSymbolMode] = useState("all_market_symbols");
   const [selectedSymbols, setSelectedSymbols] = useState([]);
 
-  const parseApiErrorMessage = (error, fallback) => {
-    const detail = error?.response?.data?.detail;
-    if (Array.isArray(detail)) {
-      const text = detail.map((item) => item?.msg || item?.message || "").filter(Boolean).join(", ");
-      if (text) return text;
-    }
-    if (typeof detail === "string" && detail.trim()) {
-      return detail;
-    }
-    if (detail && typeof detail === "object") {
-      return detail.message || detail.code || fallback;
-    }
-    return fallback;
-  };
-
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     const serviceRequests = [
       {
         key: "bot_profiles",
@@ -229,7 +229,7 @@ export const BotProfilesPage = () => {
       const extra = failures.length > 2 ? ` (+${failures.length - 2} servis)` : "";
       toast.error(`Kısmi yükleme: ${summary}${extra}`);
     }
-  };
+  }, []);
 
   const findStrategyParity = (strategyType) => (strategyPerformance?.items || []).find((item) => item.strategy_id === strategyType);
 
@@ -421,7 +421,7 @@ export const BotProfilesPage = () => {
 
   useEffect(() => {
     fetchItems();
-  }, []);
+  }, [fetchItems]);
 
   useEffect(() => {
     const queryStrategyId = String(new URLSearchParams(location.search || "").get("strategy_id") || "");

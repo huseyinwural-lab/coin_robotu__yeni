@@ -2303,7 +2303,7 @@ class UserSignalModeUpdateRequest(BaseModel):
 
 class UserScannerRunRequest(BaseModel):
     mode: str | None = None
-    max_results: int = Field(default=20, ge=5, le=100)
+    max_results: int = Field(default=20, ge=5, le=500)
     symbol_source: str = "crypto"
     market_type: str = "all"
     symbol_selection_mode: str = "all_market_symbols"
@@ -2327,7 +2327,7 @@ class UserScannerRunResponse(BaseModel):
 class UserScannerAutomationConfigUpdateRequest(BaseModel):
     auto_enabled: bool = True
     interval_seconds: int = Field(default=60, ge=30, le=120)
-    max_results: int = Field(default=25, ge=5, le=100)
+    max_results: int = Field(default=25, ge=5, le=500)
     symbol_source: str = "crypto"
     symbol_selection_mode: str = "all_market_symbols"
     selected_symbols: list[str] = Field(default_factory=list)
@@ -2359,7 +2359,7 @@ class UserScannerAutomationProfileCreateRequest(BaseModel):
     auto_enabled: bool = True
     is_active: bool = False
     interval_seconds: int = Field(default=60, ge=30, le=120)
-    max_results: int = Field(default=25, ge=5, le=100)
+    max_results: int = Field(default=25, ge=5, le=500)
     symbol_source: str = "crypto"
     symbol_selection_mode: str = "all_market_symbols"
     selected_symbols: list[str] = Field(default_factory=list)
@@ -2370,7 +2370,7 @@ class UserScannerAutomationProfileUpdateRequest(BaseModel):
     auto_enabled: bool = True
     is_active: bool = False
     interval_seconds: int = Field(default=60, ge=30, le=120)
-    max_results: int = Field(default=25, ge=5, le=100)
+    max_results: int = Field(default=25, ge=5, le=500)
     symbol_source: str = "crypto"
     symbol_selection_mode: str = "all_market_symbols"
     selected_symbols: list[str] = Field(default_factory=list)

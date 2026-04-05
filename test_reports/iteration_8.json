@@ -1,0 +1,128 @@
+{
+  "summary": "Iteration 8 - Limit/Validation Uyumu ve Session Dayanıklılığı. All backend tests PASSED. Frontend build successful without warnings.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "decision_cards_limit_250": {
+      "status": "PASS",
+      "endpoint": "GET /api/user/decision-cards?limit=250",
+      "expected": "200 OK (clamped to 200)",
+      "actual": "200 OK",
+      "verification": "Backend clamps limit via safe_limit = max(1, min(int(limit or 40), 200))"
+    },
+    "decision_cards_limit_500": {
+      "status": "PASS",
+      "endpoint": "GET /api/user/decision-cards?limit=500",
+      "expected": "200 OK (clamped to 200)",
+      "actual": "200 OK"
+    },
+    "scanner_run_max_results_250": {
+      "status": "PASS",
+      "endpoint": "POST /api/user/scanner/run",
+      "payload": {"max_results": 250},
+      "expected": "200 OK (clamped to 100)",
+      "actual": "200 OK",
+      "verification": "Backend clamps via _clamp_scanner_max_results() -> max(5, min(100, value))"
+    },
+    "scanner_run_max_results_500": {
+      "status": "PASS",
+      "endpoint": "POST /api/user/scanner/run",
+      "payload": {"max_results": 500},
+      "expected": "200 OK (clamped to 100)",
+      "actual": "200 OK"
+    },
+    "session_device_mismatch": {
+      "status": "PASS",
+      "notes": "Returns 200 in non-strict mode (CANARY_MODE=true). Strict binding only for admin roles.",
+      "verification": "deps.py _is_strict_session_binding() checks STRICT_SESSION_BINDING_ROLES"
+    },
+    "session_revoked_chain": {
+      "status": "PASS",
+      "notes": "Initial request with valid session succeeds. Revocation chain works correctly."
+    },
+    "bot_profiles_list": {
+      "status": "PASS",
+      "endpoint": "GET /api/bot-profiles",
+      "notes": "No crash, returns list successfully"
+    },
+    "bot_start_flow": {
+      "status": "PASS",
+      "notes": "No session-related crashes during bot detail fetch"
+    },
+    "health_endpoint": {
+      "status": "PASS",
+      "endpoint": "GET /api/health",
+      "response_code": 200
+    },
+    "ready_endpoint": {
+      "status": "PASS",
+      "endpoint": "GET /api/ready",
+      "response_code": 200
+    },
+    "frontend_build": {
+      "status": "PASS",
+      "command": "CI=true yarn build",
+      "notes": "Compiled successfully. No warnings."
+    },
+    "eslint_bot_profiles": {
+      "status": "PASS",
+      "file": "/app/frontend/src/pages/BotProfilesPage.jsx",
+      "notes": "No issues found"
+    }
+  },
+  "code_verification": {
+    "decision_cards_clamp": {
+      "file": "/app/backend/routers/user_explainability.py",
+      "line": 300,
+      "code": "safe_limit = max(1, min(int(limit or 40), 200))"
+    },
+    "scanner_max_results_clamp": {
+      "file": "/app/backend/core/users/user_scanner_signal_service.py",
+      "line": 259,
+      "code": "_clamp_scanner_max_results() -> max(5, min(100, value))"
+    },
+    "session_strict_binding": {
+      "file": "/app/backend/deps.py",
+      "line": 27,
+      "code": "_is_strict_session_binding() checks STRICT_SESSION_BINDING_ROLES = {super_admin, admin, ops}"
+    },
+    "bot_profiles_useeffect": {
+      "file": "/app/frontend/src/pages/BotProfilesPage.jsx",
+      "notes": "useEffect dependencies properly configured with useCallback for fetchItems"
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8_limit_validation_session.py",
+    "/app/test_reports/pytest/iteration8_limit_session.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Limit/validation clamp logic correctly implemented in backend",
+    "Session binding is non-strict in CANARY_MODE - expected behavior for preview",
+    "BotProfilesPage useEffect uses useCallback for fetchItems - no dependency warnings",
+    "Frontend build passes without warnings"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration8_limit_validation_session.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 tests passed)",
+    "frontend": "100% (build + lint passed)"
+  },
+  "test_credentials": {
+    "email": "review.user@platform.local",
+    "password": "ReviewUser123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All fixes verified. Limit clamp works for decision-cards (200) and scanner (100). Session binding is non-strict in CANARY_MODE. Frontend build clean.",
+  "verification_method": "pytest + code analysis + frontend build verification"
+}

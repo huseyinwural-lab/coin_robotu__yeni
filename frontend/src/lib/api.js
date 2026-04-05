@@ -5,10 +5,7 @@ const LOOPBACK_URL_REGEX = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
 const isRemoteBrowser =
   typeof window !== "undefined" &&
   !/^(localhost|127\.0\.0\.1)$/i.test(String(window.location.hostname || ""));
-const BACKEND_URL =
-  LOOPBACK_URL_REGEX.test(CONFIGURED_BACKEND_URL) && isRemoteBrowser
-    ? window.location.origin
-    : CONFIGURED_BACKEND_URL;
+const BACKEND_URL = CONFIGURED_BACKEND_URL;
 const AUTH_TOKEN_KEY = "token";
 const AUTH_USER_KEY = "auth_user";
 
@@ -22,6 +19,12 @@ if (!BACKEND_URL) {
 if (!/^https?:\/\//i.test(BACKEND_URL)) {
   throw new Error(
     "Invalid REACT_APP_BACKEND_URL. Expected absolute http(s) URL.",
+  );
+}
+
+if (isRemoteBrowser && LOOPBACK_URL_REGEX.test(BACKEND_URL)) {
+  throw new Error(
+    "Invalid REACT_APP_BACKEND_URL for remote browser. Loopback URL cannot be used in deployed environments.",
   );
 }
 
@@ -40,6 +43,35 @@ const isAuthPath = (url) => {
 
 const SESSION_STORAGE_KEY = "platform-session-id";
 const DEVICE_STORAGE_KEY = "platform-device-id";
+
+const decodeJwtPayload = (token) => {
+  try {
+    const [, payload = ""] = String(token || "").split(".");
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const decoded = atob(padded);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
+};
+
+const setDeviceCookie = (deviceId) => {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `device_id=${encodeURIComponent(deviceId)}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+};
+
+const persistDeviceId = (deviceId) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.localStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
+  setDeviceCookie(deviceId);
+};
 
 const readStoredToken = () => {
   if (typeof window === "undefined") {
@@ -79,14 +111,32 @@ const ensureDeviceId = () => {
   }
   const current = String(window.localStorage.getItem(DEVICE_STORAGE_KEY) || "").trim();
   if (current.length >= 24) {
+    setDeviceCookie(current);
     return current;
   }
   const randomPart = typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID().replace(/-/g, "")
     : `${Date.now()}${Math.random().toString(16).slice(2)}`;
   const deviceId = `dev${randomPart}`.slice(0, 64);
-  window.localStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
+  persistDeviceId(deviceId);
   return deviceId;
+};
+
+const syncDeviceIdFromToken = (token) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const payload = decodeJwtPayload(token);
+  const tokenDeviceId = String(payload?.device_id || "").trim();
+  if (tokenDeviceId.length < 24) {
+    return;
+  }
+  const current = String(window.localStorage.getItem(DEVICE_STORAGE_KEY) || "").trim();
+  if (current !== tokenDeviceId) {
+    persistDeviceId(tokenDeviceId);
+  } else {
+    setDeviceCookie(tokenDeviceId);
+  }
 };
 
 export const getSessionDeviceId = () => ensureDeviceId();
@@ -110,6 +160,13 @@ apiClient.interceptors.request.use((config) => {
     const token = readStoredToken();
     if (token) {
       nextConfig.headers.Authorization = `Bearer ${token}`;
+      syncDeviceIdFromToken(token);
+    }
+  } else {
+    const bearer = String(nextConfig.headers.Authorization || "");
+    const token = bearer.startsWith("Bearer ") ? bearer.slice(7).trim() : "";
+    if (token) {
+      syncDeviceIdFromToken(token);
     }
   }
 

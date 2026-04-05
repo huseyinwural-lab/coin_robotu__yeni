@@ -293,11 +293,12 @@ def explainability_coverage(
 
 @router.get("/decision-cards", response_model=DecisionCardEnvelopeResponse)
 def user_decision_cards(
-    limit: int = Query(default=40, ge=1, le=200),
+    limit: int = Query(default=40, ge=1, le=500),
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    items = list_user_decision_cards(db, current_user.id, limit=limit)
+    safe_limit = max(1, min(int(limit or 40), 200))
+    items = list_user_decision_cards(db, current_user.id, limit=safe_limit)
     return DecisionCardEnvelopeResponse(**decision_card_envelope(items))
 
 

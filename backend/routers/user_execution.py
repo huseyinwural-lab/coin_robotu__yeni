@@ -33,7 +33,6 @@ from services.execution_intent_service import (
 from services.execution_pipeline_orchestrator import ExecutionPipelineViolation
 from services.commercial_controls_enforcement_service import CommercialControlViolation
 from services.execution_readiness_service import enforce_execution_guard_or_raise
-from services.execution_readiness_service import evaluate_execution_readiness
 from services.execution_safety_service import ExecutionSafetyViolation
 from services.explainability_rules_service import build_trade_explain
 from services.quote_asset_constraints import (

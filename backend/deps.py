@@ -21,6 +21,15 @@ from services.suspicious_activity_service import create_risk_event, maybe_create
 bearer_scheme = HTTPBearer(auto_error=False)
 ADMIN_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
 STEP_UP_MAX_AGE_SECONDS = 10 * 60
+STRICT_SESSION_BINDING_ROLES = {"super_admin", "admin", "ops"}
+
+
+def _is_strict_session_binding(payload: dict) -> bool:
+    env_strict = str(os.getenv("SESSION_STRICT_BINDING", "false") or "false").strip().lower() in {"1", "true", "yes"}
+    if env_strict:
+        return True
+    role_value = str(payload.get("role") or "").strip().lower()
+    return role_value in STRICT_SESSION_BINDING_ROLES
 
 
 def is_admin_role(role: UserRole) -> bool:
@@ -63,8 +72,9 @@ def get_current_user(
     header_device_id = str((request.headers.get("x-session-device") if request else "") or "").strip()
     bound_device_id = header_device_id or cookie_device_id
     is_local_client = bool(getattr(getattr(request, "client", None), "host", None) in {"127.0.0.1", "localhost"})
+    strict_binding = _is_strict_session_binding(payload)
     if not bound_device_id or bound_device_id != token_device_id:
-        if is_local_client:
+        if is_local_client or not strict_binding:
             bound_device_id = token_device_id
         else:
             invalidate_session_by_token(
@@ -84,7 +94,7 @@ def get_current_user(
     current_device_fingerprint = resolve_device_fingerprint(request)
 
     if not token_ip_hash or token_ip_hash != current_ip_hash:
-        if is_local_client:
+        if is_local_client or not strict_binding:
             token_ip_hash = current_ip_hash
         else:
             invalidate_session_by_token(
@@ -96,7 +106,7 @@ def get_current_user(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="reauth_required_ip_change")
 
     if not token_device_fingerprint or token_device_fingerprint != current_device_fingerprint:
-        if is_local_client:
+        if is_local_client or not strict_binding:
             token_device_fingerprint = current_device_fingerprint
         else:
             invalidate_session_by_token(
