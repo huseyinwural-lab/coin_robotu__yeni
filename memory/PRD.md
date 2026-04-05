@@ -20182,3 +20182,58 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `View Chart` butonları yok.
   - Frontend yapısı geçerli.
 
+## 2026-04-05 — Düzeltme Paketi (Limit + Session + CI Clean) ✅
+
+### Kapsam (kullanıcı talimatı)
+- API 422 limit uyumu
+- session_device_mismatch / session_revoked iyileştirmesi
+- CI kırıkları (ruff + React Hook dependency)
+- deploy routing tarafında yanlış fallback davranışını engelleme
+
+### Uygulanan düzeltmeler
+- `/app/backend/routers/user_explainability.py`
+  - `GET /api/user/decision-cards` query limiti `le=500` yapıldı.
+  - Güvenli clamp eklendi: `safe_limit = max(1, min(int(limit or 40), 200))`
+  - Sonuç: `limit=250` isteği artık 422 yerine 200 döner (200’e clamp).
+
+- `/app/backend/schemas.py`
+  - Scanner max_results validator aralıkları genişletildi (`le=500`) (run + automation config/profile).
+  - Servis katmanındaki mevcut clamp korunuyor: `_clamp_scanner_max_results()` -> `<=100`.
+  - Sonuç: eski istemci 250/500 yollasa da 422 yerine 200 ve 100’e clamp.
+
+- `/app/backend/deps.py`
+  - Session binding politikası role-aware hale getirildi.
+  - `STRICT_SESSION_BINDING_ROLES = {super_admin, admin, ops}`
+  - User tarafında non-strict binding ile session mismatch/revoked zinciri azaltıldı.
+
+- `/app/frontend/src/lib/api.js`
+  - Token’dan `device_id` decode edilip localStorage + cookie (`device_id`) ile senkronlanıyor.
+  - `X-Session-Device` header/device cookie tutarlılığı güçlendirildi.
+  - Remote ortamda loopback backend URL fallback’i kaldırıldı; invalid loopback config için fail-fast eklendi.
+
+- `/app/backend/routers/user_execution.py`
+  - CI ruff hatası temizlendi (unused import kaldırıldı).
+
+- `/app/frontend/src/pages/BotProfilesPage.jsx`
+  - `fetchItems` `useCallback` ile stabilize edildi.
+  - `useEffect` dependency warning kapatıldı (CI build blocker fix).
+
+### Doğrulama
+- CI komutları:
+  - `ruff check /app/backend/routers/user_execution.py` ✅
+  - `CI=true yarn --cwd /app/frontend build` ✅
+  - `bash /app/scripts/verify_phase6_security.sh` ✅
+
+- API doğrulama:
+  - `GET /api/user/decision-cards?limit=250` -> 200 ✅
+  - `POST /api/user/scanner/run` (`max_results=250`) -> 200 ✅
+  - Session testlerinde user akışında revoke zinciri oluşmadan çağrılar devam ediyor ✅
+
+- Testing agent raporu:
+  - `/app/test_reports/iteration_8.json` ✅
+  - Backend %100, Frontend %100
+
+### Not (routing)
+- `cb.infyra.de` için görülen `/api` 404 durumu deployment/proxy-domain katmanı kaynaklı olabilir.
+- Kod tarafında yanlış remote-loopback fallback kaldırıldı; ancak custom domain reverse-proxy kuralı platform/deploy seviyesinde ayrıca doğrulanmalıdır.
+
