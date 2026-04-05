@@ -6,7 +6,6 @@ import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { ScannerResultsTable } from "@/components/ScannerResultsTable";
 import { TradeSymbolSelection } from "@/components/TradeSymbolSelection";
 import { Button } from "@/components/ui/button";
-import { UserMarketChartPanel } from "@/components/UserMarketChartPanel";
 import { apiClient } from "@/lib/api";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { saveExecutionContext } from "@/lib/userFlowContext";
@@ -293,8 +292,6 @@ export const UserScannerPage = () => {
     updatedAt: null,
   });
   const [selectedTrendWindowMinutes, setSelectedTrendWindowMinutes] = useState(5);
-  const [chartSymbol, setChartSymbol] = useState("BTCUSDT");
-  const [chartTimeframe, setChartTimeframe] = useState("1h");
   const [scannerSection, setScannerSection] = useState(searchParams.get("section") === "screener" ? "screener" : "results");
   const [scannerTemplates, setScannerTemplates] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -1074,12 +1071,6 @@ export const UserScannerPage = () => {
     navigate(`/user/trade?source=scanner&symbol=${encodeURIComponent(item.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(marketType)}&preset=spot_basic`);
   };
 
-  const openChartFromScanner = (item) => {
-    const symbol = String(item?.symbol || "BTCUSDT").trim().toUpperCase();
-    setChartSymbol(symbol);
-    setChartTimeframe("1h");
-  };
-
   const switchScannerSection = (nextSection) => {
     setScannerSection(nextSection);
     const nextParams = new URLSearchParams(searchParams);
@@ -1132,18 +1123,6 @@ export const UserScannerPage = () => {
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-scanner-title">Scanner</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
-
-      <div className="order-11 col-span-12" data-testid="user-scanner-chart-panel-col">
-        <UserMarketChartPanel
-          symbol={chartSymbol}
-          initialTimeframe={chartTimeframe}
-          signals={(scannerResults || []).filter((item) => String(item.symbol || "").toUpperCase() === chartSymbol)}
-          trades={[]}
-          selectedSignal={(scannerResults || []).find((item) => String(item.symbol || "").toUpperCase() === chartSymbol) || null}
-          onTimeframeChange={setChartTimeframe}
-          testIdPrefix="user-scanner-chart"
-        />
-      </div>
 
       <section className="order-2 col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-section-toggle-panel">
         <div className="flex flex-wrap items-center gap-2" data-testid="user-scanner-section-toggle-group">
@@ -1782,7 +1761,6 @@ export const UserScannerPage = () => {
           results={scannerResults}
           compactMode={compactMode}
           onOpenTrade={openExecuteFromScanner}
-          onViewChart={openChartFromScanner}
           onViewCard={(item) => onSelectDecisionCard(item.symbol)}
           onAddWatchlist={addWatchlistFromResult}
         />
