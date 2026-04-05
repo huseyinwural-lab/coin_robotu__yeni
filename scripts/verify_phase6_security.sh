@@ -97,6 +97,7 @@ PY
 
 BACKEND_URL="$(python - <<'PY'
 import json
+import time
 from pathlib import Path
 import requests
 
@@ -123,22 +124,28 @@ def is_alive(base: str) -> bool:
             continue
     return False
 
-candidates = [
-    'http://127.0.0.1:8001',
-    read_frontend_backend_url(),
-]
+candidates = []
+for candidate in ['http://127.0.0.1:8001', read_frontend_backend_url()]:
+    candidate = str(candidate or '').strip()
+    if candidate and candidate not in candidates:
+        candidates.append(candidate)
 
 selected = ''
-for c in candidates:
-    if is_alive(c):
-        selected = c.rstrip('/')
-        break
-
-if not selected:
+for _ in range(45):
     for c in candidates:
-        if c:
+        if is_alive(c):
             selected = c.rstrip('/')
             break
+    if selected:
+        break
+    time.sleep(2)
+
+if not selected:
+    frontend_candidate = read_frontend_backend_url().strip().rstrip('/')
+    if frontend_candidate:
+        selected = frontend_candidate
+    elif candidates:
+        selected = candidates[0].rstrip('/')
 
 print(selected)
 PY

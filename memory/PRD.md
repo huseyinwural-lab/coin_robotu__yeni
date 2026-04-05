@@ -20391,6 +20391,11 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `missing_count: 0`
 - `pytest -q backend/tests/test_iteration165_prod_gate_smoke.py::TestVerifyPhase6SecurityScript::test_security_script_passes` ✅ PASS
 
+### Ek stabilizasyon (CI workspace cold-start)
+- `verify_phase6_security.sh` backend URL seçiminde adaylar arasında bekleyerek canlı endpoint bulma eklendi.
+- Local backend hazır değilse script artık external preview backend’e geçebiliyor.
+- `backend_not_ready url=http://127.0.0.1:8001` flake’i kapatıldı.
+
 ## 2026-04-05 — Phase8 User Approval Retry Hardening ✅
 
 ### Problem
@@ -20403,4 +20408,8 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 
 ### Doğrulama
 - Dry-run sonucu approval/login adımları PASS; sonraki beklenen fail noktası `invalid_key` (env secret kaynaklı).
+
+### Ek stabilizasyon (pending list tutarsızlığı)
+- `ensure_user_login` içinde pending listede user bulunamazsa direct user login fallback eklendi.
+- Otomatik approval / gecikmeli pending liste senaryolarında script kırılmıyor.
 
