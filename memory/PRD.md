@@ -19746,3 +19746,29 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - Fallback: aynı exchange/market için mevcut diğer environment kayıtları
 - Böylece panelde “Bağlantı bulunamadı” yerine varsa fallback profile maplenir ve kullanıcı satırları her zaman görür.
 
+## 2026-04-05 — Exchange Settings -> Diagnostics Otomatik Bağlantı Senkronu ✅
+
+### Problem
+- Kullanıcı `Exchange Settings` üzerinde key kaydettiğinde `Diagnostics` panelinde `Bağlantı bulunamadı` kalıyordu.
+- Neden: `/phase4/exchange-settings` kaydı legacy `user_exchange_settings` tablosuna gidiyor, Diagnostics ise `/user/exchange-connections` kaynağını okuyordu.
+
+### Uygulanan çözüm
+- Backend (`phase4_live.update_exchange_settings`) genişletildi:
+  - Request schema’ya `market_type` eklendi.
+  - `/phase4/exchange-settings` kaydı sonrası aynı exchange/market/environment için connection profile otomatik upsert ediliyor.
+  - Senkronlanan connection için revalidate tetikleniyor.
+- Frontend (`UserExchangeSettingsPage`) güncellendi:
+  - Settings formuna `Market Type` select eklendi.
+  - Save payload artık `{ exchange, market_type, mode, api_key, api_secret }` gönderiyor.
+  - Başarılı save mesajı: Diagnostics senkronu vurgulanıyor.
+
+### Beklenen kullanım
+1) Exchange Settings -> Market Type `spot` seç -> key kaydet
+2) Exchange Settings -> Market Type `futures` seç -> key kaydet
+3) Diagnostics -> Binance Spot/Futures panellerinde bağlantı bilgileri otomatik görünür
+
+### Teknik doğrulama
+- Local backend API testleri PASS:
+  - `PUT /api/phase4/exchange-settings` (spot/futures) -> 200
+  - `GET /api/user/exchange-connections` -> ilgili spot/futures connection’larda `has_api_key=true`, `has_api_secret=true`
+
