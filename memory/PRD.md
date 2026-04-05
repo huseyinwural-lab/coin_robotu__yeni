@@ -19972,3 +19972,49 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Tetikleyen nokta: **Kullanılacak Cüzdan** dropdown açılışı ve ardından **Oluştur** akışında Live-Ready blok kontrolü.
 - İkincil etki: Portfolio ekranı cüzdan kartları, seçimde yanlış bağlantı tercih edildiği için 0 gösteriyordu.
 
+## 2026-04-05 — Signals P0 Senkron Kapanışı (Backend Payload + Frontend Binding) ✅
+
+### Kapsam
+- Bu turda sadece Signals senkronu ele alındı.
+- Hedef: `UserSignalsPage` üzerindeki Detected/Intent/Submitted kartları ve sinyal grid’inin backend gerçek verisiyle tutarlı çalışması.
+
+### Backend değişiklikleri
+- `/app/backend/schemas.py`
+  - `UserSignalResponse` zenginleştirildi:
+    - `signal`, `signal_direction`, `signal_generated_at`
+    - `execution_intent_status`, `proposed_notional`, `execution_intent_side`, `execution_intent_market_type`, `execution_intent_created_at`
+    - `linked_trade_id`, `linked_trade_status`, `linked_open_trade_count`, `has_open_position_link`
+
+- `/app/backend/routers/user_scanner_signals.py` (`GET /api/user/signals`)
+  - Pending signal + intent + trade projection eşlemesi eklendi.
+  - Sinyal satırlarına intent/trade bağı (traceability) enjekte edildi.
+  - Pending tabloda bulunmayan ama trade projection’da var olan kayıtlar için trade-linked fallback signal üretimi eklendi.
+  - Açık pozisyon bağlantısı (`has_open_position_link`) ve açık trade sayısı (`linked_open_trade_count`) hesaplanıyor.
+
+- `/app/backend/core/users/user_scanner_signal_service.py`
+  - `list_user_signals` fonksiyonuna `refresh_snapshot` parametresi eklendi.
+  - Signals liste endpoint’inde `refresh_snapshot=False` kullanılarak listeleme gecikmesi düşürüldü.
+
+### Frontend değişiklikleri
+- `/app/frontend/src/pages/UserSignalsPage.jsx`
+  - `/user/signals` çağrısı stabilize edildi (`limit: 80`, `timeout: 15000`).
+  - Kısmi istek hatalarında state’i boş listeye düşürmeyen güvenli yükleme davranışı eklendi.
+  - Detected/Intent/Submitted metrikleri backend gelen sinyal alanlarından yeniden hesaplanıyor.
+  - Grid ve mobil kartlar `execution_intent_status` + `proposed_notional` bilgilerini gösteriyor.
+  - Boş grid için explicit empty state eklendi.
+  - Auto refresh aralığı `10s` olarak güncellendi (`SIGNAL_POLL_INTERVAL_MS = 10000`).
+
+### Doğrulama
+- Lint:
+  - Python PASS (`user_scanner_signals.py`, `user_scanner_signal_service.py`, `schemas.py`)
+  - JS PASS (`UserSignalsPage.jsx`)
+- Lokal API doğrulama (`127.0.0.1:8001`):
+  - `/api/user/signals?limit=80` ~2–3s içinde dönüyor.
+  - Zorunlu zengin alanlar response içinde mevcut.
+- Testing agent raporu: `/app/test_reports/iteration_2.json`
+  - Backend + Frontend başarı oranı %100, retest gerekmedi.
+  - Signals grid dolumu ve funnel metrikleri doğrulandı.
+
+### Bilinen durum
+- Preview ortamında auth/session dalgalanması (infra kaynaklı) devam edebilir; signals fix bu sorundan bağımsızdır.
+
