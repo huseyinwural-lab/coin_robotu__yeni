@@ -20138,3 +20138,22 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - DB katmanı PostgreSQL-only çalışıyor (`DB_ENGINE=postgresql` startup log doğrulandı).
 - `MONGO_URL`/`DB_NAME` env anahtarları sistemde korunuyor (platform/protected key uyumu), fakat runtime erişim PostgreSQL üzerinde.
 
+## 2026-04-05 — User Bot Profilleri Toplu Temizlik ✅
+
+### Kullanıcı talebi
+- Kullanılmayan botların komple silinmesi.
+- Kullanıcı onayı: **A) Evet, 17’sini de sil**.
+
+### Uygulanan işlem
+- User hesabında listelenen tüm bot profilleri API üzerinden silindi.
+- İşlem metodu: `GET /api/bot-profiles` -> her kayıt için `DELETE /api/bot-profiles/{id}`.
+
+### Doğrulama
+- Önce: `before_count=17`
+- Silinen: `deleted_ok=17`, `deleted_fail=0`
+- Sonra: `after_count=0`
+
+### Etki
+- Artık user tarafında otomatik/IDLE bot profili kalmadı.
+- Yeni botlar kullanıcı tarafından temiz şekilde tekrar oluşturulabilir.
+
