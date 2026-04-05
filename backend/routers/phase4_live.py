@@ -148,6 +148,17 @@ def _sync_settings_credentials_to_connection(
     )
 
     if existing is not None:
+        snapshot = existing.readiness_snapshot if isinstance(existing.readiness_snapshot, dict) else {}
+        snapshot.update(
+            {
+                "exchange": normalized_exchange,
+                "market_type": normalized_market_type,
+                "environment": normalized_environment,
+                "source": "phase4_exchange_settings_sync",
+                "settings_sync_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        existing.readiness_snapshot = snapshot
         existing.api_key_encrypted = encrypt_exchange_secret(str(api_key or "").strip())
         existing.api_secret_encrypted = encrypt_exchange_secret(str(api_secret or "").strip())
         existing.updated_at = datetime.now(timezone.utc)

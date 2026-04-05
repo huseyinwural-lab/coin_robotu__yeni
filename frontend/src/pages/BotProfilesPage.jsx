@@ -57,13 +57,37 @@ const toNum = (value) => {
   return Number.isFinite(num) ? num : 0;
 };
 
-const isSettingsWalletConnection = (connection) => {
+const getConnectionSourceMeta = (connection) => {
   const snapshot = connection?.readiness_snapshot && typeof connection.readiness_snapshot === "object"
     ? connection.readiness_snapshot
     : {};
   const source = String(snapshot?.source || "").toLowerCase();
   const label = String(connection?.account_label || "").toUpperCase();
-  return source === "phase4_exchange_settings_sync" || label.startsWith("SETTINGS ");
+  return {
+    source,
+    isSettingsSynced: source === "phase4_exchange_settings_sync" || label.startsWith("SETTINGS "),
+  };
+};
+
+const getConnectionRanking = (connection) => {
+  const snapshot = connection?.readiness_snapshot && typeof connection.readiness_snapshot === "object"
+    ? connection.readiness_snapshot
+    : {};
+  const { isSettingsSynced } = getConnectionSourceMeta(connection);
+  const health = String(connection?.connection_health || snapshot?.connection_health || "").toLowerCase();
+  const canTradeEffective = Boolean(connection?.can_trade_effective);
+  const onlineTradeScore = health === "online" && canTradeEffective ? 1 : 0;
+  const availableBalance = toNum(snapshot.available_balance ?? snapshot.wallet_balance ?? snapshot.total_wallet_balance);
+  const walletScore = availableBalance > 0 ? 1 : 0;
+  const defaultScore = connection?.is_default ? 1 : 0;
+  const updatedAt = String(connection?.updated_at || "");
+  return {
+    onlineTradeScore,
+    walletScore,
+    settingsScore: isSettingsSynced ? 1 : 0,
+    defaultScore,
+    updatedAt,
+  };
 };
 
 const toCanonicalStrategyOptions = (items = []) => {
@@ -209,25 +233,26 @@ export const BotProfilesPage = () => {
     [canonicalStrategyOptions, form.strategy_type],
   );
 
-  const settingsScopedConnections = useMemo(() => {
+  const scopedConnections = useMemo(() => {
     return (exchangeConnections || [])
       .filter((item) => String(item?.exchange || "").toLowerCase() === String(form.exchange || "binance").toLowerCase())
       .filter((item) => String(item?.market_type || "").toLowerCase() === String(form.market_type || "spot").toLowerCase())
-      .filter((item) => isSettingsWalletConnection(item))
       .filter((item) => String(item?.environment || "live").toLowerCase() === "live")
       .sort((a, b) => {
-        const aDefault = a?.is_default ? 1 : 0;
-        const bDefault = b?.is_default ? 1 : 0;
-        if (aDefault !== bDefault) return bDefault - aDefault;
-        return String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""));
+        const aRank = getConnectionRanking(a);
+        const bRank = getConnectionRanking(b);
+        if (aRank.onlineTradeScore !== bRank.onlineTradeScore) return bRank.onlineTradeScore - aRank.onlineTradeScore;
+        if (aRank.walletScore !== bRank.walletScore) return bRank.walletScore - aRank.walletScore;
+        if (aRank.settingsScore !== bRank.settingsScore) return bRank.settingsScore - aRank.settingsScore;
+        if (aRank.defaultScore !== bRank.defaultScore) return bRank.defaultScore - aRank.defaultScore;
+        return bRank.updatedAt.localeCompare(aRank.updatedAt);
       });
   }, [exchangeConnections, form.exchange, form.market_type]);
 
   const walletConnectionOptions = useMemo(() => {
-    const scopedConnections = settingsScopedConnections;
-
     return scopedConnections.map((connection) => {
       const snapshot = connection?.readiness_snapshot || {};
+      const { isSettingsSynced } = getConnectionSourceMeta(connection);
       const availableBalance = toNum(snapshot.available_balance ?? snapshot.wallet_balance ?? snapshot.total_wallet_balance);
       const unrealizedPnl = toNum(snapshot.unrealized_pnl ?? snapshot.total_unrealized_pnl ?? snapshot.realized_pnl);
       const walletLabel = String(connection.market_type || "spot").toLowerCase() === "futures" ? "FUTURES CÜZDAN" : "SPOT CÜZDAN";
@@ -235,15 +260,17 @@ export const BotProfilesPage = () => {
         id: connection.id,
         exchange: connection.exchange,
         market_type: connection.market_type,
-        label: `${walletLabel} · ${availableBalance.toFixed(2)} USDT`,
+        label: `${walletLabel} · ${availableBalance.toFixed(2)} USDT · ${connection.account_label}`,
         available_balance: availableBalance,
         pnl: unrealizedPnl,
         global_activation_active: Boolean(connection.global_activation_active),
         global_activation_flag_key: connection.global_activation_flag_key,
         can_trade_effective: Boolean(connection.can_trade_effective),
+        connection_health: String(connection.connection_health || "unknown").toLowerCase(),
+        is_settings_synced: isSettingsSynced,
       };
     });
-  }, [settingsScopedConnections]);
+  }, [scopedConnections]);
 
   const selectedWalletConnection = useMemo(
     () => walletConnectionOptions.find((item) => item.id === form.exchange_connection_id) || null,
@@ -251,14 +278,17 @@ export const BotProfilesPage = () => {
   );
 
   const comboActivationState = useMemo(() => {
-    const scoped = settingsScopedConnections;
-    const active = scoped.some((item) => Boolean(item?.global_activation_active) && Boolean(item?.can_trade_effective));
+    const scoped = scopedConnections;
+    const active = scoped.some((item) => {
+      const health = String(item?.connection_health || "").toLowerCase();
+      return (health === "online" && Boolean(item?.can_trade_effective)) || Boolean(item?.global_activation_active);
+    });
     return {
       active,
       hasConnection: scoped.length > 0,
       flag: scoped[0]?.global_activation_flag_key || `is_${form.exchange}_${form.market_type}_active`,
     };
-  }, [form.exchange, form.market_type, settingsScopedConnections]);
+  }, [form.exchange, form.market_type, scopedConnections]);
 
   const liveReadyBlockedReason = useMemo(() => {
     if (form.mode !== "live_ready") return "";

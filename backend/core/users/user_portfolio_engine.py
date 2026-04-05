@@ -18,25 +18,40 @@ def _is_settings_synced_connection(row: UserExchangeConnection) -> bool:
     return source == "phase4_exchange_settings_sync" or label.startswith("SETTINGS ")
 
 
-def _pick_settings_wallet_connection(rows: list[UserExchangeConnection], market_type: str) -> UserExchangeConnection | None:
+def _snapshot_wallet_balance(snapshot: dict) -> float:
+    wallet_value = _safe_float(snapshot.get("wallet_balance"))
+    return wallet_value if wallet_value > 0 else 0.0
+
+
+def _snapshot_trade_ready(snapshot: dict) -> bool:
+    health = str(snapshot.get("connection_health") or "").strip().lower()
+    can_trade = bool(snapshot.get("can_trade"))
+    validation_success = bool(snapshot.get("validation_success") or snapshot.get("is_valid"))
+    if health == "online" and can_trade:
+        return True
+    return validation_success and can_trade
+
+
+def _pick_wallet_connection(rows: list[UserExchangeConnection], market_type: str) -> UserExchangeConnection | None:
     filtered = [
         row
         for row in rows
         if str(row.market_type or "").strip().lower() == market_type
         and str(row.environment or "live").strip().lower() == "live"
-        and _is_settings_synced_connection(row)
     ]
     if not filtered:
         return None
 
-    # Öncelik: default > güncel kayıt
-    filtered.sort(
-        key=lambda item: (
-            1 if item.is_default else 0,
-            item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
-        ),
-        reverse=True,
-    )
+    def _score(row: UserExchangeConnection):
+        snapshot = row.readiness_snapshot if isinstance(row.readiness_snapshot, dict) else {}
+        wallet_score = 1 if _snapshot_wallet_balance(snapshot) > 0 else 0
+        readiness_score = 1 if _snapshot_trade_ready(snapshot) else 0
+        settings_score = 1 if _is_settings_synced_connection(row) else 0
+        default_score = 1 if row.is_default else 0
+        updated_score = row.updated_at or datetime.min.replace(tzinfo=timezone.utc)
+        return readiness_score, wallet_score, settings_score, default_score, updated_score
+
+    filtered.sort(key=_score, reverse=True)
     return filtered[0]
 
 
@@ -44,11 +59,7 @@ def _wallet_balance_from_connection(row: UserExchangeConnection | None) -> float
     if row is None:
         return 0.0
     snapshot = row.readiness_snapshot if isinstance(row.readiness_snapshot, dict) else {}
-    wallet_value = _safe_float(snapshot.get("wallet_balance"))
-    # Kullanıcı talebi: veri yoksa 0 (available fallback yok)
-    if wallet_value <= 0:
-        return 0.0
-    return wallet_value
+    return _snapshot_wallet_balance(snapshot)
 
 
 def build_user_portfolio_snapshot(db: Session, user_id: str) -> dict:
@@ -88,8 +99,8 @@ def build_user_portfolio_snapshot(db: Session, user_id: str) -> dict:
         .all()
     )
 
-    spot_connection = _pick_settings_wallet_connection(all_connections, "spot")
-    futures_connection = _pick_settings_wallet_connection(all_connections, "futures")
+    spot_connection = _pick_wallet_connection(all_connections, "spot")
+    futures_connection = _pick_wallet_connection(all_connections, "futures")
 
     spot_wallet_balance = _wallet_balance_from_connection(spot_connection)
     futures_wallet_balance = _wallet_balance_from_connection(futures_connection)

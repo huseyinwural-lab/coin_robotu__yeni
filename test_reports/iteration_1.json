@@ -1,0 +1,73 @@
+{
+  "summary": "Completed testing of wallet/portfolio consistency issues. Identified ROOT CAUSE: _pick_wallet_connection scoring logic prioritizes readiness_score (online+can_trade) over wallet_score (balance>0), causing portfolio to show 0 balance when a connection is online but has no balance, even when other connections have balance.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/user/portfolio",
+        "issue": "spot_wallet_balance shows 0 when LIVE SPOT connection has 82.63 USDT balance. Root cause: _pick_wallet_connection in user_portfolio_engine.py prioritizes readiness_score over wallet_score. Connection 'user-live-spot' (online+can_trade, 0 balance) is selected over 'LIVE SPOT' (offline, 82.63 balance)",
+        "priority": "CRITICAL",
+        "file": "/app/backend/core/users/user_portfolio_engine.py",
+        "line": "45-52",
+        "fix_suggestion": "Change scoring tuple order from (readiness_score, wallet_score, ...) to (wallet_score, readiness_score, ...) OR add combined score logic that considers both"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "GET /api/user/exchange-connections",
+        "issue": "No connections have readiness_snapshot.source='phase4_exchange_settings_sync' - Exchange Settings sync may not be preserving source field",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "User login via /user/login",
+        "issue": "Login redirects to /admin/login?email=... instead of user dashboard. Known preview auth/session intermittency.",
+        "affected_selectors": []
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_wallet_portfolio_consistency.py",
+    "/app/test_reports/pytest/wallet_portfolio_test.xml"
+  ],
+  "action_items": [
+    "FIX CRITICAL: Modify _pick_wallet_connection scoring in /app/backend/core/users/user_portfolio_engine.py to prioritize wallet_score over readiness_score, or use combined scoring logic",
+    "VERIFY: Exchange Settings save should set readiness_snapshot.source='phase4_exchange_settings_sync' on synced connections",
+    "INVESTIGATE: Frontend login redirect issue (may be preview environment specific)"
+  ],
+  "critical_code_review_comments": [
+    "user_portfolio_engine.py:45-52 - Scoring tuple (readiness_score, wallet_score, settings_score, default_score, updated_at) causes connection with online+can_trade but 0 balance to be selected over connection with balance but offline status",
+    "BotProfilesPage.jsx:280-291 - comboActivationState correctly checks (online+can_trade) OR global_activation_active, but this doesn't help if the selected connection has no balance",
+    "phase4_live.py:150-167 - _sync_settings_credentials_to_connection correctly sets source='phase4_exchange_settings_sync' but existing connections may not have this field"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_wallet_portfolio_consistency.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "Unable to test due to login redirect issue"
+  },
+  "test_credentials": {
+    "email": "review.user@platform.local",
+    "password": "ReviewUser123!"
+  },
+  "seed_data_creation": "None - used existing test user data",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Root cause identified in _pick_wallet_connection scoring. After fix, verify: 1) Portfolio spot_wallet_balance shows 82.63 (from LIVE SPOT connection), 2) BotProfiles wallet dropdown shows connections with balance first, 3) comboActivationState reflects correct diagnostics flag",
+  "rca_of_the_issue": {
+    "root_cause": "_pick_wallet_connection in user_portfolio_engine.py uses scoring tuple (readiness_score, wallet_score, ...) which prioritizes trade readiness over wallet balance",
+    "reproduction_steps": [
+      "1. User has multiple spot connections: 'user-live-spot' (online, can_trade=true, balance=0) and 'LIVE SPOT' (offline, can_trade=false, balance=82.63)",
+      "2. Call GET /api/user/portfolio",
+      "3. _pick_wallet_connection scores: user-live-spot=(1,0,0,0), LIVE SPOT=(0,1,0,0)",
+      "4. Since readiness_score comes first, user-live-spot wins despite having 0 balance",
+      "5. Portfolio returns spot_wallet_balance=0 instead of 82.63"
+    ],
+    "mitigation": "Change scoring priority in _pick_wallet_connection to: (wallet_score, readiness_score, settings_score, default_score, updated_at) OR use weighted combined score"
+  }
+}
