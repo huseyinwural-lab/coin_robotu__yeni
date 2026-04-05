@@ -290,14 +290,19 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     strategy_binding, risk_binding, execution_binding, binding_validation, compatibility = _build_binding_blocks(db, bot, runtime, symbol_resolution)
     positions = db.query(PaperPosition).filter(PaperPosition.user_id == bot.user_id, PaperPosition.status == "open", PaperPosition.symbol.in_(list(bot.symbols or []))).all()
     resolved_symbols = list(symbol_resolution.get("symbols") or list(bot.symbols or []))
-    trade_rows = db.query(ExecutionMetric).filter(ExecutionMetric.user_id == bot.user_id, ExecutionMetric.symbol.in_(resolved_symbols), ExecutionMetric.strategy_type == bot.strategy_type).all()
+    trade_rows_query = db.query(ExecutionMetric).filter(ExecutionMetric.user_id == bot.user_id, ExecutionMetric.strategy_type == bot.strategy_type)
+    if resolved_symbols:
+        trade_rows_query = trade_rows_query.filter(ExecutionMetric.symbol.in_(resolved_symbols))
+    trade_rows = trade_rows_query.order_by(ExecutionMetric.created_at.desc()).limit(500).all()
     signal = (
         db.query(SignalEvent)
         .filter(SignalEvent.bot_profile_id == bot.id)
         .order_by(SignalEvent.generated_at.desc())
         .first()
     )
-    pending = db.query(PendingSignal).filter(PendingSignal.user_id == bot.user_id, PendingSignal.symbol.in_(resolved_symbols)).count()
+    pending = 0
+    if resolved_symbols:
+        pending = db.query(PendingSignal).filter(PendingSignal.user_id == bot.user_id, PendingSignal.symbol.in_(resolved_symbols)).count()
     pnl = sum(float(getattr(row, "slippage_pct", 0.0) or 0.0) for row in trade_rows)
     today_pnl = sum(float(getattr(row, "slippage_pct", 0.0) or 0.0) for row in trade_rows if getattr(row, "created_at", None) and getattr(row, "created_at").date() == datetime.now(timezone.utc).date())
     exposure = sum(abs(float(getattr(row, "size", 0.0) or 0.0) * float(getattr(row, "current_price", getattr(row, "entry_price", 0.0)) or 0.0)) for row in positions)

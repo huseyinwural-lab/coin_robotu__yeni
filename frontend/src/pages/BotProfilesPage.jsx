@@ -65,6 +65,7 @@ const parseApiErrorMessage = (error, fallback) => {
     if (code === "exchange_connection_required") return "LIVE-READY için Kullanılacak Cüzdan seçimi zorunlu.";
     if (code === "exchange_connection_not_found") return "Seçilen cüzdan bağlantısı bulunamadı.";
     if (code === "authentication required" || code === "not authenticated") return "Oturum doğrulaması düştü. Lütfen tekrar giriş yapın.";
+    if (code === "session_device_mismatch") return "Oturum cihaz doğrulaması uyuşmadı. Lütfen tekrar giriş yapın.";
     return "";
   };
 
@@ -403,19 +404,37 @@ export const BotProfilesPage = () => {
   useEffect(() => {
     const loadDetail = async () => {
       if (!selectedBot?.id) return;
-      try {
-        const [statusRes, perfRes, logsRes, tradesRes] = await Promise.all([
-          apiClient.get(`/bot-profiles/${selectedBot.id}/detail`),
-          apiClient.get(`/bot-profiles/${selectedBot.id}/performance`),
-          apiClient.get(`/bot-profiles/${selectedBot.id}/logs`),
-          apiClient.get(`/bot-profiles/${selectedBot.id}/trades`),
-        ]);
-        setBotStatus(statusRes.data || null);
-        setBotPerformance(perfRes.data || null);
-        setBotLogs(logsRes.data || []);
-        setBotTrades(tradesRes.data || []);
-      } catch (error) {
-        toast.error(error?.response?.data?.detail || 'Bot detail yüklenemedi');
+      const requests = [
+        { key: "detail", request: () => apiClient.get(`/bot-profiles/${selectedBot.id}/detail`) },
+        { key: "performance", request: () => apiClient.get(`/bot-profiles/${selectedBot.id}/performance`) },
+        { key: "logs", request: () => apiClient.get(`/bot-profiles/${selectedBot.id}/logs`) },
+        { key: "trades", request: () => apiClient.get(`/bot-profiles/${selectedBot.id}/trades`) },
+      ];
+
+      const results = await Promise.allSettled(requests.map((item) => item.request()));
+      const failures = [];
+
+      results.forEach((result, index) => {
+        const key = requests[index].key;
+        if (result.status === "fulfilled") {
+          const payload = result.value?.data;
+          if (key === "detail") setBotStatus(payload || null);
+          if (key === "performance") setBotPerformance(payload || null);
+          if (key === "logs") setBotLogs(Array.isArray(payload) ? payload : []);
+          if (key === "trades") setBotTrades(Array.isArray(payload) ? payload : []);
+          return;
+        }
+        failures.push({ key, message: parseApiErrorMessage(result.reason, "servise ulaşılamadı") });
+      });
+
+      if (failures.length > 0 && failures.length < requests.length) {
+        const summary = failures.slice(0, 2).map((item) => `${item.key}: ${item.message}`).join(" · ");
+        const extra = failures.length > 2 ? ` (+${failures.length - 2} servis)` : "";
+        toast.error(`Detail kısmi yüklendi: ${summary}${extra}`);
+      }
+
+      if (failures.length === requests.length) {
+        toast.error("Bot detail servisleri şu an yanıt vermiyor. Lütfen tekrar deneyin.");
       }
     };
     loadDetail();
@@ -753,13 +772,26 @@ export const BotProfilesPage = () => {
   };
 
   const toggleRunning = async (item) => {
+    const endpoint = item.status === "RUNNING" ? "stop" : "start";
+    const expectedState = endpoint === "start" ? "RUNNING" : "STOPPED";
     try {
-      const endpoint = item.status === "RUNNING" ? "stop" : "start";
       await apiClient.post(`/bot-profiles/${item.id}/${endpoint}`);
       toast.success(endpoint === "stop" ? "Bot durduruldu" : "Bot başlatıldı");
-      fetchItems();
+      await fetchItems();
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Bot durumu değiştirilemedi");
+      try {
+        const statusRes = await apiClient.get(`/bot-profiles/${item.id}/status`);
+        const runtimeStatus = String(statusRes?.data?.status || "").toUpperCase();
+        if (runtimeStatus === expectedState) {
+          toast.success(endpoint === "stop" ? "Bot durduruldu" : "Bot başlatıldı");
+          await fetchItems();
+          return;
+        }
+      } catch {
+        // status doğrulama da düşerse ana hatayı göstereceğiz
+      }
+
+      toast.error(parseApiErrorMessage(error, "Bot durumu değiştirilemedi"));
     }
   };
 
