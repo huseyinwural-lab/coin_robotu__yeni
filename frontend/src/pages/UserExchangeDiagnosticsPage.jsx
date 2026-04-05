@@ -28,7 +28,16 @@ const pickBestConnection = (rows = [], exchange = "binance", marketType = "spot"
   return matches[0] || null;
 };
 
-const statusMeta = (connection) => {
+const statusMeta = (connection, isChecking = false) => {
+  if (isChecking) {
+    return {
+      online: false,
+      label: "Checking...",
+      lightClass: "bg-amber-400",
+      toneClass: "border-amber-500/40 bg-amber-950/20",
+    };
+  }
+
   const online = Boolean(
     connection
     && String(connection?.connection_health || "").toLowerCase() === "online"
@@ -47,6 +56,55 @@ const formatTs = (value) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "-";
   return parsed.toLocaleString("tr-TR");
+};
+
+const toNumber = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
+const formatAmount = (value) => {
+  const num = toNumber(value);
+  if (num === null) return "-";
+  return num.toFixed(2);
+};
+
+const formatPnl = (value) => {
+  const num = toNumber(value);
+  if (num === null) return "-";
+  const sign = num > 0 ? "+" : "";
+  return `${sign}${num.toFixed(2)}`;
+};
+
+const getMiniWalletPnl = (connection) => {
+  const snapshot = connection?.readiness_snapshot && typeof connection.readiness_snapshot === "object" ? connection.readiness_snapshot : {};
+  const wallet = snapshot.wallet_balance ?? snapshot.available_balance ?? snapshot.total_wallet_balance ?? null;
+  const pnl = snapshot.unrealized_pnl ?? snapshot.total_unrealized_pnl ?? snapshot.realized_pnl ?? null;
+  return {
+    wallet: formatAmount(wallet),
+    pnl: formatPnl(pnl),
+  };
+};
+
+const ERROR_LABEL_MAP = {
+  exchange_error_451: "451: Regional Restriction",
+  invalid_key: "Invalid API Key",
+  invalid_ip: "Invalid IP",
+};
+
+const getLastErrorText = (connection) => {
+  if (!connection) return "Bağlantı yok";
+  const snapshot = connection?.readiness_snapshot && typeof connection.readiness_snapshot === "object" ? connection.readiness_snapshot : {};
+  const reasonCodes = Array.isArray(snapshot.reason_codes) ? snapshot.reason_codes : [];
+  const raw = String(
+    snapshot.last_error
+    || snapshot.error_message
+    || snapshot.failure_reason
+    || connection.connection_health_reason
+    || reasonCodes[0]
+    || "-",
+  );
+  return ERROR_LABEL_MAP[raw] || raw;
 };
 
 export const UserExchangeDiagnosticsPage = () => {
@@ -73,14 +131,20 @@ export const UserExchangeDiagnosticsPage = () => {
 
   const panels = useMemo(() => {
     return MARKET_PANELS.map((panel) => {
+      const panelKey = `${selectedExchange}-${panel.value}`;
       const connection = pickBestConnection(connections, selectedExchange, panel.value);
+      const isChecking = Boolean(revalidatingMap[panelKey]);
       return {
         ...panel,
+        panelKey,
         connection,
-        status: statusMeta(connection),
+        status: statusMeta(connection, isChecking),
+        mini: getMiniWalletPnl(connection),
+        lastError: getLastErrorText(connection),
+        isChecking,
       };
     });
-  }, [connections, selectedExchange]);
+  }, [connections, revalidatingMap, selectedExchange]);
 
   const onRevalidate = async (panel) => {
     if (selectedExchange === "bybit") {
@@ -93,7 +157,7 @@ export const UserExchangeDiagnosticsPage = () => {
       return;
     }
 
-    setRevalidatingMap((prev) => ({ ...prev, [panel.connection.id]: true }));
+    setRevalidatingMap((prev) => ({ ...prev, [panel.panelKey]: true }));
     try {
       await apiClient.post(`/user/exchange-connections/${panel.connection.id}/revalidate`);
       toast.success(`${selectedExchange.toUpperCase()} ${panel.label}: Bağlantı Onaylandı`);
@@ -101,7 +165,7 @@ export const UserExchangeDiagnosticsPage = () => {
     } catch (error) {
       toast.error(error?.response?.data?.detail || `${panel.label} revalidate başarısız`);
     } finally {
-      setRevalidatingMap((prev) => ({ ...prev, [panel.connection.id]: false }));
+      setRevalidatingMap((prev) => ({ ...prev, [panel.panelKey]: false }));
     }
   };
 
@@ -131,7 +195,7 @@ export const UserExchangeDiagnosticsPage = () => {
       <div className="grid gap-4 lg:grid-cols-2" data-testid="user-exchange-diagnostics-market-panels">
         {panels.map((panel) => {
           const connectionId = panel.connection?.id || `${selectedExchange}-${panel.value}`;
-          const isRevalidating = Boolean(revalidatingMap[panel.connection?.id]);
+          const isRevalidating = Boolean(revalidatingMap[panel.panelKey]);
           return (
             <article
               key={`${selectedExchange}-${panel.value}`}
@@ -163,6 +227,12 @@ export const UserExchangeDiagnosticsPage = () => {
                   global_flag: {panel.connection?.global_activation_flag_key || `is_${selectedExchange}_${panel.value}_active`} = {panel.connection?.global_activation_active ? "true" : "false"}
                 </p>
                 <p data-testid={`user-exchange-diagnostics-panel-meta-last-success-${selectedExchange}-${panel.value}`}>last_success: {formatTs(panel.connection?.last_success_at)}</p>
+                <p data-testid={`user-exchange-diagnostics-panel-meta-last-error-${selectedExchange}-${panel.value}`}>last_fail_reason: {panel.lastError}</p>
+                {panel.status.online && (
+                  <p className="text-emerald-300" data-testid={`user-exchange-diagnostics-panel-mini-wallet-pnl-${selectedExchange}-${panel.value}`}>
+                    Wallet: {panel.mini.wallet} USDT | PNL: {panel.mini.pnl}$
+                  </p>
+                )}
               </div>
 
               <div className="mt-4 flex items-center justify-between gap-2" data-testid={`user-exchange-diagnostics-panel-actions-${selectedExchange}-${panel.value}`}>
