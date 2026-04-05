@@ -13,11 +13,15 @@ const initialForm = {
   exchange: "binance",
   market_type: "spot",
   exchange_connection_id: "",
+  risk_policy_id: "",
   symbols: "",
   strategy_type: "",
-  mode: "live_ready_disabled",
+  mode: "mock",
   symbol_source_type: "manual",
   scanner_id: "",
+  symbol_preset: "top_50",
+  custom_watchlist_id: "",
+  use_template: false,
   timeframe: "15m",
   trend_timeframe: "1h",
   is_enabled: true,
@@ -26,28 +30,32 @@ const initialForm = {
   risk_adaptive_confirmed: false,
 };
 
-const STRATEGY_TYPE_OPTIONS = [
-  "trend_following",
-  "mean_reversion",
-  "volatility_breakout",
-  "low_vol_scalping",
-  "scalping",
-  "momentum_ignition",
-  "volume_profile_reclaim",
-  "range_rotation",
-  "funding_rate_carry",
-  "basis_arbitrage",
-  "orderflow_imbalance",
-  "news_sentiment_reaction",
+const EXCHANGE_OPTIONS = [
+  { value: "binance", label: "Binance" },
+  { value: "bybit", label: "Bybit" },
 ];
 
-const TEMPLATE_BUNDLE_PRESETS = [
-  { key: "momentum", label: "Momentum Bundle", strategy_types: ["trend_following", "volatility_breakout", "momentum_ignition"] },
-  { key: "neutral", label: "Neutral / Mean-Revert", strategy_types: ["mean_reversion", "range_rotation", "volume_profile_reclaim"] },
-  { key: "market_making", label: "Scalp + Flow", strategy_types: ["scalping", "low_vol_scalping", "orderflow_imbalance"] },
-  { key: "carry_arb", label: "Carry / Arbitrage", strategy_types: ["funding_rate_carry", "basis_arbitrage"] },
-  { key: "event_driven", label: "Event Driven", strategy_types: ["news_sentiment_reaction", "momentum_ignition"] },
+const MARKET_TYPE_OPTIONS = [
+  { value: "spot", label: "Spot" },
+  { value: "futures", label: "Futures" },
 ];
+
+const BOT_MODE_OPTIONS = [
+  { value: "live_ready", label: "LIVE-READY" },
+  { value: "mock", label: "MOCK (Paper Trade)" },
+];
+
+const SYMBOL_PRESET_OPTIONS = [
+  { value: "top_50", label: "Top 50 Coins" },
+  { value: "top_100", label: "Top 100 Coins" },
+  { value: "all_symbols", label: "All Symbols" },
+  { value: "custom_list", label: "Custom Selection" },
+];
+
+const toNum = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+};
 
 const toCanonicalStrategyOptions = (items = []) => {
   return (items || [])
@@ -69,15 +77,12 @@ export const BotProfilesPage = () => {
   const location = useLocation();
   const [items, setItems] = useState([]);
   const [strategyPerformance, setStrategyPerformance] = useState({ items: [] });
-  const [userRisk, setUserRisk] = useState(null);
+  const [riskPolicies, setRiskPolicies] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [canonicalStrategies, setCanonicalStrategies] = useState([]);
   const [exchangeConnections, setExchangeConnections] = useState([]);
-  const [portfolioBalances, setPortfolioBalances] = useState({
-    total_wallet_balance: 0,
-    spot_wallet_balance: 0,
-    futures_wallet_balance: 0,
-  });
+  const [watchlists, setWatchlists] = useState([]);
+  const [isApplyingPreset, setIsApplyingPreset] = useState(false);
   const [selectedBot, setSelectedBot] = useState(null);
   const [detailTab, setDetailTab] = useState("overview");
   const [botStatus, setBotStatus] = useState(null);
@@ -91,7 +96,6 @@ export const BotProfilesPage = () => {
   const [symbolSource, setSymbolSource] = useState("crypto");
   const [symbolMode, setSymbolMode] = useState("all_market_symbols");
   const [selectedSymbols, setSelectedSymbols] = useState([]);
-  const [selectedBundleKey, setSelectedBundleKey] = useState("");
 
   const parseApiErrorMessage = (error, fallback) => {
     const detail = error?.response?.data?.detail;
@@ -110,27 +114,21 @@ export const BotProfilesPage = () => {
 
   const fetchItems = async () => {
     try {
-      const [profilesRes, strategyPerfRes, templatesRes, riskRes, canonicalRes, connectionsRes, portfolioRes] = await Promise.all([
+      const [profilesRes, strategyPerfRes, templatesRes, canonicalRes, connectionsRes, riskPoliciesRes] = await Promise.all([
         apiClient.get("/bot-profiles"),
         apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
         apiClient.get("/strategy-templates"),
-        apiClient.get("/user/live/risk"),
         apiClient.get("/user/canonical-strategies"),
         apiClient.get("/user/exchange-connections"),
-        apiClient.get("/user/portfolio"),
+        apiClient.get("/risk-policies"),
       ]);
       const nextItems = profilesRes.data || [];
       setItems(nextItems);
       setStrategyPerformance(strategyPerfRes.data || { items: [] });
       setTemplates(templatesRes.data || []);
-      setUserRisk(riskRes.data || null);
       setCanonicalStrategies(canonicalRes.data || []);
       setExchangeConnections(connectionsRes.data || []);
-      setPortfolioBalances(portfolioRes.data || {
-        total_wallet_balance: 0,
-        spot_wallet_balance: 0,
-        futures_wallet_balance: 0,
-      });
+      setRiskPolicies(riskPoliciesRes.data || []);
       setSelectedBot((prev) => {
         if (!prev?.id) return prev;
         return nextItems.find((item) => item.id === prev.id) || null;
@@ -160,24 +158,6 @@ export const BotProfilesPage = () => {
     [],
   );
 
-  const strategyRiskFactor = useMemo(
-    () => ({
-      trend_following: 1.2,
-      volatility_breakout: 1.15,
-      mean_reversion: 0.8,
-      low_vol_scalping: 0.75,
-      scalping: 0.8,
-      momentum_ignition: 1.1,
-      volume_profile_reclaim: 0.9,
-      range_rotation: 0.85,
-      funding_rate_carry: 0.7,
-      basis_arbitrage: 0.65,
-      orderflow_imbalance: 1.05,
-      news_sentiment_reaction: 1.25,
-    }),
-    [],
-  );
-
   const activeTemplateOptions = useMemo(() => {
     const latestByCode = new Map();
     for (const item of templates || []) {
@@ -200,58 +180,19 @@ export const BotProfilesPage = () => {
       }));
   }, [templates, strategyLabelMap]);
 
-  const selectedBasketTemplates = useMemo(
-    () => activeTemplateOptions.filter((item) => (form.strategy_template_ids || []).includes(item.id)),
-    [activeTemplateOptions, form.strategy_template_ids],
-  );
-
-  const templateBundleOptions = useMemo(() => {
-    return TEMPLATE_BUNDLE_PRESETS
-      .map((bundle) => {
-        const matches = (activeTemplateOptions || []).filter((item) => bundle.strategy_types.includes(item.strategy_type));
-        return {
-          ...bundle,
-          templateIds: matches.map((item) => item.id).slice(0, 12),
-          count: matches.length,
-        };
-      })
-      .filter((bundle) => bundle.count > 0);
-  }, [activeTemplateOptions]);
-
-  const correlationWarnings = useMemo(() => {
-    const types = new Set(selectedBasketTemplates.map((item) => item.strategy_type));
-    const warnings = [];
-    if (types.has("trend_following") && types.has("mean_reversion")) {
-      warnings.push("Trend takip + mean reversion birlikte verimliliği düşürebilir.");
-    }
-    if (types.has("volatility_breakout") && (types.has("scalping") || types.has("low_vol_scalping"))) {
-      warnings.push("Kırılım + düşük volatilite scalping kombinasyonu zıt sinyal üretebilir.");
-    }
-    return warnings;
-  }, [selectedBasketTemplates]);
-
-  const riskAdaptiveRecommendation = useMemo(() => {
-    const baseCapital = Number(userRisk?.base_capital || 0);
-    const baseRiskPct = Number(userRisk?.risk_per_trade_used || 1);
-    if (!selectedBasketTemplates.length) {
-      return { recommendedRiskPct: baseRiskPct || 1, recommendedLeverage: 1, note: "Strateji seçimi bekleniyor." };
-    }
-    const avgFactor =
-      selectedBasketTemplates.reduce((acc, item) => acc + Number(strategyRiskFactor[item.strategy_type] || 1), 0) /
-      Math.max(1, selectedBasketTemplates.length);
-    const recommendedRiskPct = Math.max(0.25, Math.min(5, Number((baseRiskPct * avgFactor).toFixed(2))));
-    const baseLeverage = baseCapital >= 10000 ? 2 : 1;
-    const recommendedLeverage = Math.max(1, Math.min(10, Math.round(baseLeverage * avgFactor)));
-    return {
-      recommendedRiskPct,
-      recommendedLeverage,
-      note: `Bakiyen (${baseCapital || 0}) ve User Risk Policy baz alınarak önerildi.`,
-    };
-  }, [selectedBasketTemplates, strategyRiskFactor, userRisk?.base_capital, userRisk?.risk_per_trade_used]);
-
   const canonicalStrategyOptions = useMemo(
     () => toCanonicalStrategyOptions(canonicalStrategies),
     [canonicalStrategies],
+  );
+
+  const riskPolicyOptions = useMemo(
+    () => (riskPolicies || []).filter((item) => !String(item?.lifecycle_state || "").toUpperCase().includes("DEPRECATED")),
+    [riskPolicies],
+  );
+
+  const selectedRiskPolicy = useMemo(
+    () => riskPolicyOptions.find((item) => item.id === form.risk_policy_id) || null,
+    [riskPolicyOptions, form.risk_policy_id],
   );
 
   const selectedCanonicalStrategy = useMemo(
@@ -260,8 +201,9 @@ export const BotProfilesPage = () => {
   );
 
   const walletConnectionOptions = useMemo(() => {
-    const liveBinanceConnections = (exchangeConnections || [])
-      .filter((item) => String(item?.exchange || "").toLowerCase() === "binance")
+    const scopedConnections = (exchangeConnections || [])
+      .filter((item) => String(item?.exchange || "").toLowerCase() === String(form.exchange || "binance").toLowerCase())
+      .filter((item) => String(item?.market_type || "").toLowerCase() === String(form.market_type || "spot").toLowerCase())
       .filter((item) => String(item?.environment || "live").toLowerCase() === "live")
       .sort((a, b) => {
         const aDefault = a?.is_default ? 1 : 0;
@@ -270,36 +212,60 @@ export const BotProfilesPage = () => {
         return String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""));
       });
 
-    const pickByMarket = (marketType) =>
-      liveBinanceConnections.find((item) => String(item?.market_type || "").toLowerCase() === marketType) || null;
+    return scopedConnections.map((connection) => {
+      const snapshot = connection?.readiness_snapshot || {};
+      const availableBalance = toNum(snapshot.available_balance ?? snapshot.wallet_balance ?? snapshot.total_wallet_balance);
+      const unrealizedPnl = toNum(snapshot.unrealized_pnl ?? snapshot.total_unrealized_pnl ?? snapshot.realized_pnl);
+      return {
+        id: connection.id,
+        exchange: connection.exchange,
+        market_type: connection.market_type,
+        label: `${connection.account_label} · ${availableBalance.toFixed(2)} USDT`,
+        available_balance: availableBalance,
+        pnl: unrealizedPnl,
+        global_activation_active: Boolean(connection.global_activation_active),
+        global_activation_flag_key: connection.global_activation_flag_key,
+        can_trade_effective: Boolean(connection.can_trade_effective),
+      };
+    });
+  }, [exchangeConnections, form.exchange, form.market_type]);
 
-    const spotConn = pickByMarket("spot");
-    const futuresConn = pickByMarket("futures");
-
-    const options = [];
-    if (spotConn) {
-      options.push({
-        id: spotConn.id,
-        exchange: spotConn.exchange,
-        market_type: "spot",
-        label: `SPOT CÜZDAN (${Number(portfolioBalances?.spot_wallet_balance || 0).toFixed(2)})`,
-      });
-    }
-    if (futuresConn) {
-      options.push({
-        id: futuresConn.id,
-        exchange: futuresConn.exchange,
-        market_type: "futures",
-        label: `FUTURES CÜZDAN (${Number(portfolioBalances?.futures_wallet_balance || 0).toFixed(2)})`,
-      });
-    }
-    return options;
-  }, [exchangeConnections, portfolioBalances?.futures_wallet_balance, portfolioBalances?.spot_wallet_balance]);
-
-  const availableMarketTypes = useMemo(
-    () => Array.from(new Set(walletConnectionOptions.map((item) => String(item.market_type || "spot").toLowerCase()))),
-    [walletConnectionOptions],
+  const selectedWalletConnection = useMemo(
+    () => walletConnectionOptions.find((item) => item.id === form.exchange_connection_id) || null,
+    [walletConnectionOptions, form.exchange_connection_id],
   );
+
+  const comboActivationState = useMemo(() => {
+    const scoped = (exchangeConnections || [])
+      .filter((item) => String(item?.exchange || "").toLowerCase() === String(form.exchange || "binance").toLowerCase())
+      .filter((item) => String(item?.market_type || "").toLowerCase() === String(form.market_type || "spot").toLowerCase());
+    const active = scoped.some((item) => Boolean(item?.global_activation_active) && Boolean(item?.can_trade_effective));
+    return {
+      active,
+      hasConnection: scoped.length > 0,
+      flag: scoped[0]?.global_activation_flag_key || `is_${form.exchange}_${form.market_type}_active`,
+    };
+  }, [exchangeConnections, form.exchange, form.market_type]);
+
+  const liveReadyBlockedReason = useMemo(() => {
+    if (form.mode !== "live_ready") return "";
+    if (String(form.exchange || "").toLowerCase() === "bybit") {
+      return "Bybit için LIVE-READY bu fazda kapalı. MOCK kullanın.";
+    }
+    if (!comboActivationState.hasConnection) {
+      return "Bağlantınızı doğrulayın (Diagnostics: bağlantı bulunamadı).";
+    }
+    if (!comboActivationState.active) {
+      return "Bağlantınızı doğrulayın (Diagnostics: Passive).";
+    }
+    if (!selectedWalletConnection) {
+      return "Önce cüzdan seçin.";
+    }
+    if (toNum(selectedWalletConnection.available_balance) <= 0) {
+      return "Kullanılabilir bakiye yetersiz, LIVE-READY kilitli.";
+    }
+    return "";
+  }, [comboActivationState.active, comboActivationState.hasConnection, form.exchange, form.mode, selectedWalletConnection]);
 
   useEffect(() => {
     const loadDetail = async () => {
@@ -372,26 +338,17 @@ export const BotProfilesPage = () => {
   }, [activeTemplateOptions, canonicalStrategyOptions, location.search]);
 
   useEffect(() => {
-    if (!availableMarketTypes.length) return;
     setForm((prev) => {
-      const nextMarketType = availableMarketTypes.includes(String(prev.market_type || "").toLowerCase())
-        ? prev.market_type
-        : availableMarketTypes[0];
-
-      const selectedWallet = walletConnectionOptions.find((item) => item.id === prev.exchange_connection_id) || null;
-      const selectedMatchesMarket = selectedWallet && String(selectedWallet.market_type || "") === String(nextMarketType || "");
-
-      if (selectedMatchesMarket && nextMarketType === prev.market_type) {
-        return prev;
-      }
+      const exists = walletConnectionOptions.some((item) => item.id === prev.exchange_connection_id);
+      const nextMode = String(prev.exchange || "").toLowerCase() === "bybit" && prev.mode === "live_ready" ? "mock" : prev.mode;
+      if (exists && nextMode === prev.mode) return prev;
       return {
         ...prev,
-        market_type: nextMarketType,
-        exchange_connection_id: selectedMatchesMarket ? prev.exchange_connection_id : "",
-        exchange: selectedMatchesMarket ? prev.exchange : "binance",
+        mode: nextMode,
+        exchange_connection_id: exists ? prev.exchange_connection_id : "",
       };
     });
-  }, [availableMarketTypes, walletConnectionOptions]);
+  }, [walletConnectionOptions]);
 
   const createUserTemplateFromCanonical = async (canonicalStrategy) => {
     const entryRules = canonicalStrategy?.entry_long?.rules || ["canonical_entry_signal"];
@@ -436,8 +393,12 @@ export const BotProfilesPage = () => {
   };
 
   const ensureStrategyTemplateId = async () => {
-    if (form.template_id) {
+    if (form.use_template && form.template_id) {
       return form.template_id;
+    }
+
+    if (form.use_template && !form.template_id) {
+      return null;
     }
 
     const matchedTemplate = activeTemplateOptions.find((item) => item.strategy_type === form.strategy_type);
@@ -452,6 +413,67 @@ export const BotProfilesPage = () => {
     const createdTemplate = await createUserTemplateFromCanonical(selectedCanonicalStrategy);
     return createdTemplate?.id || null;
   };
+
+  const loadCustomWatchlists = useCallback(async () => {
+    try {
+      const { data } = await apiClient.get("/symbol-selector/watchlists", { params: { source: "crypto" } });
+      const filtered = (data || []).filter((item) => {
+        const exchangeOk = String(item?.exchange || "").toLowerCase() === String(form.exchange || "").toLowerCase();
+        const marketOk = String(item?.market_type || "").toLowerCase() === String(form.market_type || "").toLowerCase();
+        return exchangeOk && marketOk;
+      });
+      setWatchlists(filtered);
+    } catch {
+      setWatchlists([]);
+    }
+  }, [form.exchange, form.market_type]);
+
+  useEffect(() => {
+    loadCustomWatchlists();
+  }, [loadCustomWatchlists]);
+
+  const applySymbolPreset = useCallback(async () => {
+    const preset = String(form.symbol_preset || "top_50");
+    if (preset === "custom_list") {
+      const selectedWatchlist = (watchlists || []).find((item) => item.id === form.custom_watchlist_id);
+      if (!selectedWatchlist) {
+        toast.error("Özel liste seçin");
+        return;
+      }
+      const watchSymbols = (selectedWatchlist.symbols || []).map((item) => String(item || "").toUpperCase()).filter(Boolean);
+      setSelectedSymbols(watchSymbols);
+      setSymbolMode("manual_selection");
+      setForm((prev) => ({ ...prev, symbol_source_type: "manual" }));
+      return;
+    }
+
+    setIsApplyingPreset(true);
+    try {
+      const effectiveExchange = String(form.exchange || "binance").toLowerCase() === "bybit" ? "binance" : String(form.exchange || "binance").toLowerCase();
+      const { data } = await apiClient.get("/symbol-selector/universe", {
+        params: {
+          source: "crypto",
+          exchange: effectiveExchange,
+          market_type: form.market_type,
+          mode: "all_market_symbols",
+          quote_asset_filter: "USDT",
+        },
+      });
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+      let symbols = rows.map((item) => String(item?.symbol || "").toUpperCase()).filter(Boolean);
+      if (preset === "top_50") symbols = symbols.slice(0, 50);
+      if (preset === "top_100") symbols = symbols.slice(0, 100);
+
+      setSelectedSymbols(symbols);
+      setSymbolMode(preset === "all_symbols" ? "all_market_symbols" : "manual_selection");
+      setForm((prev) => ({ ...prev, symbol_source_type: "manual" }));
+      toast.success(`${symbols.length} sembol yüklendi`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Preset sembol listesi yüklenemedi");
+    } finally {
+      setIsApplyingPreset(false);
+    }
+  }, [form.custom_watchlist_id, form.exchange, form.market_type, form.symbol_preset, watchlists]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -473,11 +495,17 @@ export const BotProfilesPage = () => {
     if (String(form.symbol_source_type || "manual") === "scanner" && !String(form.scanner_id || "").trim()) {
       nextErrors.scanner_id = "Scanner source için scanner_id zorunlu.";
     }
-    if (!String(form.exchange_connection_id || "").trim()) {
+    if (String(form.mode || "mock") === "live_ready" && !String(form.exchange_connection_id || "").trim()) {
       nextErrors.exchange_connection_id = "Bot için cüzdan seçimi zorunlu.";
     }
     if (!String(form.strategy_type || "").trim()) {
       nextErrors.strategy_type = "Canonical strateji seçimi zorunlu.";
+    }
+    if (!String(form.risk_policy_id || "").trim()) {
+      nextErrors.risk_policy_id = "Risk policy seçimi zorunlu.";
+    }
+    if (String(form.mode || "mock") === "live_ready" && liveReadyBlockedReason) {
+      nextErrors.mode = liveReadyBlockedReason;
     }
     setFormErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
@@ -486,29 +514,45 @@ export const BotProfilesPage = () => {
     }
 
     const strategyTemplateId = await ensureStrategyTemplateId();
+    if (form.use_template && !strategyTemplateId) {
+      toast.error("Template seçimi zorunlu");
+      return;
+    }
     const selectedConnection = walletConnectionOptions.find((item) => item.id === form.exchange_connection_id);
-    if (!selectedConnection) {
+    if (String(form.mode || "mock") === "live_ready" && !selectedConnection) {
       toast.error("Seçilen cüzdan bulunamadı");
       return;
     }
 
     const payload = {
       name: form.name.trim(),
-      exchange_connection_id: form.exchange_connection_id,
-      exchange: selectedConnection.exchange,
-      market_type: selectedConnection.market_type,
+      exchange_connection_id: form.exchange_connection_id || null,
+      exchange: selectedConnection?.exchange || form.exchange,
+      market_type: selectedConnection?.market_type || form.market_type,
       symbol_source_type: form.symbol_source_type || 'manual',
       scanner_id: form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null,
       symbols: parsedSymbols,
       strategy_type: form.strategy_type,
       strategy_template_id: strategyTemplateId,
-      strategy_template_ids: strategyTemplateId ? [strategyTemplateId] : [],
+      strategy_template_ids: form.use_template && strategyTemplateId ? [strategyTemplateId] : [],
       timeframe: form.timeframe,
       trend_timeframe: form.trend_timeframe,
-      mode: form.mode || "live_ready_disabled",
-      leverage: form.risk_adaptive_confirmed ? Number(riskAdaptiveRecommendation.recommendedLeverage || 1) : 1,
+      mode: form.mode || "mock",
+      leverage: Number(selectedRiskPolicy?.max_leverage || 1),
       is_enabled: Boolean(form.is_enabled),
-      risk_adaptive_confirmed: Boolean(form.risk_adaptive_confirmed),
+      risk_adaptive_confirmed: false,
+      risk_policy_id: form.risk_policy_id,
+      risk_policy_snapshot: selectedRiskPolicy
+        ? {
+          id: selectedRiskPolicy.id,
+          name: selectedRiskPolicy.name,
+          max_leverage: selectedRiskPolicy.max_leverage,
+          position_size_pct: selectedRiskPolicy.position_size_pct,
+          daily_loss_cutoff_pct: selectedRiskPolicy.daily_loss_cutoff_pct,
+          atr_stop_multiplier: selectedRiskPolicy.atr_stop_multiplier,
+          risk_reward_ratio: selectedRiskPolicy.risk_reward_ratio,
+        }
+        : {},
     };
 
     try {
@@ -521,7 +565,6 @@ export const BotProfilesPage = () => {
       }
       setEditingId(null);
       setForm(initialForm);
-      setSelectedBundleKey("");
       setSelectedSymbols([]);
       setSymbolMode("all_market_symbols");
       setFormErrors({});
@@ -533,38 +576,23 @@ export const BotProfilesPage = () => {
 
   const onEdit = (item) => {
     setEditingId(item.id);
-    setSelectedBundleKey("");
     setForm({
       ...item,
       symbols: (item.symbols || []).join(","),
       exchange_connection_id: item.selected_exchange_connection_id || "",
-      mode: item.mode || "live_ready_disabled",
+      mode: item.mode === "live_ready_disabled" || item.mode === "paper" ? "mock" : (item.mode || "mock"),
       symbol_source_type: item.symbol_source_type || item.symbol_source || "manual",
       scanner_id: item.scanner_id || item.symbol_source_summary?.scanner_id || "",
       template_id: item.strategy_template_id || item.template_id || "",
       strategy_template_ids: item.strategy_template_ids || (item.strategy_template_id ? [item.strategy_template_id] : []),
-      risk_adaptive_confirmed: Boolean(item.risk_adaptive_confirmed),
+      use_template: Boolean(item.strategy_template_id),
+      risk_adaptive_confirmed: false,
+      risk_policy_id: item.selected_risk_policy_id || item.risk_policy_id || "",
     });
     setSymbolSource("crypto");
     setSymbolMode("manual_selection");
     setSelectedSymbols(item.symbols || []);
     setFormErrors({});
-  };
-
-  const applyTemplateBundle = () => {
-    const selectedBundle = templateBundleOptions.find((item) => item.key === selectedBundleKey);
-    if (!selectedBundle || (selectedBundle.templateIds || []).length === 0) {
-      toast.error("Seçili bundle için aktif template bulunamadı");
-      return;
-    }
-    const firstTemplate = (activeTemplateOptions || []).find((item) => item.id === selectedBundle.templateIds[0]);
-    setForm((prev) => ({
-      ...prev,
-      strategy_template_ids: selectedBundle.templateIds,
-      template_id: selectedBundle.templateIds[0] || "",
-      strategy_type: firstTemplate?.strategy_type || prev.strategy_type,
-    }));
-    toast.success(`${selectedBundle.label} uygulandı`);
   };
 
   const toggleRunning = async (item) => {
@@ -630,16 +658,26 @@ export const BotProfilesPage = () => {
           <select
             id="bot-form-exchange-select"
             value={form.exchange}
-            onChange={(event) => setForm((prev) => ({ ...prev, exchange: event.target.value }))}
+            onChange={(event) => {
+              const nextExchange = event.target.value;
+              setForm((prev) => ({
+                ...prev,
+                exchange: nextExchange,
+                exchange_connection_id: "",
+                mode: nextExchange === "bybit" ? "mock" : prev.mode,
+              }));
+            }}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
             data-testid="bot-form-exchange-select"
             aria-label="Exchange"
             aria-describedby="bot-form-exchange-helper"
             required
           >
-            <option value="binance">binance</option>
+            {EXCHANGE_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value}>{item.label}</option>
+            ))}
           </select>
-          <p className="form-helper-text" id="bot-form-exchange-helper" data-testid="bot-form-exchange-helper">Cüzdan seçiminden otomatik gelir.</p>
+          <p className="form-helper-text" id="bot-form-exchange-helper" data-testid="bot-form-exchange-helper">Exchange + market seçimi Diagnostics global flag ile doğrulanır.</p>
         </div>
 
         <div className="form-group" data-testid="bot-form-group-market-type">
@@ -648,13 +686,10 @@ export const BotProfilesPage = () => {
             id="bot-form-market-type-select"
             value={form.market_type}
             onChange={(event) => {
-              const nextMarket = event.target.value;
-              const selectedWallet = (walletConnectionOptions || []).find((item) => item.id === form.exchange_connection_id) || null;
-              const walletMatches = selectedWallet && String(selectedWallet.market_type || "") === String(nextMarket || "");
               setForm((prev) => ({
                 ...prev,
-                market_type: nextMarket,
-                exchange_connection_id: walletMatches ? prev.exchange_connection_id : "",
+                market_type: event.target.value,
+                exchange_connection_id: "",
               }));
             }}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -663,12 +698,11 @@ export const BotProfilesPage = () => {
             aria-describedby="bot-form-market-type-helper"
             required
           >
-            {availableMarketTypes.length === 0 && <option value="spot">spot</option>}
-            {availableMarketTypes.map((market) => (
-              <option key={market} value={market}>{market}</option>
+            {MARKET_TYPE_OPTIONS.map((market) => (
+              <option key={market.value} value={market.value}>{market.label}</option>
             ))}
           </select>
-          <p className="form-helper-text" id="bot-form-market-type-helper" data-testid="bot-form-market-type-helper">Seçilen cüzdana göre otomatik gelir.</p>
+          <p className="form-helper-text" id="bot-form-market-type-helper" data-testid="bot-form-market-type-helper">Spot/Futures seçimi cüzdanı ve preset listeleri otomatik filtreler.</p>
         </div>
 
         <div className="form-group" data-testid="bot-form-group-wallet-connection">
@@ -699,13 +733,53 @@ export const BotProfilesPage = () => {
           </select>
           <p className="form-helper-text" data-testid="bot-form-wallet-connection-helper">Bot sadece seçtiğiniz cüzdan bağlantısını kullanır.</p>
           {formErrors.exchange_connection_id && <p className="form-error-text" data-testid="bot-form-wallet-connection-error">{formErrors.exchange_connection_id}</p>}
+          <div className="mt-2 rounded border border-slate-700/60 bg-slate-950/50 p-2 text-xs" data-testid="bot-form-wallet-live-balance-box">
+            <p data-testid="bot-form-wallet-live-balance-value">Kullanılabilir Bakiye: <strong>{toNum(selectedWalletConnection?.available_balance).toFixed(2)} USDT</strong></p>
+            <p data-testid="bot-form-wallet-live-pnl-value">PNL: <strong>{toNum(selectedWalletConnection?.pnl).toFixed(2)}$</strong></p>
+            <p data-testid="bot-form-wallet-diagnostics-flag">Diagnostics Flag: {comboActivationState.flag} = {comboActivationState.active ? "true" : "false"}</p>
+          </div>
         </div>
 
         <div className="form-group" data-testid="bot-form-group-symbols">
           <label className="form-label" htmlFor="bot-form-symbols-input" data-testid="bot-form-symbols-label">Symbols</label>
+          <div className="mb-2 grid gap-2 md:grid-cols-3" data-testid="bot-form-symbol-preset-grid">
+            <label className="space-y-1" data-testid="bot-form-symbol-preset-field">
+              <span className="text-xs text-slate-400">Preset List</span>
+              <select
+                value={form.symbol_preset}
+                onChange={(event) => setForm((prev) => ({ ...prev, symbol_preset: event.target.value }))}
+                className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-sm"
+                data-testid="bot-form-symbol-preset-select"
+              >
+                {SYMBOL_PRESET_OPTIONS.map((preset) => (
+                  <option key={preset.value} value={preset.value}>{preset.label}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1" data-testid="bot-form-symbol-custom-list-field">
+              <span className="text-xs text-slate-400">Custom List</span>
+              <select
+                value={form.custom_watchlist_id || ""}
+                onChange={(event) => setForm((prev) => ({ ...prev, custom_watchlist_id: event.target.value }))}
+                className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-sm"
+                data-testid="bot-form-symbol-custom-list-select"
+                disabled={form.symbol_preset !== "custom_list"}
+              >
+                <option value="">Seçiniz</option>
+                {(watchlists || []).map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end" data-testid="bot-form-symbol-preset-apply-wrap">
+              <Button type="button" variant="outline" onClick={applySymbolPreset} disabled={isApplyingPreset} data-testid="bot-form-symbol-preset-apply-button">
+                {isApplyingPreset ? "Yükleniyor..." : "Preset Uygula"}
+              </Button>
+            </div>
+          </div>
           <SymbolSelectorPanel
             testIdPrefix="bot-form-symbol-selector"
-            exchange={form.exchange}
+            exchange={form.exchange === "bybit" ? "binance" : form.exchange}
             marketType={form.market_type}
             source={symbolSource}
             onSourceChange={setSymbolSource}
@@ -716,7 +790,7 @@ export const BotProfilesPage = () => {
             multi
           />
           <Input id="bot-form-symbols-input" value={selectedSymbols.join(",")} readOnly data-testid="bot-form-symbols-input" aria-label="Symbols" aria-describedby="bot-form-symbols-helper bot-form-symbols-error" required />
-          <p className="form-helper-text" id="bot-form-symbols-helper" data-testid="bot-form-symbols-helper">Select modları: tüm borsa / top 50-100 / custom list + watchlist.</p>
+          <p className="form-helper-text" id="bot-form-symbols-helper" data-testid="bot-form-symbols-helper">Preset + custom list seçimleri market type (spot/futures) ile filtrelenir.</p>
           {formErrors.symbols && <p className="form-error-text" id="bot-form-symbols-error" data-testid="bot-form-symbols-error">{formErrors.symbols}</p>}
         </div>
 
@@ -752,143 +826,92 @@ export const BotProfilesPage = () => {
             required
           >
             <option value="">Strateji seçin</option>
-            {(canonicalStrategyOptions.length ? canonicalStrategyOptions : STRATEGY_TYPE_OPTIONS.map((item) => ({ strategy_id: item, name: item.replaceAll("_", " ") }))).map((item) => (
+            {canonicalStrategyOptions.map((item) => (
               <option key={item.strategy_id || item} value={item.strategy_id || item}>{item.name || item}</option>
             ))}
           </select>
-          <p className="form-helper-text" id="bot-form-strategy-helper" data-testid="bot-form-strategy-helper">Admin canonical registry’deki aktif 12 strateji listelenir.</p>
+          <p className="form-helper-text" id="bot-form-strategy-helper" data-testid="bot-form-strategy-helper">Admin panelde aktif olan stratejiler listelenir.</p>
           {formErrors.strategy_type && <p className="form-error-text" data-testid="bot-form-strategy-error">{formErrors.strategy_type}</p>}
         </div>
 
-        <div className="form-group" data-testid="bot-form-group-template">
-          <label className="form-label" htmlFor="bot-form-template-select" data-testid="bot-form-template-label">Create from template</label>
+        <div className="form-group" data-testid="bot-form-group-risk-policy">
+          <label className="form-label" htmlFor="bot-form-risk-policy-select" data-testid="bot-form-risk-policy-label">Risk Policy</label>
           <select
-            id="bot-form-template-select"
-            value={form.template_id}
-            onChange={(event) => {
-              const value = event.target.value;
-              setForm((prev) => ({ ...prev, template_id: value, strategy_template_ids: value ? [value] : [] }));
-              applyTemplate(value);
-            }}
+            id="bot-form-risk-policy-select"
+            value={form.risk_policy_id || ""}
+            onChange={(event) => setForm((prev) => ({ ...prev, risk_policy_id: event.target.value }))}
             className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            data-testid="bot-form-template-select"
+            data-testid="bot-form-risk-policy-select"
+            required
           >
-            <option value="">no template</option>
-            {(activeTemplateOptions || []).map((item) => (
+            <option value="">Risk policy seçin</option>
+            {riskPolicyOptions.map((item) => (
               <option key={item.id} value={item.id}>{item.name}</option>
             ))}
           </select>
-          <p className="form-helper-text" data-testid="bot-form-template-helper">Aktif template’lerden otomatik listelenir (max 12).</p>
-          {formErrors.template_id && <p className="form-error-text" data-testid="bot-form-template-error">{formErrors.template_id}</p>}
-
-          <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="bot-form-template-bundle-row">
-            <select
-              value={selectedBundleKey}
-              onChange={(event) => setSelectedBundleKey(event.target.value)}
-              className="h-10 min-w-52 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              data-testid="bot-form-template-bundle-select"
-            >
-              <option value="">Bundle seç</option>
-              {templateBundleOptions.map((bundle) => (
-                <option key={bundle.key} value={bundle.key}>
-                  {bundle.label} ({bundle.count})
-                </option>
-              ))}
-            </select>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={applyTemplateBundle}
-              disabled={!selectedBundleKey}
-              data-testid="bot-form-template-bundle-apply-button"
-            >
-              Bundle Uygula
-            </Button>
-          </div>
-
-          <label className="mt-2 block text-xs text-slate-300" htmlFor="bot-form-template-multi-select" data-testid="bot-form-template-multi-label">
-            Basket Mode (çoklu strateji seçimi)
-          </label>
-          <select
-            id="bot-form-template-multi-select"
-            multiple
-            value={form.strategy_template_ids || []}
-            onChange={(event) => {
-              const selectedIds = Array.from(event.target.selectedOptions).map((option) => option.value);
-              setForm((prev) => ({
-                ...prev,
-                strategy_template_ids: selectedIds,
-                template_id: selectedIds[0] || prev.template_id || "",
-              }));
-            }}
-            className="mt-2 h-28 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            data-testid="bot-form-template-multi-select"
-          >
-            {(activeTemplateOptions || []).map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name} · {item.label}
-              </option>
-            ))}
-          </select>
-
-          <div className="mt-2 rounded border border-slate-700/60 bg-slate-950/60 p-2" data-testid="bot-form-performance-labeling-box">
-            <p className="text-xs text-slate-300" data-testid="bot-form-performance-labeling-title">Performance Labeling</p>
-            <div className="mt-1 flex flex-wrap gap-1" data-testid="bot-form-performance-labeling-tags">
-              {(selectedBasketTemplates || []).length === 0 ? (
-                <span className="text-xs text-slate-500" data-testid="bot-form-performance-labeling-empty">Henüz strateji seçilmedi</span>
-              ) : (
-                selectedBasketTemplates.map((item) => (
-                  <span key={item.id} className="rounded border border-cyan-500/40 bg-cyan-900/20 px-2 py-0.5 text-[11px] text-cyan-200" data-testid={`bot-form-performance-labeling-tag-${item.id}`}>
-                    {item.name} · {item.label}
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="mt-2 rounded border border-emerald-600/30 bg-emerald-950/20 p-2" data-testid="bot-form-risk-adaptive-box">
-            <p className="text-xs text-emerald-200" data-testid="bot-form-risk-adaptive-title">Risk-Adaptive Scaling</p>
-            <p className="mt-1 text-xs text-emerald-100" data-testid="bot-form-risk-adaptive-recommendation">
-              Öneri: kaldıraç <strong>{riskAdaptiveRecommendation.recommendedLeverage}x</strong> · risk/trade <strong>%{riskAdaptiveRecommendation.recommendedRiskPct}</strong>
+          <p className="form-helper-text" data-testid="bot-form-risk-policy-helper">Seçilen policy; kaldıraç ve risk limitlerini otomatik enjekte eder.</p>
+          {selectedRiskPolicy && (
+            <p className="text-xs text-slate-400" data-testid="bot-form-risk-policy-summary">
+              Leverage: {selectedRiskPolicy.max_leverage}x · Risk/Trade: %{selectedRiskPolicy.position_size_pct} · SL ATR: {selectedRiskPolicy.atr_stop_multiplier}
             </p>
-            <p className="mt-1 text-[11px] text-emerald-300" data-testid="bot-form-risk-adaptive-note">{riskAdaptiveRecommendation.note}</p>
-            <label className="mt-2 inline-flex items-center gap-2 text-xs text-emerald-100" data-testid="bot-form-risk-adaptive-confirm-label">
-              <input
-                type="checkbox"
-                checked={Boolean(form.risk_adaptive_confirmed)}
-                onChange={(event) => setForm((prev) => ({ ...prev, risk_adaptive_confirmed: event.target.checked }))}
-                data-testid="bot-form-risk-adaptive-confirm-checkbox"
-              />
-              Bu öneriyi onaylıyorum
-            </label>
-          </div>
+          )}
+          {formErrors.risk_policy_id && <p className="form-error-text" data-testid="bot-form-risk-policy-error">{formErrors.risk_policy_id}</p>}
+        </div>
 
-          {correlationWarnings.length > 0 ? (
-            <div className="mt-2 rounded border border-amber-500/40 bg-amber-950/20 p-2" data-testid="bot-form-correlation-warning-box">
-              <p className="text-xs font-medium text-amber-200" data-testid="bot-form-correlation-warning-title">Combo/Basket Uyarısı</p>
-              <ul className="mt-1 list-disc pl-4 text-xs text-amber-100" data-testid="bot-form-correlation-warning-list">
-                {correlationWarnings.map((warning, idx) => (
-                  <li key={`${warning}-${idx}`} data-testid={`bot-form-correlation-warning-item-${idx}`}>{warning}</li>
+        <div className="form-group" data-testid="bot-form-group-template">
+          <div className="flex items-center gap-2">
+            <input
+              id="bot-form-template-toggle"
+              type="checkbox"
+              checked={Boolean(form.use_template)}
+              onChange={(event) => setForm((prev) => ({ ...prev, use_template: event.target.checked, template_id: event.target.checked ? prev.template_id : "" }))}
+              data-testid="bot-form-template-toggle-checkbox"
+            />
+            <label htmlFor="bot-form-template-toggle" className="text-sm text-slate-200" data-testid="bot-form-template-toggle-label">Create from Template (Opsiyonel)</label>
+          </div>
+          {form.use_template && (
+            <>
+              <select
+                id="bot-form-template-select"
+                value={form.template_id}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setForm((prev) => ({ ...prev, template_id: value, strategy_template_ids: value ? [value] : [] }));
+                  applyTemplate(value);
+                }}
+                className="mt-2 h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                data-testid="bot-form-template-select"
+              >
+                <option value="">template seçin</option>
+                {(activeTemplateOptions || []).map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
-              </ul>
-            </div>
-          ) : null}
+              </select>
+              <p className="form-helper-text" data-testid="bot-form-template-helper">Toggle açıksa template seçimi zorunlu olur.</p>
+            </>
+          )}
         </div>
 
         <div className="form-group" data-testid="bot-form-group-mode">
           <label className="form-label" htmlFor="bot-form-mode-select" data-testid="bot-form-mode-label">Mode</label>
           <select id="bot-form-mode-select" value={form.mode} onChange={(event) => setForm((prev) => ({ ...prev, mode: event.target.value }))} className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="bot-form-mode-select">
-            <option value="live_ready_disabled">LIVE-READY (disabled)</option>
-            <option value="paper">PAPER</option>
-            <option value="mock">MOCK</option>
+            {BOT_MODE_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value} disabled={item.value === "live_ready" && String(form.exchange || "").toLowerCase() === "bybit"}>
+                {item.label}
+              </option>
+            ))}
           </select>
-          <p className="form-helper-text" data-testid="bot-form-mode-helper">Bot varsayılan olarak canlıya hazır ama kapalı başlar.</p>
+          <p className="form-helper-text" data-testid="bot-form-mode-helper">LIVE-READY gerçek emir iletir, MOCK sanal bakiye ile çalışır.</p>
+          {formErrors.mode && <p className="form-error-text" data-testid="bot-form-mode-error">{formErrors.mode}</p>}
         </div>
 
         <div className="flex gap-2 md:col-span-2">
-          <Button className="bg-orange-500 text-black hover:bg-orange-600" type="submit" data-testid="bot-form-submit-button">
+          <Button className="bg-orange-500 text-black hover:bg-orange-600" type="submit" data-testid="bot-form-submit-button" disabled={Boolean(liveReadyBlockedReason)} title={liveReadyBlockedReason || ""}>
             {editingId ? "Güncelle" : "Oluştur"}
           </Button>
+          {liveReadyBlockedReason && (
+            <p className="self-center text-xs text-amber-300" data-testid="bot-form-live-ready-blocked-warning">{liveReadyBlockedReason}</p>
+          )}
           {editingId && (
             <Button
               type="button"
@@ -897,7 +920,6 @@ export const BotProfilesPage = () => {
               onClick={() => {
                 setEditingId(null);
                 setForm(initialForm);
-                setSelectedBundleKey("");
                 setSelectedSymbols([]);
                 setSymbolMode("all_market_symbols");
                 setFormErrors({});
@@ -939,7 +961,7 @@ export const BotProfilesPage = () => {
                 <TableCell data-testid={`bot-table-parity-${item.id}`}>{parity ? `${parity.backtest?.win_rate ?? 0} / ${parity.live?.win_rate ?? 0} / ${parity.deviation_pct ?? 0}%` : "-"}</TableCell>
                 <TableCell data-testid={`bot-table-status-${item.id}`}>{item.status || (item.is_running ? "RUNNING" : "IDLE")}</TableCell>
                 <TableCell data-testid={`bot-table-health-${item.id}`}>{item.health || "HEALTHY"}</TableCell>
-                <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "live_ready_disabled"}</TableCell>
+                <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "mock"}</TableCell>
                 <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbol_source_summary?.summary || (item.symbols || []).join(", ")}</TableCell>
                 <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.last_heartbeat || (item.is_running ? "running" : "stopped")}</TableCell>
                 <TableCell>

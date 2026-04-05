@@ -44,32 +44,44 @@ def create_bot_profile(
 ):
     payload_data = payload.model_dump()
     exchange_connection_id = str(payload_data.pop("exchange_connection_id", "") or "").strip()
-    preferred_mode = str(payload_data.pop("mode", "live_ready_disabled") or "live_ready_disabled").strip()
+    risk_policy_id = str(payload_data.pop("risk_policy_id", "") or "").strip() or None
+    risk_policy_snapshot = payload_data.pop("risk_policy_snapshot", {}) or {}
+    preferred_mode = str(payload_data.pop("mode", "mock") or "mock").strip()
     selected_template_ids = [
         str(value).strip()
         for value in list(payload_data.pop("strategy_template_ids", []) or [])
         if str(value).strip()
     ]
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
-    if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
-        preferred_mode = "live_ready_disabled"
+    if preferred_mode not in {"live_ready", "mock", "live_ready_disabled", "paper"}:
+        preferred_mode = "mock"
 
-    if not exchange_connection_id:
+    if preferred_mode in {"live_ready_disabled", "paper"}:
+        preferred_mode = "mock"
+
+
+    if isinstance(risk_policy_snapshot, dict) and risk_policy_snapshot.get("max_leverage") is not None:
+        payload_data["leverage"] = max(1, int(risk_policy_snapshot.get("max_leverage") or 1))
+
+    selected_connection = None
+    if exchange_connection_id:
+        selected_connection = (
+            db.query(UserExchangeConnection)
+            .filter(
+                UserExchangeConnection.id == exchange_connection_id,
+                UserExchangeConnection.user_id == current_user.id,
+            )
+            .first()
+        )
+        if selected_connection is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
+
+    if preferred_mode == "live_ready" and selected_connection is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="exchange_connection_required")
 
-    selected_connection = (
-        db.query(UserExchangeConnection)
-        .filter(
-            UserExchangeConnection.id == exchange_connection_id,
-            UserExchangeConnection.user_id == current_user.id,
-        )
-        .first()
-    )
-    if selected_connection is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
-
-    payload_data["exchange"] = selected_connection.exchange
-    payload_data["market_type"] = selected_connection.market_type
+    if selected_connection is not None:
+        payload_data["exchange"] = selected_connection.exchange
+        payload_data["market_type"] = selected_connection.market_type
 
     if not payload_data.get("strategy_template_id") and selected_template_ids:
         payload_data["strategy_template_id"] = selected_template_ids[0]
@@ -81,9 +93,12 @@ def create_bot_profile(
         "strategy_template_ids": selected_template_ids,
         "basket_mode_enabled": len(selected_template_ids) > 1,
         "risk_adaptive_confirmed": risk_adaptive_confirmed,
-        "selected_exchange_connection_id": selected_connection.id,
-        "selected_exchange_connection_label": selected_connection.account_label,
-        "selected_exchange_market_type": selected_connection.market_type,
+        "selected_exchange_connection_id": selected_connection.id if selected_connection else None,
+        "selected_exchange_connection_label": selected_connection.account_label if selected_connection else None,
+        "selected_exchange_market_type": selected_connection.market_type if selected_connection else payload_data.get("market_type"),
+        "selected_risk_policy_id": risk_policy_id,
+        "selected_risk_policy_name": risk_policy_snapshot.get("name") if isinstance(risk_policy_snapshot, dict) else None,
+        "risk_policy_snapshot": risk_policy_snapshot if isinstance(risk_policy_snapshot, dict) else {},
     }
     db.add(bot_profile)
     db.commit()
@@ -114,32 +129,44 @@ def update_bot_profile(
 
     payload_data = payload.model_dump()
     exchange_connection_id = str(payload_data.pop("exchange_connection_id", "") or "").strip()
-    preferred_mode = str(payload_data.pop("mode", "live_ready_disabled") or "live_ready_disabled").strip()
+    risk_policy_id = str(payload_data.pop("risk_policy_id", "") or "").strip() or None
+    risk_policy_snapshot = payload_data.pop("risk_policy_snapshot", {}) or {}
+    preferred_mode = str(payload_data.pop("mode", "mock") or "mock").strip()
     selected_template_ids = [
         str(value).strip()
         for value in list(payload_data.pop("strategy_template_ids", []) or [])
         if str(value).strip()
     ]
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
-    if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
-        preferred_mode = "live_ready_disabled"
+    if preferred_mode not in {"live_ready", "mock", "live_ready_disabled", "paper"}:
+        preferred_mode = "mock"
 
-    if not exchange_connection_id:
+    if preferred_mode in {"live_ready_disabled", "paper"}:
+        preferred_mode = "mock"
+
+
+    if isinstance(risk_policy_snapshot, dict) and risk_policy_snapshot.get("max_leverage") is not None:
+        payload_data["leverage"] = max(1, int(risk_policy_snapshot.get("max_leverage") or 1))
+
+    selected_connection = None
+    if exchange_connection_id:
+        selected_connection = (
+            db.query(UserExchangeConnection)
+            .filter(
+                UserExchangeConnection.id == exchange_connection_id,
+                UserExchangeConnection.user_id == bot_profile.user_id,
+            )
+            .first()
+        )
+        if selected_connection is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
+
+    if preferred_mode == "live_ready" and selected_connection is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="exchange_connection_required")
 
-    selected_connection = (
-        db.query(UserExchangeConnection)
-        .filter(
-            UserExchangeConnection.id == exchange_connection_id,
-            UserExchangeConnection.user_id == bot_profile.user_id,
-        )
-        .first()
-    )
-    if selected_connection is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="exchange_connection_not_found")
-
-    payload_data["exchange"] = selected_connection.exchange
-    payload_data["market_type"] = selected_connection.market_type
+    if selected_connection is not None:
+        payload_data["exchange"] = selected_connection.exchange
+        payload_data["market_type"] = selected_connection.market_type
 
     if not payload_data.get("strategy_template_id") and selected_template_ids:
         payload_data["strategy_template_id"] = selected_template_ids[0]
@@ -153,9 +180,12 @@ def update_bot_profile(
         "strategy_template_ids": selected_template_ids,
         "basket_mode_enabled": len(selected_template_ids) > 1,
         "risk_adaptive_confirmed": risk_adaptive_confirmed,
-        "selected_exchange_connection_id": selected_connection.id,
-        "selected_exchange_connection_label": selected_connection.account_label,
-        "selected_exchange_market_type": selected_connection.market_type,
+        "selected_exchange_connection_id": selected_connection.id if selected_connection else None,
+        "selected_exchange_connection_label": selected_connection.account_label if selected_connection else None,
+        "selected_exchange_market_type": selected_connection.market_type if selected_connection else payload_data.get("market_type"),
+        "selected_risk_policy_id": risk_policy_id,
+        "selected_risk_policy_name": risk_policy_snapshot.get("name") if isinstance(risk_policy_snapshot, dict) else None,
+        "risk_policy_snapshot": risk_policy_snapshot if isinstance(risk_policy_snapshot, dict) else {},
     }
 
     db.commit()

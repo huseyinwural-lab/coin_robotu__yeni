@@ -60,8 +60,10 @@ def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
         "scanner_id": getattr(bot, "scanner_id", None),
         "selected_exchange_connection_id": str(snapshot.get("selected_exchange_connection_id") or "") or None,
         "selected_exchange_connection_label": str(snapshot.get("selected_exchange_connection_label") or "") or None,
+        "selected_risk_policy_id": str(snapshot.get("selected_risk_policy_id") or "") or None,
+        "selected_risk_policy_name": str(snapshot.get("selected_risk_policy_name") or "") or None,
         "status": "ERROR",
-        "mode": str(snapshot.get("preferred_mode") or "live_ready_disabled"),
+        "mode": str(snapshot.get("preferred_mode") or "mock"),
         "strategy_id": None,
         "risk_profile_id": None,
         "execution_profile_id": None,
@@ -272,9 +274,11 @@ def _build_binding_blocks(db, bot: BotProfile, runtime: dict, symbol_resolution:
 def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
     runtime = _ensure_runtime(db, bot)
     snapshot = getattr(bot, "symbol_resolution_snapshot", {}) or {}
-    preferred_mode = str(snapshot.get("preferred_mode") or "live_ready_disabled").strip()
-    if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
-        preferred_mode = "live_ready_disabled"
+    preferred_mode = str(snapshot.get("preferred_mode") or "mock").strip()
+    if preferred_mode not in {"live_ready", "mock", "live_ready_disabled", "paper"}:
+        preferred_mode = "mock"
+    if preferred_mode in {"live_ready_disabled", "paper"}:
+        preferred_mode = "mock"
     runtime_mode = str(runtime.get("mode") or "live_ready_disabled")
     mode_value = runtime_mode if str(runtime.get("status") or "").upper() == "RUNNING" else preferred_mode
     symbol_resolution = _resolve_symbol_source(db, bot)
@@ -339,6 +343,8 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "scanner_id": getattr(bot, "scanner_id", None),
         "selected_exchange_connection_id": str(snapshot.get("selected_exchange_connection_id") or "") or None,
         "selected_exchange_connection_label": str(snapshot.get("selected_exchange_connection_label") or "") or None,
+        "selected_risk_policy_id": str(snapshot.get("selected_risk_policy_id") or "") or None,
+        "selected_risk_policy_name": str(snapshot.get("selected_risk_policy_name") or "") or None,
         "status": runtime.get("status", "IDLE"),
         "mode": mode_value,
         "strategy_id": runtime.get("strategy_id"),
@@ -467,9 +473,11 @@ def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
     symbol_resolution = _resolve_symbol_source(db, bot)
     strategy_resolution = dict(bindings.get("strategy_resolution") or {})
     strategy_ok = bool(strategy_resolution.get("validation_result", {}).get("runtime_eligible", True))
-    preferred_mode = str((getattr(bot, "symbol_resolution_snapshot", {}) or {}).get("preferred_mode") or "live_ready_disabled").strip()
-    if preferred_mode not in {"live_ready_disabled", "paper", "mock"}:
-        preferred_mode = "live_ready_disabled"
+    preferred_mode = str((getattr(bot, "symbol_resolution_snapshot", {}) or {}).get("preferred_mode") or "mock").strip()
+    if preferred_mode not in {"live_ready", "mock", "live_ready_disabled", "paper"}:
+        preferred_mode = "mock"
+    if preferred_mode in {"live_ready_disabled", "paper"}:
+        preferred_mode = "mock"
     if not bindings["strategy_id"] or not bindings["execution_profile_id"] or not symbol_resolution.get("ok") or not strategy_ok:
         runtime = set_bot_runtime_state(redis_client, bot_id=bot.id, state="ERROR", error="binding_failed")
         runtime["mode"] = preferred_mode

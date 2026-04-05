@@ -317,6 +317,8 @@ class BotProfileBase(BaseModel):
 
 class BotProfileCreate(BotProfileBase):
     exchange_connection_id: str | None = None
+    risk_policy_id: str | None = None
+    risk_policy_snapshot: dict = Field(default_factory=dict)
     mode: str | None = "live_ready_disabled"
     strategy_template_ids: list[str] = Field(default_factory=list)
     risk_adaptive_confirmed: bool = False
@@ -327,6 +329,8 @@ class BotProfileUpdate(BaseModel):
     exchange: str
     market_type: str
     exchange_connection_id: str | None = None
+    risk_policy_id: str | None = None
+    risk_policy_snapshot: dict = Field(default_factory=dict)
     symbol_source_type: str = "manual"
     scanner_id: str | None = None
     symbols: list[str]
@@ -384,6 +388,8 @@ class BotRuntimeStatusResponse(BaseModel):
     scanner_id: str | None = None
     selected_exchange_connection_id: str | None = None
     selected_exchange_connection_label: str | None = None
+    selected_risk_policy_id: str | None = None
+    selected_risk_policy_name: str | None = None
     status: str
     mode: str
     strategy_id: str | None = None
