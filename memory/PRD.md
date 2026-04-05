@@ -20157,3 +20157,28 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Artık user tarafında otomatik/IDLE bot profili kalmadı.
 - Yeni botlar kullanıcı tarafından temiz şekilde tekrar oluşturulabilir.
 
+## 2026-04-05 — Scanner Chart Panel Kaldırma ✅
+
+### Kullanıcı talebi
+- Scanner sayfasındaki büyük market/signal grafik alanı kaldırılsın.
+
+### Uygulanan değişiklikler
+- `/app/frontend/src/pages/UserScannerPage.jsx`
+  - `UserMarketChartPanel` importu kaldırıldı.
+  - `chartSymbol/chartTimeframe` state’leri kaldırıldı.
+  - `openChartFromScanner` fonksiyonu kaldırıldı.
+  - Scanner içindeki chart panel bloğu kaldırıldı (`user-scanner-chart-panel-col`).
+  - `ScannerResultsTable` çağrısından `onViewChart` propu kaldırıldı.
+
+- `/app/frontend/src/components/ScannerResultsTable.jsx`
+  - `onViewChart` propu kaldırıldı.
+  - Mobile ve table aksiyonlarından `View Chart` butonu kaldırıldı.
+  - Kalan aksiyonlar: `Open Trade`, `View Card`, `Add Watchlist`.
+
+### Doğrulama
+- JS lint PASS (`UserScannerPage.jsx`, `ScannerResultsTable.jsx`).
+- Testing agent PASS: `/app/test_reports/iteration_7.json`
+  - Scanner’da chart import/render yok.
+  - `View Chart` butonları yok.
+  - Frontend yapısı geçerli.
+
