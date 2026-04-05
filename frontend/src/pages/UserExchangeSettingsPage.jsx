@@ -1105,8 +1105,8 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
               onChange={(event) => setActiveProfileId(event.target.value)}
               data-testid="user-exchange-active-profile-selector"
             >
-              {(visibleConnectionProfiles || []).map((item) => (
-                <option key={item.id} value={item.id}>{item.account_label} · {item.exchange}/{item.market_type}/{item.environment}</option>
+              {(visibleConnectionProfiles || []).map((item, index) => (
+                <option key={`${item.id}-${index}`} value={item.id}>{item.account_label} · {item.exchange}/{item.market_type}/{item.environment}</option>
               ))}
             </select>
             <p className="form-helper-text" data-testid="user-exchange-active-profile-selector-helper">Yanlış environment riskini azaltmak için aktif profil üstte açıkça seçilir.</p>
@@ -1337,8 +1337,8 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
             </div>
 
             <div className="space-y-2" data-testid="user-connection-profiles-list">
-              {visibleConnectionProfiles.map((connection) => (
-                <article key={connection.id} className="flex flex-wrap items-center justify-between gap-2 border border-slate-700 bg-slate-950 p-3" data-testid={`user-connection-profile-row-${connection.id}`}>
+              {visibleConnectionProfiles.map((connection, index) => (
+                <article key={`${connection.id}-${index}`} className="flex flex-wrap items-center justify-between gap-2 border border-slate-700 bg-slate-950 p-3" data-testid={`user-connection-profile-row-${connection.id}`}>
                   <div data-testid={`user-connection-profile-info-${connection.id}`}>
                     <p className="text-sm font-semibold text-slate-100" data-testid={`user-connection-profile-label-${connection.id}`}>{connection.account_label}{connection.is_default ? " (default)" : ""}</p>
                     <p className="text-xs text-slate-400" data-testid={`user-connection-profile-meta-${connection.id}`}>{connection.exchange} / {connection.market_type} / {connection.environment}</p>
@@ -1775,8 +1775,8 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
             <p className="mt-2 text-sm text-emerald-300" data-testid="user-exchange-action-required-empty">Tüm connection profilleri trade-ready.</p>
           ) : (
             <div className="mt-2 space-y-2" data-testid="user-exchange-action-required-list">
-              {actionRequiredProfiles.map((profile) => (
-                <div key={profile.id} className="rounded border border-slate-700 bg-slate-950 p-2" data-testid={`user-exchange-action-required-item-${profile.id}`}>
+              {actionRequiredProfiles.map((profile, index) => (
+                <div key={`${profile.id}-${index}`} className="rounded border border-slate-700 bg-slate-950 p-2" data-testid={`user-exchange-action-required-item-${profile.id}`}>
                   <p className="text-sm font-semibold text-slate-100" data-testid={`user-exchange-action-required-item-label-${profile.id}`}>{profile.account_label} · {profile.connection_health}</p>
                   <p className="text-xs text-slate-400" data-testid={`user-exchange-action-required-item-reason-${profile.id}`}>{profile.action_required_message || profile.connection_health_reason || "-"}</p>
                 </div>

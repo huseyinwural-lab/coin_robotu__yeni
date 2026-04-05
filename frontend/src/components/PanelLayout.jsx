@@ -332,7 +332,7 @@ export const PanelLayout = () => {
 
     return (
       <NavLink
-        key={item.to}
+        key={item.testId || `${item.to}-${item.label}`}
         to={item.to}
         data-testid={item.testId}
         aria-label={`${item.label} sayfasına git`}
