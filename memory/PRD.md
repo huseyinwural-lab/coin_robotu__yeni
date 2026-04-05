@@ -19861,3 +19861,35 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Frontend test agent (code-level): **PASS 7/7**
   - Exchange/Market, wallet+diagnostics, symbol presets, risk policy, template toggle, mode cleanup, bybit kuralı doğrulandı.
 
+## 2026-04-05 — İnce Düzeltme: Futures Wallet Kaynağı + Bot Wallet Kaynağı Sadeleştirme ✅
+
+### Kullanıcı geri bildirimi
+- Futures cüzdan bakiyesi sadece Futures key kaynağından beslenmeli; veri yoksa 0 yazılmalı.
+- Bot Profile cüzdan seçimi Exchange Settings içindeki Spot/Futures kaynaklarıyla sınırlı olmalı.
+
+### Yapılan düzeltme
+- Backend (`core/users/user_portfolio_engine.py`)
+  - Portfolio wallet hesapları artık yalnızca Exchange Settings senkron kaynaklarını kullanır:
+    - `readiness_snapshot.source == phase4_exchange_settings_sync`
+    - veya `account_label` `SETTINGS ...` ile başlıyor
+  - Spot/Futures için market bazlı tek kaynak seçilir (default/güncel öncelik).
+  - `wallet_balance` yoksa fallback kullanılmadan doğrudan `0` döner.
+- Frontend (`pages/BotProfilesPage.jsx`)
+  - Wallet liste filtresi sadece Settings kaynaklı bağlantılarla sınırlandı (`isSettingsWalletConnection`).
+  - Wallet etiketleri sadeleştirildi:
+    - `SPOT CÜZDAN`
+    - `FUTURES CÜZDAN`
+  - Diagnostics aktivasyon kontrolü (`comboActivationState`) da aynı Settings-scoped bağlantılar üzerinden hesaplanır.
+
+### Doğrulama
+- Frontend lint: PASS
+- Backend lint: PASS
+- Frontend test agent code-level: PASS (4/4)
+  - Settings kaynak filtresi doğrulandı
+  - Spot/Futures wallet label doğrulandı
+  - Veri yoksa 0 fallback doğrulandı
+  - Diagnostics flag bağımlılığı doğrulandı
+
+### Not
+- Yerel auth doğrulama sırasında ortam kaynaklı PostgreSQL SSL kesinti logları görüldü (`SSL connection has been closed unexpectedly`), bu Bot Profile kod değişikliğinden bağımsız altyapı bağlantı sorunu olarak kaydedildi.
+
