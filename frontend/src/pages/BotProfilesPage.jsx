@@ -57,6 +57,15 @@ const toNum = (value) => {
   return Number.isFinite(num) ? num : 0;
 };
 
+const isSettingsWalletConnection = (connection) => {
+  const snapshot = connection?.readiness_snapshot && typeof connection.readiness_snapshot === "object"
+    ? connection.readiness_snapshot
+    : {};
+  const source = String(snapshot?.source || "").toLowerCase();
+  const label = String(connection?.account_label || "").toUpperCase();
+  return source === "phase4_exchange_settings_sync" || label.startsWith("SETTINGS ");
+};
+
 const toCanonicalStrategyOptions = (items = []) => {
   return (items || [])
     .filter((item) => Boolean(item?.is_enabled) && Boolean(item?.in_production_path))
@@ -200,10 +209,11 @@ export const BotProfilesPage = () => {
     [canonicalStrategyOptions, form.strategy_type],
   );
 
-  const walletConnectionOptions = useMemo(() => {
-    const scopedConnections = (exchangeConnections || [])
+  const settingsScopedConnections = useMemo(() => {
+    return (exchangeConnections || [])
       .filter((item) => String(item?.exchange || "").toLowerCase() === String(form.exchange || "binance").toLowerCase())
       .filter((item) => String(item?.market_type || "").toLowerCase() === String(form.market_type || "spot").toLowerCase())
+      .filter((item) => isSettingsWalletConnection(item))
       .filter((item) => String(item?.environment || "live").toLowerCase() === "live")
       .sort((a, b) => {
         const aDefault = a?.is_default ? 1 : 0;
@@ -211,16 +221,21 @@ export const BotProfilesPage = () => {
         if (aDefault !== bDefault) return bDefault - aDefault;
         return String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""));
       });
+  }, [exchangeConnections, form.exchange, form.market_type]);
+
+  const walletConnectionOptions = useMemo(() => {
+    const scopedConnections = settingsScopedConnections;
 
     return scopedConnections.map((connection) => {
       const snapshot = connection?.readiness_snapshot || {};
       const availableBalance = toNum(snapshot.available_balance ?? snapshot.wallet_balance ?? snapshot.total_wallet_balance);
       const unrealizedPnl = toNum(snapshot.unrealized_pnl ?? snapshot.total_unrealized_pnl ?? snapshot.realized_pnl);
+      const walletLabel = String(connection.market_type || "spot").toLowerCase() === "futures" ? "FUTURES CÜZDAN" : "SPOT CÜZDAN";
       return {
         id: connection.id,
         exchange: connection.exchange,
         market_type: connection.market_type,
-        label: `${connection.account_label} · ${availableBalance.toFixed(2)} USDT`,
+        label: `${walletLabel} · ${availableBalance.toFixed(2)} USDT`,
         available_balance: availableBalance,
         pnl: unrealizedPnl,
         global_activation_active: Boolean(connection.global_activation_active),
@@ -228,7 +243,7 @@ export const BotProfilesPage = () => {
         can_trade_effective: Boolean(connection.can_trade_effective),
       };
     });
-  }, [exchangeConnections, form.exchange, form.market_type]);
+  }, [settingsScopedConnections]);
 
   const selectedWalletConnection = useMemo(
     () => walletConnectionOptions.find((item) => item.id === form.exchange_connection_id) || null,
@@ -236,16 +251,14 @@ export const BotProfilesPage = () => {
   );
 
   const comboActivationState = useMemo(() => {
-    const scoped = (exchangeConnections || [])
-      .filter((item) => String(item?.exchange || "").toLowerCase() === String(form.exchange || "binance").toLowerCase())
-      .filter((item) => String(item?.market_type || "").toLowerCase() === String(form.market_type || "spot").toLowerCase());
+    const scoped = settingsScopedConnections;
     const active = scoped.some((item) => Boolean(item?.global_activation_active) && Boolean(item?.can_trade_effective));
     return {
       active,
       hasConnection: scoped.length > 0,
       flag: scoped[0]?.global_activation_flag_key || `is_${form.exchange}_${form.market_type}_active`,
     };
-  }, [exchangeConnections, form.exchange, form.market_type]);
+  }, [form.exchange, form.market_type, settingsScopedConnections]);
 
   const liveReadyBlockedReason = useMemo(() => {
     if (form.mode !== "live_ready") return "";

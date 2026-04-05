@@ -11,6 +11,46 @@ def _safe_float(value: float | None) -> float:
     return float(value or 0)
 
 
+def _is_settings_synced_connection(row: UserExchangeConnection) -> bool:
+    snapshot = row.readiness_snapshot if isinstance(row.readiness_snapshot, dict) else {}
+    source = str(snapshot.get("source") or "").strip().lower()
+    label = str(row.account_label or "").strip().upper()
+    return source == "phase4_exchange_settings_sync" or label.startswith("SETTINGS ")
+
+
+def _pick_settings_wallet_connection(rows: list[UserExchangeConnection], market_type: str) -> UserExchangeConnection | None:
+    filtered = [
+        row
+        for row in rows
+        if str(row.market_type or "").strip().lower() == market_type
+        and str(row.environment or "live").strip().lower() == "live"
+        and _is_settings_synced_connection(row)
+    ]
+    if not filtered:
+        return None
+
+    # Öncelik: default > güncel kayıt
+    filtered.sort(
+        key=lambda item: (
+            1 if item.is_default else 0,
+            item.updated_at or datetime.min.replace(tzinfo=timezone.utc),
+        ),
+        reverse=True,
+    )
+    return filtered[0]
+
+
+def _wallet_balance_from_connection(row: UserExchangeConnection | None) -> float:
+    if row is None:
+        return 0.0
+    snapshot = row.readiness_snapshot if isinstance(row.readiness_snapshot, dict) else {}
+    wallet_value = _safe_float(snapshot.get("wallet_balance"))
+    # Kullanıcı talebi: veri yoksa 0 (available fallback yok)
+    if wallet_value <= 0:
+        return 0.0
+    return wallet_value
+
+
 def build_user_portfolio_snapshot(db: Session, user_id: str) -> dict:
     mapped = map_user_portfolio(db, user_id=user_id, market_type="futures", leverage=1)
     connection = (
@@ -48,18 +88,11 @@ def build_user_portfolio_snapshot(db: Session, user_id: str) -> dict:
         .all()
     )
 
-    spot_wallet_balance = 0.0
-    futures_wallet_balance = 0.0
-    for row in all_connections:
-        snapshot = row.readiness_snapshot if isinstance(row.readiness_snapshot, dict) else {}
-        wallet_value = _safe_float(snapshot.get("wallet_balance"))
-        if wallet_value <= 0:
-            wallet_value = _safe_float(snapshot.get("available_balance"))
-        market = str(row.market_type or "spot").lower()
-        if market == "futures":
-            futures_wallet_balance += wallet_value
-        else:
-            spot_wallet_balance += wallet_value
+    spot_connection = _pick_settings_wallet_connection(all_connections, "spot")
+    futures_connection = _pick_settings_wallet_connection(all_connections, "futures")
+
+    spot_wallet_balance = _wallet_balance_from_connection(spot_connection)
+    futures_wallet_balance = _wallet_balance_from_connection(futures_connection)
 
     total_wallet_balance = round(spot_wallet_balance + futures_wallet_balance, 8)
 
