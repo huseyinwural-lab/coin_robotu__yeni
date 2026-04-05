@@ -19717,3 +19717,25 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - UI otomasyonunda auth persistence blok var
   - Code-level doğrulama: 5/5 gereksinim implementasyonu PASS
 
+## 2026-04-05 — Diagnostics UX Ekleri (Mini Wallet/PNL + Last Error + Checking Light) ✅
+
+### Eklenenler
+- Panel içine mini gözcü satırı eklendi (online durumda):
+  - `Wallet: ... USDT | PNL: ...$`
+  - data-testid: `user-exchange-diagnostics-panel-mini-wallet-pnl-{exchange}-{market}`
+- `last_fail_reason` satırı eklendi (her panelde):
+  - data-testid: `user-exchange-diagnostics-panel-meta-last-error-{exchange}-{market}`
+  - Hata etiket map’i: `invalid_key`, `exchange_error_451`, `invalid_ip`
+- Revalidate canlılık efekti eklendi:
+  - Butona basınca panel status sarıya geçer ve metin `Checking...` olur
+  - Revalidate bitince online/pasif rengine geri döner
+
+### Teknik not
+- Mini wallet/pnl değerleri `readiness_snapshot` içinden çekilir (`wallet_balance`, `available_balance`, `unrealized_pnl`, `total_unrealized_pnl`, `realized_pnl`).
+
+### Doğrulama
+- Frontend lint: PASS
+- Frontend test agent:
+  - Preview auth persistence sorunu nedeniyle canlı UI akışı bloklu
+  - Code-level doğrulama: 4/4 gereksinim implementasyonu PASS
+
