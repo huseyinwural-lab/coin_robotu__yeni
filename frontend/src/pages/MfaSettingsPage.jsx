@@ -149,6 +149,48 @@ export const MfaSettingsPage = () => {
     }
   };
 
+  const toggleMfaSimple = async () => {
+    setBusyKey("simple-toggle");
+    try {
+      const currentlyEnabled = Boolean(settings?.is_enabled);
+      if (currentlyEnabled) {
+        const { data } = await apiClient.put(
+          "/auth/mfa/settings",
+          { is_enabled: false, enabled_methods: [] },
+          { timeout: 20000 },
+        );
+        setSettings(data || null);
+        toast.success("MFA kapatıldı");
+        await refresh();
+        return;
+      }
+
+      if (!settings?.totp_configured) {
+        await startSetup();
+        toast.message("MFA açmak için önce QR kurulumunu tamamlayın.");
+        return;
+      }
+
+      if (!settings?.totp_verified) {
+        toast.message("MFA açmak için OTP doğrulamasını tamamlayın.");
+        return;
+      }
+
+      const { data } = await apiClient.put(
+        "/auth/mfa/settings",
+        { is_enabled: true, enabled_methods: ["totp"] },
+        { timeout: 20000 },
+      );
+      setSettings(data || null);
+      toast.success("MFA açıldı");
+      await refresh();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "MFA durumu güncellenemedi");
+    } finally {
+      setBusyKey("");
+    }
+  };
+
   const activateMfa = async () => {
     if (!backupAcknowledged) {
       toast.error("Backup code’ları güvenli yere kaydettiğinizi onaylamalısınız");
@@ -244,6 +286,25 @@ export const MfaSettingsPage = () => {
         <article className="border border-slate-800 bg-slate-900 p-4" data-testid="mfa-backup-status-card"><p className="text-xs uppercase tracking-widest text-slate-500">Backup Codes</p><p className="mt-2 text-lg font-bold text-emerald-300">{settings?.backup_codes_remaining ?? 0}</p></article>
         <article className="border border-slate-800 bg-slate-900 p-4" data-testid="mfa-last-verified-card"><p className="text-xs uppercase tracking-widest text-slate-500">Last Verified</p><p className="mt-2 text-sm font-bold text-emerald-300">{settings?.last_verified_at || "never"}</p></article>
       </div>
+
+      <section className="border border-slate-800 bg-slate-900 p-4" data-testid="mfa-simple-toggle-panel">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-slate-500">Basit Aç / Kapat</p>
+            <p className="mt-1 text-sm text-slate-300" data-testid="mfa-simple-toggle-hint">
+              İlk kurulumda MFA kapalı gelir. İsterseniz açar, isterseniz kapatırsınız.
+            </p>
+          </div>
+          <Button
+            type="button"
+            onClick={toggleMfaSimple}
+            disabled={busyKey === "simple-toggle"}
+            data-testid="mfa-simple-toggle-button"
+          >
+            {settings?.is_enabled ? "MFA Kapat" : "MFA Aç"}
+          </Button>
+        </div>
+      </section>
 
       <section className="border border-slate-800 bg-slate-900 p-4" data-testid="mfa-setup-wizard-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500">MFA Setup Wizard</p>

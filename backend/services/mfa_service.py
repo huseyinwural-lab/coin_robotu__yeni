@@ -464,7 +464,8 @@ def verify_totp_setup(db: Session, *, user_id: str, code: str) -> dict:
     pref.totp_verified = True
     if "totp" not in _normalize_methods(pref.enabled_methods):
         pref.enabled_methods = [*_normalize_methods(pref.enabled_methods), "totp"]
-    pref.is_enabled = True
+    # İlk kurulum davranışı: MFA doğrulansa bile kullanıcı açıkça açana kadar kapalı kalsın.
+    pref.is_enabled = False
     pref.updated_at = _now()
     security_state.mfa_grace_started_at = None
     security_state.mfa_grace_expires_at = None
