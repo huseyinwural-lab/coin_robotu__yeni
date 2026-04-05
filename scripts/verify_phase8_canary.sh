@@ -59,6 +59,44 @@ EXCHANGE_MARKET_TYPE="${CANARY_EXCHANGE_MARKET_TYPE:-futures}"
 EXCHANGE_ENVIRONMENT="live"
 CANARY_ALLOW_451_BYPASS="${CANARY_ALLOW_451_BYPASS:-true}"
 
+if [[ -z "${LIVE_API_KEY}" || -z "${LIVE_API_SECRET}" ]]; then
+  if [[ -f "${ROOT_DIR}/backend/.env" ]]; then
+    LIVE_API_KEY="$(python - <<'PY'
+from pathlib import Path
+import os
+
+env_path=Path('/app/backend/.env')
+rows={}
+if env_path.exists():
+  for raw in env_path.read_text(encoding='utf-8').splitlines():
+    line=raw.strip()
+    if not line or line.startswith('#') or '=' not in line:
+      continue
+    k,v=line.split('=',1)
+    rows[k.strip()]=v.strip().strip('"').strip("'")
+
+print((rows.get('BINANCE_LIVE_API_KEY') or rows.get('BINANCE_API_KEY') or '').strip())
+PY
+)"
+    LIVE_API_SECRET="$(python - <<'PY'
+from pathlib import Path
+
+env_path=Path('/app/backend/.env')
+rows={}
+if env_path.exists():
+  for raw in env_path.read_text(encoding='utf-8').splitlines():
+    line=raw.strip()
+    if not line or line.startswith('#') or '=' not in line:
+      continue
+    k,v=line.split('=',1)
+    rows[k.strip()]=v.strip().strip('"').strip("'")
+
+print((rows.get('BINANCE_LIVE_API_SECRET') or rows.get('BINANCE_API_SECRET') or '').strip())
+PY
+)"
+  fi
+fi
+
 resolve_exchange_credentials() {
   ACTIVE_API_KEY="${LIVE_API_KEY}"
   ACTIVE_API_SECRET="${LIVE_API_SECRET}"

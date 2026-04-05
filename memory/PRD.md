@@ -20439,3 +20439,30 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `pytest -q backend/tests/test_iteration165_prod_gate_smoke.py::TestVerifyPhase6SecurityScript::test_security_script_passes` ✅ PASS
 - `verify_phase8_canary.sh` dry-run: approval/login ve exchange settings adımları PASS; kalan fail yalnızca beklenen `invalid_key` (dummy/live key yokluğu)
 
+## 2026-04-05 — Admin/User Binance Key İşleme (Manual Credential Processing) ✅
+
+### Kullanıcı talebi
+- Admin spot/futures key ve user spot+futures key sisteme işlensin.
+
+### Uygulanan işlemler
+- User tarafı:
+  - `PUT /api/phase4/exchange-settings` ile `binance spot + live` ve `binance futures + live` key/secret güncellendi.
+  - `POST /api/user/exchange-connections/{id}/revalidate` ile ilgili bağlantılar yeniden doğrulandı.
+
+- Admin tarafı:
+  - `GET/POST/PATCH /api/venues/admin/credentials` ile `binance/live/global` spot/futures execution credential kayıtları işlendi.
+  - Uygun credential satırları approve/verify akışına sokuldu.
+
+- Sistem env tarafı:
+  - `backend/.env` içinde `BINANCE_API_KEY/SECRET` (spot) ve `BINANCE_LIVE_API_KEY/SECRET` (live/futures) güncellendi.
+
+### Doğrulama
+- `bash /app/scripts/verify_phase6_security.sh` ✅ PASS (`status: PASS`, `missing_count: 0`).
+- `bash /app/scripts/verify_phase8_canary.sh`:
+  - PASS: admin login, user login, exchange settings update
+  - FAIL: exchange validate `http=400 invalid_key` (futures live key doğrulama reddi)
+
+### Operasyonel sonuç
+- Spot bağlantılarda online/tradeable durum görüldü.
+- Futures tarafında canlı doğrulama şu an `invalid_key` nedeniyle aktiflenemiyor (key permission/region/mainnet uyumu kontrolü gerekli).
+
