@@ -195,13 +195,28 @@ device_header = "phase6-jwt-rotation-device"
 
 def request_with_retry(session_obj, method, url, **kwargs):
     last_exc = None
-    for _ in range(4):
+    for _ in range(20):
         try:
             return session_obj.request(method, url, **kwargs)
         except requests.RequestException as exc:
             last_exc = exc
-            time.sleep(2)
+            time.sleep(3)
     raise SystemExit(f"request_failed method={method} url={url} error={last_exc}")
+
+
+health_ready = False
+for _ in range(30):
+    try:
+        health = requests.get(f"{backend_url}/api/health", timeout=8)
+        if health.status_code == 200:
+            health_ready = True
+            break
+    except requests.RequestException:
+        pass
+    time.sleep(2)
+
+if not health_ready:
+    raise SystemExit(f"backend_not_ready url={backend_url}")
 
 login = request_with_retry(
     session,

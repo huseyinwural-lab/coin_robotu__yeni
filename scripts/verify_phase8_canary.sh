@@ -154,9 +154,12 @@ ensure_user_login() {
     [[ "${reg_code}" == "200" ]] || fail "User register başarısız http=${reg_code}"
     # admin approval required
     local pending_code
-    pending_code="$(request_json GET "${BASE_URL}/api/auth/admin/user-approval-requests" "" "${ADMIN_TOKEN}" "/tmp/faz8_pending_users.json")"
-    [[ "${pending_code}" == "200" ]] || fail "pending approvals alınamadı"
-    USER_ID="$(python - <<PY
+    local approve_code=""
+    for _ in {1..4}; do
+      pending_code="$(request_json GET "${BASE_URL}/api/auth/admin/user-approval-requests" "" "${ADMIN_TOKEN}" "/tmp/faz8_pending_users.json")"
+      [[ "${pending_code}" == "200" ]] || { sleep 2; continue; }
+
+      USER_ID="$(python - <<PY
 import json
 rows=json.load(open('/tmp/faz8_pending_users.json', encoding='utf-8'))
 target='${USER_EMAIL}'.lower()
@@ -164,10 +167,21 @@ row=next((r for r in rows if str(r.get('email','')).lower()==target), None)
 print((row or {}).get('id',''))
 PY
 )"
+      if [[ -z "${USER_ID}" ]]; then
+        sleep 2
+        continue
+      fi
+
+      approve_code="$(request_json POST "${BASE_URL}/api/auth/admin/user-approval-requests/${USER_ID}/approve" "null" "${ADMIN_TOKEN}" "/tmp/faz8_user_approve.json")"
+      if [[ "${approve_code}" == "200" ]]; then
+        break
+      fi
+      sleep 2
+    done
+
+    [[ "${pending_code}" == "200" ]] || fail_with_body "pending approvals alınamadı http=${pending_code}" "/tmp/faz8_pending_users.json"
     [[ -n "${USER_ID}" ]] || fail "Yeni kullanıcı pending listede bulunamadı"
-    local approve_code
-    approve_code="$(request_json POST "${BASE_URL}/api/auth/admin/user-approval-requests/${USER_ID}/approve" "null" "${ADMIN_TOKEN}" "/tmp/faz8_user_approve.json")"
-    [[ "${approve_code}" == "200" ]] || fail "User approval başarısız http=${approve_code}"
+    [[ "${approve_code}" == "200" ]] || fail_with_body "User approval başarısız http=${approve_code}" "/tmp/faz8_user_approve.json"
     login_code="$(request_json POST "${BASE_URL}/api/auth/login/user" "{\"email\":\"${USER_EMAIL}\",\"password\":\"${USER_PASSWORD}\"}" "" "/tmp/faz8_user_login.json")"
     [[ "${login_code}" == "200" ]] || fail "User login (approval sonrası) başarısız http=${login_code}"
   fi

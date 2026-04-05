@@ -20376,3 +20376,31 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
   - `PASS: exchange settings`
   - Sonraki fail noktası artık beklenen `invalid_key` (400) — yani user approval/session kırığı kapanmış durumda.
 
+## 2026-04-05 — Phase6 Script Backend Readiness Retry Hardening ✅
+
+### Problem
+- CI sırasında `verify_phase6_security.sh` ilk adımda `127.0.0.1:8001 connection refused` ile düşebiliyordu.
+
+### Düzeltme
+- T-6.1 Python bloğuna backend readiness health wait eklendi (`/api/health`, retry loop).
+- HTTP request retry fonksiyonu güçlendirildi (4 deneme -> 20 deneme, 3s bekleme).
+
+### Doğrulama
+- `bash /app/scripts/verify_phase6_security.sh` ✅ PASS
+  - `status: PASS`
+  - `missing_count: 0`
+- `pytest -q backend/tests/test_iteration165_prod_gate_smoke.py::TestVerifyPhase6SecurityScript::test_security_script_passes` ✅ PASS
+
+## 2026-04-05 — Phase8 User Approval Retry Hardening ✅
+
+### Problem
+- CI loglarında canary scriptte `User approval başarısız http=500` görülebiliyordu.
+
+### Düzeltme
+- `/app/scripts/verify_phase8_canary.sh`
+  - Pending approvals + approve adımı retry/polling ile güçlendirildi.
+  - Approval fail durumunda artık body ile fail raporlanıyor (`fail_with_body`).
+
+### Doğrulama
+- Dry-run sonucu approval/login adımları PASS; sonraki beklenen fail noktası `invalid_key` (env secret kaynaklı).
+
