@@ -146,28 +146,88 @@ export const BotProfilesPage = () => {
   };
 
   const fetchItems = async () => {
-    try {
-      const [profilesRes, strategyPerfRes, templatesRes, canonicalRes, connectionsRes, riskPoliciesRes] = await Promise.all([
-        apiClient.get("/bot-profiles"),
-        apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
-        apiClient.get("/strategy-templates"),
-        apiClient.get("/user/canonical-strategies"),
-        apiClient.get("/user/exchange-connections"),
-        apiClient.get("/risk-policies"),
-      ]);
-      const nextItems = profilesRes.data || [];
+    const serviceRequests = [
+      {
+        key: "bot_profiles",
+        label: "Bot listesi servisi",
+        request: () => apiClient.get("/bot-profiles"),
+      },
+      {
+        key: "strategy_performance",
+        label: "Strategy performance servisi",
+        request: () => apiClient.get("/user/live/strategy-performance", { params: { window: "24h" } }),
+      },
+      {
+        key: "strategy_templates",
+        label: "Template servisi",
+        request: () => apiClient.get("/strategy-templates"),
+      },
+      {
+        key: "canonical_strategies",
+        label: "Canonical strategy servisi",
+        request: () => apiClient.get("/user/canonical-strategies"),
+      },
+      {
+        key: "exchange_connections",
+        label: "Exchange connection servisi",
+        request: () => apiClient.get("/user/exchange-connections"),
+      },
+      {
+        key: "risk_policies",
+        label: "Risk policy servisi",
+        request: () => apiClient.get("/risk-policies"),
+      },
+    ];
+
+    const results = await Promise.allSettled(serviceRequests.map((item) => item.request()));
+    const fulfilled = {};
+    const failures = [];
+
+    results.forEach((result, index) => {
+      const meta = serviceRequests[index];
+      if (result.status === "fulfilled") {
+        fulfilled[meta.key] = result.value?.data;
+        return;
+      }
+      failures.push({
+        label: meta.label,
+        message: parseApiErrorMessage(result.reason, "servise ulaşılamadı"),
+      });
+    });
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "bot_profiles")) {
+      const nextItems = Array.isArray(fulfilled.bot_profiles) ? fulfilled.bot_profiles : [];
       setItems(nextItems);
-      setStrategyPerformance(strategyPerfRes.data || { items: [] });
-      setTemplates(templatesRes.data || []);
-      setCanonicalStrategies(canonicalRes.data || []);
-      setExchangeConnections(connectionsRes.data || []);
-      setRiskPolicies(riskPoliciesRes.data || []);
       setSelectedBot((prev) => {
         if (!prev?.id) return prev;
         return nextItems.find((item) => item.id === prev.id) || null;
       });
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Bot listesi yüklenemedi");
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "strategy_performance")) {
+      setStrategyPerformance(fulfilled.strategy_performance || { items: [] });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "strategy_templates")) {
+      setTemplates(Array.isArray(fulfilled.strategy_templates) ? fulfilled.strategy_templates : []);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "canonical_strategies")) {
+      setCanonicalStrategies(Array.isArray(fulfilled.canonical_strategies) ? fulfilled.canonical_strategies : []);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "exchange_connections")) {
+      setExchangeConnections(Array.isArray(fulfilled.exchange_connections) ? fulfilled.exchange_connections : []);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "risk_policies")) {
+      setRiskPolicies(Array.isArray(fulfilled.risk_policies) ? fulfilled.risk_policies : []);
+    }
+
+    if (failures.length > 0) {
+      const summary = failures.slice(0, 2).map((item) => `${item.label}: ${item.message}`).join(" · ");
+      const extra = failures.length > 2 ? ` (+${failures.length - 2} servis)` : "";
+      toast.error(`Kısmi yükleme: ${summary}${extra}`);
     }
   };
 
@@ -305,10 +365,25 @@ export const BotProfilesPage = () => {
       return "Önce cüzdan seçin.";
     }
     if (toNum(selectedWalletConnection.available_balance) <= 0) {
+      if (String(selectedWalletConnection.connection_health || "").toLowerCase() === "online") {
+        return "Bağlantı online ancak bakiye 0. API yetkilerinizi (Read Balance) kontrol edin ve Revalidate yapın.";
+      }
       return "Kullanılabilir bakiye yetersiz, LIVE-READY kilitli.";
     }
     return "";
   }, [comboActivationState.active, comboActivationState.hasConnection, form.exchange, form.mode, selectedWalletConnection]);
+
+  const readBalancePermissionWarning = useMemo(() => {
+    if (!selectedWalletConnection) {
+      return "";
+    }
+    const isOnline = String(selectedWalletConnection.connection_health || "").toLowerCase() === "online";
+    const hasZeroBalance = toNum(selectedWalletConnection.available_balance) <= 0;
+    if (isOnline && hasZeroBalance) {
+      return "Bağlantı online fakat bakiye 0 görünüyor. API yetkilerinizi (Read Balance) kontrol edin ve Diagnostics > Revalidate çalıştırın.";
+    }
+    return "";
+  }, [selectedWalletConnection]);
 
   useEffect(() => {
     const loadDetail = async () => {
@@ -780,6 +855,9 @@ export const BotProfilesPage = () => {
             <p data-testid="bot-form-wallet-live-balance-value">Kullanılabilir Bakiye: <strong>{toNum(selectedWalletConnection?.available_balance).toFixed(2)} USDT</strong></p>
             <p data-testid="bot-form-wallet-live-pnl-value">PNL: <strong>{toNum(selectedWalletConnection?.pnl).toFixed(2)}$</strong></p>
             <p data-testid="bot-form-wallet-diagnostics-flag">Diagnostics Flag: {comboActivationState.flag} = {comboActivationState.active ? "true" : "false"}</p>
+            {readBalancePermissionWarning && (
+              <p className="mt-1 text-amber-300" data-testid="bot-form-wallet-read-balance-warning">{readBalancePermissionWarning}</p>
+            )}
           </div>
         </div>
 

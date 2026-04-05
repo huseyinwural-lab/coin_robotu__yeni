@@ -74,6 +74,26 @@ const isSameSymbolSelection = (left, right) => {
   return l.every((value, index) => value === r[index]);
 };
 
+const toFiniteNumber = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const parseApiErrorMessage = (error, fallback) => {
+  const detail = error?.response?.data?.detail;
+  if (Array.isArray(detail)) {
+    const message = detail.map((item) => item?.msg || item?.message || "").filter(Boolean).join(", ");
+    if (message) return message;
+  }
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (detail && typeof detail === "object") {
+    return detail.message || detail.code || fallback;
+  }
+  return error?.message || fallback;
+};
+
 const initialFuturesContext = {
   leverage: 3,
   margin_mode: "cross",
@@ -353,31 +373,116 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
     };
   }, [selectedConnectionProfile]);
 
+  const readBalancePermissionWarning = useMemo(() => {
+    if (!selectedConnectionProfile) {
+      return "";
+    }
+
+    const health = String(selectedConnectionProfile.connection_health || "").toLowerCase();
+    if (health !== "online") {
+      return "";
+    }
+
+    const available = toFiniteNumber(selectedAccountSnapshot.available_balance);
+    const wallet = toFiniteNumber(selectedAccountSnapshot.wallet_equity);
+    const hasZeroBalance = (available !== null && available <= 0) || (wallet !== null && wallet <= 0);
+
+    if (!hasZeroBalance) {
+      return "";
+    }
+
+    return "Bağlantı online görünüyor ancak bakiye 0. API yetkilerinizi (Read Balance) kontrol edin ve Revalidate çalıştırın.";
+  }, [selectedAccountSnapshot.available_balance, selectedAccountSnapshot.wallet_equity, selectedConnectionProfile]);
+
   const loadAll = useCallback(async () => {
-    try {
-      const [settingsRes, permissionRes, readinessRes, riskRes, overviewRes, venueOptionsRes, connectionsRes] = await Promise.all([
-        apiClient.get("/phase4/exchange-settings"),
-        apiClient.get("/phase4/permission-status"),
-        apiClient.get("/exchange/readiness-checklist", {
+    const serviceRequests = [
+      {
+        key: "exchange_settings",
+        label: "Exchange Settings servisi",
+        request: () => apiClient.get("/phase4/exchange-settings"),
+      },
+      {
+        key: "permission_status",
+        label: "Permission servisi",
+        request: () => apiClient.get("/phase4/permission-status"),
+      },
+      {
+        key: "readiness_checklist",
+        label: "Readiness servisi",
+        request: () => apiClient.get("/exchange/readiness-checklist", {
           params: {
             exchange: selectedVenue.exchange,
             market_type: selectedVenue.market_type,
             environment: selectedVenue.environment,
           },
         }),
-        apiClient.get("/user-risk/settings"),
-        apiClient.get("/user/portfolio"),
-        apiClient.get("/venues/options"),
-        apiClient.get("/user/exchange-connections"),
-      ]);
-      setSettings(settingsRes.data);
-      setPermission(permissionRes.data);
-      setReadiness(readinessRes.data);
-      setRiskSettings(riskRes.data);
-      setPortfolioOverview(overviewRes.data);
-      const allowedVenueOptions = (venueOptionsRes.data || []).filter((item) => item.exchange !== "-");
+      },
+      {
+        key: "risk_settings",
+        label: "Risk ayarları servisi",
+        request: () => apiClient.get("/user-risk/settings"),
+      },
+      {
+        key: "portfolio",
+        label: "Portfolio servisi",
+        request: () => apiClient.get("/user/portfolio"),
+      },
+      {
+        key: "venue_options",
+        label: "Venue options servisi",
+        request: () => apiClient.get("/venues/options"),
+      },
+      {
+        key: "exchange_connections",
+        label: "Exchange connection servisi",
+        request: () => apiClient.get("/user/exchange-connections"),
+      },
+    ];
+
+    const results = await Promise.allSettled(serviceRequests.map((item) => item.request()));
+    const fulfilled = {};
+    const failures = [];
+
+    results.forEach((result, index) => {
+      const meta = serviceRequests[index];
+      if (result.status === "fulfilled") {
+        fulfilled[meta.key] = result.value?.data;
+        return;
+      }
+      failures.push({
+        label: meta.label,
+        message: parseApiErrorMessage(result.reason, "servise ulaşılamadı"),
+      });
+    });
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "exchange_settings")) {
+      setSettings(fulfilled.exchange_settings);
+      setForm((prev) => ({
+        ...prev,
+        exchange: fulfilled.exchange_settings?.exchange || prev.exchange,
+        mode: fulfilled.exchange_settings?.mode || prev.mode,
+      }));
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "permission_status")) {
+      setPermission(fulfilled.permission_status);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "readiness_checklist")) {
+      setReadiness(fulfilled.readiness_checklist);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "risk_settings")) {
+      setRiskSettings(fulfilled.risk_settings);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "portfolio")) {
+      setPortfolioOverview(fulfilled.portfolio);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "venue_options")) {
+      const allowedVenueOptions = (fulfilled.venue_options || []).filter((item) => item.exchange !== "-");
       setVenueOptions(allowedVenueOptions);
-      setConnectionProfiles(connectionsRes.data || []);
       setSelectedVenue((prev) => {
         const previousStillAvailable = allowedVenueOptions.find(
           (item) => item.exchange === prev.exchange && item.market_type === prev.market_type && item.environment === prev.environment,
@@ -387,13 +492,16 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
         }
         return allowedVenueOptions[0] || fallbackVenue;
       });
-      setForm((prev) => ({
-        ...prev,
-        exchange: settingsRes.data?.exchange || prev.exchange,
-        mode: settingsRes.data?.mode || prev.mode,
-      }));
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Exchange ayarları yüklenemedi");
+    }
+
+    if (Object.prototype.hasOwnProperty.call(fulfilled, "exchange_connections")) {
+      setConnectionProfiles(Array.isArray(fulfilled.exchange_connections) ? fulfilled.exchange_connections : []);
+    }
+
+    if (failures.length > 0) {
+      const summary = failures.slice(0, 2).map((item) => `${item.label}: ${item.message}`).join(" · ");
+      const extra = failures.length > 2 ? ` (+${failures.length - 2} servis)` : "";
+      toast.error(`Kısmi yükleme: ${summary}${extra}`);
     }
 
     setLatestQuality((prev) => prev || null);
@@ -1038,6 +1146,12 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
             <MetricCard label="Toplam Cüzdan" value={portfolioOverview?.total_wallet_balance ?? 0} tone="orange" testId="user-overview-total-wallet-balance" />
           </div>
 
+          {readBalancePermissionWarning && (
+            <div className="rounded border border-amber-600/70 bg-amber-950/25 p-3 text-amber-200" data-testid="user-overview-read-balance-permission-warning">
+              {readBalancePermissionWarning}
+            </div>
+          )}
+
           <section className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="user-overview-system-health-dashboard">
             <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-overview-system-health-header">
               <div>
@@ -1279,6 +1393,11 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
               {selectedAccountSnapshot.wallet_equity === null && (
                 <p className="mt-2 text-xs text-amber-300" data-testid="user-exchange-account-missing-wallet-hint">
                   Cüzdan verisi yok. Profile Revalidate çalıştırın veya key/permission kontrol edin.
+                </p>
+              )}
+              {readBalancePermissionWarning && (
+                <p className="mt-2 text-xs text-amber-300" data-testid="user-exchange-account-read-balance-warning">
+                  {readBalancePermissionWarning}
                 </p>
               )}
             </div>
