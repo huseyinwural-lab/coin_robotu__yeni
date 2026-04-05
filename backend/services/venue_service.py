@@ -152,6 +152,7 @@ def ensure_user_venue_assignment(
             exchange_code=normalized_exchange,
             spot_allowed=True,
             futures_allowed=True,
+            testnet_allowed=False,
             live_allowed=True,
             updated_at=now,
         )
@@ -166,6 +167,9 @@ def ensure_user_venue_assignment(
             changed = True
         if not row.live_allowed:
             row.live_allowed = True
+            changed = True
+        if getattr(row, "testnet_allowed", None) is None:
+            row.testnet_allowed = False
             changed = True
 
     if normalized_market == "spot" and not row.spot_allowed:

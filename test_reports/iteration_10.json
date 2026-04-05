@@ -1,0 +1,94 @@
+{
+  "summary": "Iteration 10 - CI Kırıkları Doğrulaması. All 8 backend tests PASSED. verify_phase6_security.sh script PASS. Admin login duplicate token_hash fix verified. user_venue_assignments testnet_allowed NOT NULL fix verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "admin_login_first_attempt": {
+      "status": "PASS",
+      "endpoint": "POST /api/auth/login/admin",
+      "verification": "Admin login succeeds without IntegrityError"
+    },
+    "admin_login_repeated_attempts": {
+      "status": "PASS",
+      "endpoint": "POST /api/auth/login/admin (3x rapid)",
+      "verification": "Multiple rapid logins do NOT cause duplicate token_hash IntegrityError"
+    },
+    "admin_login_mfa_verify_flow": {
+      "status": "PASS",
+      "verification": "MFA verify flow works without session conflicts"
+    },
+    "venue_assignment_testnet_allowed_default": {
+      "status": "PASS",
+      "verification": "Venue operations complete without NOT NULL constraint violation"
+    },
+    "ensure_user_venue_assignment_idempotent": {
+      "status": "PASS",
+      "endpoint": "GET /api/user/venue/options",
+      "verification": "ensure_user_venue_assignment handles NULL testnet_allowed correctly"
+    },
+    "verify_phase6_security_script": {
+      "status": "PASS",
+      "script": "/app/scripts/verify_phase6_security.sh",
+      "verification": "Script exits 0 with PASS status"
+    },
+    "security_artifacts_generated": {
+      "status": "PASS",
+      "verification": "All expected artifacts in /app/artifacts/"
+    },
+    "same_token_multiple_registrations": {
+      "status": "PASS",
+      "verification": "register_auth_session updates existing session instead of duplicate insert"
+    }
+  },
+  "code_verification": {
+    "register_auth_session_fix": {
+      "file": "/app/backend/services/identity_control_service.py",
+      "lines": "599-607",
+      "fix": "Checks for existing session with same token_hash before insert, updates last_seen_at if found",
+      "comment": "Turkish comment: 'Token hash benzersizdir (uq_auth_sessions_token_hash). Aynı token ile tekrar login/verify akışı gelirse duplicate insert yerine mevcut session güncellenir.'"
+    },
+    "venue_service_testnet_allowed_fix": {
+      "file": "/app/backend/services/venue_service.py",
+      "lines": "155, 171-172",
+      "fix": "testnet_allowed=False on new assignment creation, and NULL check with default False for existing rows"
+    },
+    "verify_phase6_security_script": {
+      "file": "/app/scripts/verify_phase6_security.sh",
+      "status": "PASS",
+      "features": "rg fallback to grep, backend URL selection with health check, retry logic"
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration165_prod_gate_smoke.py",
+    "/app/test_reports/pytest/iteration165_prod_gate_smoke.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "register_auth_session correctly handles duplicate token_hash by updating existing session (line 599-607)",
+    "venue_service.py correctly sets testnet_allowed=False by default (line 155) and handles NULL values (lines 171-172)",
+    "verify_phase6_security.sh script passes all 6 security tests (T-6.1 through T-6.6)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration165_prod_gate_smoke.py"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 tests passed)",
+    "frontend": "N/A (backend only testing)"
+  },
+  "test_credentials": {
+    "email": "canary.admin@platform.local",
+    "password": "CanaryAdmin123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "CI kırıkları düzeltildi ve doğrulandı: (1) register_auth_session duplicate token_hash IntegrityError fix verified - updates existing session instead of insert, (2) verify_phase6_security.sh PASS, (3) user_venue_assignments testnet_allowed NOT NULL fix verified.",
+  "verification_method": "pytest + script execution + code review"
+}

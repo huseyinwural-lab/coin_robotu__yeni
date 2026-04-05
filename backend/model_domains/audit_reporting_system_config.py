@@ -387,6 +387,7 @@ class UserVenueAssignment(Base):
     exchange_code: Mapped[str] = mapped_column(String(40), index=True)
     spot_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
     futures_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    testnet_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
     live_allowed: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

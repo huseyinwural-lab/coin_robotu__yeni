@@ -116,8 +116,8 @@ def is_alive(base: str) -> bool:
     return False
 
 candidates = [
-    read_frontend_backend_url(),
     'http://127.0.0.1:8001',
+    read_frontend_backend_url(),
 ]
 
 selected = ''
@@ -170,6 +170,7 @@ log "T-6.1 JWT rotation testi başlıyor"
 python - <<'PY' > "${ARTIFACT_DIR}/faz6_jwt_rotation_proof.log"
 import json
 import os
+import time
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
@@ -183,7 +184,20 @@ admin_password = os.environ['ADMIN_PASSWORD']
 session = requests.Session()
 device_header = "phase6-jwt-rotation-device"
 
-login = session.post(
+
+def request_with_retry(session_obj, method, url, **kwargs):
+    last_exc = None
+    for _ in range(4):
+        try:
+            return session_obj.request(method, url, **kwargs)
+        except requests.RequestException as exc:
+            last_exc = exc
+            time.sleep(2)
+    raise SystemExit(f"request_failed method={method} url={url} error={last_exc}")
+
+login = request_with_retry(
+    session,
+    "POST",
     f"{backend_url}/api/auth/login/admin",
     json={"email": admin_email, "password": admin_password},
     headers={"X-Session-Device": device_header},
@@ -211,13 +225,17 @@ old_payload = {
 }
 old_token = jwt.encode(old_payload, legacy_signing_key, algorithm="HS256")
 
-old_probe = requests.get(
+old_probe = request_with_retry(
+    requests,
+    "GET",
     f"{backend_url}/api/admin/users",
     headers={"Authorization": f"Bearer {old_token}", "X-Session-Device": bound_device},
     cookies={"device_id": bound_device},
     timeout=25,
 )
-new_probe = session.get(
+new_probe = request_with_retry(
+    session,
+    "GET",
     f"{backend_url}/api/admin/users",
     headers={"Authorization": f"Bearer {new_token}", "X-Session-Device": bound_device},
     timeout=25,

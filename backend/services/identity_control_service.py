@@ -593,16 +593,18 @@ def register_auth_session(
     lookup_existing: bool = False,
 ) -> AuthSession:
     token_hash = _token_hash(access_token)
-    if lookup_existing:
-        existing = db.query(AuthSession).filter(AuthSession.token_hash == token_hash).first()
-        if existing is not None:
-            existing.last_seen_at = _utcnow()
-            if commit:
-                db.commit()
-                db.refresh(existing)
-            else:
-                db.flush()
-            return existing
+
+    # Token hash benzersizdir (uq_auth_sessions_token_hash).
+    # Aynı token ile tekrar login/verify akışı gelirse duplicate insert yerine mevcut session güncellenir.
+    existing = db.query(AuthSession).filter(AuthSession.token_hash == token_hash).first()
+    if existing is not None:
+        existing.last_seen_at = _utcnow()
+        if commit:
+            db.commit()
+            db.refresh(existing)
+        else:
+            db.flush()
+        return existing
 
     ip = resolve_client_ip(request)
     user_agent = str(request.headers.get("user-agent") or "")
