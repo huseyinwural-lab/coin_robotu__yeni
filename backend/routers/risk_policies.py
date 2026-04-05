@@ -223,6 +223,64 @@ def risk_policy_history(policy_id: str, current_user: User = Depends(get_current
     return {"items": [_serialize_policy(row).model_dump() for row in rows]}
 
 
+@router.delete("/{policy_id}")
+def delete_risk_policy(policy_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    risk_policy = _authorized_risk_query(db, policy_id, current_user).first()
+    if risk_policy is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Risk policy not found")
+
+    was_active = bool(risk_policy.is_active)
+    before_state = {
+        "policy_id": risk_policy.id,
+        "version_group_id": risk_policy.version_group_id,
+        "version_num": risk_policy.version_num,
+        "is_active": risk_policy.is_active,
+        "lifecycle_state": risk_policy.lifecycle_state,
+    }
+
+    db.delete(risk_policy)
+    db.commit()
+
+    replacement = None
+    if was_active:
+        replacement = (
+            db.query(RiskPolicy)
+            .filter(RiskPolicy.user_id == current_user.id)
+            .order_by(RiskPolicy.updated_at.desc())
+            .first()
+        )
+        if replacement is not None:
+            replacement.is_active = True
+            replacement.lifecycle_state = "active"
+            replacement.activated_at = _now()
+            replacement.activated_by = current_user.id
+            replacement.status_reason = "active_policy_selected_after_delete"
+            db.commit()
+            db.refresh(replacement)
+
+    create_audit_log(
+        db,
+        action="risk_policy_deleted",
+        entity_type="risk_policy",
+        entity_id=policy_id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details=build_critical_action_details(
+            actor=current_user.id,
+            reason="manual_delete",
+            scope="risk_policy:delete",
+            before_state=before_state,
+            after_state={"replacement_active_policy_id": replacement.id if replacement else None},
+        ),
+    )
+
+    return {
+        "deleted": True,
+        "policy_id": policy_id,
+        "replacement_active_policy_id": replacement.id if replacement else None,
+    }
+
+
 @router.post("/{policy_id}/rollback", response_model=RiskPolicyResponse)
 def rollback_risk_policy(policy_id: str, payload: RiskPolicyReasonRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     risk_policy = _authorized_risk_query(db, policy_id, current_user).first()

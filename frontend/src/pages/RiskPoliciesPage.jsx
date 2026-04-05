@@ -167,6 +167,29 @@ export const RiskPoliciesPage = () => {
     }
   };
 
+  const deletePolicy = async (item) => {
+    const ok = window.confirm(`${item.name} politikasını kalıcı silmek istediğinize emin misiniz?`);
+    if (!ok) return;
+
+    try {
+      await apiClient.delete(`/risk-policies/${item.id}`);
+      if (editingId === item.id) {
+        setEditingId(null);
+        setForm(initialForm);
+        setFormErrors({});
+      }
+      if (selectedPolicy?.id === item.id) {
+        setSelectedPolicy(null);
+        setHistory([]);
+        setPreviewImpact(null);
+      }
+      toast.success("Risk policy silindi");
+      await fetchItems();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Risk policy silinemedi");
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="risk-policies-page">
       <header className="border border-slate-800 bg-slate-900 p-4" data-testid="risk-policies-header">
@@ -341,6 +364,7 @@ export const RiskPoliciesPage = () => {
                     <Button size="sm" variant="outline" className="border-emerald-600 bg-transparent" onClick={() => activatePolicy(item)} data-testid={`risk-table-activate-${item.id}`}>Set Active</Button>
                     <Button size="sm" variant="outline" className="border-amber-600 bg-transparent" onClick={() => loadHistory(item)} data-testid={`risk-table-history-${item.id}`}>History</Button>
                     <Button size="sm" variant="outline" className="border-rose-600 bg-transparent" onClick={() => rollbackPolicy(item)} data-testid={`risk-table-rollback-${item.id}`}>Rollback</Button>
+                    <Button size="sm" variant="outline" className="border-red-600 bg-transparent text-red-300 hover:text-red-200" onClick={() => deletePolicy(item)} data-testid={`risk-table-delete-${item.id}`}>Sil</Button>
                   </div>
                   <Input className="mt-2" value={reasonById[item.id] || ''} onChange={(event) => setReasonById((prev) => ({ ...prev, [item.id]: event.target.value }))} placeholder="reason" data-testid={`risk-table-reason-${item.id}`} />
                 </TableCell>
