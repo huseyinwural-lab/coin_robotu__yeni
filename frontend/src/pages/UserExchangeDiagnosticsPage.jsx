@@ -15,16 +15,17 @@ const MARKET_PANELS = [
 ];
 
 const pickBestConnection = (rows = [], exchange = "binance", marketType = "spot") => {
-  const matches = (rows || [])
+  const baseMatches = (rows || [])
     .filter((item) => String(item?.exchange || "").toLowerCase() === exchange)
     .filter((item) => String(item?.market_type || "").toLowerCase() === marketType)
-    .filter((item) => String(item?.environment || "live").toLowerCase() === "live")
     .sort((a, b) => {
       const aDefault = a?.is_default ? 1 : 0;
       const bDefault = b?.is_default ? 1 : 0;
       if (aDefault !== bDefault) return bDefault - aDefault;
       return String(b?.updated_at || "").localeCompare(String(a?.updated_at || ""));
     });
+  const liveMatches = baseMatches.filter((item) => String(item?.environment || "live").toLowerCase() === "live");
+  const matches = liveMatches.length > 0 ? liveMatches : baseMatches;
   return matches[0] || null;
 };
 
@@ -228,11 +229,9 @@ export const UserExchangeDiagnosticsPage = () => {
                 </p>
                 <p data-testid={`user-exchange-diagnostics-panel-meta-last-success-${selectedExchange}-${panel.value}`}>last_success: {formatTs(panel.connection?.last_success_at)}</p>
                 <p data-testid={`user-exchange-diagnostics-panel-meta-last-error-${selectedExchange}-${panel.value}`}>last_fail_reason: {panel.lastError}</p>
-                {panel.status.online && (
-                  <p className="text-emerald-300" data-testid={`user-exchange-diagnostics-panel-mini-wallet-pnl-${selectedExchange}-${panel.value}`}>
-                    Wallet: {panel.mini.wallet} USDT | PNL: {panel.mini.pnl}$
-                  </p>
-                )}
+                <p className={panel.status.online ? "text-emerald-300" : "text-slate-400"} data-testid={`user-exchange-diagnostics-panel-mini-wallet-pnl-${selectedExchange}-${panel.value}`}>
+                  Wallet: {panel.mini.wallet} USDT | PNL: {panel.mini.pnl}$
+                </p>
               </div>
 
               <div className="mt-4 flex items-center justify-between gap-2" data-testid={`user-exchange-diagnostics-panel-actions-${selectedExchange}-${panel.value}`}>
