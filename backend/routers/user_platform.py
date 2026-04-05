@@ -558,7 +558,7 @@ def revalidate_exchange_connection(
     return UserExchangeConnectionResponse(**_with_routing_metadata(row=refreshed, user_id=current_user.id, db=db))
 
 
-@router.delete("/exchange-connections/{connection_id}", dependencies=[Depends(require_step_up_for("api_key_delete"))])
+@router.delete("/exchange-connections/{connection_id}")
 def remove_exchange_connection(
     connection_id: str,
     current_user: User = Depends(require_user),

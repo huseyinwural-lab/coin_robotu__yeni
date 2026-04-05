@@ -682,6 +682,25 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
     }
   };
 
+  const purgeInactiveConnectionProfiles = async () => {
+    const inactiveRows = (visibleConnectionProfiles || []).filter((item) => !Boolean(item?.can_trade_effective));
+    if (inactiveRows.length === 0) {
+      toast.info("Silinecek pasif profil bulunamadı");
+      return;
+    }
+
+    try {
+      await Promise.all(inactiveRows.map((item) => apiClient.delete(`/user/exchange-connections/${item.id}`)));
+      if (editingConnectionId && inactiveRows.some((item) => item.id === editingConnectionId)) {
+        resetConnectionEditor();
+      }
+      toast.success(`Pasif profiller temizlendi (${inactiveRows.length})`);
+      await loadAll();
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Pasif profiller temizlenemedi");
+    }
+  };
+
   const revalidateConnectionProfile = useCallback(async (connection, { silent = false } = {}) => {
     setValidatingConnectionId(connection.id);
     try {
@@ -1089,7 +1108,10 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
                 <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-connection-profiles-title">Connection Profiles</p>
                 <p className="text-xs text-slate-400" data-testid="user-connection-profiles-description">account_label + exchange + market_type + environment + default yönetimi.</p>
               </div>
-              <Button variant="outline" onClick={resetConnectionEditor} data-testid="user-connection-profiles-reset-button">Yeni Profil</Button>
+              <div className="flex flex-wrap items-center gap-2" data-testid="user-connection-profiles-header-actions">
+                <Button type="button" variant="outline" onClick={purgeInactiveConnectionProfiles} data-testid="user-connection-profiles-purge-inactive-button">Pasifleri Temizle</Button>
+                <Button variant="outline" onClick={resetConnectionEditor} data-testid="user-connection-profiles-reset-button">Yeni Profil</Button>
+              </div>
             </div>
 
             <div className="grid gap-2 md:grid-cols-3" data-testid="user-connection-profiles-form-grid">
