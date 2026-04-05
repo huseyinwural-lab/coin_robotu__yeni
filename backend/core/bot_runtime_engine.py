@@ -6,7 +6,7 @@ from services.pipeline.cache_store import get_json, set_json
 
 
 BOT_RUNTIME_PREFIX = "bot:runtime"
-BOT_RUNTIME_ALLOWED_MODES = {"live_ready_disabled", "paper", "mock"}
+BOT_RUNTIME_ALLOWED_MODES = {"live_ready", "live_ready_disabled", "paper", "mock"}
 BOT_STATES = {"CREATED", "IDLE", "RUNNING", "PAUSED", "STOPPED", "ERROR"}
 
 
