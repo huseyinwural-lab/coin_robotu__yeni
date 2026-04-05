@@ -2512,6 +2512,9 @@ class UserSignalResponse(BaseModel):
     market_type: str | None = None
     quote_asset: str | None = None
     strategy_code: str
+    signal: str | None = None
+    signal_direction: str | None = None
+    signal_generated_at: datetime | None = None
     confidence: float
     mode: str
     status: str
@@ -2533,9 +2536,18 @@ class UserSignalResponse(BaseModel):
     risk_policy_id: str | None = None
     exchange_connection_id: str | None = None
     created_order_intent_id: str | None = None
+    execution_intent_status: str | None = None
+    proposed_notional: float | None = None
+    execution_intent_side: str | None = None
+    execution_intent_market_type: str | None = None
+    execution_intent_created_at: datetime | None = None
     runtime_owner: str | None = None
     last_eligibility_check_at: datetime | None = None
     execution_mode_label: str | None = None
+    linked_trade_id: str | None = None
+    linked_trade_status: str | None = None
+    linked_open_trade_count: int = 0
+    has_open_position_link: bool = False
 
 
 class UserSignalDecisionRequest(BaseModel):

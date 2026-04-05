@@ -1,0 +1,87 @@
+{
+  "summary": "Signals page backend and frontend testing completed. Backend API returns all required rich fields (signal, signal_direction, execution_intent_status, proposed_notional, linked_trade_id, linked_open_trade_count, has_open_position_link). Frontend correctly displays funnel metrics (Detected/Intent/Submitted) and signals grid with data. Auto refresh interval is 10s as expected.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/user/signals", "issue": "limit parameter must be >= 5, returns 422 for smaller values"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_signals_endpoint.py",
+    "/app/test_reports/pytest/signals_test.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend signals endpoint correctly returns all required fields: signal, signal_direction, execution_intent_status, proposed_notional, linked_trade_id, linked_open_trade_count, has_open_position_link",
+    "Frontend UserSignalsPage.jsx correctly calculates funnel metrics from signals list using useMemo hooks",
+    "Auto refresh interval is correctly set to 10s (SIGNAL_POLL_INTERVAL_MS = 10000)",
+    "Signal grid is populated with active signal objects, not empty list",
+    "has_open_position_link and linked_open_trade_count are used in submittedSignals calculation for tracking open positions"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_signals_endpoint.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "email": "review.user@platform.local",
+    "password": "ReviewUser123!"
+  },
+  "seed_data_creation": "None - used existing test user",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Signals page is working correctly. Backend API at /api/user/signals returns 80 signals with all required rich fields. Frontend displays funnel metrics (Detected: 80, Ready/Approved: 65, Intent: 79, Submitted: 66, Filled: 65, Blocked: 0) and signals table with Symbol, Market, Strategy, Confidence, Weight, Allocation, Meta, Status, Execution Mode, Intent columns. Auto refresh is 10s. Preview environment auth may be slow/unstable - use local backend (127.0.0.1:8001) for reliable testing.",
+  "backend_verification_results": {
+    "endpoint_response_time": "~2.5s for 80 signals (well under 15s timeout)",
+    "required_fields_present": {
+      "signal": true,
+      "signal_direction": true,
+      "execution_intent_status": true,
+      "proposed_notional": true,
+      "linked_trade_id": true,
+      "linked_open_trade_count": true,
+      "has_open_position_link": true
+    },
+    "sample_signal_data": {
+      "symbol": "XRPUSDT",
+      "signal": "long",
+      "signal_direction": "long",
+      "execution_intent_status": "RELEASED",
+      "proposed_notional": 1900,
+      "linked_trade_id": "ae4a9acc-97f4-43f8-984c-9aa20250ad76",
+      "linked_open_trade_count": 0,
+      "has_open_position_link": false,
+      "status": "filled"
+    },
+    "signal_mode_endpoint": {
+      "mode": "AUTO",
+      "working": true
+    }
+  },
+  "frontend_verification_results": {
+    "signals_page_title": "SIGNALS",
+    "auto_refresh_indicator": "Auto Refresh: 10s",
+    "live_control_status": {
+      "signal_mode": "AUTO",
+      "bot_runtime": "STOPPED (0)",
+      "execution_path": "MANUAL_FLOW"
+    },
+    "funnel_metrics_displayed": {
+      "detected": 80,
+      "ready_approved": 65,
+      "intent": 79,
+      "submitted": 66,
+      "filled": 65,
+      "blocked": 0
+    },
+    "signals_table_populated": true,
+    "signals_in_table": ["XRPUSDT", "SOLUSDT", "ETHUSDT"]
+  }
+}

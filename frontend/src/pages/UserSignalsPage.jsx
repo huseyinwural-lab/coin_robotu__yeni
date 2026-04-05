@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 import { saveExecutionContext } from "@/lib/userFlowContext";
 
+const SIGNAL_POLL_INTERVAL_MS = 10000;
+
 export const UserSignalsPage = () => {
   const navigate = useNavigate();
   const [signals, setSignals] = useState([]);
@@ -34,25 +36,40 @@ export const UserSignalsPage = () => {
     }
     try {
       const [signalsRes, portfolioRes, tradesRes, modeRes, botsRes] = await Promise.allSettled([
-        apiClient.get("/user/signals", { params: { limit: 120 }, timeout: 8000 }),
+        apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 15000 }),
         apiClient.get("/user/portfolio", { timeout: 8000 }),
         apiClient.get("/user/trades", { params: { limit: 120 }, timeout: 8000 }),
         apiClient.get("/user/signal-mode", { timeout: 8000 }),
         apiClient.get("/bot-profiles", { timeout: 8000 }),
       ]);
 
-      const extractData = (result, fallbackValue) => {
-        if (result?.status === "fulfilled") {
-          return result.value?.data ?? fallbackValue;
-        }
-        return fallbackValue;
-      };
+      if (signalsRes?.status === "fulfilled") {
+        const payload = signalsRes.value?.data;
+        const nextSignals = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.items)
+            ? payload.items
+            : [];
+        setSignals(nextSignals);
+      }
 
-      setSignals(extractData(signalsRes, []));
-      setPortfolio(extractData(portfolioRes, null));
-      setTrades(extractData(tradesRes, []));
-      setSignalMode(extractData(modeRes, null));
-      setBotProfiles(extractData(botsRes, []));
+      if (portfolioRes?.status === "fulfilled") {
+        setPortfolio(portfolioRes.value?.data ?? null);
+      }
+
+      if (tradesRes?.status === "fulfilled") {
+        const nextTrades = Array.isArray(tradesRes.value?.data) ? tradesRes.value.data : [];
+        setTrades(nextTrades);
+      }
+
+      if (modeRes?.status === "fulfilled") {
+        setSignalMode(modeRes.value?.data ?? null);
+      }
+
+      if (botsRes?.status === "fulfilled") {
+        const nextBots = Array.isArray(botsRes.value?.data) ? botsRes.value.data : [];
+        setBotProfiles(nextBots);
+      }
 
       const firstRejected = [signalsRes, portfolioRes, tradesRes, modeRes, botsRes].find((item) => item?.status === "rejected");
       if (firstRejected && !silent) {
@@ -73,9 +90,11 @@ export const UserSignalsPage = () => {
   useEffect(() => {
     const timer = setInterval(() => {
       load({ silent: true });
-    }, 15000);
+    }, SIGNAL_POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, []);
+
+  const signalRows = useMemo(() => (Array.isArray(signals) ? signals : []), [signals]);
 
   useEffect(() => {
     localStorage.setItem("signals-blocked-alerts", blockedAlertEnabled ? "on" : "off");
@@ -85,34 +104,43 @@ export const UserSignalsPage = () => {
     if (!blockedAlertEnabled) {
       return;
     }
-    const blockedRows = signals.filter((item) => item.status === "blocked" && item.blocked_reason_code);
+    const blockedRows = signalRows.filter((item) => item.status === "blocked" && item.blocked_reason_code);
     for (const row of blockedRows) {
       if (!alertedSignalIdsRef.current.has(row.id)) {
         alertedSignalIdsRef.current.add(row.id);
         toast.warning(`Signal blocked: ${row.symbol} / ${row.blocked_reason_code}`);
       }
     }
-  }, [signals, blockedAlertEnabled]);
+  }, [signalRows, blockedAlertEnabled]);
 
-  const pendingSignals = useMemo(() => signals.filter((item) => item.status === "pending"), [signals]);
+  const pendingSignals = useMemo(() => signalRows.filter((item) => item.status === "pending"), [signalRows]);
+  const activeIntentSignals = useMemo(
+    () => signalRows.filter((item) => Boolean(item.created_order_intent_id || item.execution_intent_status)),
+    [signalRows],
+  );
+  const submittedSignals = useMemo(
+    () => signalRows.filter((item) => {
+      const status = String(item.status || "").toLowerCase();
+      const intentStatus = String(item.execution_intent_status || "").toUpperCase();
+      return ["queued", "submitted", "filled"].includes(status)
+        || ["SUBMITTED", "APPROVED", "RELEASED"].includes(intentStatus)
+        || Boolean(item.has_open_position_link)
+        || Number(item.linked_open_trade_count || 0) > 0;
+    }),
+    [signalRows],
+  );
   const funnelMetrics = useMemo(() => {
     const counters = {
-      detected: signals.length,
+      detected: signalRows.length,
       approved_or_ready: 0,
-      intent_created: 0,
-      submitted: 0,
+      intent_created: activeIntentSignals.length,
+      submitted: submittedSignals.length,
       filled: 0,
       blocked: 0,
     };
-    signals.forEach((row) => {
+    signalRows.forEach((row) => {
       if (["ready", "approved", "queued", "submitted", "filled"].includes(String(row.status))) {
         counters.approved_or_ready += 1;
-      }
-      if (row.created_order_intent_id) {
-        counters.intent_created += 1;
-      }
-      if (["queued", "submitted", "filled"].includes(String(row.status))) {
-        counters.submitted += 1;
       }
       if (String(row.status) === "filled") {
         counters.filled += 1;
@@ -122,10 +150,10 @@ export const UserSignalsPage = () => {
       }
     });
     return counters;
-  }, [signals]);
+  }, [activeIntentSignals.length, signalRows, submittedSignals.length]);
 
   const recommendationText = useMemo(() => {
-    const blockedByCode = signals.reduce((acc, row) => {
+    const blockedByCode = signalRows.reduce((acc, row) => {
       const code = row.blocked_reason_code || "NONE";
       acc[code] = (acc[code] || 0) + 1;
       return acc;
@@ -143,7 +171,14 @@ export const UserSignalsPage = () => {
       return "ORDER_PRECHECK_FAILED görüldü; Execute preview parametrelerini gözden geçirin.";
     }
     return "Signal->Execution hattı sağlıklı. Filled oranını artırmak için confidence >= 0.7 filtreleyin.";
-  }, [signals]);
+  }, [signalRows]);
+
+  const gridSignals = useMemo(() => signalRows, [signalRows]);
+
+  const resolveSignalSide = (signal) => {
+    const raw = String(signal.signal || signal.signal_direction || "").toLowerCase();
+    return raw === "short" || raw === "sell" ? "sell" : "buy";
+  };
 
   const modeLabelFromRaw = (rawMode) => {
     const normalized = String(rawMode || "ASSISTED").toUpperCase();
@@ -193,7 +228,7 @@ export const UserSignalsPage = () => {
   };
 
   const openExecuteFromSignal = (signal) => {
-    const side = signal.signal === "short" ? "sell" : "buy";
+    const side = resolveSignalSide(signal);
     const marketType = signal.market_type || "spot";
     saveExecutionContext({
       source: "signal",
@@ -210,7 +245,7 @@ export const UserSignalsPage = () => {
   };
 
   const applyPresetFromSignal = (signal) => {
-    const side = signal.signal === "short" ? "sell" : "buy";
+    const side = resolveSignalSide(signal);
     navigate(`/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(signal.market_type || "spot")}&preset=spot_basic`);
   };
 
@@ -286,8 +321,8 @@ export const UserSignalsPage = () => {
 
   const controlPanelState = useMemo(() => {
     const rawMode = String(signalMode?.mode || "ASSISTED").toUpperCase();
-    const latestSignal = signals[0] || null;
-    const currentBlocker = signals.find((item) => item.status === "blocked" && item.blocked_reason_code) || null;
+    const latestSignal = gridSignals[0] || null;
+    const currentBlocker = gridSignals.find((item) => item.status === "blocked" && item.blocked_reason_code) || null;
     let executionPath = "MANUAL_FLOW";
     if (rawMode === "AUTO" && activeBotCount > 0) {
       executionPath = "BOT_AUTO_ACTIVE";
@@ -302,14 +337,14 @@ export const UserSignalsPage = () => {
       currentBlocker: currentBlocker?.blocked_reason_code || "-",
       executionPath,
     };
-  }, [activeBotCount, signalMode?.mode, signals]);
+  }, [activeBotCount, gridSignals, signalMode?.mode]);
 
   const buildIntentPayload = (signal) => ({
     source_type: "signal",
     source_ref_id: signal.signal_id,
     market_type: signal.market_type || "spot",
     symbol: signal.symbol,
-    side: signal.signal === "short" ? "sell" : "buy",
+    side: resolveSignalSide(signal),
     order_type: "market",
     position_size_mode: "fixed_notional",
     position_size_value: 30,
@@ -412,7 +447,7 @@ export const UserSignalsPage = () => {
             {isBulkFixRunning ? "Fixing..." : "Fix All Blockers"}
           </Button>
           <Button variant="outline" onClick={setSignalModeAuto} data-testid="user-signals-set-auto-mode-button">AUTO'ya Al</Button>
-          <span className="text-xs text-slate-400" data-testid="user-signals-auto-refresh-indicator">Auto Refresh: 15s</span>
+          <span className="text-xs text-slate-400" data-testid="user-signals-auto-refresh-indicator">Auto Refresh: 10s</span>
         </div>
       </header>
 
@@ -436,10 +471,10 @@ export const UserSignalsPage = () => {
       </div>
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-signals-funnel-grid">
-        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-detected-card"><p className="text-[11px] text-slate-500">Detected</p><p className="text-lg font-semibold">{funnelMetrics.detected}</p></div>
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-detected-card"><p className="text-[11px] text-slate-500">Detected</p><p className="text-lg font-semibold" data-testid="user-signals-funnel-detected-value">{funnelMetrics.detected}</p></div>
         <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-approved-card"><p className="text-[11px] text-slate-500">Ready/Approved</p><p className="text-lg font-semibold">{funnelMetrics.approved_or_ready}</p></div>
-        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-intent-card"><p className="text-[11px] text-slate-500">Intent</p><p className="text-lg font-semibold">{funnelMetrics.intent_created}</p></div>
-        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-submitted-card"><p className="text-[11px] text-slate-500">Submitted</p><p className="text-lg font-semibold">{funnelMetrics.submitted}</p></div>
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-intent-card"><p className="text-[11px] text-slate-500">Intent</p><p className="text-lg font-semibold" data-testid="user-signals-funnel-intent-value">{funnelMetrics.intent_created}</p></div>
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-submitted-card"><p className="text-[11px] text-slate-500">Submitted</p><p className="text-lg font-semibold" data-testid="user-signals-funnel-submitted-value">{funnelMetrics.submitted}</p></div>
         <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-filled-card"><p className="text-[11px] text-slate-500">Filled</p><p className="text-lg font-semibold text-emerald-400">{funnelMetrics.filled}</p></div>
         <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-blocked-card"><p className="text-[11px] text-slate-500">Blocked</p><p className="text-lg font-semibold text-rose-400">{funnelMetrics.blocked}</p></div>
       </div>
@@ -491,7 +526,7 @@ export const UserSignalsPage = () => {
       </aside>
 
       <div className="col-span-12 grid gap-3 md:hidden" data-testid="user-signals-mobile-cards">
-        {signals.map((signal) => (
+        {gridSignals.map((signal) => (
           <article key={signal.id} className="rounded border border-slate-800 bg-slate-900 p-3" data-testid={`user-signals-mobile-card-${signal.id}`}>
             <p className="text-sm font-semibold" data-testid={`user-signals-mobile-symbol-${signal.id}`}>{signal.symbol}</p>
             <p className="text-xs text-cyan-300" data-testid={`user-signals-mobile-market-type-${signal.id}`}>market: {String(signal.market_type || "spot").toUpperCase()}</p>
@@ -504,6 +539,8 @@ export const UserSignalsPage = () => {
             <p className="text-xs text-rose-300" data-testid={`user-signals-mobile-blocked-reason-${signal.id}`}>blocked: {signal.blocked_reason_code || "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-solution-hint-${signal.id}`}>hint: {signal.blocked_solution_hint || "-"}</p>
             <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-strategy-${signal.id}`}>{signal.strategy_code}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-intent-status-${signal.id}`}>intent: {signal.execution_intent_status || "-"}</p>
+            <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-proposed-notional-${signal.id}`}>notional: {signal.proposed_notional ?? "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-strategy-weight-${signal.id}`}>weight: {signal.strategy_weight ?? "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-allocation-source-${signal.id}`}>source: {signal.allocation_source ?? "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-meta-decision-${signal.id}`}>meta: {signal.meta_engine_decision ?? "-"}</p>
@@ -536,6 +573,11 @@ export const UserSignalsPage = () => {
             </div>
           </article>
         ))}
+        {gridSignals.length === 0 && (
+          <article className="rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-mobile-empty-state">
+            <p className="text-sm text-slate-300">Aktif sinyal bulunamadı. Scanner çalıştığında burası otomatik dolacaktır.</p>
+          </article>
+        )}
       </div>
 
       <div className="col-span-12 hidden overflow-x-auto border border-slate-800 bg-slate-900 md:block" data-testid="user-signals-table-wrapper">
@@ -560,7 +602,7 @@ export const UserSignalsPage = () => {
             </tr>
           </thead>
           <tbody data-testid="user-signals-table-body">
-            {signals.map((signal) => (
+            {gridSignals.map((signal) => (
               <tr key={signal.id} className="border-t border-slate-800" data-testid={`user-signals-table-row-${signal.id}`}>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-symbol-${signal.id}`}>{signal.symbol}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-market-type-${signal.id}`}>{String(signal.market_type || "spot").toUpperCase()}</td>
@@ -580,7 +622,13 @@ export const UserSignalsPage = () => {
                   </div>
                 </td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-last-eligibility-check-${signal.id}`}>{signal.last_eligibility_check_at ? new Date(signal.last_eligibility_check_at).toLocaleString() : "-"}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-intent-${signal.id}`}>{signal.created_order_intent_id || "-"}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-intent-${signal.id}`}>
+                  <div>
+                    <p className="text-xs" data-testid={`user-signals-table-intent-id-${signal.id}`}>{signal.created_order_intent_id || "-"}</p>
+                    <p className="text-[11px] text-slate-400" data-testid={`user-signals-table-intent-status-${signal.id}`}>{signal.execution_intent_status || "-"}</p>
+                    <p className="text-[11px] text-slate-400" data-testid={`user-signals-table-intent-notional-${signal.id}`}>{signal.proposed_notional ?? "-"}</p>
+                  </div>
+                </td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-runtime-owner-${signal.id}`}>{signal.runtime_owner || "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-time-${signal.id}`}>{new Date(signal.created_at).toLocaleString()}</td>
                 <td className={compactMode ? "px-2 py-1 align-top min-w-[420px]" : "px-3 py-2 align-top min-w-[420px]"}>
@@ -613,6 +661,13 @@ export const UserSignalsPage = () => {
                 </td>
               </tr>
             ))}
+            {gridSignals.length === 0 && (
+              <tr data-testid="user-signals-table-empty-row">
+                <td className="px-3 py-6 text-center text-slate-400" colSpan={15} data-testid="user-signals-table-empty-text">
+                  Aktif sinyal bulunamadı. Scanner sonucu geldikçe grid otomatik güncellenir.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

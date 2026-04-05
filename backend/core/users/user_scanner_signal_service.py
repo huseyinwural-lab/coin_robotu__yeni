@@ -1087,7 +1087,13 @@ def list_user_scanner_results(db: Session, user_id: str, limit: int = 100) -> li
     )
 
 
-def list_user_signals(db: Session, user_id: str, limit: int = 100) -> list[PendingSignal]:
+def list_user_signals(
+    db: Session,
+    user_id: str,
+    limit: int = 100,
+    *,
+    refresh_snapshot: bool = True,
+) -> list[PendingSignal]:
     rows = (
         db.query(PendingSignal)
         .filter(PendingSignal.user_id == user_id)
@@ -1109,7 +1115,7 @@ def list_user_signals(db: Session, user_id: str, limit: int = 100) -> list[Pendi
     mutated = False
     for row in rows:
         row.market_type = signal_market_type_map.get(str(row.signal_id), "spot")
-        if row.status not in {"rejected", "filled"}:
+        if refresh_snapshot and row.status not in {"rejected", "filled"}:
             before = (
                 row.status,
                 row.current_state,
@@ -1129,7 +1135,7 @@ def list_user_signals(db: Session, user_id: str, limit: int = 100) -> list[Pendi
                 mutated = True
         row.execution_mode_label = _execution_mode_label(row.mode)
 
-    if mutated:
+    if refresh_snapshot and mutated:
         db.commit()
         for row in rows:
             db.refresh(row)

@@ -28,6 +28,7 @@ from core.users.user_scanner_signal_service import (
 from db import get_db
 from deps import require_user
 from models import PendingSignal, User, UserExecutionIntent, UserScannerResult, UserExchangeConnection
+from models import SignalEvent, UserTradeProjection
 from core.users.user_exchange_connector import decrypt_exchange_secret
 from schemas import (
     IndicatorScreenerPresetResponse,
@@ -400,7 +401,7 @@ def signals(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    rows = list_user_signals(db, current_user.id, limit=limit)
+    rows = list_user_signals(db, current_user.id, limit=limit, refresh_snapshot=False)
 
     def _safe_float(value, fallback: float = 0.0) -> float:
         try:
@@ -408,42 +409,248 @@ def signals(
         except (TypeError, ValueError):
             return fallback
 
-    return [
-        UserSignalResponse(
-            id=row.id,
-            signal_id=row.signal_id,
-            user_id=row.user_id,
-            symbol=row.symbol,
-            quote_asset=extract_quote_asset(row.symbol),
-            strategy_code=row.strategy_code,
-            confidence=_safe_float(row.confidence),
-            mode=row.mode,
-            status=row.status,
-            market_type=getattr(row, "market_type", "spot"),
-            order_position_id=row.order_position_id,
-            created_at=row.created_at,
-            decided_at=row.decided_at,
-            decision_note=row.decision_note or "",
-            strategy_weight=row.strategy_weight,
-            allocation_source=row.allocation_source,
-            meta_engine_decision=row.meta_engine_decision,
-            previous_state=row.previous_state,
-            current_state=row.current_state,
-            blocked_reason_code=row.blocked_reason_code,
-            blocked_reason_message=row.blocked_reason_message,
-            blocked_solution_hint=row.blocked_solution_hint,
-            requires_manual_approval=row.requires_manual_approval,
-            execution_eligible=row.execution_eligible,
-            bot_profile_id=row.bot_profile_id,
-            risk_policy_id=row.risk_policy_id,
-            exchange_connection_id=row.exchange_connection_id,
-            created_order_intent_id=row.created_order_intent_id,
-            runtime_owner=row.runtime_owner,
-            last_eligibility_check_at=row.last_eligibility_check_at,
-            execution_mode_label=getattr(row, "execution_mode_label", None),
+    def _safe_optional_float(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _trade_signal_status(raw_status: str | None) -> str:
+        value = str(raw_status or "").upper()
+        if value in {"OPEN", "PARTIALLY_FILLED"}:
+            return "submitted"
+        if value in {"PENDING", "NEW"}:
+            return "queued"
+        if value in {"FILLED", "CLOSED"}:
+            return "filled"
+        if value in {"REJECTED", "CANCELLED", "CANCELED", "EXPIRED"}:
+            return "rejected"
+        return "submitted"
+
+    def _latest_trade_time(trade_row: UserTradeProjection):
+        return trade_row.opened_at or trade_row.created_at or trade_row.updated_at or datetime.now(timezone.utc)
+
+    def _build_trade_links(
+        *,
+        signal_id: str | None,
+        intent_db_id: str | None,
+        intent_token: str | None,
+        position_id: str | None,
+        by_signal: dict[str, list[UserTradeProjection]],
+        by_intent: dict[str, list[UserTradeProjection]],
+        by_position: dict[str, list[UserTradeProjection]],
+    ) -> list[UserTradeProjection]:
+        merged: list[UserTradeProjection] = []
+        seen: set[str] = set()
+
+        def _append(items: list[UserTradeProjection] | None):
+            for item in items or []:
+                key = str(item.trade_id or "")
+                if key and key not in seen:
+                    seen.add(key)
+                    merged.append(item)
+
+        _append(by_signal.get(str(signal_id or "")))
+        _append(by_intent.get(str(intent_token or "")))
+        _append(by_intent.get(str(intent_db_id or "")))
+        _append(by_position.get(str(position_id or "")))
+
+        merged.sort(key=lambda row: row.updated_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        return merged
+
+    signal_ids = {str(row.signal_id or "") for row in rows if str(row.signal_id or "").strip()}
+    intent_db_ids = {str(row.created_order_intent_id or "") for row in rows if str(row.created_order_intent_id or "").strip()}
+    position_ids = {str(row.order_position_id or "") for row in rows if str(row.order_position_id or "").strip()}
+
+    trade_rows = (
+        db.query(UserTradeProjection)
+        .filter(UserTradeProjection.user_id == current_user.id)
+        .order_by(UserTradeProjection.updated_at.desc())
+        .limit(max(limit * 3, 180))
+        .all()
+    )
+
+    for trade in trade_rows:
+        if str(trade.signal_id or "").strip():
+            signal_ids.add(str(trade.signal_id))
+        if str(trade.intent_id or "").strip():
+            intent_db_ids.add(str(trade.intent_id))
+        if str(trade.position_id or "").strip():
+            position_ids.add(str(trade.position_id))
+
+    signal_rows = (
+        db.query(SignalEvent)
+        .filter(SignalEvent.user_id == current_user.id, SignalEvent.id.in_(list(signal_ids)))
+        .all()
+        if signal_ids
+        else []
+    )
+    signal_map = {str(item.id): item for item in signal_rows}
+
+    intent_rows = (
+        db.query(UserExecutionIntent)
+        .filter(
+            UserExecutionIntent.user_id == current_user.id,
+            (UserExecutionIntent.id.in_(list(intent_db_ids))) | (UserExecutionIntent.intent_id.in_(list(intent_db_ids))),
         )
-        for row in rows
-    ]
+        .all()
+        if intent_db_ids
+        else []
+    )
+    intent_by_id = {str(item.id): item for item in intent_rows}
+    intent_by_token = {str(item.intent_id): item for item in intent_rows if str(item.intent_id or "").strip()}
+
+    trades_by_signal: dict[str, list[UserTradeProjection]] = {}
+    trades_by_intent: dict[str, list[UserTradeProjection]] = {}
+    trades_by_position: dict[str, list[UserTradeProjection]] = {}
+    for trade in trade_rows:
+        signal_key = str(trade.signal_id or "").strip()
+        if signal_key:
+            trades_by_signal.setdefault(signal_key, []).append(trade)
+        intent_key = str(trade.intent_id or "").strip()
+        if intent_key:
+            trades_by_intent.setdefault(intent_key, []).append(trade)
+        position_key = str(trade.position_id or "").strip()
+        if position_key:
+            trades_by_position.setdefault(position_key, []).append(trade)
+
+    normalized_responses: list[UserSignalResponse] = []
+    represented_trade_ids: set[str] = set()
+
+    for row in rows:
+        signal_event = signal_map.get(str(row.signal_id or ""))
+        intent = intent_by_id.get(str(row.created_order_intent_id or "")) or intent_by_token.get(str(row.created_order_intent_id or ""))
+        intent_token = str(getattr(intent, "intent_id", "") or "") if intent is not None else ""
+
+        linked_trades = _build_trade_links(
+            signal_id=row.signal_id,
+            intent_db_id=row.created_order_intent_id,
+            intent_token=intent_token,
+            position_id=row.order_position_id,
+            by_signal=trades_by_signal,
+            by_intent=trades_by_intent,
+            by_position=trades_by_position,
+        )
+        for trade in linked_trades:
+            represented_trade_ids.add(str(trade.trade_id))
+
+        linked_open_count = sum(1 for trade in linked_trades if str(trade.status or "").upper() in {"OPEN", "PARTIALLY_FILLED"})
+        linked_primary = linked_trades[0] if linked_trades else None
+
+        normalized_responses.append(
+            UserSignalResponse(
+                id=row.id,
+                signal_id=row.signal_id,
+                user_id=row.user_id,
+                symbol=row.symbol,
+                quote_asset=extract_quote_asset(row.symbol),
+                strategy_code=row.strategy_code,
+                signal=(str(signal_event.signal or "") if signal_event else None),
+                signal_direction=(str(signal_event.direction or "") if signal_event else None),
+                signal_generated_at=signal_event.generated_at if signal_event else None,
+                confidence=_safe_float((signal_event.confidence if signal_event is not None else row.confidence)),
+                mode=row.mode,
+                status=row.status,
+                market_type=getattr(row, "market_type", "spot"),
+                order_position_id=row.order_position_id,
+                created_at=row.created_at,
+                decided_at=row.decided_at,
+                decision_note=row.decision_note or "",
+                strategy_weight=row.strategy_weight,
+                allocation_source=row.allocation_source,
+                meta_engine_decision=row.meta_engine_decision,
+                previous_state=row.previous_state,
+                current_state=row.current_state,
+                blocked_reason_code=row.blocked_reason_code,
+                blocked_reason_message=row.blocked_reason_message,
+                blocked_solution_hint=row.blocked_solution_hint,
+                requires_manual_approval=row.requires_manual_approval,
+                execution_eligible=row.execution_eligible,
+                bot_profile_id=row.bot_profile_id,
+                risk_policy_id=row.risk_policy_id,
+                exchange_connection_id=row.exchange_connection_id,
+                created_order_intent_id=row.created_order_intent_id,
+                execution_intent_status=(str(intent.status) if intent is not None else None),
+                proposed_notional=_safe_optional_float(intent.notional if intent is not None else None),
+                execution_intent_side=(str(intent.side) if intent is not None else None),
+                execution_intent_market_type=(str(intent.market_type) if intent is not None else None),
+                execution_intent_created_at=(intent.created_at if intent is not None else None),
+                runtime_owner=row.runtime_owner,
+                last_eligibility_check_at=row.last_eligibility_check_at,
+                execution_mode_label=getattr(row, "execution_mode_label", None),
+                linked_trade_id=(str(linked_primary.trade_id) if linked_primary is not None else None),
+                linked_trade_status=(str(linked_primary.status) if linked_primary is not None else None),
+                linked_open_trade_count=linked_open_count,
+                has_open_position_link=linked_open_count > 0,
+            )
+        )
+
+    for trade in trade_rows:
+        trade_id = str(trade.trade_id or "").strip()
+        if not trade_id or trade_id in represented_trade_ids:
+            continue
+
+        if not str(trade.signal_id or "").strip() and not str(trade.intent_id or "").strip():
+            continue
+
+        signal_event = signal_map.get(str(trade.signal_id or ""))
+        linked_intent = intent_by_token.get(str(trade.intent_id or "")) or intent_by_id.get(str(trade.intent_id or ""))
+        synthetic_status = _trade_signal_status(str(trade.status or ""))
+        created_at = _latest_trade_time(trade)
+        signal_value = None
+        if signal_event is not None:
+            signal_value = str(signal_event.signal or signal_event.direction or "") or None
+
+        normalized_responses.append(
+            UserSignalResponse(
+                id=f"trade-link-{trade_id}",
+                signal_id=str(trade.signal_id or trade_id),
+                user_id=current_user.id,
+                symbol=str(trade.symbol or "").upper(),
+                quote_asset=extract_quote_asset(str(trade.symbol or "")),
+                strategy_code=str(trade.strategy_name or (signal_event.strategy_id if signal_event is not None else "trade_linked")),
+                signal=signal_value,
+                signal_direction=(str(signal_event.direction) if signal_event is not None and signal_event.direction else None),
+                signal_generated_at=(signal_event.generated_at if signal_event is not None else None),
+                confidence=_safe_float(signal_event.confidence if signal_event is not None else 0.0),
+                mode="AUTO",
+                status=synthetic_status,
+                market_type=str((trade.meta_json or {}).get("market_type") or "spot").lower(),
+                order_position_id=str(trade.position_id or "") or None,
+                created_at=created_at,
+                decided_at=None,
+                decision_note="trade_projection_linked_signal",
+                strategy_weight=None,
+                allocation_source=(trade.meta_json or {}).get("allocation_source"),
+                meta_engine_decision=(trade.meta_json or {}).get("meta_engine_decision"),
+                previous_state="EXECUTION_SUBMITTED",
+                current_state="POSITION_OPEN" if synthetic_status == "submitted" else "EXECUTION_FILLED",
+                blocked_reason_code="",
+                blocked_reason_message="",
+                blocked_solution_hint="",
+                requires_manual_approval=False,
+                execution_eligible=True,
+                bot_profile_id=None,
+                risk_policy_id=None,
+                exchange_connection_id=None,
+                created_order_intent_id=(str(linked_intent.id) if linked_intent is not None else None),
+                execution_intent_status=(str(linked_intent.status) if linked_intent is not None else None),
+                proposed_notional=_safe_optional_float(linked_intent.notional if linked_intent is not None else None),
+                execution_intent_side=(str(linked_intent.side) if linked_intent is not None else None),
+                execution_intent_market_type=(str(linked_intent.market_type) if linked_intent is not None else None),
+                execution_intent_created_at=(linked_intent.created_at if linked_intent is not None else None),
+                runtime_owner="trade_projection_sync",
+                last_eligibility_check_at=trade.updated_at,
+                execution_mode_label="Full Auto",
+                linked_trade_id=trade_id,
+                linked_trade_status=str(trade.status or ""),
+                linked_open_trade_count=1 if str(trade.status or "").upper() in {"OPEN", "PARTIALLY_FILLED"} else 0,
+                has_open_position_link=str(trade.status or "").upper() in {"OPEN", "PARTIALLY_FILLED"},
+            )
+        )
+
+    normalized_responses.sort(key=lambda item: item.created_at, reverse=True)
+    return normalized_responses[:limit]
 
 
 @router.post("/signal/{signal_id}/approve", response_model=UserSignalDecisionResponse)
