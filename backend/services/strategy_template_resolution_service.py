@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 
 from models import AuditLog, BacktestResultCard, BotProfile, StrategyTemplate, UserTradeProjection
 from schemas import StrategyTemplateResponse
 
 PROMOTION_STEPS = ["DRAFT", "VALIDATED", "BACKTEST_PASSED", "ACTIVE", "DEPRECATED", "ROLLED_BACK"]
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -31,6 +33,14 @@ def _safe_float(value, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _is_strategy_template_schema_mismatch(exc: Exception) -> bool:
+    message = str(exc or "").lower()
+    return (
+        "undefinedcolumn" in message
+        and "strategy_templates.execution_profile_ref" in message
+    )
 
 
 def _build_outcome_analytics(trades: list[UserTradeProjection]) -> tuple[dict, list[dict], list[dict], dict]:
@@ -182,16 +192,25 @@ def _build_promotion_lifecycle(*, template: StrategyTemplate, audits: list[Audit
 
 
 def resolve_strategy_template(db, *, template_id: str | None = None, strategy_type: str | None = None) -> StrategyTemplate | None:
-    query = db.query(StrategyTemplate)
-    if template_id:
-        return query.filter(StrategyTemplate.id == template_id).first()
-    if strategy_type:
-        return (
-            query.filter(StrategyTemplate.strategy_type == strategy_type, StrategyTemplate.is_active.is_(True))
-            .order_by(StrategyTemplate.updated_at.desc())
-            .first()
-        )
-    return None
+    try:
+        query = db.query(StrategyTemplate)
+        if template_id:
+            return query.filter(StrategyTemplate.id == template_id).first()
+        if strategy_type:
+            return (
+                query.filter(StrategyTemplate.strategy_type == strategy_type, StrategyTemplate.is_active.is_(True))
+                .order_by(StrategyTemplate.updated_at.desc())
+                .first()
+            )
+        return None
+    except Exception as exc:  # noqa: BLE001
+        if _is_strategy_template_schema_mismatch(exc):
+            logger.warning(
+                "STRATEGY_TEMPLATE_SCHEMA_MISMATCH_FALLBACK",
+                extra={"template_id": template_id, "strategy_type": strategy_type},
+            )
+            return None
+        raise
 
 
 def resolve_effective_strategy_config(db, *, template_id: str | None = None, strategy_type: str | None = None, override_params: dict | None = None) -> dict:

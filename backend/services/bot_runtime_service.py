@@ -115,7 +115,27 @@ def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
 
 
 def _resolve_bindings(db, bot: BotProfile) -> dict:
-    resolved_template = resolve_effective_strategy_config(db, template_id=getattr(bot, "strategy_template_id", None), strategy_type=bot.strategy_type)
+    try:
+        resolved_template = resolve_effective_strategy_config(
+            db,
+            template_id=getattr(bot, "strategy_template_id", None),
+            strategy_type=bot.strategy_type,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "BOT_STRATEGY_RESOLUTION_FALLBACK",
+            extra={"bot_id": getattr(bot, "id", None), "strategy_type": getattr(bot, "strategy_type", None)},
+        )
+        resolved_template = {
+            "template_id": None,
+            "template_code": None,
+            "validation_result": {
+                "ok": False,
+                "reason": f"strategy_resolution_exception:{exc.__class__.__name__}",
+                "runtime_eligible": True,
+            },
+            "effective_runtime_config": {},
+        }
     risk_policy = (
         db.query(RiskPolicy)
         .filter(RiskPolicy.user_id == bot.user_id)
