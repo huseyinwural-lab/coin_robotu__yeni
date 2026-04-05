@@ -1153,12 +1153,12 @@ export const BotProfilesPage = () => {
               <TableHead data-testid="bot-table-head-name">Ad</TableHead>
               <TableHead data-testid="bot-table-head-market">Market</TableHead>
               <TableHead data-testid="bot-table-head-strategy">Strateji</TableHead>
-              <TableHead data-testid="bot-table-head-parity">Backtest ↔ Live</TableHead>
               <TableHead data-testid="bot-table-head-status">Status</TableHead>
-              <TableHead data-testid="bot-table-head-health">Health</TableHead>
               <TableHead data-testid="bot-table-head-mode">Mode</TableHead>
               <TableHead data-testid="bot-table-head-symbols">Semboller</TableHead>
-              <TableHead data-testid="bot-table-head-runtime">Runtime</TableHead>
+              {!LEGACY_TOP_FORM && <TableHead data-testid="bot-table-head-parity">Backtest ↔ Live</TableHead>}
+              {!LEGACY_TOP_FORM && <TableHead data-testid="bot-table-head-health">Health</TableHead>}
+              {!LEGACY_TOP_FORM && <TableHead data-testid="bot-table-head-runtime">Runtime</TableHead>}
               <TableHead data-testid="bot-table-head-action">Aksiyon</TableHead>
             </TableRow>
           </TableHeader>
@@ -1172,12 +1172,12 @@ export const BotProfilesPage = () => {
                 <TableCell data-testid={`bot-table-name-${item.id}`}>{item.name}</TableCell>
                 <TableCell data-testid={`bot-table-market-${item.id}`}>{item.market_type}</TableCell>
                 <TableCell data-testid={`bot-table-strategy-${item.id}`}>{item.strategy_id || item.strategy_type}</TableCell>
-                <TableCell data-testid={`bot-table-parity-${item.id}`}>{parity ? `${parity.backtest?.win_rate ?? 0} / ${parity.live?.win_rate ?? 0} / ${parity.deviation_pct ?? 0}%` : "-"}</TableCell>
                 <TableCell data-testid={`bot-table-status-${item.id}`}>{item.status || (item.is_running ? "RUNNING" : "IDLE")}</TableCell>
-                <TableCell data-testid={`bot-table-health-${item.id}`}>{item.health || "HEALTHY"}</TableCell>
                 <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "live_ready"}</TableCell>
                 <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>{item.symbol_source_summary?.summary || (item.symbols || []).join(", ")}</TableCell>
-                <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.last_heartbeat || (item.is_running ? "running" : "stopped")}</TableCell>
+                {!LEGACY_TOP_FORM && <TableCell data-testid={`bot-table-parity-${item.id}`}>{parity ? `${parity.backtest?.win_rate ?? 0} / ${parity.live?.win_rate ?? 0} / ${parity.deviation_pct ?? 0}%` : "-"}</TableCell>}
+                {!LEGACY_TOP_FORM && <TableCell data-testid={`bot-table-health-${item.id}`}>{item.health || "HEALTHY"}</TableCell>}
+                {!LEGACY_TOP_FORM && <TableCell data-testid={`bot-table-runtime-${item.id}`}>{item.last_heartbeat || (item.is_running ? "running" : "stopped")}</TableCell>}
                 <TableCell>
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" className="border-cyan-400 bg-transparent text-cyan-200" onClick={() => setSelectedBot(item)} data-testid={`bot-table-open-detail-${item.id}`}>Detail</Button>
