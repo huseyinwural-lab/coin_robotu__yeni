@@ -59,16 +59,31 @@ const toNum = (value) => {
 
 const parseApiErrorMessage = (error, fallback) => {
   const detail = error?.response?.data?.detail;
+  const normalizeKnownCode = (text) => {
+    const code = String(text || "").trim().toLowerCase();
+    if (!code) return "";
+    if (code === "exchange_connection_required") return "LIVE-READY için Kullanılacak Cüzdan seçimi zorunlu.";
+    if (code === "exchange_connection_not_found") return "Seçilen cüzdan bağlantısı bulunamadı.";
+    if (code === "authentication required" || code === "not authenticated") return "Oturum doğrulaması düştü. Lütfen tekrar giriş yapın.";
+    return "";
+  };
+
   if (Array.isArray(detail)) {
     const text = detail.map((item) => item?.msg || item?.message || "").filter(Boolean).join(", ");
     if (text) return text;
   }
   if (typeof detail === "string" && detail.trim()) {
+    const known = normalizeKnownCode(detail);
+    if (known) return known;
     return detail;
   }
   if (detail && typeof detail === "object") {
-    return detail.message || detail.code || fallback;
+    const known = normalizeKnownCode(detail.message || detail.code || detail.error || detail.detail);
+    if (known) return known;
+    return detail.message || detail.code || detail.error || detail.detail || fallback;
   }
+  const knownFromMessage = normalizeKnownCode(error?.message || "");
+  if (knownFromMessage) return knownFromMessage;
   return fallback;
 };
 

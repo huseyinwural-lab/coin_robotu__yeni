@@ -59,7 +59,6 @@ def create_bot_profile(
     if preferred_mode in {"live_ready_disabled", "paper"}:
         preferred_mode = "mock"
 
-    payload_data["mode"] = preferred_mode
 
 
     if isinstance(risk_policy_snapshot, dict) and risk_policy_snapshot.get("max_leverage") is not None:
@@ -146,7 +145,6 @@ def update_bot_profile(
     if preferred_mode in {"live_ready_disabled", "paper"}:
         preferred_mode = "mock"
 
-    payload_data["mode"] = preferred_mode
 
 
     if isinstance(risk_policy_snapshot, dict) and risk_policy_snapshot.get("max_leverage") is not None:

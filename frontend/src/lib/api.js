@@ -234,7 +234,15 @@ apiClient.interceptors.response.use(
       url.includes("/auth/mfa/verify") ||
       url.includes("/mfa/verify") ||
       url.includes("/auth/step-up");
-    if (status === 401 && !isLoginLike && (!latestStoredToken || latestStoredToken === authSnapshot)) {
+    const detail401 = String(error?.response?.data?.detail || "").toLowerCase();
+    const shouldForceLogout =
+      detail401.includes("session_device_mismatch") ||
+      detail401.includes("token_expired") ||
+      detail401.includes("token_revoked") ||
+      detail401.includes("invalid_token") ||
+      detail401.includes("not_authenticated");
+
+    if (status === 401 && !isLoginLike && shouldForceLogout && (!latestStoredToken || latestStoredToken === authSnapshot)) {
       clearStoredAuth();
       setAuthToken(null);
       if (typeof window !== "undefined") {
