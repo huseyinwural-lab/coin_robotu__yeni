@@ -20237,3 +20237,21 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - `cb.infyra.de` için görülen `/api` 404 durumu deployment/proxy-domain katmanı kaynaklı olabilir.
 - Kod tarafında yanlış remote-loopback fallback kaldırıldı; ancak custom domain reverse-proxy kuralı platform/deploy seviyesinde ayrıca doğrulanmalıdır.
 
+## 2026-04-05 — CI Hata Kapanışı (Ruff + Security Script) ✅
+
+### Kullanıcıdan gelen CI hataları
+- `backend/tests/test_deploy_readiness_retest_v2.py`: `F401 os imported but unused`
+- `scripts/verify_phase6_security.sh`: `jwt_secret_too_short`
+
+### Uygulanan düzeltmeler
+- `/app/backend/tests/test_deploy_readiness_retest_v2.py`
+  - Kullanılmayan `import os` kaldırıldı.
+
+- `/app/scripts/verify_phase6_security.sh`
+  - JWT secret uzunluğu kontrolü yalnız dosyadan değil, öncelikle runtime env `JWT_SECRET` değerinden okunacak şekilde düzeltildi.
+  - `BACKEND_URL` seçiminde health check bulunamazsa ilk geçerli candidate'a fallback eklendi (CI/ephemeral ortamlarda gereksiz erken fail engellendi).
+
+### Doğrulama
+- `ruff check /app/backend/tests/test_deploy_readiness_retest_v2.py` ✅ PASS
+- `bash /app/scripts/verify_phase6_security.sh` ✅ PASS
+

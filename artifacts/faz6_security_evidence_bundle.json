@@ -1,6 +1,6 @@
 {
   "phase": "FAZ-6-SECURITY",
-  "generated_at": "2026-04-05T11:08:14.060661+00:00",
+  "generated_at": "2026-04-05T11:27:32.195544+00:00",
   "status": "PASS",
   "summary_log": "/app/artifacts/faz6_security_summary.log",
   "files": [
@@ -10,7 +10,7 @@
       "exists": true,
       "size_bytes": 296,
       "sha256": "ab641ffd71160d070e5c48880aab17c639da180e8b64cb63fe8039adef514b8d",
-      "updated_at": "2026-04-05T11:08:14.032428+00:00"
+      "updated_at": "2026-04-05T11:27:32.166430+00:00"
     },
     {
       "relative_path": "artifacts/faz6_jwt_rotation_proof.log",
@@ -18,7 +18,7 @@
       "exists": true,
       "size_bytes": 192,
       "sha256": "bc41c34ea83b5ae4f6d36e16d9554786e3582657a017b86486372a69f9f8731a",
-      "updated_at": "2026-04-05T11:07:41.901428+00:00"
+      "updated_at": "2026-04-05T11:27:03.794430+00:00"
     },
     {
       "relative_path": "artifacts/faz6_admin_credential_scan.log",
@@ -26,23 +26,23 @@
       "exists": true,
       "size_bytes": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "updated_at": "2026-04-05T11:07:41.931428+00:00"
+      "updated_at": "2026-04-05T11:27:03.827430+00:00"
     },
     {
       "relative_path": "artifacts/faz6_rate_limit_test.log",
       "path": "/app/artifacts/faz6_rate_limit_test.log",
       "exists": true,
-      "size_bytes": 183,
-      "sha256": "e765f467c868a4979678ff735a2d80885e0bec8d0de1636feb95831a790ed036",
-      "updated_at": "2026-04-05T11:07:56.295428+00:00"
+      "size_bytes": 184,
+      "sha256": "2c17e1fcb7f90701cecef11658ea3a847e92e95f95900084c4a52f243c01054e",
+      "updated_at": "2026-04-05T11:27:18.188430+00:00"
     },
     {
       "relative_path": "artifacts/faz6_api_key_encryption_proof.log",
       "path": "/app/artifacts/faz6_api_key_encryption_proof.log",
       "exists": true,
       "size_bytes": 187,
-      "sha256": "d779e14a2a0236b1c4668d0070ab96f4f25a079d2a287e4e3957cf2ca7715243",
-      "updated_at": "2026-04-05T11:08:04.807428+00:00"
+      "sha256": "2fa4ded5b1ea72e35e877e50b67a4ae0206a2736d89660046f26451c995bc465",
+      "updated_at": "2026-04-05T11:27:26.789430+00:00"
     },
     {
       "relative_path": "artifacts/faz6_dump_backup_scan.log",
@@ -50,23 +50,23 @@
       "exists": true,
       "size_bytes": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "updated_at": "2026-04-05T11:08:05.106428+00:00"
+      "updated_at": "2026-04-05T11:27:27.089430+00:00"
     },
     {
       "relative_path": "artifacts/faz6_secret_scan_report.log",
       "path": "/app/artifacts/faz6_secret_scan_report.log",
       "exists": true,
       "size_bytes": 47,
-      "sha256": "2328b95c9dde485d60de498545b5989dd699639419c762128e081de0af0af140",
-      "updated_at": "2026-04-05T11:08:14.018428+00:00"
+      "sha256": "f701b66809a8a76c61b6037dc82c8a12ec273fcd895f14dcf260b7188997a3ef",
+      "updated_at": "2026-04-05T11:27:32.152430+00:00"
     },
     {
       "relative_path": "artifacts/faz6_secret_scan_report.json",
       "path": "/app/artifacts/faz6_secret_scan_report.json",
       "exists": true,
       "size_bytes": 115,
-      "sha256": "946080ee44f13bbf79d2d5de47dcee52e70a955d7a9a7958c6ea2e780d4198ec",
-      "updated_at": "2026-04-05T11:08:14.018428+00:00"
+      "sha256": "053e8e0a88599a048a509ddd3a186ea9ff6dd695888392d3bda4678d5ae79521",
+      "updated_at": "2026-04-05T11:27:32.152430+00:00"
     }
   ],
   "missing_count": 0,

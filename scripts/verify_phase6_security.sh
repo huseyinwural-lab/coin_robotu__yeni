@@ -126,6 +126,12 @@ for c in candidates:
         selected = c.rstrip('/')
         break
 
+if not selected:
+    for c in candidates:
+        if c:
+            selected = c.rstrip('/')
+            break
+
 print(selected)
 PY
 )"
@@ -217,14 +223,17 @@ new_probe = session.get(
     timeout=25,
 )
 
-jwt_secret_len = 0
-env_file = Path('/app/backend/.env')
-if env_file.exists():
-    for raw in env_file.read_text(encoding='utf-8').splitlines():
-        line = raw.strip()
-        if line.startswith('JWT_SECRET='):
-            jwt_secret_len = len(line.split('=', 1)[1].strip().strip('"').strip("'"))
-            break
+jwt_secret_value = str(os.environ.get("JWT_SECRET") or "").strip().strip('"').strip("'")
+if not jwt_secret_value:
+    env_file = Path('/app/backend/.env')
+    if env_file.exists():
+        for raw in env_file.read_text(encoding='utf-8').splitlines():
+            line = raw.strip()
+            if line.startswith('JWT_SECRET='):
+                jwt_secret_value = line.split('=', 1)[1].strip().strip('"').strip("'")
+                break
+
+jwt_secret_len = len(jwt_secret_value)
 
 result = {
     "old_token_status": old_probe.status_code,

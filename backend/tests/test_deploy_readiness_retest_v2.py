@@ -7,7 +7,6 @@ Testing fixes for:
 4. BotProfiles/ExchangeSettings page crash
 5. Duplicate key warning in /user/exchange-settings route
 """
-import os
 import time
 import pytest
 import requests
