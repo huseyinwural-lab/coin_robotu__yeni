@@ -33,6 +33,36 @@ MANDATORY_FIELDS = [
 
 LIFECYCLE_ORDER = ["request", "intent", "decision", "risk", "order", "execution", "fill"]
 
+TRADING_CORRELATION_HINTS = {
+    "trade",
+    "strategy",
+    "signal",
+    "intent",
+    "preview",
+    "risk",
+    "order",
+    "execution",
+    "fill",
+    "position",
+    "scanner",
+    "bot",
+    "exchange",
+}
+
+NOISE_CORRELATION_EXCLUDE_HINTS = {
+    "auth",
+    "login",
+    "logout",
+    "mfa",
+    "session",
+    "password",
+    "forgot",
+    "reset",
+    "profile",
+    "onboarding",
+    "user_approval",
+}
+
 SEVERITY_ACTION = {
     "INFO": "observe",
     "WARNING": "filterable",
@@ -154,6 +184,24 @@ def _normalize_environment_value(raw: str | None) -> str:
     }
     normalized = aliases.get(value, value)
     return normalized if normalized in {"prod", "staging", "test", "canary"} else "test"
+
+
+def _requires_correlation_tracking(row: AuditLog, normalized_event: dict) -> bool:
+    payload = normalized_event.get("payload") if isinstance(normalized_event.get("payload"), dict) else {}
+    raw = " ".join(
+        [
+            str(getattr(row, "action", "") or ""),
+            str(getattr(row, "entity_type", "") or ""),
+            str(payload.get("event_type") or ""),
+            str(payload.get("route") or ""),
+            str(normalized_event.get("event_type") or ""),
+            str(normalized_event.get("lifecycle_stage") or ""),
+        ]
+    ).lower()
+
+    if any(token in raw for token in NOISE_CORRELATION_EXCLUDE_HINTS):
+        return False
+    return any(token in raw for token in TRADING_CORRELATION_HINTS)
 
 
 def normalize_audit_log_event(row: AuditLog) -> NormalizedEvent:
@@ -622,7 +670,8 @@ def list_lifecycle_summaries(
         normalized = normalize_audit_log_event(row).envelope
         correlation_id = str(normalized.get("correlation_id") or "").strip()
         if not correlation_id:
-            missing_correlation.append(str(normalized.get("event_id") or ""))
+            if _requires_correlation_tracking(row, normalized):
+                missing_correlation.append(str(normalized.get("event_id") or ""))
             continue
         grouped[correlation_id].append(normalized)
 

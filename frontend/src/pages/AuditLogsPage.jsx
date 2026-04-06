@@ -60,6 +60,7 @@ export const AuditLogsPage = () => {
   const [expandedEventRows, setExpandedEventRows] = useState({});
   const [errorWindowDays, setErrorWindowDays] = useState(1);
   const [missingCorrelationEventIds, setMissingCorrelationEventIds] = useState([]);
+  const [missingCorrelationPage, setMissingCorrelationPage] = useState(1);
   const [errorLogLoading, setErrorLogLoading] = useState(false);
   const [errorLogItems, setErrorLogItems] = useState([]);
   const [errorLogPage, setErrorLogPage] = useState(1);
@@ -150,6 +151,7 @@ export const AuditLogsPage = () => {
       setQueryLatencyMs(data?.query_latency_ms || null);
       const missingIds = Array.isArray(data?.missing_correlation_event_ids) ? data.missing_correlation_event_ids : [];
       setMissingCorrelationEventIds(missingIds);
+      setMissingCorrelationPage(1);
       if (missingIds.length) {
         toast.warning(`Correlation eksik event sayısı: ${missingIds.length}`);
       }
@@ -553,6 +555,32 @@ export const AuditLogsPage = () => {
     }));
   }, [missingCorrelationEventIds]);
 
+  const missingCorrelationPageCount = useMemo(
+    () => Math.max(Math.ceil((missingCorrelationRows.length || 0) / 50), 1),
+    [missingCorrelationRows.length],
+  );
+
+  const pagedMissingCorrelationRows = useMemo(() => {
+    const start = (missingCorrelationPage - 1) * 50;
+    const end = start + 50;
+    return missingCorrelationRows.slice(start, end);
+  }, [missingCorrelationPage, missingCorrelationRows]);
+
+  const missingCorrelationRangeLabel = useMemo(() => {
+    if (missingCorrelationRows.length === 0) {
+      return "0 / 0";
+    }
+    const start = (missingCorrelationPage - 1) * 50 + 1;
+    const end = Math.min(start + 49, missingCorrelationRows.length);
+    return `${start}-${end} / ${missingCorrelationRows.length}`;
+  }, [missingCorrelationPage, missingCorrelationRows.length]);
+
+  useEffect(() => {
+    if (missingCorrelationPage > missingCorrelationPageCount) {
+      setMissingCorrelationPage(1);
+    }
+  }, [missingCorrelationPage, missingCorrelationPageCount]);
+
   return (
     <section className="space-y-6" data-testid="audit-logs-page">
       <header className="rounded-2xl border border-cyan-800/50 bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950 p-6" data-testid="audit-logs-header">
@@ -574,9 +602,11 @@ export const AuditLogsPage = () => {
             <h3 className="text-base font-semibold text-rose-200" data-testid="audit-missing-correlation-table-title">
               Correlation Eksik Event Listesi
             </h3>
-            <span className="text-xs text-rose-100" data-testid="audit-missing-correlation-table-count">
-              toplam_hata: {missingCorrelationRows.length}
-            </span>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-rose-100" data-testid="audit-missing-correlation-table-meta-group">
+              <span data-testid="audit-missing-correlation-table-count">toplam_hata: {missingCorrelationRows.length}</span>
+              <span data-testid="audit-missing-correlation-table-page">sayfa: {missingCorrelationPage}/{missingCorrelationPageCount}</span>
+              <span data-testid="audit-missing-correlation-table-range">aralık: {missingCorrelationRangeLabel}</span>
+            </div>
           </div>
           <p className="mt-2 text-xs text-rose-100/90" data-testid="audit-missing-correlation-table-subtitle">
             Hata adresi ve hata açıklaması satır/sütun formatında listelenir.
@@ -593,7 +623,7 @@ export const AuditLogsPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {missingCorrelationRows.map((row, index) => (
+                {pagedMissingCorrelationRows.map((row, index) => (
                   <TableRow key={`${row.event_id}-${index}`} data-testid={`audit-missing-correlation-table-row-${index}`}>
                     <TableCell data-testid={`audit-missing-correlation-table-row-no-${index}`}>{row.row_no}</TableCell>
                     <TableCell className="font-mono text-xs" data-testid={`audit-missing-correlation-table-event-id-${index}`}>{row.event_id || "-"}</TableCell>
@@ -604,6 +634,26 @@ export const AuditLogsPage = () => {
                 ))}
               </TableBody>
             </Table>
+          </div>
+          <div className="mt-3 flex items-center gap-2" data-testid="audit-missing-correlation-table-pagination-controls">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={missingCorrelationPage <= 1}
+              onClick={() => setMissingCorrelationPage((prev) => Math.max(prev - 1, 1))}
+              data-testid="audit-missing-correlation-table-pagination-prev-button"
+            >
+              Önceki 50
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={missingCorrelationPage >= missingCorrelationPageCount}
+              onClick={() => setMissingCorrelationPage((prev) => Math.min(prev + 1, missingCorrelationPageCount))}
+              data-testid="audit-missing-correlation-table-pagination-next-button"
+            >
+              Sonraki 50
+            </Button>
           </div>
         </section>
       )}
