@@ -382,6 +382,7 @@ export const UserScannerPage = () => {
   const selectedTrendWindowRef = useRef(5);
   const anomalyAlertArmedRef = useRef(false);
   const scannerToastTrackerRef = useRef(new Map());
+  const initialFullLoadDoneRef = useRef(false);
 
   const activeProfile = useMemo(() => {
     if (!automationProfiles.length) {
@@ -1055,6 +1056,10 @@ export const UserScannerPage = () => {
   }, [updateRequestHealthWindow]);
 
   useEffect(() => {
+    if (initialFullLoadDoneRef.current) {
+      return;
+    }
+    initialFullLoadDoneRef.current = true;
     load({ hydrateSelection: true });
   }, [load]);
 
