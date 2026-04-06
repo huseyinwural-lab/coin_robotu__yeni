@@ -1,3 +1,37 @@
+## 2026-04-06 — Kalıcı Stabilizasyon V2 (500 azaltma + endpoint görünürlüğü + test revizyonu) ✅
+
+### Backend Kalıcı Düzeltme
+- `server.py` içinde retryable DB hata ipuçları genişletildi:
+  - `SSL connection has been closed unexpectedly`, `server closed the connection unexpectedly`, `could not connect`, `connection refused`, `broken pipe` vb.
+- `http_logging_middleware.py` içine retryable DB hata yakalama eklendi:
+  - Middleware seviyesinde `OperationalError/TimeoutError` → `503`
+  - Yanıt sözleşmesi: `code=DB_POOL_TIMEOUT`, `retryable=true`, `error_class=infra_error`, `trace_id`
+
+### Frontend Kalıcı Düzeltme
+- `api.js`: `infra_error` sınıflı `HTTP 500` için tekil retry eklendi (GET güvenli retry mantığı).
+- `UserSignalsPage.jsx`:
+  - Fail eden endpoint özet satırı eklendi (`endpoints=...`).
+  - Kritik/opsiyonel servis ayrımı eklendi (opsiyonel düşüşte alarm şiddeti azaltıldı).
+  - `trades` çağrısı optimize edildi (`limit` düşürüldü, timeout artırıldı).
+- `UserScannerPage.jsx`:
+  - Infra/Auth toastlarında endpoint adı + status görünürlüğü eklendi.
+  - Bazı istek timeoutları stabilize edildi.
+- `BotProfilesPage.jsx`:
+  - Kısmi yükleme toast’ına error class dahil edildi.
+  - Kritik servis düşmezse uyarı seviyesinde kalacak şekilde iyileştirildi.
+
+### Test Yaklaşımı Revizyonu
+- Statik regression testleri genişletildi (`test_iteration18_p0_patch.py`):
+  - SSL/connection hatalarının retryable kapsamına girdiği doğrulandı.
+  - Middleware 503 sözleşmesi doğrulandı.
+  - Signals banner endpoint-summary render doğrulandı.
+  - API `infra 500 retry` doğrulandı.
+- Yük testi: 12 tur paralel endpoint paketi ile 500/503 izleme.
+
+### Sonuç
+- Backend regresyon ajanı: 12 turda 500/503 gözlenmedi (PASS).
+- Frontend regresyon ajanı: preview login `ERR_ABORTED` nedeniyle canlı etkileşim bloklu; ancak kod-seviyesi doğrulamalar PASS.
+
 ## 2026-04-06 — Correlation Eksik Event Tablosu 50’lik Sayfalama + Gürültü Azaltma ✅
 
 ### Yapılanlar
