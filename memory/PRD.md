@@ -1,3 +1,27 @@
+## 2026-04-06 — `/admin/audit-logs` Eski Yapı Korunarak Alt Hata Listesi Güncellemesi ✅
+
+### Uygulanan Düzeltme
+- `Logs` menüsü yeniden **`/admin/audit-logs`** ekranına bağlandı (eski ekran korundu).
+- `/admin/log` ve `/admin/logs` route’ları **`/admin/audit-logs`**’a redirect edildi.
+- Eski Audit Logs sayfasının en altındaki `Errors (en altta)` bölümü, incident tabanlı listeden çıkarılıp doğrudan log kaynağına bağlandı.
+
+### Yeni Alt Hata Bölümü Davranışı
+- Sayfa başına **50** hata kaydı (pagination).
+- **50’den fazlası 2. sayfaya** geçiyor (`Önceki 50` / `Sonraki 50`).
+- Toplam görünür pencere: **son 250 hata kaydı** (`max_window_records=250`).
+- Rapor filtresi: **1 gün / 7 gün / 30 gün** (loglardan çekiliyor).
+
+### Backend Güncellemesi
+- `GET /api/audit-logs/admin/log-feed` endpointi genişletildi:
+  - `page`, `page_size(<=50)`, `window_days(1|7|30)` destekleri eklendi.
+  - `include_error_only=true` için sayfalı hata listesi + `error_pagination` meta bilgisi döndürülüyor.
+  - Geçersiz pencere değeri (`window_days=2`) için `400 invalid_window_days` doğrulaması.
+
+### Doğrulama
+- Frontend uzman test: 9/9 PASS (`/admin/audit-logs` eski ekran + alt hata bölümü + pagination + redirectler).
+- Backend uzman test: 9/9 PASS (pagination/window/error-only/validation).
+- `CI=true yarn build` PASS.
+
 ## 2026-04-06 — Admin `/admin/log` Canlı Log Ekranı (50 kayıt + 5sn auto-refresh) ✅
 
 ### Tamamlananlar
