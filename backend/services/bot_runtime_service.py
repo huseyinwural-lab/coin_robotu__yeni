@@ -371,6 +371,11 @@ def _resolve_symbol_source(db, bot: BotProfile) -> dict:
     source_type = str(getattr(bot, "symbol_source_type", "manual") or "manual")
     if source_type == "scanner" and str(getattr(bot, "scanner_id", "") or "").strip():
         scanner_id = str(getattr(bot, "scanner_id", "") or "").strip()
+        bot_symbols_fallback = [
+            str(symbol).upper().strip()
+            for symbol in list(getattr(bot, "symbols", []) or [])
+            if str(symbol).strip()
+        ]
         selection_row = (
             db.query(UserScannerSymbolSelection)
             .filter(UserScannerSymbolSelection.user_id == bot.user_id, UserScannerSymbolSelection.scanner_id == scanner_id)
@@ -405,6 +410,18 @@ def _resolve_symbol_source(db, bot: BotProfile) -> dict:
                     "scanner_id": scanner_id,
                     "symbols": fallback_symbols,
                     "summary": "scanner_selection_fallback",
+                    "selected_symbols": selected_symbols,
+                    "last_resolution_time": None,
+                    "resolution_status": "fallback",
+                }
+
+            if bot_symbols_fallback:
+                return {
+                    "ok": True,
+                    "source_type": "scanner",
+                    "scanner_id": scanner_id,
+                    "symbols": bot_symbols_fallback[:200],
+                    "summary": "scanner_bot_symbols_fallback",
                     "selected_symbols": selected_symbols,
                     "last_resolution_time": None,
                     "resolution_status": "fallback",
