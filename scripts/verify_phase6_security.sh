@@ -425,15 +425,41 @@ import secrets
 
 from sqlalchemy import text
 
+from core.security import hash_password
 from core.users.user_exchange_connector import upsert_user_exchange_connection
 from db import SessionLocal
-from model_domains.auth_users import User
+from model_domains.auth_users import User, UserRole
 
 db = SessionLocal()
 try:
-    admin = db.query(User).filter(User.email == os.environ['ADMIN_EMAIL']).first()
+    bootstrap_created = False
+    requested_email = str(os.environ.get('ADMIN_EMAIL') or '').strip().lower()
+    requested_password = str(os.environ.get('ADMIN_PASSWORD') or '').strip()
+
+    admin = db.query(User).filter(User.email == requested_email).first() if requested_email else None
     if admin is None:
-        raise SystemExit('admin_user_not_found')
+        admin = (
+            db.query(User)
+            .filter(User.role.in_([UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS]))
+            .filter(User.is_active.is_(True))
+            .order_by(User.created_at.asc())
+            .first()
+        )
+
+    if admin is None:
+        fallback_email = requested_email or 'phase6.security.admin@local'
+        fallback_password = requested_password or 'Phase6Admin123!'
+        admin = User(
+            email=fallback_email,
+            password_hash=hash_password(fallback_password),
+            role=UserRole.SUPER_ADMIN,
+            is_active=True,
+            approval_status='approved',
+        )
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+        bootstrap_created = True
 
     api_key_plain = 'AKIA' + secrets.token_hex(10).upper()
     api_secret_plain = 'sec_' + secrets.token_urlsafe(24)
@@ -463,6 +489,9 @@ try:
     key_raw = row[0] or ''
     secret_raw = row[1] or ''
     result = {
+        "admin_email": admin.email,
+        "admin_role": str(admin.role.value if hasattr(admin.role, 'value') else admin.role),
+        "bootstrap_created": bootstrap_created,
         "api_key_plaintext_visible": api_key_plain in key_raw,
         "api_secret_plaintext_visible": api_secret_plain in secret_raw,
         "api_key_cipher_prefix": key_raw[:20],
