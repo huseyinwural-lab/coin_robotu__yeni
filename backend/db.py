@@ -11,7 +11,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
-from sqlalchemy.pool import NullPool
 
 from core.config import settings
 from core.db_determinism import enforce_postgresql_only
@@ -221,6 +220,10 @@ def _create_and_verify_engine(database_url: str) -> Engine:
     use_null_pool = "pooler.supabase.com" in host
     if database_url.startswith("postgresql") and host not in LOCALHOST_DATABASE_HOSTS:
         connect_args["sslmode"] = "require"
+        connect_args.setdefault("keepalives", 1)
+        connect_args.setdefault("keepalives_idle", 30)
+        connect_args.setdefault("keepalives_interval", 10)
+        connect_args.setdefault("keepalives_count", 5)
 
     engine_kwargs: dict = {
         "pool_pre_ping": True,
@@ -228,7 +231,16 @@ def _create_and_verify_engine(database_url: str) -> Engine:
         "connect_args": connect_args,
     }
     if use_null_pool:
-        engine_kwargs["poolclass"] = NullPool
+        engine_kwargs.update(
+            {
+                "pool_timeout": 15,
+                "pool_size": 4,
+                "max_overflow": 4,
+                "pool_use_lifo": True,
+                "pool_reset_on_return": "rollback",
+                "pool_recycle": 180,
+            }
+        )
     else:
         engine_kwargs.update(
             {

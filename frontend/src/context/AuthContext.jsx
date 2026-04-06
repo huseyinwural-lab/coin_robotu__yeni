@@ -194,6 +194,10 @@ export const AuthProvider = ({ children }) => {
     clearAuthSession();
     setAuthToken(null);
     const panelPath = panel === "admin" ? "/auth/login/admin" : panel === "user" ? "/auth/login/user" : "/auth/login";
+    const LOGIN_TOTAL_TIMEOUT_MS = 30000;
+    const LOGIN_PRIMARY_TIMEOUT_MS = 12000;
+    const LOGIN_FALLBACK_TIMEOUT_MS = 10000;
+    const startedAt = Date.now();
     let data;
     let lastError = null;
     const isNetworkLikeError = (error) => {
@@ -210,9 +214,14 @@ export const AuthProvider = ({ children }) => {
       );
     };
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const elapsed = Date.now() - startedAt;
+      const remaining = LOGIN_TOTAL_TIMEOUT_MS - elapsed;
+      if (remaining <= 0) {
+        break;
+      }
       try {
-        const response = await apiClient.post(panelPath, { email, password }, { timeout: 45000 });
+        const response = await apiClient.post(panelPath, { email, password }, { timeout: Math.min(LOGIN_PRIMARY_TIMEOUT_MS, remaining) });
         data = response.data;
         break;
       } catch (error) {
@@ -220,19 +229,32 @@ export const AuthProvider = ({ children }) => {
           throw error;
         }
         lastError = error;
+        const fallbackRemaining = LOGIN_TOTAL_TIMEOUT_MS - (Date.now() - startedAt);
+        if (fallbackRemaining <= 0) {
+          break;
+        }
         try {
-          data = await authFetchJson(panelPath, { method: "POST", body: { email, password }, timeoutMs: 45000 });
+          data = await authFetchJson(panelPath, {
+            method: "POST",
+            body: { email, password },
+            timeoutMs: Math.min(LOGIN_FALLBACK_TIMEOUT_MS, fallbackRemaining),
+          });
           break;
         } catch (fallbackError) {
           lastError = fallbackError;
         }
-        if (attempt < 2) {
-          await new Promise((resolve) => window.setTimeout(resolve, 400 + attempt * 300));
+        if (attempt < 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 300));
         }
       }
     }
 
     if (!data) {
+      if (Date.now() - startedAt >= LOGIN_TOTAL_TIMEOUT_MS) {
+        const timeoutError = new Error("login_timeout");
+        timeoutError.code = "LOGIN_TIMEOUT";
+        throw timeoutError;
+      }
       throw lastError || new Error("login_request_failed");
     }
     if (data?.mfa_required) {

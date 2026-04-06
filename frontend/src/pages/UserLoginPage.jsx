@@ -30,6 +30,11 @@ export const UserLoginPage = () => {
   const mfaMethods = Array.isArray(mfaState?.methods) ? mfaState.methods : [];
 
   const getErrorMessage = (error, fallback) => {
+    const code = String(error?.code || "").toUpperCase();
+    const rawMessage = String(error?.message || "").toLowerCase();
+    if (code === "LOGIN_TIMEOUT" || rawMessage.includes("login_timeout") || rawMessage.includes("timeout")) {
+      return "Sunucu yanıtı gecikti. Lütfen tekrar deneyin.";
+    }
     const detail = error?.response?.data?.detail;
     if (typeof detail === "string" && detail.trim()) {
       return detail;
@@ -86,20 +91,7 @@ export const UserLoginPage = () => {
         setMode("login");
       } else {
         setPanelHint("");
-        const attemptLogin = async () => login({ email: form.email, password: form.password, panel: "user" });
-        let loginResult;
-        try {
-          loginResult = await attemptLogin();
-        } catch (firstError) {
-          const code = String(firstError?.code || "").toUpperCase();
-          const message = String(firstError?.message || "").toLowerCase();
-          const retryableAbort = code === "ERR_CANCELED" || code === "ERR_ABORTED" || message.includes("aborted") || message.includes("canceled") || message.includes("network error");
-          if (!retryableAbort) {
-            throw firstError;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 350));
-          loginResult = await attemptLogin();
-        }
+        const loginResult = await login({ email: form.email, password: form.password, panel: "user" });
         if (loginResult?.mfaRequired) {
           setMfaState(loginResult);
           setMfaCode("");

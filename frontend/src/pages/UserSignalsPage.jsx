@@ -49,6 +49,7 @@ export const UserSignalsPage = () => {
   const [isStaleCleanupRunning, setIsStaleCleanupRunning] = useState(false);
   const [animatedSignalIds, setAnimatedSignalIds] = useState([]);
   const [loadIssue, setLoadIssue] = useState(null);
+  const [showSlowLoadingHint, setShowSlowLoadingHint] = useState(false);
   const alertedSignalIdsRef = useRef(new Set());
   const toastTrackerRef = useRef(new Map());
 
@@ -182,6 +183,34 @@ export const UserSignalsPage = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setShowSlowLoadingHint(false);
+      return;
+    }
+
+    setShowSlowLoadingHint(false);
+    const slowTimer = setTimeout(() => {
+      setShowSlowLoadingHint(true);
+    }, 4000);
+
+    const hardTimer = setTimeout(() => {
+      setIsLoading(false);
+      setLoadIssue((previous) => previous || {
+        errorClass: "infra_error",
+        message: "Yükleme zaman aşımına uğradı. Altyapı gecikmesi algılandı.",
+        rejectedCount: 0,
+        endpointsSummary: "timeout",
+      });
+      emitDedupedToast("warning", "user-signals-hard-timeout", "Yükleme beklenenden uzun sürdü. Yenile ile tekrar deneyin.");
+    }, 35000);
+
+    return () => {
+      clearTimeout(slowTimer);
+      clearTimeout(hardTimer);
+    };
+  }, [emitDedupedToast, isLoading]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -584,6 +613,11 @@ export const UserSignalsPage = () => {
         </header>
         <div className="col-span-12">
           <LoadingSkeleton rows={6} testId="user-signals-loading-skeleton" />
+          {showSlowLoadingHint && (
+            <div className="mt-3 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="user-signals-slow-loading-hint">
+              Altyapı gecikmesi algılandı. Yükleme beklenenden uzun sürüyor.
+            </div>
+          )}
         </div>
       </section>
     );

@@ -589,8 +589,16 @@ def build_user_trade_projection_list(db: Session, user_id: str, *, limit: int = 
     latest_updated_at = latest_projection_row[0] if latest_projection_row else None
     latest_is_fresh = bool(latest_updated_at and ((datetime.now(timezone.utc) - latest_updated_at).total_seconds() <= 300))
 
-    if (not latest_is_fresh) and _should_sync_trade_projection(user_id):
-        sync_user_trade_projection(db, user_id=user_id)
+    should_sync = (not latest_is_fresh) and _should_sync_trade_projection(user_id)
+    has_existing_projection = latest_projection_row is not None
+
+    if should_sync and not has_existing_projection:
+        try:
+            sync_user_trade_projection(db, user_id=user_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("trade_projection_sync_skipped_on_list", extra={"user_id": user_id, "reason": str(exc)[:180]})
+            db.rollback()
+
     rows = db.query(UserTradeProjection).filter(UserTradeProjection.user_id == user_id).order_by(UserTradeProjection.updated_at.desc()).limit(limit).all()
     return [
         {
@@ -660,9 +668,17 @@ def build_user_trade_detail(db: Session, user_id: str, trade_id: str) -> dict:
     latest_updated_at = latest_projection_row[0] if latest_projection_row else None
     latest_is_fresh = bool(latest_updated_at and ((datetime.now(timezone.utc) - latest_updated_at).total_seconds() <= 300))
 
-    if (not latest_is_fresh) and _should_sync_trade_projection(user_id):
-        sync_user_trade_projection(db, user_id=user_id)
+    should_sync = (not latest_is_fresh) and _should_sync_trade_projection(user_id)
+
     row = db.query(UserTradeProjection).filter(UserTradeProjection.user_id == user_id, UserTradeProjection.trade_id == trade_id).first()
+    if row is None and should_sync:
+        try:
+            sync_user_trade_projection(db, user_id=user_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("trade_projection_sync_skipped_on_detail", extra={"user_id": user_id, "trade_id": trade_id, "reason": str(exc)[:180]})
+            db.rollback()
+        row = db.query(UserTradeProjection).filter(UserTradeProjection.user_id == user_id, UserTradeProjection.trade_id == trade_id).first()
+
     if row is None:
         raise ValueError("trade_not_found")
     traces = db.query(UserDecisionTrace).filter(UserDecisionTrace.user_id == user_id).order_by(UserDecisionTrace.created_at.desc()).limit(10).all()
