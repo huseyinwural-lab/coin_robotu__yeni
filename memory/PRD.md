@@ -1,3 +1,21 @@
+## 2026-04-06 — Admin Sol Menü Kullanıcılar Grubu Yeniden Düzenleme ✅
+
+### Uygulanan değişiklik
+- Sol menüde `CORE` ile `STRATEGY` arasına yeni grup eklendi: **KULLANICILAR**
+- Bu gruba taşınan/eklenen linkler:
+  - `Admin Kullanıcılar`
+  - `User Kullanıcılar`
+  - `Kullanıcı Onay`
+  - `Kullanıcı Ekonomisi`
+- `OPERATIONS` altında kullanıcı linkleri kaldırıldı (çift görünüm engellendi).
+
+### Doğrulama
+- Frontend uzman testi PASS:
+  - Grup sırası doğru (`CORE -> KULLANICILAR -> STRATEGY`)
+  - KULLANICILAR linkleri görünür
+  - OPERATIONS içinde kullanıcı linkleri yok
+  - `/admin/kullanicilar/user-kullanicilar` route doğrulandı
+
 ## 2026-04-06 — Admin Kullanıcılar Paneli Sadeleştirme (UI Temizlik) ✅
 
 ### Yapılanlar
