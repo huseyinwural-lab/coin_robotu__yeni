@@ -1,3 +1,18 @@
+## 2026-04-06 — Bot Start `SYMBOLS_NOT_RESOLVED` False-Positive Fix
+
+- Sorun kaynağı doğrulandı: `symbol_source_type=scanner` iken scanner kaynağı boşsa bot UI’da symbol görünse bile start tarafı `SYMBOLS_NOT_RESOLVED` verebiliyordu.
+- Düzeltme: `_resolve_symbol_source()` içine fallback eklendi.
+  - Öncelik sırası:
+    1. scanner rows
+    2. `scanner_selection_fallback`
+    3. `scanner_bot_symbols_fallback` (**yeni**)
+    4. `scanner_source_empty`
+- Sonuç: scanner kaynağı boş + bot.symbols dolu durumda `ok=True` ve false-positive blocker kalktı.
+- Doğrulama: `/app/test_reports/iteration_17.json` PASS.
+  - `symbols_ready=true`
+  - `SYMBOLS_NOT_RESOLVED` blocker yok
+  - Gerçek blocker (ör. `EXCHANGE_NOT_READY`) korunuyor.
+
 ## 2026-04-06 — Operasyonel Son Paket (4 Madde) ✅
 
 ### 1) Fix-All Queue/Async + Adaptive Batching
