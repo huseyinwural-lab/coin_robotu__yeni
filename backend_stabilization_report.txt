@@ -1,0 +1,47 @@
+================================================================================
+BACKEND STABILIZATION VALIDATION REPORT
+================================================================================
+📍 Base URL: https://trade-trace-engine.preview.emergentagent.com
+👤 Test User: review.user@platform.local
+🕒 Test Date: 2026-04-06 18:00:39 UTC
+
+🎯 OVERALL RESULT: ❌ FAIL
+
+🔐 LOGIN STATUS: ✅ SUCCESS
+
+📊 REQUEST STATISTICS:
+   Total Requests: 84
+   Successful (2xx): 80
+   Failed (non-2xx): 4
+   Success Rate: 95.2%
+
+🔥 ERROR ANALYSIS:
+   HTTP 500 Errors: 1
+   HTTP 503 Errors: 0
+   503 with DB_POOL_TIMEOUT markers: 0
+
+⚡ INTERMITTENT ISSUES DETECTED:
+   📍 /api/user/trades?limit=120
+      Success Rate: 75.0% (9/12)
+      Common Errors: Request timeout
+
+   📍 /api/bot-profiles
+      Success Rate: 91.7% (11/12)
+      HTTP 500 Errors: 1
+      Common Errors: HTTP 500
+
+📋 EVIDENCE SUMMARY:
+   ❌ 1 requests returned HTTP 500 (server errors)
+
+⚙️ TEST CONFIGURATION:
+   Endpoints Tested: 7
+   Rounds Executed: 12
+   Parallel Requests per Round: 7
+   Total Expected Requests: 84
+
+📝 NOTE:
+   This test checks for backend stability issues that may be intermittent.
+   Results may vary between test runs due to the nature of distributed systems.
+   Multiple test runs may be needed to identify patterns in intermittent issues.
+
+================================================================================
