@@ -506,12 +506,22 @@ def admin_log_feed(
     _: User = Depends(require_admin),
     db: Session = Depends(get_db),
     limit: int = Query(default=50, ge=10, le=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=10, le=50),
+    window_days: int | None = Query(default=None),
     actor_roles: str = Query(default="admin,user"),
     include_error_only: bool = Query(default=False),
     q: str | None = Query(default=None),
 ):
+    if window_days is not None and window_days not in {1, 7, 30}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_window_days")
+
     normalized_roles = _normalize_actor_roles(actor_roles)
     query = db.query(AuditLog).filter(func.lower(func.coalesce(AuditLog.actor_role, "system")).in_(normalized_roles))
+
+    if window_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+        query = query.filter(AuditLog.created_at >= cutoff)
 
     if q and q.strip():
         needle = f"%{q.strip()}%"
@@ -525,19 +535,32 @@ def admin_log_feed(
             )
         )
 
-    window_limit = min(max(limit * 6, 200), 1000)
+    window_limit = min(max(limit * 8, 300), 1600)
     rows = query.order_by(AuditLog.created_at.desc()).limit(window_limit).all()
     serialized = [_serialize_admin_log_feed_item(row) for row in rows]
-    error_rows = [item for item in serialized if bool(item.get("is_error"))]
+    error_rows = [item for item in serialized if bool(item.get("is_error"))][:250]
+
+    normalized_page = max(int(page or 1), 1)
+    normalized_page_size = max(min(int(page_size or 50), 50), 10)
+    error_total = len(error_rows)
+    error_page_count = max((error_total + normalized_page_size - 1) // normalized_page_size, 1)
+    if normalized_page > error_page_count:
+        normalized_page = error_page_count
+    page_start = (normalized_page - 1) * normalized_page_size
+    page_end = page_start + normalized_page_size
+    paged_error_rows = error_rows[page_start:page_end]
 
     if include_error_only:
-        items = error_rows[:limit]
+        items = paged_error_rows
     else:
         items = serialized[:limit]
 
     role_counter = Counter(str(item.get("actor_role") or "unknown") for item in serialized)
     return {
         "limit": limit,
+        "page": normalized_page,
+        "page_size": normalized_page_size,
+        "window_days": window_days,
         "requested_roles": normalized_roles,
         "include_error_only": include_error_only,
         "query": q or "",
@@ -547,7 +570,16 @@ def admin_log_feed(
         "error_count_in_window": len(error_rows),
         "role_breakdown": dict(role_counter),
         "items": items,
-        "error_items": error_rows[:limit],
+        "error_items": paged_error_rows,
+        "error_pagination": {
+            "page": normalized_page,
+            "page_size": normalized_page_size,
+            "total": error_total,
+            "page_count": error_page_count,
+            "has_prev": normalized_page > 1,
+            "has_next": normalized_page < error_page_count,
+            "max_window_records": 250,
+        },
     }
 
 

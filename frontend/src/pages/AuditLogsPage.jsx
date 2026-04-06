@@ -59,6 +59,16 @@ export const AuditLogsPage = () => {
   const [selectedEventId, setSelectedEventId] = useState("");
   const [expandedEventRows, setExpandedEventRows] = useState({});
   const [errorWindowDays, setErrorWindowDays] = useState(1);
+  const [errorLogLoading, setErrorLogLoading] = useState(false);
+  const [errorLogItems, setErrorLogItems] = useState([]);
+  const [errorLogPage, setErrorLogPage] = useState(1);
+  const [errorLogMeta, setErrorLogMeta] = useState({
+    total: 0,
+    pageCount: 1,
+    hasPrev: false,
+    hasNext: false,
+    refreshedAt: null,
+  });
 
   const fetchSavedQueries = useCallback(async () => {
     try {
@@ -68,6 +78,38 @@ export const AuditLogsPage = () => {
       toast.error(error?.response?.data?.detail || "Saved query listesi alınamadı");
     }
   }, []);
+
+  const fetchErrorLogs = useCallback(async ({ page = 1, windowDays = errorWindowDays, silent = false } = {}) => {
+    if (!silent) {
+      setErrorLogLoading(true);
+    }
+    try {
+      const { data } = await apiClient.get("/audit-logs/admin/log-feed", {
+        params: {
+          include_error_only: true,
+          actor_roles: "admin,user",
+          page,
+          page_size: 50,
+          window_days: windowDays,
+        },
+      });
+      setErrorLogItems(Array.isArray(data?.items) ? data.items : []);
+      const pagination = data?.error_pagination || {};
+      setErrorLogMeta({
+        total: Number(pagination.total || 0),
+        pageCount: Number(pagination.page_count || 1),
+        hasPrev: Boolean(pagination.has_prev),
+        hasNext: Boolean(pagination.has_next),
+        refreshedAt: data?.refreshed_at || null,
+      });
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Hata logları alınamadı", { id: "audit-error-log-feed-fail" });
+    } finally {
+      if (!silent) {
+        setErrorLogLoading(false);
+      }
+    }
+  }, [errorWindowDays]);
 
   const fetchSummaries = useCallback(async (cursor = null, overrides = null) => {
     const activeFilters = overrides || filters;
@@ -119,6 +161,20 @@ export const AuditLogsPage = () => {
     fetchSummaries(null);
     fetchSavedQueries();
   }, [fetchSavedQueries, fetchSummaries]);
+
+  useEffect(() => {
+    fetchErrorLogs({ page: errorLogPage, windowDays: errorWindowDays });
+  }, [errorLogPage, errorWindowDays, fetchErrorLogs]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+      fetchErrorLogs({ page: errorLogPage, windowDays: errorWindowDays, silent: true });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [errorLogPage, errorWindowDays, fetchErrorLogs]);
 
   const fetchIncidents = useCallback(async (correlationId) => {
     if (!correlationId) {
@@ -455,29 +511,15 @@ export const AuditLogsPage = () => {
     rootCauseBreakdown?.root_cause,
   ]);
 
-  const filteredErrorIncidents = useMemo(() => {
-    const threshold = Date.now() - Number(errorWindowDays || 1) * 24 * 60 * 60 * 1000;
-    const toTs = (value) => {
-      if (!value) return null;
-      const parsed = new Date(value).getTime();
-      return Number.isNaN(parsed) ? null : parsed;
-    };
-
-    return (incidents || [])
-      .filter((incident) => {
-        const severity = String(incident?.severity || "").toUpperCase();
-        const isErrorLike = severity === "ERROR" || severity === "CRITICAL";
-        if (!isErrorLike) return false;
-        const ts = toTs(incident?.created_at || incident?.detected_at || incident?.updated_at || incident?.occurred_at);
-        if (!ts) return true;
-        return ts >= threshold;
-      })
-      .sort((a, b) => {
-        const aTs = new Date(a?.created_at || a?.detected_at || a?.updated_at || 0).getTime() || 0;
-        const bTs = new Date(b?.created_at || b?.detected_at || b?.updated_at || 0).getTime() || 0;
-        return bTs - aTs;
-      });
-  }, [errorWindowDays, incidents]);
+  const errorLogPageLabel = useMemo(() => {
+    const total = Number(errorLogMeta.total || 0);
+    if (total <= 0) {
+      return "0 / 0";
+    }
+    const start = (errorLogPage - 1) * 50 + 1;
+    const end = Math.min(start + 49, total);
+    return `${start}-${end} / ${total}`;
+  }, [errorLogMeta.total, errorLogPage]);
 
   const actionSuggestion = useMemo(() => {
     if (!selectedCorrelation) {
@@ -1028,7 +1070,10 @@ export const AuditLogsPage = () => {
                     key={days}
                     size="sm"
                     variant={errorWindowDays === days ? "default" : "outline"}
-                    onClick={() => setErrorWindowDays(days)}
+                    onClick={() => {
+                      setErrorWindowDays(days);
+                      setErrorLogPage(1);
+                    }}
                     data-testid={`audit-error-window-filter-${days}d-button`}
                   >
                     {days} gün
@@ -1036,21 +1081,54 @@ export const AuditLogsPage = () => {
                 ))}
               </div>
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-300" data-testid="audit-error-list-meta-row">
+              <span data-testid="audit-error-list-meta-total">son_250_hata_toplamı: {errorLogMeta.total}</span>
+              <span data-testid="audit-error-list-meta-page">sayfa: {errorLogPage}/{errorLogMeta.pageCount || 1}</span>
+              <span data-testid="audit-error-list-meta-range">aralık: {errorLogPageLabel}</span>
+              <span data-testid="audit-error-list-meta-refreshed">güncellendi: {errorLogMeta.refreshedAt || "-"}</span>
+            </div>
 
-            {filteredErrorIncidents.length === 0 ? (
+            {errorLogLoading && errorLogItems.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-400" data-testid="audit-error-list-loading">hata logları yükleniyor...</p>
+            ) : errorLogItems.length === 0 ? (
               <p className="mt-2 text-sm text-slate-400" data-testid="audit-error-list-empty">Seçili pencerede hata yok.</p>
             ) : (
               <div className="mt-2 space-y-2" data-testid="audit-error-list-items">
-                {filteredErrorIncidents.map((incident, idx) => (
-                  <div key={`${incident.incident_id}-err-${idx}`} className="rounded border border-rose-700/50 bg-rose-950/20 px-3 py-2" data-testid={`audit-error-item-${idx}`}>
-                    <p className="text-sm text-rose-100" data-testid={`audit-error-item-id-${idx}`}>{incident.incident_id}</p>
+                {errorLogItems.map((row, idx) => (
+                  <div key={`${row.id}-err-${idx}`} className="rounded border border-rose-700/50 bg-rose-950/20 px-3 py-2" data-testid={`audit-error-item-${idx}`}>
+                    <p className="text-sm text-rose-100" data-testid={`audit-error-item-id-${idx}`}>{row.id}</p>
                     <p className="text-xs text-rose-200/90" data-testid={`audit-error-item-meta-${idx}`}>
-                      {String(incident.severity || "-").toUpperCase()} • {incident.status || "-"} • {incident.created_at || incident.updated_at || "tarih_yok"}
+                      {String(row.severity || "-").toUpperCase()} • {row.error_class || "trade_blocker"} • {row.created_at || "tarih_yok"}
+                    </p>
+                    <p className="mt-1 text-xs text-rose-100" data-testid={`audit-error-item-action-${idx}`}>action: {row.action || "-"}</p>
+                    <p className="text-xs text-rose-100/90" data-testid={`audit-error-item-message-${idx}`}>
+                      {row.error_message || "hata mesajı yok"}
                     </p>
                   </div>
                 ))}
               </div>
             )}
+
+            <div className="mt-3 flex items-center gap-2" data-testid="audit-error-list-pagination-controls">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!errorLogMeta.hasPrev || errorLogLoading}
+                onClick={() => setErrorLogPage((prev) => Math.max(prev - 1, 1))}
+                data-testid="audit-error-list-pagination-prev-button"
+              >
+                Önceki 50
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!errorLogMeta.hasNext || errorLogLoading}
+                onClick={() => setErrorLogPage((prev) => prev + 1)}
+                data-testid="audit-error-list-pagination-next-button"
+              >
+                Sonraki 50
+              </Button>
+            </div>
           </div>
         </div>
       </div>
