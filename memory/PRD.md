@@ -1,3 +1,51 @@
+## 2026-04-06 — Execution Reliability Hardening (Readiness + Precheck + Fail-Fast)
+
+### Uygulanan ana katmanlar
+- **Gerçek Exchange Readiness tek fonksiyonu**
+  - Yeni merkez fonksiyon: `get_exchange_readiness(connection_id, market_type, symbol?)`
+  - Dönüş sözleşmesi: `is_ready`, `reason_code`, `permissions`, `market_types`, `last_check_at`.
+  - Gerçek kontroller: key validity, trade permission, market type uyumu, environment mismatch ve symbol market doğrulaması.
+  - API: `GET /api/user/scanner/exchange-readiness`
+
+- **Precheck → Intent/Submit enforce**
+  - Preview/submit hattında precheck fail ise submit zorunlu blok.
+  - `first_precheck_failure_code` backend’de korunup reject alanlarına işleniyor.
+  - Submit hatasında `ORDER_PRECHECK_FAILED` + `first_precheck_failure_code` yapısal dönüyor (422).
+
+- **Scanner/Signal Tradeability kesin ayrımı**
+  - Candidate precheck alanları: `tradeable`, `first_precheck_failure_code`, `candidate_precheck.checks`.
+  - Signals alanları: `tradeable`, `first_precheck_failure_code`, `status=non_tradeable` desteği.
+  - Kural kilitlendi:
+    - `NON_TRADEABLE`: exchange/precheck/symbol/market uyumsuzluğu
+    - `BLOCKED`: risk/manual/bot-state
+
+- **Universe alignment + market uyumu**
+  - Scanner scope, execution-allowed kesişiminden üretiliyor (user/bot/venue+policy/market_type).
+  - `MARKET_TYPE_NOT_ALLOWED` ve `SYMBOL_NOT_ALLOWED` için precheck kaynaklı doğru sınıflama.
+
+- **Bot start fail-fast sertleştirme**
+  - Başlatma başarısızlık detaylarında `status: FAILED` + `blocking_reasons` + `status_contract` zorunlu.
+  - `RUNNING ama trade atmıyor` maskesini azaltmak için exchange readiness gerçek kontrol bağlandı.
+
+- **Auto-fix güvenlik sınırı**
+  - Güvenli aksiyonlarla sınırlandı: `connection_revalidate_required`, `status_contract_refresh_requested`, `symbol_reload_requested`.
+  - Otomatik lot/risk/leverage müdahalesi yok.
+
+### Performans düzeltmesi
+- `diagnose` ve `fix-all-blockers` timeoutları giderildi.
+- `bulk_fix_blocked_signals` iç işlem limiti güvenli/performans odaklı sınırlandı.
+
+### Test Sonuçları
+- Iteration 14: core reliability testleri geçti, timeout gözlendi.
+- Iteration 15: timeout + auto-fix safety tekrar testi **PASS**
+  - Diagnose: ~4s
+  - Fix-all-blockers(limit=10): ~7s
+  - Unsafe action: **NONE**
+  - Rapor: `/app/test_reports/iteration_15.json`
+
+### Not
+- Futures tarafında `invalid_key` kullanıcının borsa anahtar/permission durumuna bağlı dış bağımlılık olarak halen mümkün; sistem bunu artık açık ve deterministik reason code ile döndürüyor.
+
 ## 2026-04-06 — Precheck-First Tradeability (B+A+A Kararı) ✅
 
 ### Kapsam (Uygulandı)
