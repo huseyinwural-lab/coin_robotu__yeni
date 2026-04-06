@@ -1,3 +1,34 @@
+## 2026-04-06 — Linked Incidents Error Table 14 Kolon Genişletmesi ✅
+
+### Eklenen 6 kritik kolon (8 -> 14)
+- `Service Source`
+- `Severity/Level`
+- `Correlation ID`
+- `Event Type`
+- `Client Context`
+- `Security Mask`
+
+### Backend
+- Endpoint: `GET /api/audit-logs/admin/error-table-report`
+- `items` satırlarına yeni alanlar eklendi:
+  - `service_source`, `severity_level`, `correlation_id`, `event_type`, `client_context`, `security_mask`
+- JSON/XLSX export şeması da 14 kolon olacak şekilde güncellendi.
+
+### Frontend
+- `AuditLogsPage.jsx` içindeki **Linked incidents / Hata Tablosu** başlıkları 14 kolona çıkarıldı.
+- Severity için renkli badge (FATAL/ERROR/WARN/INFO) eklendi.
+- Client Context alanı ikon+JSON formatında gösteriliyor.
+- Loading/empty `colSpan` 14 olacak şekilde güncellendi.
+
+### Doğrulama
+- Backend canlı doğrulama:
+  - `error-table-report` 200
+  - `columns` uzunluğu 14
+  - yeni alanlar örnek satırda dolu
+  - XLSX export 200
+- Frontend code-level doğrulama: 14 başlık + hücre render + testid’ler mevcut.
+- `CI=true yarn build` PASS.
+
 ## 2026-04-06 — Admin Sol Menü Kullanıcılar Grubu Yeniden Düzenleme ✅
 
 ### Uygulanan değişiklik
