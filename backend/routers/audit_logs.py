@@ -294,6 +294,94 @@ def _serialize_admin_log_feed_item(row: AuditLog) -> dict:
     }
 
 
+def _to_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _derive_retryable(details: dict, error_class: str, status_code: int | None) -> bool:
+    if isinstance(details.get("retryable"), bool):
+        return bool(details.get("retryable"))
+    code = str(details.get("code") or details.get("error_code") or "").upper()
+    if code in {"DB_POOL_TIMEOUT", "SERVICE_UNAVAILABLE", "GATEWAY_TIMEOUT", "TIMEOUT"}:
+        return True
+    if error_class == "infra_error" and (status_code is None or status_code >= 500):
+        return True
+    return False
+
+
+def _build_error_table_row(item: dict) -> dict:
+    details = item.get("details") if isinstance(item.get("details"), dict) else {}
+    status_code = item.get("status_code")
+    try:
+        normalized_status = int(status_code) if status_code is not None else None
+    except (TypeError, ValueError):
+        normalized_status = None
+
+    trace_id = (
+        item.get("request_id")
+        or details.get("trace_id")
+        or details.get("request_id")
+        or item.get("id")
+    )
+    endpoint = item.get("route") or details.get("route") or "unknown_endpoint"
+    error_class = str(item.get("error_class") or "trade_blocker")
+    retryable = _derive_retryable(details, error_class, normalized_status)
+
+    created_at_raw = str(item.get("created_at") or "").strip()
+    created_at = None
+    if created_at_raw:
+        try:
+            created_at = _to_utc(datetime.fromisoformat(created_at_raw.replace("Z", "+00:00")))
+        except ValueError:
+            created_at = None
+    utc_label = created_at.isoformat().replace("+00:00", "Z") if created_at else ""
+
+    return {
+        "trace_id": str(trace_id or ""),
+        "time_utc": utc_label,
+        "error_class": error_class,
+        "endpoint": str(endpoint or "unknown_endpoint"),
+        "http_status": normalized_status,
+        "error_message": str(item.get("error_message") or "").strip(),
+        "retryable": bool(retryable),
+        "user_id": str(item.get("actor_user_id") or ""),
+    }
+
+
+def _build_error_table_export_workbook(rows: list[dict]):
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "error_report"
+    sheet.append([
+        "Trace ID",
+        "Zaman (UTC)",
+        "Error Class",
+        "Endpoint",
+        "HTTP Status",
+        "Hata Mesajı",
+        "Retryable",
+        "Kullanıcı ID",
+    ])
+    for row in rows:
+        sheet.append([
+            row.get("trace_id") or "",
+            row.get("time_utc") or "",
+            row.get("error_class") or "",
+            row.get("endpoint") or "",
+            row.get("http_status") if row.get("http_status") is not None else "",
+            row.get("error_message") or "",
+            "true" if row.get("retryable") else "false",
+            row.get("user_id") or "",
+        ])
+    return workbook
+
+
 def _root_cause_labels(*, action: str, details: dict, route: str | None) -> dict:
     reason_codes = details.get("reason_codes") or []
     if not isinstance(reason_codes, list):
@@ -581,6 +669,108 @@ def admin_log_feed(
             "max_window_records": 250,
         },
     }
+
+
+@router.get("/admin/error-table-report")
+def admin_error_table_report(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=100, ge=1, le=100),
+    window_days: int | None = Query(default=1),
+    start_time: str | None = Query(default=None),
+    end_time: str | None = Query(default=None),
+    actor_roles: str = Query(default="admin,user,system"),
+    q: str | None = Query(default=None),
+    export_format: str = Query(default="json"),
+    download: bool = Query(default=False),
+):
+    if window_days is not None and window_days not in {1, 7, 30}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_window_days")
+
+    normalized_roles = _normalize_actor_roles(actor_roles)
+    query = db.query(AuditLog).filter(func.lower(func.coalesce(AuditLog.actor_role, "system")).in_(normalized_roles))
+
+    parsed_start = _parse_iso_datetime(start_time, detail_code="invalid_start_time")
+    parsed_end = _parse_iso_datetime(end_time, detail_code="invalid_end_time")
+    if parsed_start and parsed_end and parsed_start > parsed_end:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_time_range")
+
+    if parsed_start:
+        query = query.filter(AuditLog.created_at >= _to_utc(parsed_start))
+    if parsed_end:
+        query = query.filter(AuditLog.created_at <= _to_utc(parsed_end))
+    if not parsed_start and not parsed_end and window_days is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+        query = query.filter(AuditLog.created_at >= cutoff)
+
+    if q and q.strip():
+        needle = f"%{q.strip()}%"
+        details_text = cast(AuditLog.details, String)
+        query = query.filter(
+            or_(
+                AuditLog.action.ilike(needle),
+                AuditLog.entity_type.ilike(needle),
+                AuditLog.entity_id.ilike(needle),
+                details_text.ilike(needle),
+            )
+        )
+
+    rows = query.order_by(AuditLog.created_at.desc()).limit(2000).all()
+    serialized = [_serialize_admin_log_feed_item(row) for row in rows]
+    error_rows = [item for item in serialized if bool(item.get("is_error"))][:limit]
+    table_rows = [_build_error_table_row(item) for item in error_rows]
+
+    refreshed_at = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "limit": limit,
+        "window_days": window_days,
+        "start_time": _to_utc(parsed_start).isoformat().replace("+00:00", "Z") if parsed_start else None,
+        "end_time": _to_utc(parsed_end).isoformat().replace("+00:00", "Z") if parsed_end else None,
+        "requested_roles": normalized_roles,
+        "query": q or "",
+        "refreshed_at": refreshed_at,
+        "returned_count": len(table_rows),
+        "total_scanned": len(serialized),
+        "columns": [
+            "trace_id",
+            "time_utc",
+            "error_class",
+            "endpoint",
+            "http_status",
+            "error_message",
+            "retryable",
+            "user_id",
+        ],
+        "items": table_rows,
+    }
+
+    normalized_format = str(export_format or "json").strip().lower()
+    if download:
+        if normalized_format == "xlsx":
+            workbook = _build_error_table_export_workbook(table_rows)
+            stream = io.BytesIO()
+            workbook.save(stream)
+            stream.seek(0)
+            filename = f"error_report_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xlsx"
+            return StreamingResponse(
+                stream,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
+        if normalized_format != "json":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_export_format")
+
+        blob = io.BytesIO(json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"))
+        blob.seek(0)
+        filename = f"error_report_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.json"
+        return StreamingResponse(
+            blob,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    return payload
 
 
 @router.get("/timeline", response_model=AuditTimelineResponse)

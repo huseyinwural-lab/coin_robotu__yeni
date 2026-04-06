@@ -19,6 +19,22 @@ const severityClass = {
 
 const LIFECYCLE_ORDER = ["request", "intent", "decision", "risk", "order", "execution", "fill"];
 
+const toIsoFromDatetimeLocal = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return undefined;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString();
+};
+
+const formatUtcDisplay = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return "-";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toISOString();
+};
+
 export const AuditLogsPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -62,6 +78,17 @@ export const AuditLogsPage = () => {
   const [missingCorrelationEvents, setMissingCorrelationEvents] = useState([]);
   const [missingCorrelationPage, setMissingCorrelationPage] = useState(1);
   const [expandedMissingCorrelationRows, setExpandedMissingCorrelationRows] = useState({});
+  const [linkedErrorReportLoading, setLinkedErrorReportLoading] = useState(false);
+  const [linkedErrorRows, setLinkedErrorRows] = useState([]);
+  const [linkedErrorMeta, setLinkedErrorMeta] = useState({
+    refreshedAt: null,
+    returnedCount: 0,
+    totalScanned: 0,
+  });
+  const [linkedErrorWindowDays, setLinkedErrorWindowDays] = useState(1);
+  const [linkedErrorStartTime, setLinkedErrorStartTime] = useState("");
+  const [linkedErrorEndTime, setLinkedErrorEndTime] = useState("");
+  const [linkedErrorSearch, setLinkedErrorSearch] = useState("");
   const [errorLogLoading, setErrorLogLoading] = useState(false);
   const [errorLogItems, setErrorLogItems] = useState([]);
   const [errorLogPage, setErrorLogPage] = useState(1);
@@ -113,6 +140,92 @@ export const AuditLogsPage = () => {
       }
     }
   }, [errorWindowDays]);
+
+  const fetchLinkedErrorReport = useCallback(async ({
+    windowDays = 1,
+    startTime = "",
+    endTime = "",
+    search = "",
+    silent = false,
+  } = {}) => {
+    if (!silent) {
+      setLinkedErrorReportLoading(true);
+    }
+
+    try {
+      const startIso = toIsoFromDatetimeLocal(startTime);
+      const endIso = toIsoFromDatetimeLocal(endTime);
+      const hasCustomRange = Boolean(startIso || endIso);
+
+      const params = {
+        limit: 100,
+        actor_roles: "admin,user,system",
+        q: search || undefined,
+        window_days: hasCustomRange ? undefined : windowDays,
+        start_time: hasCustomRange ? startIso : undefined,
+        end_time: hasCustomRange ? endIso : undefined,
+      };
+
+      const { data } = await apiClient.get("/audit-logs/admin/error-table-report", { params });
+      setLinkedErrorRows(Array.isArray(data?.items) ? data.items : []);
+      setLinkedErrorMeta({
+        refreshedAt: data?.refreshed_at || null,
+        returnedCount: Number(data?.returned_count || 0),
+        totalScanned: Number(data?.total_scanned || 0),
+      });
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Linked incidents hata raporu alınamadı", {
+        id: "audit-linked-error-report-fail",
+      });
+    } finally {
+      if (!silent) {
+        setLinkedErrorReportLoading(false);
+      }
+    }
+  }, []);
+
+  const downloadLinkedErrorReport = useCallback(async (format = "json") => {
+    try {
+      const startIso = toIsoFromDatetimeLocal(linkedErrorStartTime);
+      const endIso = toIsoFromDatetimeLocal(linkedErrorEndTime);
+      const hasCustomRange = Boolean(startIso || endIso);
+      const normalizedFormat = format === "xlsx" ? "xlsx" : "json";
+
+      const { data, headers } = await apiClient.get("/audit-logs/admin/error-table-report", {
+        params: {
+          limit: 100,
+          actor_roles: "admin,user,system",
+          q: linkedErrorSearch || undefined,
+          window_days: hasCustomRange ? undefined : linkedErrorWindowDays,
+          start_time: hasCustomRange ? startIso : undefined,
+          end_time: hasCustomRange ? endIso : undefined,
+          export_format: normalizedFormat,
+          download: true,
+        },
+        responseType: "blob",
+      });
+
+      const fallbackName = `linked_incidents_error_report_${Date.now()}.${normalizedFormat}`;
+      const disposition = String(headers?.["content-disposition"] || "");
+      const extracted = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+      const filename = extracted || fallbackName;
+
+      const blobUrl = window.URL.createObjectURL(data);
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(blobUrl);
+
+      toast.success(`${normalizedFormat.toUpperCase()} raporu indirildi`, { id: `audit-linked-error-export-${normalizedFormat}` });
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Rapor indirilemedi", {
+        id: `audit-linked-error-export-${format}-fail`,
+      });
+    }
+  }, [linkedErrorEndTime, linkedErrorSearch, linkedErrorStartTime, linkedErrorWindowDays]);
 
   const fetchSummaries = useCallback(async (cursor = null, overrides = null) => {
     const activeFilters = overrides || filters;
@@ -181,6 +294,10 @@ export const AuditLogsPage = () => {
     fetchSummaries(null);
     fetchSavedQueries();
   }, [fetchSavedQueries, fetchSummaries]);
+
+  useEffect(() => {
+    fetchLinkedErrorReport({ windowDays: 1, startTime: "", endTime: "", search: "" });
+  }, [fetchLinkedErrorReport]);
 
   useEffect(() => {
     fetchErrorLogs({ page: errorLogPage, windowDays: errorWindowDays });
@@ -1226,6 +1343,134 @@ export const AuditLogsPage = () => {
               ))}
             </div>
           )}
+
+          <div className="mt-4 rounded-lg border border-cyan-800/40 bg-cyan-950/20 p-3" data-testid="audit-linked-incidents-error-report-section">
+            <div className="flex flex-wrap items-center justify-between gap-2" data-testid="audit-linked-incidents-error-report-header">
+              <p className="text-sm font-semibold text-cyan-100" data-testid="audit-linked-incidents-error-report-title">
+                Linked Incidents · Hata Tablosu (son 100)
+              </p>
+              <p className="text-xs text-cyan-200" data-testid="audit-linked-incidents-error-report-meta">
+                returned={linkedErrorMeta.returnedCount} · scanned={linkedErrorMeta.totalScanned} · refreshed={linkedErrorMeta.refreshedAt || "-"}
+              </p>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="audit-linked-incidents-error-report-window-buttons">
+              {[1, 7, 30].map((days) => (
+                <Button
+                  key={days}
+                  size="sm"
+                  variant={linkedErrorWindowDays === days ? "default" : "outline"}
+                  onClick={() => {
+                    setLinkedErrorWindowDays(days);
+                    setLinkedErrorStartTime("");
+                    setLinkedErrorEndTime("");
+                    fetchLinkedErrorReport({ windowDays: days, startTime: "", endTime: "", search: linkedErrorSearch });
+                  }}
+                  data-testid={`audit-linked-incidents-error-report-window-${days}d-button`}
+                >
+                  {days} gün
+                </Button>
+              ))}
+            </div>
+
+            <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="audit-linked-incidents-error-report-range-inputs-grid">
+              <Input
+                type="datetime-local"
+                value={linkedErrorStartTime}
+                onChange={(event) => setLinkedErrorStartTime(event.target.value)}
+                data-testid="audit-linked-incidents-error-report-start-time-input"
+              />
+              <Input
+                type="datetime-local"
+                value={linkedErrorEndTime}
+                onChange={(event) => setLinkedErrorEndTime(event.target.value)}
+                data-testid="audit-linked-incidents-error-report-end-time-input"
+              />
+              <Input
+                value={linkedErrorSearch}
+                onChange={(event) => setLinkedErrorSearch(event.target.value)}
+                placeholder="endpoint / hata metni ara"
+                data-testid="audit-linked-incidents-error-report-search-input"
+              />
+              <div className="flex flex-wrap items-center gap-2" data-testid="audit-linked-incidents-error-report-actions-group">
+                <Button
+                  size="sm"
+                  onClick={() => fetchLinkedErrorReport({
+                    windowDays: linkedErrorWindowDays,
+                    startTime: linkedErrorStartTime,
+                    endTime: linkedErrorEndTime,
+                    search: linkedErrorSearch,
+                  })}
+                  data-testid="audit-linked-incidents-error-report-apply-button"
+                >
+                  Raporu Getir
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => downloadLinkedErrorReport("json")}
+                  data-testid="audit-linked-incidents-error-report-export-json-button"
+                >
+                  JSON İndir
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => downloadLinkedErrorReport("xlsx")}
+                  data-testid="audit-linked-incidents-error-report-export-xlsx-button"
+                >
+                  Excel İndir
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-3 overflow-x-auto" data-testid="audit-linked-incidents-error-report-table-wrap">
+              <Table data-testid="audit-linked-incidents-error-report-table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-trace-id">Trace ID</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-time-utc">Zaman (UTC)</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-error-class">Error Class</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-endpoint">Endpoint</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-http-status">HTTP Status</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-message">Hata Mesajı</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-retryable">Retryable</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-user-id">Kullanıcı ID</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {linkedErrorReportLoading && linkedErrorRows.length === 0 ? (
+                    <TableRow data-testid="audit-linked-incidents-error-report-loading-row">
+                      <TableCell colSpan={8} className="text-center text-slate-300" data-testid="audit-linked-incidents-error-report-loading-cell">
+                        hata raporu yükleniyor...
+                      </TableCell>
+                    </TableRow>
+                  ) : linkedErrorRows.length === 0 ? (
+                    <TableRow data-testid="audit-linked-incidents-error-report-empty-row">
+                      <TableCell colSpan={8} className="text-center text-slate-400" data-testid="audit-linked-incidents-error-report-empty-cell">
+                        seçili aralıkta hata kaydı yok
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    linkedErrorRows.map((row, index) => (
+                      <TableRow key={`${row.trace_id || "trace"}-${index}`} data-testid={`audit-linked-incidents-error-report-row-${index}`}>
+                        <TableCell className="font-mono text-xs" data-testid={`audit-linked-incidents-error-report-trace-id-${index}`}>{row.trace_id || "-"}</TableCell>
+                        <TableCell className="font-mono text-xs" data-testid={`audit-linked-incidents-error-report-time-utc-${index}`}>{formatUtcDisplay(row.time_utc)}</TableCell>
+                        <TableCell data-testid={`audit-linked-incidents-error-report-error-class-${index}`}>{row.error_class || "-"}</TableCell>
+                        <TableCell className="font-mono text-xs" data-testid={`audit-linked-incidents-error-report-endpoint-${index}`}>{row.endpoint || "-"}</TableCell>
+                        <TableCell data-testid={`audit-linked-incidents-error-report-http-status-${index}`}>{row.http_status ?? "-"}</TableCell>
+                        <TableCell className="max-w-[380px] truncate" title={row.error_message || ""} data-testid={`audit-linked-incidents-error-report-message-${index}`}>
+                          {row.error_message || "-"}
+                        </TableCell>
+                        <TableCell data-testid={`audit-linked-incidents-error-report-retryable-${index}`}>{String(Boolean(row.retryable))}</TableCell>
+                        <TableCell className="font-mono text-xs" data-testid={`audit-linked-incidents-error-report-user-id-${index}`}>{row.user_id || "-"}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
 
           <div className="mt-4 border-t border-slate-700/60 pt-3" data-testid="audit-error-list-section">
             <div className="flex flex-wrap items-center justify-between gap-2">
