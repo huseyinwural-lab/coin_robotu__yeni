@@ -26,3 +26,7 @@
 ### User Spot/Futures
 - API Key: `uq8wqbm5...Q01LH`
 - Secret: `twXu6MXs...od16A`
+
+## Admin Users Cleanup Note (2026-04-06)
+- Admin panel testlerinde oluşturulan geçici admin hesapları temizlendi.
+- Kalıcı test admin hesabı: `canary.admin@platform.local`

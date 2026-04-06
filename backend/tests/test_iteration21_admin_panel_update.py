@@ -12,6 +12,9 @@ Tests for:
 """
 
 import os
+import json
+import uuid
+import base64
 import pytest
 import requests
 
@@ -23,6 +26,30 @@ SUPER_ADMIN_EMAIL = "canary.admin@platform.local"
 SUPER_ADMIN_PASSWORD = "CanaryAdmin123!"
 USER_EMAIL = "review.user@platform.local"
 USER_PASSWORD = "ReviewUser123!"
+
+
+def _decode_jwt_payload(token: str) -> dict:
+    try:
+        parts = token.split(".")
+        if len(parts) < 2:
+            return {}
+        payload = parts[1]
+        payload += "=" * (-len(payload) % 4)
+        decoded = base64.urlsafe_b64decode(payload.encode()).decode()
+        return json.loads(decoded)
+    except Exception:
+        return {}
+
+
+def build_auth_headers(token: str) -> dict:
+    payload = _decode_jwt_payload(token)
+    device_id = str(payload.get("device_id") or "test-device")
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-Session-ID": str(uuid.uuid4()),
+        "X-Session-Device": device_id,
+        "X-Request-ID": str(uuid.uuid4()),
+    }
 
 
 class TestAdminPanelUpdate:
@@ -69,7 +96,7 @@ class TestAdminPanelUpdate:
 
     def test_admin_identity_users_list(self, super_admin_token):
         """Test /api/admin/identity/users endpoint returns user list"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         response = requests.get(
             f"{BASE_URL}/api/admin/identity/users",
             headers=headers,
@@ -84,7 +111,7 @@ class TestAdminPanelUpdate:
 
     def test_admin_identity_users_filter_by_role_user(self, super_admin_token):
         """Test filtering users by role=user"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         response = requests.get(
             f"{BASE_URL}/api/admin/identity/users",
             headers=headers,
@@ -101,7 +128,7 @@ class TestAdminPanelUpdate:
 
     def test_admin_identity_users_filter_by_admin_roles(self, super_admin_token):
         """Test filtering users by admin roles (super_admin, admin, ops)"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         admin_roles = ["super_admin", "admin", "ops"]
         for role in admin_roles:
             response = requests.get(
@@ -117,7 +144,7 @@ class TestAdminPanelUpdate:
 
     def test_user_approvals_list(self, super_admin_token):
         """Test /api/admin/user-approvals endpoint"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         response = requests.get(
             f"{BASE_URL}/api/admin/user-approvals",
             headers=headers,
@@ -132,7 +159,7 @@ class TestAdminPanelUpdate:
 
     def test_admin_create_endpoint_super_admin_success(self, super_admin_token):
         """Test admin create endpoint with super_admin role - should succeed"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         test_email = f"test.admin.{os.urandom(4).hex()}@platform.local"
         response = requests.post(
             f"{BASE_URL}/api/admin/users/admin-create",
@@ -154,7 +181,7 @@ class TestAdminPanelUpdate:
 
     def test_trading_enabled_direct_endpoint(self, super_admin_token):
         """Test PATCH /api/admin/identity/users/{id}/trading-enabled-direct endpoint"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         
         # First get a user to test with
         response = requests.get(
@@ -197,7 +224,7 @@ class TestAdminPanelUpdate:
 
     def test_trading_disabled_direct_endpoint(self, super_admin_token):
         """Test PATCH /api/admin/identity/users/{id}/trading-enabled-direct with trading_enabled=false"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         
         # First get a user to test with
         response = requests.get(
@@ -233,7 +260,7 @@ class TestAdminPanelUpdate:
 
     def test_hard_delete_direct_endpoint_requires_super_admin(self, super_admin_token):
         """Test DELETE /api/admin/identity/users/{id}/hard-delete-direct requires super_admin"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         
         # Create a test user to delete
         test_email = f"test.delete.{os.urandom(4).hex()}@platform.local"
@@ -270,7 +297,7 @@ class TestAdminPanelUpdate:
 
     def test_admin_users_list_endpoint(self, super_admin_token):
         """Test /api/admin/users endpoint (legacy)"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         response = requests.get(
             f"{BASE_URL}/api/admin/users",
             headers=headers,
@@ -284,7 +311,7 @@ class TestAdminPanelUpdate:
 
     def test_user_approval_approve_endpoint(self, super_admin_token):
         """Test POST /api/auth/admin/user-approval-requests/{user_id}/approve"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         
         # First check if there are pending approvals
         response = requests.get(
@@ -333,7 +360,7 @@ class TestAdminPanelUpdate:
 
     def test_user_approval_reject_endpoint(self, super_admin_token):
         """Test POST /api/auth/admin/user-approval-requests/{user_id}/reject"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         
         # Create a test user to reject
         test_email = f"test.reject.{os.urandom(4).hex()}@platform.local"
@@ -368,7 +395,7 @@ class TestAdminPanelUpdate:
 
     def test_approved_user_appears_in_user_list_not_admin_list(self, super_admin_token):
         """Test that approved users appear in user list but not admin list"""
-        headers = {"Authorization": f"Bearer {super_admin_token}"}
+        headers = build_auth_headers(super_admin_token)
         
         # Get user list (role=user)
         user_response = requests.get(

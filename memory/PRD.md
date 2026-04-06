@@ -1,3 +1,40 @@
+## 2026-04-06 — Admin Kullanıcılar Bilgi Mimarisi Güncellemesi (8 Madde) ✅
+
+### Yeni yapı
+- Admin panelde kullanıcı yönetimi `admin/kullanicilar` altında toplandı.
+- Alt rotalar:
+  - `/admin/kullanicilar/admin-kullanicilar`
+  - `/admin/kullanicilar/user-kullanicilar`
+  - `/admin/kullanicilar/kullanici-onaylar`
+  - `/admin/kullanicilar/kullanici-ekonomisi`
+- Legacy redirectler eklendi:
+  - `/admin/users`, `/admin/users/admins`, `/admin/users/customers`, `/admin/user-approvals`, `/admin/users/economics`
+
+### Backend davranış güncellemesi
+- `POST /api/admin/users/admin-create` artık **yalnız SUPER_ADMIN** için açık.
+- Yeni user yönetim endpointleri:
+  - `PATCH /api/admin/identity/users/{user_id}/trading-enabled-direct`
+  - `DELETE /api/admin/identity/users/{user_id}/hard-delete-direct` (SUPER_ADMIN only)
+- SUPER_ADMIN tarafından manuel onayda kullanıcı profiline doğrudan işlem açılabilirlik veriliyor:
+  - `trading_enabled=true`, `live_trading_eligible=true`
+
+### UI güncellemesi
+- Yeni sayfa: `AdminUserUsersPage`
+- İstenen sütunlar eksiksiz:
+  1) Kullanıcı İsmi
+  2) Aktif/Pasif (yeşil/kırmızı)
+  3) Trade Aktif Et
+  4) Trade Durdur
+  5) Sil (hard delete)
+  6) Kayıt Tarihi
+- Onaylı user’lar bu listede gösteriliyor; admin listesi ayrı tutuluyor.
+
+### Doğrulama
+- Testing agent raporu: `/app/test_reports/iteration_21.json`
+  - Route ve redirect doğrulaması PASS
+  - Yeni endpointler PASS
+  - Kullanıcılar tablosu kolon ve aksiyon doğrulaması PASS
+
 ## 2026-04-06 — User Tarafı Geniş Kapsam Test + Stabilizasyon (Iteration 20) ✅
 
 ### Kullanıcı talebine göre kapsam
