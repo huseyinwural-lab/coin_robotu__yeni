@@ -71,10 +71,15 @@ export const UserSignalsPage = () => {
         setBotProfiles(nextBots);
       }
 
-      const firstRejected = [signalsRes, portfolioRes, tradesRes, modeRes, botsRes].find((item) => item?.status === "rejected");
-      if (firstRejected && !silent) {
-        const detail = firstRejected.reason?.response?.data?.detail || firstRejected.reason?.message || "Signals verisi kısmi yüklendi";
-        toast.error(typeof detail === "string" ? detail : "Signals verisi kısmi yüklendi");
+      const rejected = [signalsRes, portfolioRes, tradesRes, modeRes, botsRes].filter((item) => item?.status === "rejected");
+      if (!silent && rejected.length > 0) {
+        const signalsFailed = signalsRes?.status === "rejected";
+        const allFailed = rejected.length === 5;
+        if (signalsFailed || allFailed) {
+          const root = signalsRes?.reason || rejected[0]?.reason;
+          const detail = root?.response?.data?.detail || root?.message || "Signals verisi yüklenemedi";
+          toast.error(typeof detail === "string" ? detail : "Signals verisi yüklenemedi");
+        }
       }
     } finally {
       if (!silent) {

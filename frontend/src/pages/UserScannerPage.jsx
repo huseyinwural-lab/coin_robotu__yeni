@@ -36,11 +36,12 @@ const scannerQuickPresets = [
   },
 ];
 
-const AUTO_SCAN_INTERVAL_SECONDS = 180;
+const AUTO_SCAN_INTERVAL_SECONDS = 60;
 const PROFILE_INTERVAL_OPTIONS = [
-  { value: 180, label: "3 dakika" },
-  { value: 300, label: "5 dakika" },
-  { value: 900, label: "15 dakika" },
+  { value: 30, label: "30 saniye" },
+  { value: 60, label: "1 dakika" },
+  { value: 90, label: "1.5 dakika" },
+  { value: 120, label: "2 dakika" },
 ];
 
 const SIMPLE_SCANNER_V2 = true;
@@ -48,7 +49,19 @@ const SIMPLE_SCANNER_V2 = true;
 const normalizeIntervalSeconds = (value) => {
   const allowed = new Set(PROFILE_INTERVAL_OPTIONS.map((option) => Number(option.value)));
   const parsed = Number(value || AUTO_SCAN_INTERVAL_SECONDS);
-  return allowed.has(parsed) ? parsed : AUTO_SCAN_INTERVAL_SECONDS;
+  if (allowed.has(parsed)) {
+    return parsed;
+  }
+  if (!Number.isFinite(parsed)) {
+    return AUTO_SCAN_INTERVAL_SECONDS;
+  }
+  if (parsed > 120) {
+    return 120;
+  }
+  if (parsed < 30) {
+    return 30;
+  }
+  return AUTO_SCAN_INTERVAL_SECONDS;
 };
 
 const MINIMAL_FILTER_DEFAULTS = {
