@@ -1,3 +1,21 @@
+## 2026-04-06 — Correlation Eksik Event Tablosu 50’lik Sayfalama + Gürültü Azaltma ✅
+
+### Yapılanlar
+- `/admin/audit-logs` içindeki **Correlation Eksik Event Listesi** tablo yapısı korunarak 50’lik sayfalamaya alındı:
+  - Meta: `toplam_hata`, `sayfa`, `aralık`
+  - Butonlar: `Önceki 50`, `Sonraki 50`
+- Satır/sütun formatı netleştirildi: `#`, `Event ID`, `Hata Adresi`, `Hata`, `Öneri`.
+
+### Hata Çözümünde Devam (Kök iyileştirme)
+- `trading_lifecycle_debugger_service.py` içinde missing-correlation hesabı iyileştirildi.
+- Auth/login/mfa/session gibi **lifecycle dışı gürültü eventleri** missing-correlation sayımından hariç tutuldu.
+- Trade/lifecycle odaklı eventlerde correlation zorunluluğu korunarak gerçek sorunlara odaklanıldı.
+
+### Doğrulama
+- Backend canlı çağrıda `missing_correlation_event_ids` sayısı iyileşti (testte 0 görüldü).
+- Frontend uzman test: yeni tablo metası + pagination + alt errors 50’lik sayfalama PASS.
+- `CI=true yarn build` PASS.
+
 ## 2026-04-06 — `/admin/audit-logs` Eski Yapı Korunarak Alt Hata Listesi Güncellemesi ✅
 
 ### Uygulanan Düzeltme
