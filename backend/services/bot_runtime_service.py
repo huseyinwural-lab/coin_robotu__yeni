@@ -36,6 +36,24 @@ def _safe_int(value, default: int = 0) -> int:
         return default
 
 
+def _connection_trade_snapshot(row: UserExchangeConnection | None) -> tuple[str, bool]:
+    if row is None:
+        return "unknown", False
+    snapshot = dict(getattr(row, "readiness_snapshot", {}) or {})
+    health = str(snapshot.get("connection_health") or "unknown").strip().lower()
+    can_trade = snapshot.get("can_trade_effective")
+    if can_trade is None:
+        can_trade = snapshot.get("can_trade_snapshot")
+    if can_trade is None:
+        can_trade = snapshot.get("can_trade")
+    return health, bool(can_trade)
+
+
+def _is_trade_ready_connection(row: UserExchangeConnection | None) -> bool:
+    health, can_trade = _connection_trade_snapshot(row)
+    return can_trade and health in {"online", "degraded"}
+
+
 def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
     snapshot = getattr(bot, "symbol_resolution_snapshot", {}) or {}
     strategy_template_ids = [
@@ -170,28 +188,62 @@ def _resolve_bindings(db, bot: BotProfile) -> dict:
                 "reason": "template_not_found_fallback_to_strategy_type",
             },
         }
-    risk_policy = (
-        db.query(RiskPolicy)
-        .filter(RiskPolicy.user_id == bot.user_id)
-        .order_by(RiskPolicy.updated_at.desc())
-        .first()
-    )
+    risk_policy = None
+    try:
+        risk_policy = (
+            db.query(RiskPolicy)
+            .filter(RiskPolicy.user_id == bot.user_id)
+            .order_by(RiskPolicy.updated_at.desc())
+            .first()
+        )
+    except Exception:  # noqa: BLE001
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        risk_policy = (
+            db.query(RiskPolicy)
+            .filter(RiskPolicy.user_id == bot.user_id)
+            .order_by(RiskPolicy.updated_at.desc())
+            .first()
+        )
+
     snapshot = getattr(bot, "symbol_resolution_snapshot", {}) or {}
     selected_connection_id = str(snapshot.get("selected_exchange_connection_id") or "").strip()
+    bot_market_type = str(getattr(bot, "market_type", "spot") or "spot").strip().lower()
 
-    connection_query = db.query(UserExchangeConnection).filter(UserExchangeConnection.user_id == bot.user_id)
+    connection_query = db.query(UserExchangeConnection).filter(
+        UserExchangeConnection.user_id == bot.user_id,
+        UserExchangeConnection.environment == "live",
+    )
+    market_connection_query = connection_query.filter(UserExchangeConnection.market_type == bot_market_type)
     connection = None
+
     if selected_connection_id:
         connection = connection_query.filter(UserExchangeConnection.id == selected_connection_id).first()
 
-    if connection is None:
-        connection = (
-            connection_query.order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc()).first()
-        )
+    if connection is None or not _is_trade_ready_connection(connection):
+        market_candidates = market_connection_query.order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc()).all()
+        ready_market = next((row for row in market_candidates if _is_trade_ready_connection(row)), None)
+        if ready_market is not None:
+            connection = ready_market
+        elif connection is None and market_candidates:
+            connection = market_candidates[0]
+
+    if connection is None or not _is_trade_ready_connection(connection):
+        all_candidates = connection_query.order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc()).all()
+        ready_any = next((row for row in all_candidates if _is_trade_ready_connection(row)), None)
+        if ready_any is not None:
+            connection = ready_any
+        elif connection is None and all_candidates:
+            connection = all_candidates[0]
 
     execution_source = connection.account_label if connection else "default"
     if selected_connection_id and connection and connection.id == selected_connection_id:
-        execution_source = f"selected:{connection.account_label}"
+        if _is_trade_ready_connection(connection):
+            execution_source = f"selected:{connection.account_label}"
+        else:
+            execution_source = f"selected_unhealthy:{connection.account_label}"
     elif selected_connection_id and connection:
         execution_source = f"fallback_default:{connection.account_label}"
 
@@ -237,13 +289,25 @@ def _resolve_symbol_source(db, bot: BotProfile) -> dict:
             if symbol and symbol not in symbols:
                 symbols.append(symbol)
         if not symbols:
-            resolution_reason = "scanner_selection_empty" if selected_set else "scanner_source_empty"
+            if selected_symbols:
+                fallback_symbols = selected_symbols[:200]
+                return {
+                    "ok": True,
+                    "source_type": "scanner",
+                    "scanner_id": scanner_id,
+                    "symbols": fallback_symbols,
+                    "summary": "scanner_selection_fallback",
+                    "selected_symbols": selected_symbols,
+                    "last_resolution_time": None,
+                    "resolution_status": "fallback",
+                }
+
             return {
                 "ok": False,
                 "source_type": "scanner",
                 "scanner_id": scanner_id,
                 "symbols": [],
-                "summary": resolution_reason,
+                "summary": "scanner_source_empty",
                 "selected_symbols": selected_symbols,
                 "last_resolution_time": None,
                 "resolution_status": "failed",
