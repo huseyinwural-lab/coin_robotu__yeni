@@ -1,3 +1,36 @@
+## 2026-04-06 — `/admin/core/logs` Linked Incidents 8 Kolon Hata Rapor Tablosu ✅
+
+### İstenen tasarım uygulandı (mevcut logs yapısı korunarak)
+- Konum: `admin/core/logs` içindeki **Linked incidents** paneline yeni hata rapor tablosu eklendi.
+- Görünüm: **son 100 hata logu**.
+- Kolonlar (8):
+  1. `Trace ID`
+  2. `Zaman (UTC)`
+  3. `Error Class`
+  4. `Endpoint`
+  5. `HTTP Status`
+  6. `Hata Mesajı`
+  7. `Retryable`
+  8. `Kullanıcı ID`
+
+### Filtre ve raporlama
+- Hızlı pencere: `1 gün / 7 gün / 30 gün`
+- Özel zaman aralığı: `start_time` ve `end_time` (datetime-local)
+- Arama: endpoint / hata metni
+
+### İndirme
+- `JSON` indir
+- `Excel (XLSX)` indir
+- İndirme aralığı: seçilen filtreye göre, son 30 güne kadar rapor alınabilir
+
+### Backend endpoint
+- Yeni endpoint: `GET /api/audit-logs/admin/error-table-report`
+- Desteklenen parametreler: `limit<=100`, `window_days(1|7|30)`, `start_time`, `end_time`, `q`, `download`, `export_format(json|xlsx)`
+
+### Doğrulama
+- Backend uzman test: 8/8 PASS (window/filter/export/validation)
+- Frontend uzman test: admin auth yönlendirme sorunu nedeniyle canlı UI etkileşimi bloklu; ancak code-level testte tüm data-testid, kolonlar, filtreler, export çağrıları doğrulandı.
+
 ## 2026-04-06 — Kalıcı Stabilizasyon V2 (500 azaltma + endpoint görünürlüğü + test revizyonu) ✅
 
 ### Backend Kalıcı Düzeltme
