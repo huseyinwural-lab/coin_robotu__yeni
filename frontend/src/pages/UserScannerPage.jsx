@@ -313,6 +313,7 @@ export const UserScannerPage = () => {
   const [isExplainabilityLoading, setIsExplainabilityLoading] = useState(false);
   const [isSavingAutomation, setIsSavingAutomation] = useState(false);
   const [selectionSavedAt, setSelectionSavedAt] = useState(null);
+  const [scannerSeedTriggered, setScannerSeedTriggered] = useState(false);
   const [selectionHydrated, setSelectionHydrated] = useState(false);
   const [minimalFilters, setMinimalFilters] = useState(MINIMAL_FILTER_DEFAULTS);
   const [requestHealth, setRequestHealth] = useState({
@@ -829,7 +830,8 @@ export const UserScannerPage = () => {
 
       setMode((prev) => modeRes?.data?.mode || prev || "ASSISTED");
       setOverview((prev) => overviewRes?.data || prev || null);
-      setScannerResults((prev) => resultsRes?.data || prev || []);
+      const nextScannerResults = Array.isArray(resultsRes?.data) ? resultsRes.data : [];
+      setScannerResults((prev) => nextScannerResults || prev || []);
       const activeTemplates = (templatesRes?.data || []).filter((item) => item.is_active);
       setScannerTemplates(activeTemplates);
       setSelectedTemplateId((prev) => prev || activeTemplates[0]?.id || "");
@@ -844,6 +846,31 @@ export const UserScannerPage = () => {
       setScannerDailyReport((prev) => dailyRes?.data || prev || null);
       setSchedulerState((prev) => schedulerRes?.data || prev || null);
       setDecisionCards(cards);
+
+      if (!silent && nextScannerResults.length === 0 && !scannerSeedTriggered) {
+        try {
+          const seedSymbols = Array.isArray(selectedSymbols) && selectedSymbols.length > 0
+            ? selectedSymbols.slice(0, 8)
+            : ["BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT"];
+          await apiClient.post(
+            "/user/scanner/run-async",
+            {
+              mode: mode || "ASSISTED",
+              max_results: 40,
+              symbol_source: symbolSource || "crypto",
+              market_type: marketType || "spot",
+              symbol_selection_mode: "manual_selection",
+              selected_symbols: seedSymbols,
+            },
+            { timeout: 12000 },
+          );
+          setScannerSeedTriggered(true);
+          toast.info("Scanner sonuçları boştu; otomatik seed run tetiklendi.");
+        } catch {
+          // Seed trigger başarısız olsa da normal load devam eder
+        }
+      }
+
       if (cards.length > 0) {
         const selectedSymbol = selectedDecisionSymbol || cards[0].symbol;
         setSelectedDecisionSymbol(selectedSymbol);

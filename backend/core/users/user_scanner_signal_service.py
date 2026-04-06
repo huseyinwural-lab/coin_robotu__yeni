@@ -66,6 +66,7 @@ SIGNAL_PENDING_REASON_HINTS = {
     "RISK_LIMIT_BLOCKED": ("Risk limiti engeli oluştu.", "Risk limitlerini veya mevcut pozisyon riskini kontrol edin."),
     "EXCHANGE_NOT_READY": ("Exchange readiness uygun değil.", "Exchange key/venue assignment/readiness durumunu düzeltin."),
     "MARKET_TYPE_NOT_ALLOWED": ("Sembol market_type bot ile uyumsuz.", "Bot market_type ve symbol market_type eşleşmesini doğrulayın."),
+    "WALLET_REFRESH_FAILED": ("Cüzdan snapshot güncel değil.", "Wallet refresh başarılı olmadan trade açılmaz."),
     "MARKET_DATA_STALE": ("Piyasa verisi güncel değil.", "Market data akışını ve son candle zamanını doğrulayın."),
     "POSITION_LIMIT_REACHED": ("Pozisyon limiti dolu.", "Açık pozisyon sayısını azaltın veya policy limitini artırın."),
     "SYMBOL_NOT_ALLOWED": ("Sembol bot kapsamı dışında.", "Bot symbols listesine sembolü ekleyin."),
@@ -95,6 +96,7 @@ SIGNAL_REASON_PRIORITY = [
 
 PRECHECK_FAILURE_PRIORITY = [
     "EXCHANGE_NOT_READY",
+    "WALLET_REFRESH_FAILED",
     "MARKET_TYPE_NOT_ALLOWED",
     "INSUFFICIENT_BALANCE",
     "RISK_NOTIONAL_LIMIT_EXCEEDED",
@@ -110,6 +112,7 @@ PRECHECK_ACTION_HINTS = {
     "SYMBOL_NOT_ALLOWED": "Symbol universe'a ekle veya scanner filtresini daralt.",
     "EXCHANGE_NOT_READY": "Connection revalidate et / permission kontrol et.",
     "MARKET_TYPE_NOT_ALLOWED": "Bot market_type ile execution connection market_type eşleşmeli.",
+    "WALLET_REFRESH_FAILED": "Wallet refresh başarısız; cüzdan snapshot yenilenmeden trade açılmaz.",
     "MIN_NOTIONAL_NOT_MET": "Order size değerini venue min_notional üstüne çıkar.",
     "MIN_QTY_NOT_MET": "Min qty altında, qty veya notional artır.",
     "INSUFFICIENT_BALANCE": "Bakiye yetersiz, notional düşür veya bakiye artır.",
@@ -124,6 +127,7 @@ NON_TRADEABLE_REASON_CODES = {
     "MARKET_TYPE_NOT_ALLOWED",
     "SCANNER_SYMBOL_MISMATCH",
     "EXECUTION_DISABLED",
+    "WALLET_REFRESH_FAILED",
 }
 
 
@@ -978,9 +982,6 @@ def _evaluate_candidate_tradeability(
         mapped_failures.append("MIN_QTY_NOT_MET")
     if not tick_aligned:
         mapped_failures.append("TICK_SIZE_INVALID")
-    if available_balance > 0 and effective_notional > available_balance:
-        mapped_failures.append("INSUFFICIENT_BALANCE")
-
     exchange_readiness = {
         "is_ready": False,
         "reason_code": "connection_not_selected",
@@ -995,6 +996,7 @@ def _evaluate_candidate_tradeability(
                 connection_id=exchange_connection.id,
                 market_type=normalized_market_type,
                 symbol=normalized_symbol,
+                force_refresh=True,
             )
         exchange_readiness = dict(exchange_readiness_cache.get(readiness_key) or exchange_readiness)
 
@@ -1004,6 +1006,13 @@ def _evaluate_candidate_tradeability(
             mapped_failures.append("MARKET_TYPE_NOT_ALLOWED")
         else:
             mapped_failures.append("EXCHANGE_NOT_READY")
+
+    permissions_payload = dict(exchange_readiness.get("permissions") or {})
+    if permissions_payload.get("available_balance") is None and permissions_payload.get("wallet_balance") is None:
+        mapped_failures.append("WALLET_REFRESH_FAILED")
+    fresh_available_balance = _safe_float(permissions_payload.get("available_balance"), _safe_float(available_balance, 0.0))
+    if fresh_available_balance > 0 and effective_notional > fresh_available_balance:
+        mapped_failures.append("INSUFFICIENT_BALANCE")
 
     deduped_failures = list(dict.fromkeys(mapped_failures))
     first_failure_code = _first_precheck_failure_code(deduped_failures)
@@ -1047,9 +1056,9 @@ def _evaluate_candidate_tradeability(
                 "ok": "LEVERAGE_MARGIN_MISMATCH" not in deduped_failures,
             },
             "balance": {
-                "available": round(max(float(available_balance or 0.0), 0.0), 6),
+                "available": round(max(float(fresh_available_balance or 0.0), 0.0), 6),
                 "required": round(effective_notional, 6),
-                "ok": not (available_balance > 0 and effective_notional > available_balance),
+                "ok": not (fresh_available_balance > 0 and effective_notional > fresh_available_balance),
             },
             "exchange_readiness": {
                 "ok": bool(exchange_readiness.get("is_ready")),
@@ -2669,7 +2678,7 @@ def diagnose_pending_signal(
 
 
 def bulk_fix_blocked_signals(db: Session, user_id: str, limit: int = 200) -> dict:
-    safe_limit = max(min(limit, 3), 1)
+    safe_limit = max(min(limit, 50), 1)
     rows = (
         db.query(PendingSignal)
         .filter(PendingSignal.user_id == user_id, PendingSignal.status.in_(["blocked", "non_tradeable"]))
@@ -2698,6 +2707,8 @@ def bulk_fix_blocked_signals(db: Session, user_id: str, limit: int = 200) -> dic
     )
 
     return {
+        "processed": len(rows),
+        "fixed": fixed_count,
         "scanned_count": len(rows),
         "blocked_before": len(rows),
         "fixed_count": fixed_count,

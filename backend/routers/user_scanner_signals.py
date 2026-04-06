@@ -68,6 +68,8 @@ from services.execution_readiness_service import get_exchange_readiness
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
 
+_FIX_ALL_BLOCKERS_ASYNC_FALLBACK: dict[str, dict] = {}
+
 
 @router.get("/scanner/presets", response_model=list[IndicatorScreenerPresetResponse])
 def get_scanner_presets(
@@ -99,6 +101,38 @@ def _set_scanner_async_payload(job_key: str, payload: dict) -> None:
             redis_client.expire(job_key, SCANNER_ASYNC_JOB_TTL_SECONDS)
     except Exception:  # noqa: BLE001
         pass
+
+
+def _fix_all_blockers_async_job_key(user_id: str, job_id: str) -> str:
+    return f"user:signals:fix_all_blockers_async:{user_id}:{job_id}"
+
+
+def _set_fix_all_blockers_async_payload(job_key: str, payload: dict) -> None:
+    _FIX_ALL_BLOCKERS_ASYNC_FALLBACK[job_key] = payload
+    try:
+        set_json(redis_client, job_key, payload, ttl=600)
+    except Exception:
+        pass
+
+
+def _get_fix_all_blockers_async_payload(job_key: str) -> dict | None:
+    payload = get_json(redis_client, job_key)
+    if isinstance(payload, dict):
+        _FIX_ALL_BLOCKERS_ASYNC_FALLBACK[job_key] = payload
+        return payload
+    return _FIX_ALL_BLOCKERS_ASYNC_FALLBACK.get(job_key)
+
+
+def _adaptive_batch_size(remaining: int) -> int:
+    if remaining >= 250:
+        return 50
+    if remaining >= 120:
+        return 30
+    if remaining >= 50:
+        return 20
+    if remaining >= 20:
+        return 10
+    return 5
 
 
 def _normalize_blocked_payload(*, status: str | None, blocked_reason_code: str | None, blocked_reason_message: str | None, blocked_solution_hint: str | None) -> tuple[str, str, str]:
@@ -187,8 +221,18 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
             .filter(UserExchangeConnection.id == selected_connection_id, UserExchangeConnection.user_id == user_id)
             .first()
         )
+    if selected_connection is None:
+        selected_connection = (
+            db.query(UserExchangeConnection)
+            .filter(UserExchangeConnection.user_id == user_id)
+            .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+            .first()
+        )
     exchange_reason_code = "connection_not_selected"
     exchange_ready = bool(execution_ready)
+    wallet_last_check_at = None
+    wallet_available_balance = None
+    wallet_balance = None
     if selected_connection is not None:
         readiness = get_exchange_readiness(
             db,
@@ -198,6 +242,10 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         )
         exchange_ready = bool(readiness.get("is_ready"))
         exchange_reason_code = str(readiness.get("reason_code") or "ready")
+        wallet_last_check_at = readiness.get("last_check_at")
+        perms = dict(readiness.get("permissions") or {})
+        wallet_available_balance = perms.get("available_balance")
+        wallet_balance = perms.get("wallet_balance")
 
     blocked_rows = (
         db.query(PendingSignal)
@@ -230,6 +278,8 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         blocking_reasons.append({"code": "SYMBOLS_NOT_READY", "message": "Symbol resolution tamamlanmadı.", "hint": "manual_selection sembollerini güncelleyin."})
     if not exchange_ready:
         blocking_reasons.append({"code": "EXCHANGE_NOT_READY", "message": f"Exchange trade-ready değil ({exchange_reason_code}).", "hint": "connection revalidate / permission kontrol / market_type doğrulaması yapın."})
+    if exchange_ready and wallet_available_balance in {None, 0, 0.0} and wallet_balance in {None, 0, 0.0}:
+        blocking_reasons.append({"code": "WALLET_REFRESH_FAILED", "message": "Cüzdan snapshot güncel değil veya boş.", "hint": "wallet refresh tetikleyin; güncel balance olmadan trade açılmaz."})
 
     for code, count in sorted(blocked_reason_counts.items(), key=lambda item: (-item[1], item[0]))[:5]:
         blocking_reasons.append(
@@ -252,6 +302,9 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         "blocking_reasons": blocking_reasons,
         "latest_scanner_run_at": latest_scanner_row.generated_at.isoformat() if latest_scanner_row and latest_scanner_row.generated_at else None,
         "active_bot_id": (primary_bot or {}).get("id"),
+        "wallet_last_check_at": wallet_last_check_at,
+        "wallet_available_balance": wallet_available_balance,
+        "wallet_balance": wallet_balance,
     }
 
 
@@ -418,6 +471,110 @@ def _run_scanner_async_dual_market_job(
                     "selected_symbols": selected_symbols,
                     "symbol_selection_mode": symbol_selection_mode,
                 },
+            },
+        )
+    finally:
+        db.close()
+
+
+def _run_fix_all_blockers_async_job(*, job_key: str, user_id: str, total_limit: int) -> None:
+    db = SessionLocal()
+    started_at = datetime.now(timezone.utc)
+    _set_fix_all_blockers_async_payload(
+        job_key,
+        {
+            "status": "running",
+            "started_at": started_at.isoformat(),
+            "processed": 0,
+            "fixed": 0,
+            "remaining_blocked": None,
+            "actions_summary": {},
+            "batch_history": [],
+        },
+    )
+
+    processed_total = 0
+    fixed_total = 0
+    actions_summary: dict[str, int] = {}
+    batch_history: list[dict] = []
+    remaining_budget = max(min(int(total_limit or 20), 200), 1)
+
+    try:
+        while remaining_budget > 0:
+            remaining_blocked = (
+                db.query(PendingSignal)
+                .filter(PendingSignal.user_id == user_id, PendingSignal.status.in_(["blocked", "non_tradeable"]))
+                .count()
+            )
+            if remaining_blocked <= 0:
+                break
+
+            batch_size = min(_adaptive_batch_size(remaining_blocked), remaining_budget)
+            result = bulk_fix_blocked_signals(db, user_id, limit=batch_size)
+            processed_batch = int(result.get("processed") or 0)
+            fixed_batch = int(result.get("fixed") or 0)
+            processed_total += processed_batch
+            fixed_total += fixed_batch
+            remaining_budget = max(remaining_budget - processed_batch, 0)
+
+            batch_history.append(
+                {
+                    "batch_size": batch_size,
+                    "processed": processed_batch,
+                    "fixed": fixed_batch,
+                    "remaining_blocked": int(result.get("remaining_blocked") or 0),
+                }
+            )
+
+            for action, count in (result.get("actions_summary") or {}).items():
+                actions_summary[action] = actions_summary.get(action, 0) + int(count or 0)
+
+            _set_fix_all_blockers_async_payload(
+                job_key,
+                {
+                    "status": "running",
+                    "started_at": started_at.isoformat(),
+                    "processed": processed_total,
+                    "fixed": fixed_total,
+                    "remaining_blocked": int(result.get("remaining_blocked") or 0),
+                    "actions_summary": actions_summary,
+                    "batch_history": batch_history,
+                },
+            )
+
+            if processed_batch <= 0:
+                break
+
+        final_remaining = (
+            db.query(PendingSignal)
+            .filter(PendingSignal.user_id == user_id, PendingSignal.status.in_(["blocked", "non_tradeable"]))
+            .count()
+        )
+        _set_fix_all_blockers_async_payload(
+            job_key,
+            {
+                "status": "completed",
+                "started_at": started_at.isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "processed": processed_total,
+                "fixed": fixed_total,
+                "remaining_blocked": final_remaining,
+                "actions_summary": actions_summary,
+                "batch_history": batch_history,
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        _set_fix_all_blockers_async_payload(
+            job_key,
+            {
+                "status": "failed",
+                "started_at": started_at.isoformat(),
+                "failed_at": datetime.now(timezone.utc).isoformat(),
+                "error": str(exc),
+                "processed": processed_total,
+                "fixed": fixed_total,
+                "actions_summary": actions_summary,
+                "batch_history": batch_history,
             },
         )
     finally:
@@ -1315,6 +1472,44 @@ def fix_all_blocked_signals(
         },
     )
     return UserSignalsBulkFixResponse(**payload)
+
+
+@router.post("/signals/fix-all-blockers-async")
+def fix_all_blocked_signals_async(
+    background_tasks: BackgroundTasks,
+    limit: int = Query(default=100, ge=1, le=500),
+    current_user: User = Depends(require_user),
+):
+    job_id = str(uuid4())
+    job_key = _fix_all_blockers_async_job_key(current_user.id, job_id)
+    _set_fix_all_blockers_async_payload(
+        job_key,
+        {
+            "job_id": job_id,
+            "status": "queued",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "requested_limit": int(limit),
+        },
+    )
+    background_tasks.add_task(
+        _run_fix_all_blockers_async_job,
+        job_key=job_key,
+        user_id=current_user.id,
+        total_limit=int(limit),
+    )
+    return {"job_id": job_id, "status": "queued", "requested_limit": int(limit)}
+
+
+@router.get("/signals/fix-all-blockers-async/{job_id}")
+def fix_all_blocked_signals_async_status(
+    job_id: str,
+    current_user: User = Depends(require_user),
+):
+    job_key = _fix_all_blockers_async_job_key(current_user.id, job_id)
+    payload = _get_fix_all_blockers_async_payload(job_key)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="signals_fix_all_async_job_not_found")
+    return payload
 
 
 @router.post("/signals/cleanup-stale-intents")

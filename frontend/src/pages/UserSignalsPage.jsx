@@ -27,6 +27,7 @@ export const UserSignalsPage = () => {
   const [blockedAlertEnabled, setBlockedAlertEnabled] = useState(() => localStorage.getItem("signals-blocked-alerts") !== "off");
   const [diagnoseBusyId, setDiagnoseBusyId] = useState("");
   const [isBulkFixRunning, setIsBulkFixRunning] = useState(false);
+  const [bulkFixJob, setBulkFixJob] = useState(null);
   const [isStaleCleanupRunning, setIsStaleCleanupRunning] = useState(false);
   const [animatedSignalIds, setAnimatedSignalIds] = useState([]);
   const alertedSignalIdsRef = useRef(new Set());
@@ -335,17 +336,38 @@ export const UserSignalsPage = () => {
 
   const runFixAllBlockers = async () => {
     setIsBulkFixRunning(true);
+    setBulkFixJob(null);
     try {
-      const { data } = await apiClient.post("/user/signals/fix-all-blockers", null, { params: { limit: 250 } });
+      const { data: queued } = await apiClient.post("/user/signals/fix-all-blockers-async", null, { params: { limit: 180 } });
+      const jobId = String(queued?.job_id || "").trim();
+      if (!jobId) {
+        throw new Error("fix_all_async_job_id_missing");
+      }
+
+      let lastPayload = null;
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        const { data: jobPayload } = await apiClient.get(`/user/signals/fix-all-blockers-async/${jobId}`, { timeout: 12000 });
+        lastPayload = jobPayload;
+        setBulkFixJob(jobPayload);
+        const status = String(jobPayload?.status || "").toLowerCase();
+        if (status === "completed") {
+          break;
+        }
+        if (status === "failed") {
+          throw new Error(jobPayload?.error || "fix_all_async_failed");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+
       await load();
-      const updatedIds = data?.updated_signal_ids || [];
+      const updatedIds = lastPayload?.updated_signal_ids || [];
       if (updatedIds.length > 0) {
         setAnimatedSignalIds((previous) => Array.from(new Set([...previous, ...updatedIds])));
         setTimeout(() => {
           setAnimatedSignalIds((previous) => previous.filter((id) => !updatedIds.includes(id)));
         }, 3600);
       }
-      toast.success(`Fix All tamamlandı: fixed=${data?.fixed_count || 0}, remaining=${data?.remaining_blocked || 0}`);
+      toast.success(`Fix All tamamlandı: fixed=${lastPayload?.fixed || 0}, remaining=${lastPayload?.remaining_blocked || 0}`);
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Fix All Blockers başarısız");
     } finally {
@@ -510,6 +532,11 @@ export const UserSignalsPage = () => {
           <Button className="bg-cyan-500 text-black hover:bg-cyan-400" disabled={isBulkFixRunning} onClick={runFixAllBlockers} data-testid="user-signals-fix-all-blockers-button">
             {isBulkFixRunning ? "Fixing..." : "Fix All Blockers"}
           </Button>
+          {bulkFixJob && (
+            <span className="text-xs text-cyan-300" data-testid="user-signals-fix-all-job-status">
+              fix-job: {bulkFixJob.status} · processed={bulkFixJob.processed || 0} · fixed={bulkFixJob.fixed || 0}
+            </span>
+          )}
           <Button variant="outline" onClick={setSignalModeAuto} data-testid="user-signals-set-auto-mode-button">AUTO'ya Al</Button>
           <span className="text-xs text-slate-400" data-testid="user-signals-auto-refresh-indicator">Auto Refresh: 10s</span>
         </div>
@@ -539,6 +566,7 @@ export const UserSignalsPage = () => {
               <p className="text-xs" data-testid="user-signals-status-contract-bot-status">bot_status: <span className="font-semibold">{statusContract.bot_status || "-"}</span></p>
               <p className="text-xs" data-testid="user-signals-status-contract-health">health: <span className="font-semibold">{statusContract.health || "-"}</span></p>
               <p className="text-xs" data-testid="user-signals-status-contract-latest-run">latest_scanner_run_at: <span className="font-semibold">{statusContract.latest_scanner_run_at ? new Date(statusContract.latest_scanner_run_at).toLocaleString() : "-"}</span></p>
+              <p className="text-xs" data-testid="user-signals-status-contract-wallet-last-check">wallet_last_check_at: <span className="font-semibold">{statusContract.wallet_last_check_at ? new Date(statusContract.wallet_last_check_at).toLocaleString() : "-"}</span></p>
             </div>
             <div className="mt-3" data-testid="user-signals-status-contract-blocking-reasons">
               <p className="text-xs text-slate-400" data-testid="user-signals-status-contract-blocking-reasons-title">blocking_reasons</p>

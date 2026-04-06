@@ -456,6 +456,16 @@ def submit_position_action(
         ) from exc
     except ValueError as exc:
         message = str(exc)
+        if message.startswith("wallet_refresh_failed:"):
+            reason_code = message.split(":", 1)[1].strip() or "wallet_refresh_failed"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "WALLET_REFRESH_FAILED",
+                    "reason_code": reason_code,
+                    "message": "Cüzdan snapshot güncel değil; submit engellendi.",
+                },
+            ) from exc
         if message.startswith("order_validation_failed:"):
             first_failure_code = message.split(":", 1)[1].strip() or "ORDER_PRECHECK_FAILED"
             raise HTTPException(
@@ -559,6 +569,16 @@ def submit_intent(
         ) from exc
     except ValueError as exc:
         message = str(exc)
+        if message.startswith("wallet_refresh_failed:"):
+            reason_code = message.split(":", 1)[1].strip() or "wallet_refresh_failed"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "WALLET_REFRESH_FAILED",
+                    "reason_code": reason_code,
+                    "message": "Cüzdan snapshot güncel değil; submit engellendi.",
+                },
+            ) from exc
         if message.startswith("order_validation_failed:"):
             first_failure_code = message.split(":", 1)[1].strip() or "ORDER_PRECHECK_FAILED"
             raise HTTPException(

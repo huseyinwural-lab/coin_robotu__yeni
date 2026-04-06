@@ -10,14 +10,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db import redis_client
-from models import AuditLog, BotProfile, PaperPosition, Position, PositionLedgerEvent, User, UserExecutionIntent
+from models import AuditLog, BotProfile, PaperPosition, Position, PositionLedgerEvent, User, UserExchangeConnection, UserExecutionIntent
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 from services.audit_service import create_audit_log
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
 from services.execution_pipeline_orchestrator import ExecutionPipelineViolation, run_execution_pipeline
 from services.execution_mode_control_service import enforce_execution_mode_for_intent
-from services.execution_readiness_service import enforce_execution_guard_or_raise, validate_order_precheck
+from services.execution_readiness_service import enforce_execution_guard_or_raise, get_exchange_readiness, validate_order_precheck
 from services.execution_safety_service import enforce_execution_open_allowed_or_raise
 from services.commercial_controls_enforcement_service import enforce_commercial_control_or_raise
 from services.idempotency_service import build_execution_idempotency_key
@@ -160,6 +160,111 @@ def _first_precheck_failure_code(precheck: dict) -> str:
         "exchange_not_ready": "EXCHANGE_NOT_READY",
     }
     return mapping.get(raw_code, (raw_code.upper() if raw_code else "ORDER_PRECHECK_FAILED"))
+
+
+def _resolve_execution_connection_for_wallet_refresh(
+    db: Session,
+    *,
+    user_id: str,
+    market_type: str,
+    exchange_connection_id: str | None,
+) -> UserExchangeConnection | None:
+    if exchange_connection_id:
+        direct = (
+            db.query(UserExchangeConnection)
+            .filter(UserExchangeConnection.id == exchange_connection_id, UserExchangeConnection.user_id == user_id)
+            .first()
+        )
+        if direct is not None:
+            return direct
+
+    normalized_market_type = str(market_type or "spot").lower().strip()
+    scoped = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id, UserExchangeConnection.market_type == normalized_market_type)
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+    if scoped is not None:
+        return scoped
+
+    return (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id)
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+
+
+def _ensure_fresh_wallet_snapshot(
+    db: Session,
+    *,
+    user_id: str,
+    market_type: str,
+    symbol: str,
+    exchange_connection_id: str | None,
+) -> dict:
+    connection = _resolve_execution_connection_for_wallet_refresh(
+        db,
+        user_id=user_id,
+        market_type=market_type,
+        exchange_connection_id=exchange_connection_id,
+    )
+    if connection is None:
+        return {
+            "ok": False,
+            "reason_code": "wallet_refresh_failed",
+            "message": "Exchange connection bulunamadı.",
+            "last_check_at": datetime.now(timezone.utc).isoformat(),
+            "available_balance": None,
+            "wallet_balance": None,
+            "connection_id": None,
+        }
+
+    readiness = get_exchange_readiness(
+        db,
+        connection_id=connection.id,
+        market_type=market_type,
+        symbol=symbol,
+        force_refresh=True,
+    )
+    permissions = dict(readiness.get("permissions") or {})
+    available_balance = _to_float(permissions.get("available_balance"), 0.0)
+    wallet_balance = _to_float(permissions.get("wallet_balance"), 0.0)
+    is_ready = bool(readiness.get("is_ready"))
+    reason_code = str(readiness.get("reason_code") or ("ready" if is_ready else "wallet_refresh_failed"))
+
+    if not is_ready:
+        return {
+            "ok": False,
+            "reason_code": reason_code,
+            "message": "Wallet refresh başarısız veya exchange readiness uygun değil.",
+            "last_check_at": readiness.get("last_check_at"),
+            "available_balance": available_balance,
+            "wallet_balance": wallet_balance,
+            "connection_id": connection.id,
+        }
+
+    if available_balance <= 0 and wallet_balance <= 0:
+        return {
+            "ok": False,
+            "reason_code": "wallet_snapshot_unavailable",
+            "message": "Cüzdan snapshot güncel değil.",
+            "last_check_at": readiness.get("last_check_at"),
+            "available_balance": available_balance,
+            "wallet_balance": wallet_balance,
+            "connection_id": connection.id,
+        }
+
+    return {
+        "ok": True,
+        "reason_code": None,
+        "message": "wallet_refresh_ok",
+        "last_check_at": readiness.get("last_check_at"),
+        "available_balance": available_balance,
+        "wallet_balance": wallet_balance,
+        "connection_id": connection.id,
+    }
 
 
 def _has_market_data(symbol: str) -> bool:
@@ -616,6 +721,18 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     exchange_connection_id = str(payload.get("exchange_connection_id") or "").strip() or None
     account_label = str(payload.get("account_label") or normalized.get("account_label") or "default").strip()
 
+    wallet_refresh = _ensure_fresh_wallet_snapshot(
+        db,
+        user_id=user_id,
+        market_type=requested_market_type,
+        symbol=symbol,
+        exchange_connection_id=exchange_connection_id,
+    )
+    normalized["wallet_refresh"] = wallet_refresh
+    normalized["wallet_last_check_at"] = wallet_refresh.get("last_check_at")
+    normalized["wallet_available_balance"] = wallet_refresh.get("available_balance")
+    normalized["wallet_balance"] = wallet_refresh.get("wallet_balance")
+
     seed_binance_venue_registry(db)
     venue_allowed, venue_state, capability_match, venue_reason_codes = check_user_venue_access(
         db,
@@ -686,6 +803,11 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
 
     precheck_reasons = list(validation.get("reject_reason_codes") or [])
     precheck_flags = list(validation.get("risk_flags") or [])
+
+    if not bool(wallet_refresh.get("ok")):
+        validation["validation_status"] = "rejected"
+        precheck_reasons.append(str(wallet_refresh.get("reason_code") or "wallet_refresh_failed"))
+        precheck_flags.append("wallet_refresh_required")
 
     if meta_decision == "DISABLED":
         if intent_type in RISK_REDUCTION_ACTIONS:
@@ -1171,6 +1293,8 @@ def preview_execution_intent(db: Session, user_id: str, payload: dict) -> tuple[
     validation["standardized_reject"] = pipeline_reject if pipeline_reject else None
     validation["rollout_mode"] = pipeline_result.get("rollout_mode") or "shadow"
     validation["execution_mode"] = str(requested_environment or "live").lower()
+    validation["wallet_refresh"] = wallet_refresh
+    validation["wallet_last_check_at"] = wallet_refresh.get("last_check_at")
 
     try:
         db.commit()
@@ -1213,6 +1337,32 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         raise ValueError("preview_hash_mismatch")
 
     normalized_payload = dict(intent.normalized_order_payload or {})
+    wallet_refresh = _ensure_fresh_wallet_snapshot(
+        db,
+        user_id=user_id,
+        market_type=str(intent.market_type or "spot"),
+        symbol=str(intent.symbol or ""),
+        exchange_connection_id=str(normalized_payload.get("exchange_connection_id") or "") or None,
+    )
+    normalized_payload["wallet_refresh"] = wallet_refresh
+    normalized_payload["wallet_last_check_at"] = wallet_refresh.get("last_check_at")
+    normalized_payload["wallet_available_balance"] = wallet_refresh.get("available_balance")
+    normalized_payload["wallet_balance"] = wallet_refresh.get("wallet_balance")
+    intent.normalized_order_payload = normalized_payload
+    if not bool(wallet_refresh.get("ok")):
+        blocker_code = str(wallet_refresh.get("reason_code") or "wallet_refresh_failed")
+        intent.reject_reason_codes = sorted(set([*(intent.reject_reason_codes or []), blocker_code]))
+        intent.risk_flags = sorted(set([*(intent.risk_flags or []), "wallet_refresh_required"]))
+        _transition_execution_intent_status(
+            intent,
+            target_status="REJECTED",
+            actor_user_id=user_id,
+            reason=f"wallet_refresh_failed:{blocker_code}",
+        )
+        db.commit()
+        db.refresh(intent)
+        raise ValueError(f"wallet_refresh_failed:{blocker_code}")
+
     submit_pipeline_context = {
         "intent_id": intent.id,
         "intent_token": intent.intent_token,
@@ -1820,6 +1970,31 @@ def approve_execution_intent(
             entity_type="user_execution_intent",
             entity_id=intent.id,
         )
+        wallet_refresh = _ensure_fresh_wallet_snapshot(
+            db,
+            user_id=intent.user_id,
+            market_type=str(intent.market_type or "spot"),
+            symbol=str(intent.symbol or ""),
+            exchange_connection_id=str((intent.normalized_order_payload or {}).get("exchange_connection_id") or "") or None,
+        )
+        normalized_payload = dict(intent.normalized_order_payload or {})
+        normalized_payload["wallet_refresh"] = wallet_refresh
+        normalized_payload["wallet_last_check_at"] = wallet_refresh.get("last_check_at")
+        intent.normalized_order_payload = normalized_payload
+        if not bool(wallet_refresh.get("ok")):
+            blocker_code = str(wallet_refresh.get("reason_code") or "wallet_refresh_failed")
+            intent.reject_reason_codes = sorted(set([*(intent.reject_reason_codes or []), blocker_code]))
+            intent.risk_flags = sorted(set([*(intent.risk_flags or []), "wallet_refresh_required"]))
+            _transition_execution_intent_status(
+                intent,
+                target_status="REJECTED",
+                actor_user_id=admin_user_id,
+                reason=f"wallet_refresh_failed:{blocker_code}",
+            )
+            db.commit()
+            db.refresh(intent)
+            raise ValueError(f"wallet_refresh_failed:{blocker_code}")
+
         approval_price = float(intent.price or 0.0)
         approval_size = float(intent.size or 0.0)
         approval_notional = float(intent.notional or 0.0)
