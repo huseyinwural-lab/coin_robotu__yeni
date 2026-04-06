@@ -4,11 +4,10 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from core.audit.audit_events import AuditEvent
 from db import get_db, redis_client
-from deps import get_current_user, is_admin_role
+from deps import get_current_user
 from exchange.binance_mock import BinanceMockAdapter
-from models import BotProfile, ExecutionCorrectionEvent, ExecutionEvent, ExecutionMetric, User
+from models import ExecutionCorrectionEvent, ExecutionMetric, User
 from schemas import (
     ExecutionCorrectionCreate,
     ExecutionCorrectionResponse,

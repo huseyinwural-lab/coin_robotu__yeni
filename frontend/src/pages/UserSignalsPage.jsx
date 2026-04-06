@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -52,7 +52,7 @@ export const UserSignalsPage = () => {
   const alertedSignalIdsRef = useRef(new Set());
   const toastTrackerRef = useRef(new Map());
 
-  const emitDedupedToast = (level, key, message) => {
+  const emitDedupedToast = useCallback((level, key, message) => {
     if (!message) {
       return;
     }
@@ -64,9 +64,9 @@ export const UserSignalsPage = () => {
     toastTrackerRef.current.set(key, now);
     const notifier = toast[level] || toast.info;
     notifier(message, { id: key });
-  };
+  }, []);
 
-  const load = async ({ silent = false } = {}) => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) {
       setIsLoading(true);
     }
@@ -140,11 +140,11 @@ export const UserSignalsPage = () => {
         setIsLoading(false);
       }
     }
-  };
+  }, [emitDedupedToast]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -154,7 +154,7 @@ export const UserSignalsPage = () => {
       load({ silent: true });
     }, SIGNAL_POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, []);
+  }, [load]);
 
   const signalRows = useMemo(() => (Array.isArray(signals) ? signals : []), [signals]);
 

@@ -1030,7 +1030,16 @@ export const UserScannerPage = () => {
         setIsLoading(false);
       }
     }
-  }, [emitScannerToast, selectedDecisionSymbol, updateRequestHealthWindow]);
+  }, [
+    emitScannerToast,
+    marketType,
+    mode,
+    scannerSeedTriggered,
+    selectedDecisionSymbol,
+    selectedSymbols,
+    symbolSource,
+    updateRequestHealthWindow,
+  ]);
 
   useEffect(() => {
     const timer = setInterval(() => {
