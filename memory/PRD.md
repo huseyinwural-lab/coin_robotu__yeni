@@ -1,3 +1,36 @@
+## 2026-04-06 — Operasyonel Son Paket (4 Madde) ✅
+
+### 1) Fix-All Queue/Async + Adaptive Batching
+- Yeni endpointler:
+  - `POST /api/user/signals/fix-all-blockers-async`
+  - `GET /api/user/signals/fix-all-blockers-async/{job_id}`
+- Job çıktısı: `status`, `processed`, `fixed`, `remaining_blocked`, `actions_summary`, `batch_history`.
+- Adaptive batch fonksiyonu aktif (`remaining_blocked` büyüklüğüne göre batch boyutu artıyor).
+
+### 2) Scanner sonuçları boşsa seed/trigger
+- `UserScannerPage` içinde sonuç seti boş kaldığında otomatik seed run tetikleme eklendi.
+- Seed run tek seferlik güvenli tetik (loop önleyici flag ile).
+
+### 3) Wallet refresh garantisi (execute/precheck/preview öncesi)
+- Yeni zorunlu kapı: `_ensure_fresh_wallet_snapshot(...)`
+- Preview/submit/approve öncesi cüzdan snapshot force-refresh alınıyor.
+- Refresh başarısızsa trade açılmıyor:
+  - `WALLET_REFRESH_FAILED` blocker/reason
+  - submit tarafında 422 yapısal hata
+
+### 4) UI’da son cüzdan kontrol zamanı
+- `UserSignalsPage` status contract paneline `wallet_last_check_at` eklendi.
+- Status-contract backend artık `wallet_last_check_at`, `wallet_available_balance`, `wallet_balance` döndürüyor.
+
+### Test Sonuçları
+- Iteration 16: **PASS** (`/app/test_reports/iteration_16.json`)
+  - Backend: 17/17 passed, 2 skipped
+  - Frontend: code review doğrulandı
+  - Async fix-all + wallet fields + status contract + precheck/tradeable regression doğrulandı.
+
+### Not (düşük öncelik)
+- Exchange bağlantı sorunu olduğunda `wallet_available_balance` / `wallet_balance` null dönebilir; bu durumda sistem blocker üretip trade açmıyor (beklenen güvenli davranış).
+
 ## 2026-04-06 — Execution Reliability Hardening (Readiness + Precheck + Fail-Fast)
 
 ### Uygulanan ana katmanlar
