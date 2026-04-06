@@ -112,6 +112,17 @@ const adminOnlyItems = [
     ],
   },
   {
+    id: "kullanicilar",
+    label: "KULLANICILAR",
+    defaultOpen: true,
+    items: [
+      { to: "/admin/kullanicilar/admin-kullanicilar", label: "Admin Kullanıcılar", icon: UserCog, testId: "nav-admin-users-admin-link" },
+      { to: "/admin/kullanicilar/user-kullanicilar", label: "User Kullanıcılar", icon: UserCog, testId: "nav-admin-users-user-link" },
+      { to: "/admin/kullanicilar/kullanici-onaylar", label: "Kullanıcı Onay", icon: UserCog, testId: "nav-admin-user-approvals-link" },
+      { to: "/admin/kullanicilar/kullanici-ekonomisi", label: "Kullanıcı Ekonomisi", icon: BarChart3, testId: "nav-admin-user-economics-link", superAdminOnly: true },
+    ],
+  },
+  {
     id: "strategy",
     label: "STRATEGY",
     defaultOpen: true,
@@ -149,9 +160,6 @@ const adminOnlyItems = [
     defaultOpen: true,
     items: [
       { to: "/admin/strategies", label: "Bots", icon: ClipboardList, testId: "nav-admin-bots-link" },
-      { to: "/admin/kullanicilar/admin-kullanicilar", label: "Kullanıcılar / Admin", icon: UserCog, testId: "nav-admin-users-admin-link" },
-      { to: "/admin/kullanicilar/kullanici-onaylar", label: "Kullanıcılar / Onaylar", icon: UserCog, testId: "nav-admin-user-approvals-link" },
-      { to: "/admin/kullanicilar/kullanici-ekonomisi", label: "Kullanıcılar / Ekonomi", icon: BarChart3, testId: "nav-admin-user-economics-link", superAdminOnly: true },
       { to: "/admin/commercial-ops", label: "Commercial Ops", icon: BarChartBig, testId: "nav-admin-commercial-ops-link", superAdminOnly: true },
       { to: "/admin/revenue", label: "Revenue Engine", icon: TrendingUp, testId: "nav-admin-revenue-link", superAdminOnly: true },
       { to: "/admin/snapshots", label: "Analytics Snapshots", icon: LineChart, testId: "nav-admin-analytics-snapshots-link", superAdminOnly: true },
