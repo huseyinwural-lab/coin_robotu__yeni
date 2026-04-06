@@ -313,6 +313,158 @@ def _derive_retryable(details: dict, error_class: str, status_code: int | None) 
     return False
 
 
+def _derive_service_source(item: dict, details: dict) -> str:
+    explicit = str(details.get("service_source") or details.get("source_service") or "").strip()
+    if explicit:
+        return explicit
+
+    route = str(item.get("route") or details.get("route") or "").lower()
+    action = str(item.get("action") or "").lower()
+    combined = f"{route} {action}"
+
+    if any(token in combined for token in ["auth", "login", "session", "mfa", "identity"]):
+        return "Auth"
+    if any(token in combined for token in ["scanner", "signal", "screener"]):
+        return "Scanner"
+    if any(token in combined for token in ["trade", "order", "execution", "portfolio", "bot", "position"]):
+        return "Trade"
+    return "System"
+
+
+def _derive_severity_level(item: dict, *, status_code: int | None, error_class: str) -> str:
+    raw = str(item.get("severity") or "").strip().lower()
+    if raw in {"critical", "fatal"}:
+        return "FATAL"
+    if raw in {"error"}:
+        return "ERROR"
+    if raw in {"warning", "warn"}:
+        return "WARN"
+
+    if status_code is not None and status_code >= 500:
+        return "ERROR"
+    if error_class in {"infra_error", "auth_error", "trade_blocker"}:
+        return "WARN"
+    return "INFO"
+
+
+def _derive_correlation_id(item: dict, details: dict) -> str:
+    candidates = (
+        details.get("correlation_id"),
+        details.get("linked_correlation_id"),
+        details.get("correlation"),
+        details.get("trace_id"),
+        item.get("request_id"),
+        item.get("id"),
+    )
+    for value in candidates:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _derive_event_type(item: dict, details: dict) -> str:
+    candidates = (
+        details.get("event_type"),
+        details.get("audit_event_type"),
+        details.get("type"),
+        item.get("action"),
+    )
+    for value in candidates:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return "unknown_event"
+
+
+def _mask_ip(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if "." in text and text.count(".") >= 2:
+        parts = text.split(".")
+        if len(parts) >= 4:
+            return f"{parts[0]}.{parts[1]}.***.***"
+        return "***.***.***.***"
+    if ":" in text:
+        chunks = text.split(":")
+        if len(chunks) >= 2:
+            return f"{chunks[0]}:{chunks[1]}:****"
+        return "****"
+    if len(text) > 8:
+        return f"{text[:4]}***{text[-2:]}"
+    return "***"
+
+
+def _derive_client_context(details: dict) -> dict:
+    ip_raw = (
+        details.get("client_ip")
+        or details.get("source_ip")
+        or details.get("ip_address")
+        or details.get("x_forwarded_for")
+        or details.get("ip_hash")
+        or ""
+    )
+    user_agent_raw = (
+        details.get("user_agent")
+        or details.get("user_agent_hash")
+        or details.get("ua")
+        or ""
+    )
+    user_agent_label = str(user_agent_raw or "").strip()
+    if len(user_agent_label) > 90:
+        user_agent_label = f"{user_agent_label[:87]}..."
+
+    return {
+        "ip_masked": _mask_ip(str(ip_raw or "")),
+        "user_agent": user_agent_label,
+    }
+
+
+def _contains_unmasked_sensitive_payload(payload: object) -> bool:
+    sensitive_tokens = {
+        "password",
+        "secret",
+        "token",
+        "authorization",
+        "cookie",
+        "private_key",
+        "api_key",
+        "api_secret",
+    }
+
+    def walk(node: object) -> bool:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                key_text = str(key or "").lower()
+                if any(token in key_text for token in sensitive_tokens):
+                    if isinstance(value, str):
+                        masked = "***" in value or value.endswith("...")
+                        if not masked:
+                            return True
+                    elif value not in (None, "", False):
+                        return True
+                if walk(value):
+                    return True
+        elif isinstance(node, list):
+            for item in node:
+                if walk(item):
+                    return True
+        return False
+
+    return walk(payload)
+
+
+def _derive_security_mask(details: dict) -> bool:
+    explicit = details.get("is_sanitized")
+    if isinstance(explicit, bool):
+        return explicit
+    explicit_alt = details.get("sanitized")
+    if isinstance(explicit_alt, bool):
+        return explicit_alt
+    return not _contains_unmasked_sensitive_payload(details)
+
+
 def _build_error_table_row(item: dict) -> dict:
     details = item.get("details") if isinstance(item.get("details"), dict) else {}
     status_code = item.get("status_code")
@@ -330,6 +482,12 @@ def _build_error_table_row(item: dict) -> dict:
     endpoint = item.get("route") or details.get("route") or "unknown_endpoint"
     error_class = str(item.get("error_class") or "trade_blocker")
     retryable = _derive_retryable(details, error_class, normalized_status)
+    service_source = _derive_service_source(item, details)
+    severity_level = _derive_severity_level(item, status_code=normalized_status, error_class=error_class)
+    correlation_id = _derive_correlation_id(item, details)
+    event_type = _derive_event_type(item, details)
+    client_context = _derive_client_context(details)
+    security_mask = _derive_security_mask(details)
 
     created_at_raw = str(item.get("created_at") or "").strip()
     created_at = None
@@ -349,6 +507,12 @@ def _build_error_table_row(item: dict) -> dict:
         "error_message": str(item.get("error_message") or "").strip(),
         "retryable": bool(retryable),
         "user_id": str(item.get("actor_user_id") or ""),
+        "service_source": service_source,
+        "severity_level": severity_level,
+        "correlation_id": correlation_id,
+        "event_type": event_type,
+        "client_context": client_context,
+        "security_mask": bool(security_mask),
     }
 
 
@@ -367,8 +531,15 @@ def _build_error_table_export_workbook(rows: list[dict]):
         "Hata Mesajı",
         "Retryable",
         "Kullanıcı ID",
+        "Service Source",
+        "Severity/Level",
+        "Correlation ID",
+        "Event Type",
+        "Client Context",
+        "Security Mask",
     ])
     for row in rows:
+        client_context = row.get("client_context") if isinstance(row.get("client_context"), dict) else {}
         sheet.append([
             row.get("trace_id") or "",
             row.get("time_utc") or "",
@@ -378,6 +549,12 @@ def _build_error_table_export_workbook(rows: list[dict]):
             row.get("error_message") or "",
             "true" if row.get("retryable") else "false",
             row.get("user_id") or "",
+            row.get("service_source") or "",
+            row.get("severity_level") or "",
+            row.get("correlation_id") or "",
+            row.get("event_type") or "",
+            json.dumps(client_context, ensure_ascii=False),
+            "true" if row.get("security_mask") else "false",
         ])
     return workbook
 
@@ -740,6 +917,12 @@ def admin_error_table_report(
             "error_message",
             "retryable",
             "user_id",
+            "service_source",
+            "severity_level",
+            "correlation_id",
+            "event_type",
+            "client_context",
+            "security_mask",
         ],
         "items": table_rows,
     }

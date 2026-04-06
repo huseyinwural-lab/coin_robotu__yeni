@@ -35,6 +35,24 @@ const formatUtcDisplay = (value) => {
   return parsed.toISOString();
 };
 
+const severityLevelBadgeClass = {
+  FATAL: "bg-rose-900/50 text-rose-200 border border-rose-700",
+  ERROR: "bg-orange-900/50 text-orange-200 border border-orange-700",
+  WARN: "bg-amber-900/50 text-amber-200 border border-amber-700",
+  INFO: "bg-slate-800 text-slate-200 border border-slate-600",
+};
+
+const formatClientContextDisplay = (value) => {
+  if (!value) return "-";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    const ip = value.ip_masked || "-";
+    const ua = value.user_agent || "-";
+    return `🌐 {"ip":"${ip}","ua":"${ua}"}`;
+  }
+  return String(value);
+};
+
 export const AuditLogsPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1436,18 +1454,24 @@ export const AuditLogsPage = () => {
                     <TableHead data-testid="audit-linked-incidents-error-report-header-message">Hata Mesajı</TableHead>
                     <TableHead data-testid="audit-linked-incidents-error-report-header-retryable">Retryable</TableHead>
                     <TableHead data-testid="audit-linked-incidents-error-report-header-user-id">Kullanıcı ID</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-service-source">Service Source</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-severity-level">Severity/Level</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-correlation-id">Correlation ID</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-event-type">Event Type</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-client-context">Client Context</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-security-mask">Security Mask</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {linkedErrorReportLoading && linkedErrorRows.length === 0 ? (
                     <TableRow data-testid="audit-linked-incidents-error-report-loading-row">
-                      <TableCell colSpan={8} className="text-center text-slate-300" data-testid="audit-linked-incidents-error-report-loading-cell">
+                      <TableCell colSpan={14} className="text-center text-slate-300" data-testid="audit-linked-incidents-error-report-loading-cell">
                         hata raporu yükleniyor...
                       </TableCell>
                     </TableRow>
                   ) : linkedErrorRows.length === 0 ? (
                     <TableRow data-testid="audit-linked-incidents-error-report-empty-row">
-                      <TableCell colSpan={8} className="text-center text-slate-400" data-testid="audit-linked-incidents-error-report-empty-cell">
+                      <TableCell colSpan={14} className="text-center text-slate-400" data-testid="audit-linked-incidents-error-report-empty-cell">
                         seçili aralıkta hata kaydı yok
                       </TableCell>
                     </TableRow>
@@ -1464,6 +1488,18 @@ export const AuditLogsPage = () => {
                         </TableCell>
                         <TableCell data-testid={`audit-linked-incidents-error-report-retryable-${index}`}>{String(Boolean(row.retryable))}</TableCell>
                         <TableCell className="font-mono text-xs" data-testid={`audit-linked-incidents-error-report-user-id-${index}`}>{row.user_id || "-"}</TableCell>
+                        <TableCell data-testid={`audit-linked-incidents-error-report-service-source-${index}`}>{row.service_source || "System"}</TableCell>
+                        <TableCell data-testid={`audit-linked-incidents-error-report-severity-level-${index}`}>
+                          <span className={`rounded px-2 py-1 text-xs font-semibold ${severityLevelBadgeClass[String(row.severity_level || "INFO").toUpperCase()] || severityLevelBadgeClass.INFO}`}>
+                            {String(row.severity_level || "INFO").toUpperCase()}
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs" data-testid={`audit-linked-incidents-error-report-correlation-id-${index}`}>{row.correlation_id || "-"}</TableCell>
+                        <TableCell data-testid={`audit-linked-incidents-error-report-event-type-${index}`}>{row.event_type || "unknown_event"}</TableCell>
+                        <TableCell className="max-w-[260px] truncate" title={formatClientContextDisplay(row.client_context)} data-testid={`audit-linked-incidents-error-report-client-context-${index}`}>
+                          {formatClientContextDisplay(row.client_context)}
+                        </TableCell>
+                        <TableCell data-testid={`audit-linked-incidents-error-report-security-mask-${index}`}>{String(Boolean(row.security_mask))}</TableCell>
                       </TableRow>
                     ))
                   )}
