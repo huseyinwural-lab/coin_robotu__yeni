@@ -219,6 +219,7 @@ export const BotProfilesPage = () => {
         return;
       }
       failures.push({
+        key: meta.key,
         label: meta.label,
         message: parseApiErrorMessage(result.reason, "servise ulaşılamadı"),
         errorClass: classifyApiError(result.reason),
@@ -258,7 +259,10 @@ export const BotProfilesPage = () => {
       const summary = failures.slice(0, 2).map((item) => `${item.label}: ${item.message}`).join(" · ");
       const extra = failures.length > 2 ? ` (+${failures.length - 2} servis)` : "";
       const classes = Array.from(new Set(failures.map((item) => item.errorClass))).join(", ");
-      toast.error(`Kısmi yükleme [${classes}]: ${summary}${extra}`);
+      const criticalKeys = new Set(["bot_profiles", "risk_policies", "exchange_connections"]);
+      const hasCriticalFailure = failures.some((item) => criticalKeys.has(item.key));
+      const toastMethod = hasCriticalFailure ? "error" : "warning";
+      toast[toastMethod](`Kısmi yükleme [${classes}]: ${summary}${extra}`);
     }
   }, []);
 

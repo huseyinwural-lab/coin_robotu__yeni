@@ -815,7 +815,7 @@ export const UserScannerPage = () => {
       const requestDescriptors = SIMPLE_SCANNER_V2
         ? [
             { key: "signal_mode", request: apiClient.get("/user/signal-mode", { timeout: 8000 }) },
-            { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 8000 }) },
+            { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 12000 }) },
             {
               key: "scanner_results",
               request: apiClient.get("/screener", {
@@ -826,14 +826,14 @@ export const UserScannerPage = () => {
                 timeout: 12000,
               }),
             },
-            { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 8000 }) },
-            { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 8000 }) },
-            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 8000 }) },
-            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 8000 }) },
+            { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 15000 }) },
+            { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 12000 }) },
+            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 12000 }) },
+            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
           ]
         : [
-            { key: "signal_mode", request: apiClient.get("/user/signal-mode", { timeout: 8000 }) },
-            { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 8000 }) },
+            { key: "signal_mode", request: apiClient.get("/user/signal-mode", { timeout: 12000 }) },
+            { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 12000 }) },
             {
               key: "scanner_results",
               request: apiClient.get("/screener", {
@@ -844,15 +844,15 @@ export const UserScannerPage = () => {
                 timeout: 10000,
               }),
             },
-            { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 8000 }) },
-            { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 8000 }) },
-            { key: "scanner_profiles", request: apiClient.get("/user/scanner/automation-profiles", { timeout: 8000 }) },
-            { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 }, timeout: 8000 }) },
-            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 8000 }) },
-            { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", { timeout: 8000 }) },
-            { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" }, timeout: 8000 }) },
-            { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, timeout: 8000 }) },
-            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 8000 }) },
+            { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 15000 }) },
+            { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 12000 }) },
+            { key: "scanner_profiles", request: apiClient.get("/user/scanner/automation-profiles", { timeout: 12000 }) },
+            { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 }, timeout: 12000 }) },
+            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 12000 }) },
+            { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", { timeout: 12000 }) },
+            { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" }, timeout: 12000 }) },
+            { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, timeout: 12000 }) },
+            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
           ];
       const responses = await Promise.allSettled(requestDescriptors.map((entry) => entry.request));
       const responsesWithEndpointMeta = responses.map((entry, index) => ({

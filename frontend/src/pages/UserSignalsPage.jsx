@@ -72,12 +72,12 @@ export const UserSignalsPage = () => {
     }
     try {
       const requestDescriptors = [
-        { key: "signals", label: "signals", request: () => apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 15000 }) },
-        { key: "portfolio", label: "portfolio", request: () => apiClient.get("/user/portfolio", { timeout: 8000 }) },
-        { key: "trades", label: "trades", request: () => apiClient.get("/user/trades", { params: { limit: 120 }, timeout: 8000 }) },
-        { key: "signal_mode", label: "signal_mode", request: () => apiClient.get("/user/signal-mode", { timeout: 8000 }) },
-        { key: "bot_profiles", label: "bot_profiles", request: () => apiClient.get("/bot-profiles", { timeout: 8000 }) },
-        { key: "status_contract", label: "status_contract", request: () => apiClient.get("/user/scanner/status-contract", { timeout: 8000 }) },
+        { key: "signals", label: "signals", critical: true, request: () => apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 20000 }) },
+        { key: "portfolio", label: "portfolio", critical: true, request: () => apiClient.get("/user/portfolio", { timeout: 15000 }) },
+        { key: "trades", label: "trades", critical: false, request: () => apiClient.get("/user/trades", { params: { limit: 50 }, timeout: 25000 }) },
+        { key: "signal_mode", label: "signal_mode", critical: true, request: () => apiClient.get("/user/signal-mode", { timeout: 15000 }) },
+        { key: "bot_profiles", label: "bot_profiles", critical: true, request: () => apiClient.get("/bot-profiles", { timeout: 15000 }) },
+        { key: "status_contract", label: "status_contract", critical: false, request: () => apiClient.get("/user/scanner/status-contract", { timeout: 15000 }) },
       ];
       const settled = await Promise.allSettled(requestDescriptors.map((item) => item.request()));
       const byKey = requestDescriptors.reduce((acc, descriptor, index) => {
@@ -133,6 +133,7 @@ export const UserSignalsPage = () => {
           return {
             key: descriptor.key,
             label: descriptor.label,
+            critical: Boolean(descriptor.critical),
             reason: result.reason,
             errorClass: classifyApiError(result.reason),
             status: Number(result?.reason?.response?.status || 0),
@@ -142,7 +143,8 @@ export const UserSignalsPage = () => {
         .filter(Boolean);
 
       if (rejectedEntries.length > 0) {
-        const primary = rejectedEntries[0];
+        const criticalRejected = rejectedEntries.filter((entry) => entry.critical);
+        const primary = criticalRejected[0] || rejectedEntries[0];
         const primaryError = primary.reason;
         const primaryClass = classifyApiError(primaryError);
         const loadIssueMessage = resolveLoadErrorMessage(primaryError, "Signals verisi yüklenemedi");
@@ -159,7 +161,8 @@ export const UserSignalsPage = () => {
 
         if (!silent) {
           if (primaryClass === "infra_error") {
-            emitDedupedToast("warning", "user-signals-load-infra-error", `Altyapı hatası: ${endpointSummary} · ${loadIssueMessage}`);
+            const level = criticalRejected.length > 0 ? "warning" : "info";
+            emitDedupedToast(level, "user-signals-load-infra-error", `Altyapı hatası: ${endpointSummary} · ${loadIssueMessage}`);
           } else if (primaryClass === "auth_error") {
             emitDedupedToast("warning", "user-signals-load-auth-error", `Auth hatası: ${endpointSummary} · ${loadIssueMessage}`);
           } else {
