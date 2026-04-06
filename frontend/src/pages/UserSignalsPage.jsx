@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 import { saveExecutionContext } from "@/lib/userFlowContext";
 
-const SIGNAL_POLL_INTERVAL_MS = 10000;
+const SIGNAL_POLL_INTERVAL_MS = 30000;
 
 export const UserSignalsPage = () => {
   const navigate = useNavigate();
@@ -94,6 +94,9 @@ export const UserSignalsPage = () => {
 
   useEffect(() => {
     const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
       load({ silent: true });
     }, SIGNAL_POLL_INTERVAL_MS);
     return () => clearInterval(timer);

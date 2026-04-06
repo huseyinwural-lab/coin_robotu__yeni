@@ -46,6 +46,8 @@ const PROFILE_INTERVAL_OPTIONS = [
 
 const SIMPLE_SCANNER_V2 = true;
 
+const RUN_CHUNK_SIZE = 20;
+
 const normalizeIntervalSeconds = (value) => {
   const allowed = new Set(PROFILE_INTERVAL_OPTIONS.map((option) => Number(option.value)));
   const parsed = Number(value || AUTO_SCAN_INTERVAL_SECONDS);
@@ -62,6 +64,22 @@ const normalizeIntervalSeconds = (value) => {
     return 30;
   }
   return AUTO_SCAN_INTERVAL_SECONDS;
+};
+
+const normalizeSymbolsForRun = (symbols) => {
+  const unique = Array.from(new Set((symbols || []).map((item) => String(item || "").trim().toUpperCase()).filter(Boolean)));
+  return unique.filter((symbol) => symbol.endsWith("USDT") || symbol.endsWith("USDC"));
+};
+
+const chunkSymbols = (symbols, size = RUN_CHUNK_SIZE) => {
+  if (!Array.isArray(symbols) || symbols.length === 0) {
+    return [];
+  }
+  const chunks = [];
+  for (let i = 0; i < symbols.length; i += size) {
+    chunks.push(symbols.slice(i, i + size));
+  }
+  return chunks;
 };
 
 const MINIMAL_FILTER_DEFAULTS = {
@@ -322,6 +340,7 @@ export const UserScannerPage = () => {
   const profileRunTrackerRef = useRef({});
   const symbolPersistTimerRef = useRef(null);
   const minimalFiltersRef = useRef(MINIMAL_FILTER_DEFAULTS);
+  const rotatingScanWindowRef = useRef(0);
   const requestWindowRef = useRef([]);
   const requestTrendRef = useRef([]);
   const selectedTrendWindowRef = useRef(5);
@@ -779,10 +798,13 @@ export const UserScannerPage = () => {
         .map(({ index }) => index);
 
       const failedKeys = failedIndexes.map((index) => requestDescriptors[index]?.key).filter(Boolean);
+      const criticalFailedKeys = SIMPLE_SCANNER_V2
+        ? failedKeys.filter((key) => key !== "strategy_templates")
+        : failedKeys;
       setScannerLoadFailures(failedKeys);
-      setScannerLoadDegraded(failedKeys.length > 0);
-      if (failedKeys.length > 0 && !silent) {
-        toast.error(`Scanner kısmi yüklendi: ${failedKeys.join(", ")}`);
+      setScannerLoadDegraded(criticalFailedKeys.length > 0);
+      if (criticalFailedKeys.length > 0 && !silent) {
+        toast.error(`Scanner kısmi yüklendi: ${criticalFailedKeys.join(", ")}`);
       }
 
       const byKey = requestDescriptors.reduce((acc, descriptor, index) => {
@@ -968,11 +990,94 @@ export const UserScannerPage = () => {
   }, [selectionHydrated, symbolMode, symbolSource, selectedSymbols, watchlistOnly]);
 
   const ensureScannerRunReady = () => {
-    if ((selectedSymbols || []).length === 0) {
+    const validSymbols = normalizeSymbolsForRun(selectedSymbols || []);
+    if (validSymbols.length === 0) {
       toast.error("İşlem için en az bir geçerli USDT/USDC market seçmelisiniz.");
       return false;
     }
     return true;
+  };
+
+  const executeScannerRunWithChunks = async ({ runMode, maxResults, effectiveMode, selectedForRun }) => {
+    const runScannerAsync = async (requestPayload) => {
+      if (!SIMPLE_SCANNER_V2) {
+        const { data } = await apiClient.post("/user/scanner/run", requestPayload);
+        return data;
+      }
+
+      const { data: queued } = await apiClient.post("/user/scanner/run-async", requestPayload, { timeout: 12000 });
+      const jobId = String(queued?.job_id || "").trim();
+      if (!jobId) {
+        throw new Error("scanner_async_job_id_missing");
+      }
+
+      const deadline = Date.now() + 180_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const { data: job } = await apiClient.get(`/user/scanner/run-async/${jobId}`, { timeout: 10000 });
+        const status = String(job?.status || "").toLowerCase();
+        if (status === "completed") {
+          return job?.result || {};
+        }
+        if (status === "failed") {
+          throw new Error(String(job?.error || "scanner_run_async_failed"));
+        }
+      }
+
+      throw new Error("scanner_run_async_timeout");
+    };
+
+    const symbols = normalizeSymbolsForRun(selectedForRun || []);
+    const isChunked = SIMPLE_SCANNER_V2 && effectiveMode === "manual_selection" && symbols.length > RUN_CHUNK_SIZE;
+
+    if (!isChunked) {
+      const data = await runScannerAsync({
+        mode: runMode,
+        max_results: maxResults,
+        symbol_source: symbolSource,
+        market_type: marketType,
+        symbol_selection_mode: effectiveMode,
+        selected_symbols: symbols,
+        strategy_template_id: selectedTemplateId || null,
+      });
+      return data;
+    }
+
+    const chunks = chunkSymbols(symbols, RUN_CHUNK_SIZE);
+    const windowIndex = rotatingScanWindowRef.current % chunks.length;
+    const selectedWindow = chunks[windowIndex] || chunks[0] || [];
+    rotatingScanWindowRef.current = (windowIndex + 1) % chunks.length;
+
+    const data = await runScannerAsync({
+      mode: runMode,
+      max_results: Math.min(40, Math.max(10, maxResults)),
+      symbol_source: symbolSource,
+      market_type: marketType,
+      symbol_selection_mode: "manual_selection",
+      selected_symbols: selectedWindow,
+      strategy_template_id: selectedTemplateId || null,
+    });
+
+    const warnings = Array.isArray(data?.warnings) ? [...data.warnings.map((item) => String(item || ""))] : [];
+    warnings.push(`rotating_window:${windowIndex + 1}/${chunks.length}`);
+
+    return {
+      run_id: data?.run_id || null,
+      mode: runMode,
+      market_type: marketType,
+      symbol_selection_mode: "manual_selection",
+      selected_symbols: symbols,
+      scanned_window_symbols: selectedWindow,
+      result_count: Number(data?.result_count || 0),
+      actionable_count: Number(data?.actionable_count || 0),
+      queued_count: Number(data?.queued_count || 0),
+      pending_total: Number(data?.pending_total || 0),
+      warnings,
+      chunked: true,
+      chunk_count: chunks.length,
+      chunk_success_count: 1,
+      chunk_index: windowIndex + 1,
+    };
   };
 
   const addWatchlistFromResult = async (item) => {
@@ -1052,14 +1157,11 @@ export const UserScannerPage = () => {
         await saveActiveProfile({ autoEnabled: true, withToast: false });
       }
       await apiClient.put("/user/signal-mode", { mode });
-      const { data } = await apiClient.post("/user/scanner/run", {
-        mode,
-        max_results: SIMPLE_SCANNER_V2 ? 120 : 25,
-        symbol_source: symbolSource,
-        market_type: marketType,
-        symbol_selection_mode: effectiveMode,
-        selected_symbols: selectedSymbols,
-        strategy_template_id: selectedTemplateId || null,
+      const data = await executeScannerRunWithChunks({
+        runMode: mode,
+        maxResults: SIMPLE_SCANNER_V2 ? 120 : 25,
+        effectiveMode,
+        selectedForRun: selectedSymbols,
       });
       setLastRunEnvelope(data);
       await load();
@@ -1087,14 +1189,11 @@ export const UserScannerPage = () => {
         await saveActiveProfile({ autoEnabled: true, withToast: false });
       }
       await apiClient.put("/user/signal-mode", { mode });
-      const { data } = await apiClient.post("/user/scanner/run", {
-        mode,
-        max_results: SIMPLE_SCANNER_V2 ? 120 : 25,
-        symbol_source: symbolSource,
-        market_type: marketType,
-        symbol_selection_mode: effectiveMode,
-        selected_symbols: selectedSymbols,
-        strategy_template_id: selectedTemplateId || null,
+      const data = await executeScannerRunWithChunks({
+        runMode: mode,
+        maxResults: SIMPLE_SCANNER_V2 ? 120 : 25,
+        effectiveMode,
+        selectedForRun: selectedSymbols,
       });
       setLastRunEnvelope(data);
 
@@ -1161,14 +1260,11 @@ export const UserScannerPage = () => {
     try {
       await apiClient.put("/user/signal-mode", { mode: preset.mode });
       setMode(preset.mode);
-      const { data } = await apiClient.post("/user/scanner/run", {
-        mode: preset.mode,
-        max_results: preset.maxResults,
-        symbol_source: symbolSource,
-        market_type: marketType,
-        symbol_selection_mode: effectiveMode,
-        selected_symbols: selectedSymbols,
-        strategy_template_id: selectedTemplateId || null,
+      const data = await executeScannerRunWithChunks({
+        runMode: preset.mode,
+        maxResults: preset.maxResults,
+        effectiveMode,
+        selectedForRun: selectedSymbols,
       });
       setLastRunEnvelope(data);
       await load();

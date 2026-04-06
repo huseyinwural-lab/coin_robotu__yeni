@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_DOWN
 import time
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from core.users.user_scanner_signal_service import (
@@ -25,7 +27,7 @@ from core.users.user_scanner_signal_service import (
     update_scanner_automation_profile,
     update_scanner_automation_config,
 )
-from db import get_db
+from db import SessionLocal, get_db, redis_client
 from deps import require_user
 from models import PendingSignal, User, UserExecutionIntent, UserScannerResult, UserExchangeConnection
 from models import SignalEvent, UserTradeProjection
@@ -60,6 +62,7 @@ from services.live_mode_service import (
 )
 from services.quote_asset_constraints import allowed_quote_assets
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
+from services.pipeline.cache_store import get_json, set_json
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
 
@@ -78,6 +81,83 @@ def get_scanner_presets(
 def _allowed_quote_notice() -> str:
     quotes = ", ".join(allowed_quote_assets())
     return f"İşlem için en az bir geçerli market seçmelisiniz. Allowed quote assets: {quotes}"
+
+
+SCANNER_ASYNC_JOB_TTL_SECONDS = 60 * 30
+
+
+def _scanner_async_job_key(user_id: str, job_id: str) -> str:
+    return f"user:scanner:run_async:{user_id}:{job_id}"
+
+
+def _set_scanner_async_payload(job_key: str, payload: dict) -> None:
+    set_json(redis_client, job_key, payload)
+    try:
+        if hasattr(redis_client, "expire"):
+            redis_client.expire(job_key, SCANNER_ASYNC_JOB_TTL_SECONDS)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _run_scanner_async_job(
+    *,
+    job_key: str,
+    user_id: str,
+    mode: str,
+    max_results: int,
+    symbol_source: str,
+    market_type: str,
+    selected_symbols: list[str],
+    symbol_selection_mode: str,
+) -> None:
+    db = SessionLocal()
+    started_at = datetime.now(timezone.utc)
+    _set_scanner_async_payload(
+        job_key,
+        {
+            "status": "running",
+            "started_at": started_at.isoformat(),
+            "mode": mode,
+            "market_type": market_type,
+            "selected_count": len(selected_symbols),
+        },
+    )
+    try:
+        result = run_user_scanner(
+            db,
+            user_id,
+            requested_mode=mode,
+            max_results=max_results,
+            symbol_source=symbol_source,
+            market_type=market_type,
+            selected_symbols=selected_symbols,
+            symbol_selection_mode=symbol_selection_mode,
+        )
+        _set_scanner_async_payload(
+            job_key,
+            {
+                "status": "completed",
+                "started_at": started_at.isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "result": jsonable_encoder(result),
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        _set_scanner_async_payload(
+            job_key,
+            {
+                "status": "failed",
+                "started_at": started_at.isoformat(),
+                "failed_at": datetime.now(timezone.utc).isoformat(),
+                "error": str(exc),
+            },
+        )
+    finally:
+        db.close()
 
 
 @router.get("/signal-mode", response_model=UserSignalModeResponse)
@@ -341,6 +421,63 @@ def scanner_run(
         },
     )
     return UserScannerRunResponse(**result)
+
+
+@router.post("/scanner/run-async")
+def scanner_run_async(
+    payload: UserScannerRunRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_user),
+):
+    selected_symbols = payload.selected_symbols or []
+    valid_symbols = filter_allowed_quote_symbols(selected_symbols)
+    if payload.symbol_selection_mode == "manual_selection" and len(valid_symbols) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_allowed_quote_notice())
+
+    job_id = str(uuid4())
+    job_key = _scanner_async_job_key(current_user.id, job_id)
+    _set_scanner_async_payload(
+        job_key,
+        {
+            "job_id": job_id,
+            "status": "queued",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "mode": payload.mode,
+            "market_type": payload.market_type,
+            "selected_count": len(valid_symbols),
+        },
+    )
+
+    background_tasks.add_task(
+        _run_scanner_async_job,
+        job_key=job_key,
+        user_id=current_user.id,
+        mode=payload.mode,
+        max_results=payload.max_results,
+        symbol_source=payload.symbol_source,
+        market_type=payload.market_type,
+        selected_symbols=valid_symbols,
+        symbol_selection_mode=payload.symbol_selection_mode,
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "selected_count": len(valid_symbols),
+        "market_type": payload.market_type,
+    }
+
+
+@router.get("/scanner/run-async/{job_id}")
+def scanner_run_async_status(
+    job_id: str,
+    current_user: User = Depends(require_user),
+):
+    job_key = _scanner_async_job_key(current_user.id, job_id)
+    payload = get_json(redis_client, job_key)
+    if not payload:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="scanner_run_async_job_not_found")
+    return payload
 
 
 @router.get("/scanner/results", response_model=list[UserScannerResultResponse])
