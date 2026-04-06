@@ -1,3 +1,44 @@
+## 2026-04-06 — Phase 3/4 Kapanış (Blocked Visibility + Status Contract + Run Both)
+
+### Tamamlananlar (P0/P1/P2 Scope)
+- **Blocked visibility backend garantisi**
+  - `GET /api/user/signals` çıktısında blocked kayıtlar için `blocked_reason_code`, `blocked_reason_message`, `blocked_solution_hint` normalize/garanti edildi.
+  - `summary_fallback` artık gerçek hatayı `runtime_context.error` içinde maskelemiyor; `error_code=summary_fallback` ayrı taşınıyor.
+- **Signals/Observability hızlı diagnose akışı**
+  - User: `POST /api/user/signal/{signal_id}/diagnose?auto_fix=true` akışı mevcut UI butonlarıyla netleştirildi.
+  - Admin: yeni endpoint `POST /api/admin/strategy/signals/{signal_id}/diagnose?auto_fix=true` eklendi.
+- **Tekil status contract sözleşmesi**
+  - User endpoint: `GET /api/user/scanner/status-contract`
+  - Admin endpoint: `GET /api/admin/strategy/status-contract`
+  - Zorunlu alanlar sağlandı: `scanner_ready`, `strategy_ready`, `risk_ready`, `execution_ready`, `symbols_ready`, `exchange_ready`, `bot_status`, `health`, `blocking_reasons`.
+- **Bot start 4’lü binding fail-fast**
+  - `POST /api/bot-profiles/{id}/start` ve `POST /api/pipeline/bots/{id}/start` için fail-fast sözleşmesi eklendi.
+  - Binding başarısızsa `422` + `detail.status_contract` + `detail.blocking_reasons` dönüyor.
+- **Run Both (Spot+Futures) async tek akış**
+  - Yeni endpoint: `POST /api/user/scanner/run-async-both`
+  - Mevcut job status endpointi ile birlikte dual-market job izleme tamamlandı.
+  - Frontend `UserScannerPage` market seçiminde `BOTH` seçeneği ve tek akış bağlandı.
+
+### UI Güncellemeleri
+- `UserSignalsPage.jsx`
+  - Status contract kartı eklendi.
+  - blocked reason message + solution hint görünürlüğü güçlendirildi.
+  - `diagnose?auto_fix=true` etiketli hızlı aksiyon butonları eklendi/güncellendi.
+- `AdminStrategyObservabilityPage.jsx`
+  - Status contract paneli eklendi.
+  - Top Signals tablosuna blocked visibility kolonu (`code/message/hint`) eklendi.
+  - Satır bazlı `diagnose?auto_fix=true` aksiyonu eklendi.
+- `BotProfilesPage.jsx`
+  - Fail-fast 422 detail içindeki `blocking_reasons` kullanıcıya daha net hata mesajı olarak yansıtıldı.
+
+### Doğrulama
+- **Lint**: Backend + Frontend ilgili dosyalar temiz.
+- **Manual API smoke**: User status contract, run-async-both, user blocked fields, admin status contract, admin diagnose endpoint doğrulandı.
+- **Testing Agent (iteration_11)**: PASS
+  - Backend: 9/10 PASS, 1 SKIPPED (pending diagnose verisi yok)
+  - Frontend: 100% PASS
+  - Rapor: `/app/test_reports/iteration_11.json`
+
 ## 2026-04-03 — P0 Prod Stabilizasyonu (Zombie + WS 404 Döngü + Token Sızıntısı + Soak)
 
 ### Tamamlananlar (P0)
