@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="18" time="182.157" timestamp="2026-04-06T12:14:24.733048+00:00" hostname="agent-env-43e32607-6770-4a6b-a330-ea2d7dab053c"><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestExchangeReadinessEndpoint" name="test_exchange_readiness_spot_contract" time="18.057" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestExchangeReadinessEndpoint" name="test_exchange_readiness_futures_contract" time="8.845" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestExchangeReadinessEndpoint" name="test_exchange_readiness_with_symbol" time="10.531" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestScannerCandidatePrecheckFields" name="test_scanner_results_contain_precheck_fields" time="1.358" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestScannerCandidatePrecheckFields" name="test_signals_contain_precheck_fields" time="2.130" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestNonTradeableVsBlockedDistinction" name="test_non_tradeable_status_exists" time="2.420" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestNonTradeableVsBlockedDistinction" name="test_order_precheck_failed_shows_first_failure_code" time="2.394" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestRunAsyncResults" name="test_run_async_returns_counts" time="16.727" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestRunAsyncResults" name="test_run_async_both_returns_counts" time="29.326" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestExecutionPreviewPipeline" name="test_preview_spot_returns_validation_status" time="12.551" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestExecutionPreviewPipeline" name="test_preview_futures_returns_validation_status" time="12.467" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestSubmitGateEnforcement" name="test_submit_requires_valid_preview" time="1.346" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestSubmitGateEnforcement" name="test_preview_then_submit_flow" time="12.386" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestBotStartFailFast" name="test_status_contract_returns_blocking_reasons" time="12.657" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestBotStartFailFast" name="test_bot_runtime_summaries_contain_binding_validation" time="4.233" /><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestAutoFixSafeBoundaries" name="test_diagnose_auto_fix_does_not_increase_risk" time="16.965"><failure message="requests.exceptions.ReadTimeout: HTTPConnectionPool(host='localhost', port=8001): Read timed out. (read timeout=15)">/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:1415: in getresponse
+    response.begin()
+/usr/local/lib/python3.11/http/client.py:330: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:291: in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/socket.py:718: in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E   TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:644: in send
+    resp = conn.urlopen(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:490: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/util/util.py:39: in reraise
+    raise value
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:536: in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:367: in _raise_timeout
+    raise ReadTimeoutError(
+E   urllib3.exceptions.ReadTimeoutError: HTTPConnectionPool(host='localhost', port=8001): Read timed out. (read timeout=15)
+
+During handling of the above exception, another exception occurred:
+tests/test_iteration14_precheck_pipeline.py:607: in test_diagnose_auto_fix_does_not_increase_risk
+    diagnose_response = requests.post(
+/root/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:690: in send
+    raise ReadTimeout(e, request=request)
+E   requests.exceptions.ReadTimeout: HTTPConnectionPool(host='localhost', port=8001): Read timed out. (read timeout=15)</failure></testcase><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestAutoFixSafeBoundaries" name="test_fix_all_blockers_safe_actions" time="15.015"><failure message="requests.exceptions.ReadTimeout: HTTPConnectionPool(host='localhost', port=8001): Read timed out. (read timeout=15)">/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:1415: in getresponse
+    response.begin()
+/usr/local/lib/python3.11/http/client.py:330: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:291: in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/socket.py:718: in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+E   TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:644: in send
+    resp = conn.urlopen(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:841: in urlopen
+    retries = retries.increment(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:490: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/util/util.py:39: in reraise
+    raise value
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:787: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:536: in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:367: in _raise_timeout
+    raise ReadTimeoutError(
+E   urllib3.exceptions.ReadTimeoutError: HTTPConnectionPool(host='localhost', port=8001): Read timed out. (read timeout=15)
+
+During handling of the above exception, another exception occurred:
+tests/test_iteration14_precheck_pipeline.py:638: in test_fix_all_blockers_safe_actions
+    response = requests.post(
+/root/.venv/lib/python3.11/site-packages/requests/api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:690: in send
+    raise ReadTimeout(e, request=request)
+E   requests.exceptions.ReadTimeout: HTTPConnectionPool(host='localhost', port=8001): Read timed out. (read timeout=15)</failure></testcase><testcase classname="backend.tests.test_iteration14_precheck_pipeline.TestSignalsFunnelMetrics" name="test_signals_funnel_counts" time="2.463" /></testsuite></testsuites>

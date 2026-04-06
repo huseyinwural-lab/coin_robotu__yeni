@@ -456,6 +456,16 @@ def submit_position_action(
         ) from exc
     except ValueError as exc:
         message = str(exc)
+        if message.startswith("order_validation_failed:"):
+            first_failure_code = message.split(":", 1)[1].strip() or "ORDER_PRECHECK_FAILED"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "ORDER_PRECHECK_FAILED",
+                    "first_precheck_failure_code": first_failure_code,
+                    "message": "Order precheck başarısız, submit engellendi.",
+                },
+            ) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
     except CommercialControlViolation as exc:
         raise HTTPException(
@@ -549,6 +559,16 @@ def submit_intent(
         ) from exc
     except ValueError as exc:
         message = str(exc)
+        if message.startswith("order_validation_failed:"):
+            first_failure_code = message.split(":", 1)[1].strip() or "ORDER_PRECHECK_FAILED"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "ORDER_PRECHECK_FAILED",
+                    "first_precheck_failure_code": first_failure_code,
+                    "message": "Order precheck başarısız, submit engellendi.",
+                },
+            ) from exc
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
     except CommercialControlViolation as exc:
         raise HTTPException(

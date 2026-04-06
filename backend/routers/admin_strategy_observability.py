@@ -28,6 +28,7 @@ from models import (
 from core.users.user_scanner_signal_service import diagnose_pending_signal
 from services.identity_control_service import is_access_token_revoked
 from services.audit_service import create_audit_log
+from services.execution_readiness_service import get_exchange_readiness
 from services.strategy_observability_service import (
     get_rejection_analytics,
     get_score_metrics,
@@ -239,9 +240,18 @@ def _build_admin_status_contract(db: Session) -> dict:
         risk_ready = bool(selected_risk_policy_id)
         selected_connection_id = str(snapshot.get("selected_exchange_connection_id") or "").strip()
         execution_ready = bool(selected_connection_id)
+        exchange_reason_code = "connection_not_selected"
         if selected_connection_id:
             connection = db.query(UserExchangeConnection).filter(UserExchangeConnection.id == selected_connection_id).first()
-            exchange_ready = _is_exchange_ready(connection)
+            if connection is not None:
+                readiness = get_exchange_readiness(
+                    db,
+                    connection_id=connection.id,
+                    market_type=str(getattr(bot_row, "market_type", "spot") or "spot"),
+                    symbol=((list(getattr(bot_row, "symbols", []) or [])[0]) if list(getattr(bot_row, "symbols", []) or []) else None),
+                )
+                exchange_ready = bool(readiness.get("is_ready"))
+                exchange_reason_code = str(readiness.get("reason_code") or "ready")
 
         blocked_rows = (
             db.query(PendingSignal)
@@ -271,7 +281,7 @@ def _build_admin_status_contract(db: Session) -> dict:
     if not symbols_ready:
         blocking_reasons.append({"code": "SYMBOLS_NOT_READY", "message": "Symbols boş.", "hint": "manual_selection listesi güncelleyin."})
     if not exchange_ready:
-        blocking_reasons.append({"code": "EXCHANGE_NOT_READY", "message": "Exchange trade-ready değil.", "hint": "can_trade_effective + connection_health kontrol edin."})
+        blocking_reasons.append({"code": "EXCHANGE_NOT_READY", "message": f"Exchange trade-ready değil ({exchange_reason_code if 'exchange_reason_code' in locals() else 'unknown'}).", "hint": "connection revalidate / permission kontrol / market_type doğrulaması yapın."})
 
     for code, count in sorted(blocked_reason_counts.items(), key=lambda item: (-item[1], item[0]))[:5]:
         blocking_reasons.append(

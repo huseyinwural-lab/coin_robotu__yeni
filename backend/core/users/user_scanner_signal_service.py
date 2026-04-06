@@ -6,6 +6,7 @@ from time import perf_counter
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
+from core.exchanges.binance_adapter import BinanceExecutionAdapter
 from db import redis_client
 from models import (
     BotProfile,
@@ -26,6 +27,7 @@ from services.execution_intent_service import (
     preview_execution_intent,
     submit_execution_intent,
 )
+from services.execution_readiness_service import get_exchange_readiness
 from services.execution_precheck_service import load_execution_policy_registry, validate_execution_payload
 from core.users.user_portfolio_engine import build_user_portfolio_snapshot
 from services.explainability_service import record_decision_trace
@@ -35,7 +37,6 @@ from services.pipeline.cache_store import get_json, incr_counter, set_json
 from services.pipeline.canonical_signal_engine import scan_canonical_universe_for_signals
 from services.pipeline.universe_engine import apply_scanner_mode, build_effective_universe, normalize_scanner_mode
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
-from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 from services.scanner_observability_service import (
     get_rollout_state,
     record_fallback_event,
@@ -64,6 +65,7 @@ SIGNAL_PENDING_REASON_HINTS = {
     "RISK_POLICY_MISSING": ("Risk policy tanımlı değil.", "Signals satırından Auto-Fix veya Risk Policy ekranından policy oluşturun."),
     "RISK_LIMIT_BLOCKED": ("Risk limiti engeli oluştu.", "Risk limitlerini veya mevcut pozisyon riskini kontrol edin."),
     "EXCHANGE_NOT_READY": ("Exchange readiness uygun değil.", "Exchange key/venue assignment/readiness durumunu düzeltin."),
+    "MARKET_TYPE_NOT_ALLOWED": ("Sembol market_type bot ile uyumsuz.", "Bot market_type ve symbol market_type eşleşmesini doğrulayın."),
     "MARKET_DATA_STALE": ("Piyasa verisi güncel değil.", "Market data akışını ve son candle zamanını doğrulayın."),
     "POSITION_LIMIT_REACHED": ("Pozisyon limiti dolu.", "Açık pozisyon sayısını azaltın veya policy limitini artırın."),
     "SYMBOL_NOT_ALLOWED": ("Sembol bot kapsamı dışında.", "Bot symbols listesine sembolü ekleyin."),
@@ -113,6 +115,15 @@ PRECHECK_ACTION_HINTS = {
     "INSUFFICIENT_BALANCE": "Bakiye yetersiz, notional düşür veya bakiye artır.",
     "LEVERAGE_MARGIN_MISMATCH": "Leverage/margin ayarını venue kurallarıyla eşleştir.",
     "RISK_NOTIONAL_LIMIT_EXCEEDED": "Risk cap aşımı: pozisyon boyutunu azalt.",
+}
+
+NON_TRADEABLE_REASON_CODES = {
+    "ORDER_PRECHECK_FAILED",
+    "EXCHANGE_NOT_READY",
+    "SYMBOL_NOT_ALLOWED",
+    "MARKET_TYPE_NOT_ALLOWED",
+    "SCANNER_SYMBOL_MISMATCH",
+    "EXECUTION_DISABLED",
 }
 
 
@@ -703,6 +714,22 @@ def _resolve_default_exchange_connection(db: Session, user_id: str) -> UserExcha
     )
 
 
+def _resolve_exchange_connection_for_market(db: Session, user_id: str, market_type: str) -> UserExchangeConnection | None:
+    normalized_market_type = str(market_type or "spot").strip().lower()
+    scoped = (
+        db.query(UserExchangeConnection)
+        .filter(
+            UserExchangeConnection.user_id == user_id,
+            UserExchangeConnection.market_type == normalized_market_type,
+        )
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+    if scoped is not None:
+        return scoped
+    return _resolve_default_exchange_connection(db, user_id)
+
+
 def _safe_float(value, fallback: float = 0.0) -> float:
     try:
         return float(value)
@@ -803,8 +830,80 @@ def _build_execution_allowed_scope(
     }
 
 
+def _fetch_exchange_symbol_filters(
+    *,
+    symbol: str,
+    market_type: str,
+    exchange_connection: UserExchangeConnection | None,
+    registry_payload: dict,
+) -> tuple[dict, bool]:
+    normalized_symbol = str(symbol or "").upper()
+    normalized_market_type = str(market_type or "spot").lower()
+    min_notional_map = dict((registry_payload or {}).get("min_notional_by_symbol") or {})
+
+    if exchange_connection is None:
+        return {
+            "min_qty": 0.0,
+            "step_size": 0.0,
+            "quantity_precision": 0,
+            "min_notional": _safe_float(min_notional_map.get(normalized_symbol), 0.0),
+            "tick_size": 0.0,
+        }, False
+
+    try:
+        adapter = BinanceExecutionAdapter(mode=str(getattr(exchange_connection, "environment", "live") or "live"))
+        adapter.execution_market_type = normalized_market_type
+        payload = adapter._public_request(
+            "GET",
+            adapter._exchange_info_endpoint(),
+            params={"symbol": normalized_symbol},
+            base_url=adapter._active_base_url(),
+        )
+        symbols = payload.get("symbols") if isinstance(payload, dict) else []
+        target = next((row for row in symbols or [] if str(row.get("symbol") or "").upper() == normalized_symbol), None)
+        if not isinstance(target, dict):
+            raise ValueError("symbol_not_found_in_exchange_info")
+
+        filters = list(target.get("filters") or [])
+        lot_size_filter = next((item for item in filters if str(item.get("filterType") or "") == "LOT_SIZE"), {})
+        price_filter = next((item for item in filters if str(item.get("filterType") or "") == "PRICE_FILTER"), {})
+        notional_filter = next(
+            (
+                item
+                for item in filters
+                if str(item.get("filterType") or "") in {"NOTIONAL", "MIN_NOTIONAL"}
+            ),
+            {},
+        )
+
+        min_notional = _safe_float(notional_filter.get("minNotional"), _safe_float(min_notional_map.get(normalized_symbol), 0.0))
+        step_size = _safe_float(lot_size_filter.get("stepSize"), 0.0)
+        min_qty = _safe_float(lot_size_filter.get("minQty"), 0.0)
+        tick_size = _safe_float(price_filter.get("tickSize"), 0.0)
+        quantity_precision = 0
+        if step_size > 0:
+            quantity_precision = max(0, len(str(step_size).split(".")[-1].rstrip("0")))
+
+        return {
+            "min_qty": min_qty,
+            "step_size": step_size,
+            "quantity_precision": quantity_precision,
+            "min_notional": min_notional,
+            "tick_size": tick_size,
+        }, True
+    except Exception:
+        return {
+            "min_qty": 0.0,
+            "step_size": 0.0,
+            "quantity_precision": 0,
+            "min_notional": _safe_float(min_notional_map.get(normalized_symbol), 0.0),
+            "tick_size": 0.0,
+        }, False
+
+
 def _evaluate_candidate_tradeability(
     *,
+    db: Session,
     symbol: str,
     market_type: str,
     signal_side: str,
@@ -815,6 +914,7 @@ def _evaluate_candidate_tradeability(
     leverage: int,
     margin_mode: str,
     symbol_filters_cache: dict[str, dict],
+    exchange_readiness_cache: dict[str, dict],
     registry_payload: dict | None = None,
 ) -> dict:
     normalized_symbol = str(symbol or "").upper()
@@ -822,16 +922,19 @@ def _evaluate_candidate_tradeability(
 
     if normalized_symbol not in symbol_filters_cache:
         source_registry = registry_payload if isinstance(registry_payload, dict) else load_execution_policy_registry()
-        min_notional_map = dict(source_registry.get("min_notional_by_symbol") or {})
+        filters_payload, filters_ok = _fetch_exchange_symbol_filters(
+            symbol=normalized_symbol,
+            market_type=normalized_market_type,
+            exchange_connection=exchange_connection,
+            registry_payload=source_registry,
+        )
         symbol_filters_cache[normalized_symbol] = {
-            "min_qty": 0.001,
-            "step_size": 0.001,
-            "quantity_precision": 3,
-            "min_notional": _safe_float(min_notional_map.get(normalized_symbol), 0.0),
-            "tick_size": 0.01,
+            **filters_payload,
+            "exchange_filter_source_ok": bool(filters_ok),
         }
 
     symbol_filters = dict(symbol_filters_cache.get(normalized_symbol) or {})
+    exchange_filter_source_ok = bool(symbol_filters.get("exchange_filter_source_ok"))
     min_qty = max(_safe_float(symbol_filters.get("min_qty"), 0.0), 0.0)
     tick_size = max(_safe_float(symbol_filters.get("tick_size"), 0.0), 0.0)
     venue_min_notional = max(_safe_float(symbol_filters.get("min_notional"), 0.0), 0.0)
@@ -866,6 +969,8 @@ def _evaluate_candidate_tradeability(
         mapped_failures.append("LEVERAGE_MARGIN_MISMATCH")
     if any(code in {"invalid_market_type", "execution_mode_not_allowed", "order_type_not_allowed"} for code in reject_reason_codes):
         mapped_failures.append("EXECUTION_POLICY_REJECTED")
+    if not exchange_filter_source_ok:
+        mapped_failures.append("EXCHANGE_NOT_READY")
 
     if effective_notional > max(float(risk_notional_cap or 0.0), 0.0):
         mapped_failures.append("RISK_NOTIONAL_LIMIT_EXCEEDED")
@@ -875,12 +980,30 @@ def _evaluate_candidate_tradeability(
         mapped_failures.append("TICK_SIZE_INVALID")
     if available_balance > 0 and effective_notional > available_balance:
         mapped_failures.append("INSUFFICIENT_BALANCE")
+
+    exchange_readiness = {
+        "is_ready": False,
+        "reason_code": "connection_not_selected",
+        "permissions": {},
+        "market_types": [],
+    }
     if exchange_connection is not None:
-        connection_market_type = str(getattr(exchange_connection, "market_type", "") or "").lower().strip()
-        if connection_market_type and connection_market_type != normalized_market_type:
+        readiness_key = f"{exchange_connection.id}:{normalized_market_type}:{normalized_symbol}"
+        if readiness_key not in exchange_readiness_cache:
+            exchange_readiness_cache[readiness_key] = get_exchange_readiness(
+                db,
+                connection_id=exchange_connection.id,
+                market_type=normalized_market_type,
+                symbol=normalized_symbol,
+            )
+        exchange_readiness = dict(exchange_readiness_cache.get(readiness_key) or exchange_readiness)
+
+    if not bool(exchange_readiness.get("is_ready")):
+        readiness_reason = str(exchange_readiness.get("reason_code") or "exchange_not_ready").strip().lower()
+        if readiness_reason in {"symbol_not_in_market", "market_type_not_allowed"}:
             mapped_failures.append("MARKET_TYPE_NOT_ALLOWED")
-    if not _is_connection_trade_ready(exchange_connection):
-        mapped_failures.append("EXCHANGE_NOT_READY")
+        else:
+            mapped_failures.append("EXCHANGE_NOT_READY")
 
     deduped_failures = list(dict.fromkeys(mapped_failures))
     first_failure_code = _first_precheck_failure_code(deduped_failures)
@@ -929,7 +1052,10 @@ def _evaluate_candidate_tradeability(
                 "ok": not (available_balance > 0 and effective_notional > available_balance),
             },
             "exchange_readiness": {
-                "ok": _is_connection_trade_ready(exchange_connection),
+                "ok": bool(exchange_readiness.get("is_ready")),
+                "reason_code": exchange_readiness.get("reason_code"),
+                "permissions": exchange_readiness.get("permissions") or {},
+                "exchange_symbol_filters_ok": exchange_filter_source_ok,
                 "connection_id": str(getattr(exchange_connection, "id", "") or ""),
                 "market_type": str(getattr(exchange_connection, "market_type", "") or ""),
             },
@@ -974,7 +1100,8 @@ def _apply_order_precheck_failed(
     error_detail: str = "",
 ) -> None:
     row.execution_eligible = False
-    row.status = "blocked"
+    row.status = "non_tradeable"
+    row.current_state = "NON_TRADEABLE"
     row.blocked_reason_code = "ORDER_PRECHECK_FAILED"
 
     base_message, base_hint = _signal_reason_details("ORDER_PRECHECK_FAILED")
@@ -1105,7 +1232,8 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
         row.last_eligibility_check_at = datetime.now(timezone.utc)
         return row
     if row.current_state == "BLOCKED" and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
-        row.status = "blocked"
+        row.status = "non_tradeable"
+        row.current_state = "NON_TRADEABLE"
         row.execution_eligible = False
         row.last_eligibility_check_at = datetime.now(timezone.utc)
         return row
@@ -1125,7 +1253,7 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
 
     bot = db.query(BotProfile).filter(BotProfile.id == signal.bot_profile_id, BotProfile.is_deleted.is_(False)).first()
     risk_policy = _resolve_default_risk_policy(db, row.user_id)
-    exchange_connection = _resolve_default_exchange_connection(db, row.user_id)
+    exchange_connection = _resolve_exchange_connection_for_market(db, row.user_id, str(signal.market_type or "spot"))
     reason_codes, requires_manual, execution_eligible = _evaluate_signal_blockers(
         db,
         row=row,
@@ -1158,6 +1286,9 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
     elif primary_reason == "MANUAL_APPROVAL_REQUIRED":
         row.status = "pending"
         _set_state(row, "PENDING_APPROVAL")
+    elif primary_reason in NON_TRADEABLE_REASON_CODES:
+        row.status = "non_tradeable"
+        _set_state(row, "NON_TRADEABLE")
     else:
         row.status = "blocked"
         _set_state(row, "BLOCKED")
@@ -1759,8 +1890,9 @@ def run_user_scanner(
     }
 
     runtime_strategy_code = str(getattr(bot, "strategy_type", "") or "").strip().lower()
-    default_exchange_connection = _resolve_default_exchange_connection(db, user_id)
+    default_exchange_connection = _resolve_exchange_connection_for_market(db, user_id, bot_market_type)
     symbol_filters_cache: dict[str, dict] = {}
+    exchange_readiness_cache: dict[str, dict] = {}
     non_tradeable_count = 0
 
     for item in selected:
@@ -2028,6 +2160,7 @@ def run_user_scanner(
         db.flush()
 
         candidate_precheck = _evaluate_candidate_tradeability(
+            db=db,
             symbol=symbol,
             market_type=bot_market_type,
             signal_side=signal_value,
@@ -2038,6 +2171,7 @@ def run_user_scanner(
             leverage=int(getattr(bot, "leverage", 1) or 1),
             margin_mode="isolated" if str(bot_market_type or "spot").lower() == "futures" else "",
             symbol_filters_cache=symbol_filters_cache,
+            exchange_readiness_cache=exchange_readiness_cache,
             registry_payload=execution_policy_registry,
         )
         scanner_row.payload = {
@@ -2445,32 +2579,17 @@ def diagnose_pending_signal(
     actions_applied: list[str] = []
     _refresh_pending_signal_snapshot(db, row)
 
-    if auto_fix and row.blocked_reason_code == "BOT_NOT_RUNNING" and row.bot_profile_id:
-        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id, BotProfile.is_deleted.is_(False)).first()
-        if bot is not None and not bool(bot.is_running):
-            bot.is_running = True
-            bot.updated_at = datetime.now(timezone.utc)
-            actions_applied.append("bot_runtime_started")
+    if auto_fix and row.blocked_reason_code == "BOT_NOT_RUNNING":
+        actions_applied.append("status_contract_refresh_requested")
 
     if auto_fix and row.blocked_reason_code == "SYMBOL_NOT_ALLOWED" and row.bot_profile_id:
-        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id, BotProfile.is_deleted.is_(False)).first()
-        if bot is not None:
-            existing = [item.upper() for item in (bot.symbols or []) if item]
-            symbol = str(row.symbol or "").upper()
-            if symbol and symbol not in existing:
-                bot.symbols = [*existing, symbol][:40]
-                bot.updated_at = datetime.now(timezone.utc)
-                actions_applied.append("symbol_added_to_bot_scope")
+        actions_applied.append("symbol_reload_requested")
 
     if auto_fix and row.blocked_reason_code == "RISK_POLICY_MISSING":
-        _, created = ensure_user_safe_default_risk_policy(db, row.user_id, commit=False)
-        if created:
-            actions_applied.append("safe_default_risk_policy_created")
+        actions_applied.append("status_contract_refresh_requested")
 
     if auto_fix and row.blocked_reason_code == "MANUAL_APPROVAL_REQUIRED" and _has_active_bot(db, row.user_id):
-        if row.mode != "AUTO":
-            row.mode = "AUTO"
-            actions_applied.append("signal_mode_switched_to_auto")
+        actions_applied.append("status_contract_refresh_requested")
 
     if auto_fix and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
         first_code = _extract_precheck_first_failure(row.decision_note, row.blocked_reason_message)
@@ -2491,16 +2610,22 @@ def diagnose_pending_signal(
             available_balance_snapshot = max(_safe_float(portfolio_snapshot.get("available_balance"), 0.0), 0.0)
             requested_notional = min(max(10.0, round(float(signal.confidence or row.confidence or 0.5) * 100, 4)), per_trade_notional_cap)
             precheck_result = _evaluate_candidate_tradeability(
+                db=db,
                 symbol=row.symbol,
                 market_type=str(getattr(signal, "market_type", "spot") or "spot"),
                 signal_side=str(getattr(signal, "signal", "long") or "long"),
                 requested_notional=requested_notional,
                 risk_notional_cap=per_trade_notional_cap,
                 available_balance=available_balance_snapshot,
-                exchange_connection=_resolve_default_exchange_connection(db, row.user_id),
+                exchange_connection=_resolve_exchange_connection_for_market(
+                    db,
+                    row.user_id,
+                    str(getattr(signal, "market_type", "spot") or "spot"),
+                ),
                 leverage=int(getattr(bot, "leverage", 1) or 1),
                 margin_mode="isolated" if str(getattr(signal, "market_type", "spot") or "spot").lower() == "futures" else "",
                 symbol_filters_cache={},
+                exchange_readiness_cache={},
                 registry_payload=load_execution_policy_registry(),
             )
             if bool(precheck_result.get("tradeable")):
@@ -2530,7 +2655,7 @@ def diagnose_pending_signal(
 
     _refresh_pending_signal_snapshot(db, row)
 
-    if auto_fix and row.mode == "AUTO" and row.execution_eligible and row.status in {"pending", "ready", "blocked"}:
+    if auto_fix and row.mode == "AUTO" and row.execution_eligible and row.status in {"pending", "ready"}:
         signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
         if signal is not None:
             try:

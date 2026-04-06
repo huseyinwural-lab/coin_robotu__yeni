@@ -254,6 +254,7 @@ def start_bot_profile_runtime(bot_id: str, current_user: User = Depends(get_curr
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
+                "status": "FAILED",
                 "code": "bot_start_binding_failed",
                 "message": "Bot başlatma öncesi binding doğrulaması başarısız.",
                 "status_contract": payload.get("status_contract") or {},

@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from core.exchanges.binance_adapter import BinanceExecutionAdapter
+from db import redis_client
 from models import PaperPosition, UserExchangeConnection
 from services.audit_service import create_guard_audit_event
 from services.explainability_rules_service import build_trade_explain
@@ -11,6 +13,8 @@ from services.explainability_rules_service import build_trade_explain
 
 _READINESS_CACHE_TTL_SECONDS = 30.0
 _READINESS_CACHE: dict[str, tuple[float, dict]] = {}
+_EXCHANGE_READINESS_CACHE_TTL_SECONDS = 20.0
+_EXCHANGE_READINESS_CACHE: dict[str, tuple[float, dict]] = {}
 
 
 def _readiness_cache_key(user_id: str | None) -> str:
@@ -40,6 +44,163 @@ def _latest_connection(db: Session, user_id: str | None) -> UserExchangeConnecti
     if user_id:
         query = query.filter(UserExchangeConnection.user_id == user_id)
     return query.order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc()).first()
+
+
+def _map_exchange_reason_code(reason_codes: list[str]) -> str:
+    normalized = {str(code or "").strip().lower() for code in (reason_codes or []) if str(code or "").strip()}
+    if "invalid_key" in normalized:
+        return "invalid_key"
+    if "missing_trade_permission" in normalized:
+        return "permission_missing"
+    if "ip_restriction" in normalized:
+        return "ip_restricted"
+    if "settings_mismatch" in normalized:
+        return "testnet_mainnet_mismatch"
+    if "exchange_unreachable" in normalized:
+        return "exchange_unreachable"
+    if "missing_credentials" in normalized:
+        return "missing_credentials"
+    if normalized:
+        return sorted(normalized)[0]
+    return "unknown_readiness_failure"
+
+
+def _exchange_readiness_cache_key(connection_id: str, market_type: str) -> str:
+    return f"{str(connection_id)}::{str(market_type).lower()}"
+
+
+def _symbol_exists_in_exchange_market(connection: UserExchangeConnection, market_type: str, symbol: str) -> tuple[bool | None, str | None]:
+    normalized_market_type = str(market_type or "spot").lower()
+    normalized_symbol = str(symbol or "").upper()
+    if not normalized_symbol:
+        return None, None
+    try:
+        adapter = BinanceExecutionAdapter(mode=str(connection.environment or "live"))
+        adapter.execution_market_type = normalized_market_type
+        payload = adapter._public_request(
+            "GET",
+            adapter._exchange_info_endpoint(),
+            params={"symbol": normalized_symbol},
+            base_url=adapter._active_base_url(),
+        )
+        symbols = payload.get("symbols") if isinstance(payload, dict) else []
+        exists = any(str(item.get("symbol") or "").upper() == normalized_symbol for item in (symbols or []))
+        return bool(exists), (None if exists else "symbol_not_in_market")
+    except Exception:
+        return None, "symbol_check_unavailable"
+
+
+def get_exchange_readiness(
+    db: Session,
+    *,
+    connection_id: str,
+    market_type: str,
+    symbol: str | None = None,
+    force_refresh: bool = False,
+) -> dict:
+    normalized_market_type = str(market_type or "spot").strip().lower()
+    normalized_symbol = str(symbol or "").strip().upper()
+    connection = db.query(UserExchangeConnection).filter(UserExchangeConnection.id == connection_id).first()
+    checked_at = datetime.now(timezone.utc).isoformat()
+    if connection is None:
+        return {
+            "is_ready": False,
+            "reason_code": "connection_not_found",
+            "permissions": {"can_trade": False, "list": []},
+            "market_types": [],
+            "last_check_at": checked_at,
+            "connection_id": connection_id,
+            "market_type": normalized_market_type,
+            "symbol": normalized_symbol or None,
+        }
+
+    cache_key = _exchange_readiness_cache_key(connection_id=connection.id, market_type=normalized_market_type)
+    now_mono = time.monotonic()
+    cached = _EXCHANGE_READINESS_CACHE.get(cache_key)
+    if (not force_refresh) and cached and cached[0] > now_mono:
+        base_payload = dict(cached[1])
+    else:
+        from services.live_mode_service import validate_exchange_credentials_for_user
+        from services.pipeline.universe_engine import build_effective_universe
+
+        validation_payload, status_code = validate_exchange_credentials_for_user(
+            db,
+            connection.user_id,
+            exchange=str(connection.exchange or "binance"),
+            market_type=normalized_market_type,
+            environment=str(connection.environment or "live"),
+            connection_id=connection.id,
+        )
+        reason_codes = list(validation_payload.get("reason_codes") or [])
+        permissions_list = [str(item).upper() for item in (validation_payload.get("permissions") or [])]
+        market_types = sorted(
+            {
+                *(["spot"] if "SPOT" in permissions_list else []),
+                *(["futures"] if "FUTURES" in permissions_list else []),
+                str(connection.market_type or normalized_market_type).lower(),
+            }
+        )
+
+        universe_payload = build_effective_universe(db, redis_client)
+        spot_scope = {str(item).upper() for item in (universe_payload.get("spot_symbols") or []) if str(item).strip()}
+        futures_scope = {str(item).upper() for item in (universe_payload.get("futures_symbols") or []) if str(item).strip()}
+        symbol_scope = futures_scope if normalized_market_type == "futures" else spot_scope
+
+        settings_mismatch = str(connection.environment or "").lower() != str(validation_payload.get("environment") or connection.environment or "").lower()
+        can_trade = bool(validation_payload.get("can_trade"))
+        base_is_ready = bool(status_code == 200 and can_trade and normalized_market_type in market_types and not settings_mismatch)
+        base_reason = None if base_is_ready else _map_exchange_reason_code(reason_codes)
+        if not base_is_ready and normalized_market_type not in market_types:
+            base_reason = "market_type_not_allowed"
+        if not base_is_ready and settings_mismatch:
+            base_reason = "testnet_mainnet_mismatch"
+
+        base_payload = {
+            "is_ready": base_is_ready,
+            "reason_code": base_reason,
+            "permissions": {
+                "can_trade": can_trade,
+                "can_withdraw": bool(validation_payload.get("can_withdraw")),
+                "list": permissions_list,
+                "validation_reason_codes": reason_codes,
+                "available_balance": validation_payload.get("available_balance"),
+                "wallet_balance": validation_payload.get("wallet_balance"),
+            },
+            "market_types": market_types,
+            "last_check_at": checked_at,
+            "connection_id": connection.id,
+            "market_type": normalized_market_type,
+            "environment": str(connection.environment or "live").lower(),
+            "symbol_scope": sorted(symbol_scope),
+        }
+        _EXCHANGE_READINESS_CACHE[cache_key] = (now_mono + _EXCHANGE_READINESS_CACHE_TTL_SECONDS, dict(base_payload))
+
+    if normalized_symbol:
+        exists, symbol_reason = _symbol_exists_in_exchange_market(connection, normalized_market_type, normalized_symbol)
+        if exists is False:
+            return {
+                **base_payload,
+                "is_ready": False,
+                "reason_code": symbol_reason or "symbol_not_in_market",
+                "symbol": normalized_symbol,
+                "last_check_at": checked_at,
+            }
+        if exists is None:
+            symbol_scope_set = {str(item).upper() for item in (base_payload.get("symbol_scope") or []) if str(item).strip()}
+            if symbol_scope_set and normalized_symbol not in symbol_scope_set:
+                return {
+                    **base_payload,
+                    "is_ready": False,
+                    "reason_code": "symbol_not_in_market",
+                    "symbol": normalized_symbol,
+                    "last_check_at": checked_at,
+                }
+
+    response = dict(base_payload)
+    response["symbol"] = normalized_symbol or None
+    response["last_check_at"] = checked_at
+    response.pop("symbol_scope", None)
+    return response
 
 
 def evaluate_execution_readiness(db: Session, *, user_id: str | None = None, force_refresh: bool = False) -> dict:

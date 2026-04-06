@@ -6,6 +6,7 @@ import logging
 from core.bot_runtime_engine import bind_bot_runtime, heartbeat_bot_runtime, initialize_bot_runtime, set_bot_runtime_state
 from db import redis_client
 from models import BotProfile, ExecutionMetric, PaperPosition, PendingSignal, RiskPolicy, SignalEvent, UserExchangeConnection, UserScannerResult, UserScannerSymbolSelection
+from services.execution_readiness_service import get_exchange_readiness
 from services.strategy_template_resolution_service import resolve_effective_strategy_config
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,8 @@ def _build_start_status_contract(
     execution_profile_id = str(bindings.get("execution_profile_id") or "").strip()
     execution_ready = bool(execution_profile_id)
     symbols_ready = bool(symbol_resolution.get("ok")) and len(resolved_symbols) > 0
+    exchange_reason_code = "connection_not_selected"
+    exchange_permissions: dict = {}
 
     exchange_ready = False
     if execution_profile_id:
@@ -159,7 +162,16 @@ def _build_start_status_contract(
             .filter(UserExchangeConnection.id == execution_profile_id, UserExchangeConnection.user_id == bot.user_id)
             .first()
         )
-        exchange_ready = _is_trade_ready_connection(selected_connection)
+        if selected_connection is not None:
+            exchange_readiness = get_exchange_readiness(
+                db,
+                connection_id=selected_connection.id,
+                market_type=str(getattr(bot, "market_type", "spot") or "spot"),
+                symbol=(resolved_symbols[0] if resolved_symbols else None),
+            )
+            exchange_ready = bool(exchange_readiness.get("is_ready"))
+            exchange_reason_code = str(exchange_readiness.get("reason_code") or "ready")
+            exchange_permissions = dict(exchange_readiness.get("permissions") or {})
 
     scanner_ready = bool(resolved_symbols)
     if str(getattr(bot, "scanner_id", "") or "").strip():
@@ -208,8 +220,8 @@ def _build_start_status_contract(
         blocking_reasons.append(
             {
                 "code": "EXCHANGE_NOT_READY",
-                "message": "Exchange bağlantısı trade-ready değil.",
-                "hint": "Connection health=online/degraded ve can_trade_effective=true olmalı.",
+                "message": f"Exchange bağlantısı trade-ready değil ({exchange_reason_code}).",
+                "hint": "connection revalidate / permission kontrol / market_type eşleşmesini doğrulayın.",
             }
         )
 
@@ -223,6 +235,8 @@ def _build_start_status_contract(
         "bot_status": "RUNNING" if bool(getattr(bot, "is_running", False)) else "IDLE",
         "health": "HEALTHY" if len(blocking_reasons) == 0 else "ERROR",
         "blocking_reasons": blocking_reasons,
+        "exchange_reason_code": exchange_reason_code,
+        "exchange_permissions": exchange_permissions,
     }
 
 

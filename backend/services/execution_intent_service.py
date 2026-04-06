@@ -142,6 +142,26 @@ def _safe_spread_bps(symbol: str) -> float:
         return 0.0
 
 
+def _first_precheck_failure_code(precheck: dict) -> str:
+    violations = list(precheck.get("violations") or [])
+    first_violation = violations[0] if violations else {}
+    raw_code = str(first_violation.get("code") or "").strip().lower()
+    mapping = {
+        "min_notional_violation": "MIN_NOTIONAL_NOT_MET",
+        "min_notional_not_met": "MIN_NOTIONAL_NOT_MET",
+        "min_order_size_violation": "MIN_QTY_NOT_MET",
+        "min_qty_not_met": "MIN_QTY_NOT_MET",
+        "insufficient_balance": "INSUFFICIENT_BALANCE",
+        "leverage_limit_exceeded": "LEVERAGE_MARGIN_MISMATCH",
+        "margin_mode_invalid": "LEVERAGE_MARGIN_MISMATCH",
+        "margin_mode_invalid_for_spot": "LEVERAGE_MARGIN_MISMATCH",
+        "market_type_not_allowed": "MARKET_TYPE_NOT_ALLOWED",
+        "symbol_not_allowed": "SYMBOL_NOT_ALLOWED",
+        "exchange_not_ready": "EXCHANGE_NOT_READY",
+    }
+    return mapping.get(raw_code, (raw_code.upper() if raw_code else "ORDER_PRECHECK_FAILED"))
+
+
 def _has_market_data(symbol: str) -> bool:
     try:
         payload = redis_client.get(f"market:ticker:{symbol}")
@@ -1339,6 +1359,7 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
         )
         normalized_payload = dict(intent.normalized_order_payload or {})
         normalized_payload["microstructure_guard"] = precheck.get("microstructure_guard") or {}
+        normalized_payload["order_precheck"] = precheck
         intent.normalized_order_payload = normalized_payload
         adjusted_size = float((precheck.get("adjustments") or {}).get("adjusted_size") or precheck_size)
         if adjusted_size > 0 and adjusted_size < precheck_size:
@@ -1369,7 +1390,21 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
                 commit=False,
             )
         if not precheck.get("valid"):
-            raise ValueError("order_validation_failed")
+            first_failure_code = _first_precheck_failure_code(precheck)
+            intent.reject_reason_codes = sorted(set([*(intent.reject_reason_codes or []), "ORDER_PRECHECK_FAILED", first_failure_code]))
+            intent.risk_flags = sorted(set([*(intent.risk_flags or []), f"order_precheck_failed:{first_failure_code.lower()}", "precheck_blocked"]))
+            normalized_payload = dict(intent.normalized_order_payload or {})
+            normalized_payload["first_precheck_failure_code"] = first_failure_code
+            intent.normalized_order_payload = normalized_payload
+            _transition_execution_intent_status(
+                intent,
+                target_status="REJECTED",
+                actor_user_id=user_id,
+                reason=f"order_precheck_failed:{first_failure_code.lower()}",
+            )
+            db.commit()
+            db.refresh(intent)
+            raise ValueError(f"order_validation_failed:{first_failure_code}")
 
     enforce_execution_mode_for_intent(
         db,
@@ -1804,6 +1839,7 @@ def approve_execution_intent(
         )
         normalized_payload = dict(intent.normalized_order_payload or {})
         normalized_payload["microstructure_guard"] = approval_precheck.get("microstructure_guard") or {}
+        normalized_payload["order_precheck"] = approval_precheck
         intent.normalized_order_payload = normalized_payload
         approval_adjusted_size = float((approval_precheck.get("adjustments") or {}).get("adjusted_size") or approval_size)
         if approval_adjusted_size > 0 and approval_adjusted_size < approval_size:
@@ -1814,7 +1850,21 @@ def approve_execution_intent(
             elif approval_notional > 0:
                 intent.notional = round(approval_notional * reduction_ratio, 8)
         if not approval_precheck.get("valid"):
-            raise ValueError("order_validation_failed")
+            first_failure_code = _first_precheck_failure_code(approval_precheck)
+            intent.reject_reason_codes = sorted(set([*(intent.reject_reason_codes or []), "ORDER_PRECHECK_FAILED", first_failure_code]))
+            intent.risk_flags = sorted(set([*(intent.risk_flags or []), f"order_precheck_failed:{first_failure_code.lower()}", "precheck_blocked"]))
+            normalized_payload = dict(intent.normalized_order_payload or {})
+            normalized_payload["first_precheck_failure_code"] = first_failure_code
+            intent.normalized_order_payload = normalized_payload
+            _transition_execution_intent_status(
+                intent,
+                target_status="REJECTED",
+                actor_user_id=admin_user_id,
+                reason=f"order_precheck_failed:{first_failure_code.lower()}",
+            )
+            db.commit()
+            db.refresh(intent)
+            raise ValueError(f"order_validation_failed:{first_failure_code}")
 
     normalized = intent.normalized_order_payload or {}
     decision_gate = dict(normalized.get("decision_gate") or {})

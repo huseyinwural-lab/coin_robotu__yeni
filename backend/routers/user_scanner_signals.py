@@ -64,6 +64,7 @@ from services.quote_asset_constraints import allowed_quote_assets
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
 from services.pipeline.cache_store import get_json, set_json
 from services.bot_runtime_service import list_bot_runtime_summaries
+from services.execution_readiness_service import get_exchange_readiness
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
 
@@ -172,6 +173,7 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
     )
 
     binding_validation = dict((primary_bot or {}).get("binding_validation") or {})
+    resolved_symbols = list(binding_validation.get("resolved_symbols") or [])
     strategy_ready = bool(binding_validation.get("strategy_bound"))
     risk_ready = bool(binding_validation.get("risk_bound"))
     execution_ready = bool(binding_validation.get("execution_bound"))
@@ -185,7 +187,17 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
             .filter(UserExchangeConnection.id == selected_connection_id, UserExchangeConnection.user_id == user_id)
             .first()
         )
-    exchange_ready = _is_exchange_connection_ready(selected_connection) if selected_connection is not None else bool(execution_ready)
+    exchange_reason_code = "connection_not_selected"
+    exchange_ready = bool(execution_ready)
+    if selected_connection is not None:
+        readiness = get_exchange_readiness(
+            db,
+            connection_id=selected_connection.id,
+            market_type=str((primary_bot or {}).get("market_type") or "spot"),
+            symbol=(resolved_symbols[0] if resolved_symbols else None),
+        )
+        exchange_ready = bool(readiness.get("is_ready"))
+        exchange_reason_code = str(readiness.get("reason_code") or "ready")
 
     blocked_rows = (
         db.query(PendingSignal)
@@ -217,7 +229,7 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
     if not symbols_ready:
         blocking_reasons.append({"code": "SYMBOLS_NOT_READY", "message": "Symbol resolution tamamlanmadı.", "hint": "manual_selection sembollerini güncelleyin."})
     if not exchange_ready:
-        blocking_reasons.append({"code": "EXCHANGE_NOT_READY", "message": "Exchange trade-ready değil.", "hint": "connection health ve can_trade_effective alanlarını doğrulayın."})
+        blocking_reasons.append({"code": "EXCHANGE_NOT_READY", "message": f"Exchange trade-ready değil ({exchange_reason_code}).", "hint": "connection revalidate / permission kontrol / market_type doğrulaması yapın."})
 
     for code, count in sorted(blocked_reason_counts.items(), key=lambda item: (-item[1], item[0]))[:5]:
         blocking_reasons.append(
@@ -785,6 +797,47 @@ def scanner_status_contract(
     db: Session = Depends(get_db),
 ):
     return _build_user_status_contract(db, current_user.id)
+
+
+@router.get("/scanner/exchange-readiness")
+def scanner_exchange_readiness(
+    market_type: str = Query(default="spot"),
+    symbol: str | None = Query(default=None),
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    normalized_market_type = str(market_type or "spot").lower()
+    connection = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == current_user.id, UserExchangeConnection.market_type == normalized_market_type)
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .first()
+    )
+    if connection is None:
+        connection = (
+            db.query(UserExchangeConnection)
+            .filter(UserExchangeConnection.user_id == current_user.id)
+            .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+            .first()
+        )
+    if connection is None:
+        return {
+            "is_ready": False,
+            "reason_code": "connection_not_found",
+            "permissions": {"can_trade": False, "list": []},
+            "market_types": [],
+            "last_check_at": datetime.now(timezone.utc).isoformat(),
+            "connection_id": None,
+            "market_type": normalized_market_type,
+            "symbol": str(symbol or "").upper() or None,
+        }
+
+    return get_exchange_readiness(
+        db,
+        connection_id=connection.id,
+        market_type=normalized_market_type,
+        symbol=(str(symbol).upper() if symbol else None),
+    )
 
 
 @router.get("/scanner/results", response_model=list[UserScannerResultResponse])

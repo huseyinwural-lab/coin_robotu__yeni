@@ -1,0 +1,64 @@
+{
+  "summary": "Iteration 14 - Precheck Pipeline & Exchange Readiness Testing. Backend tests: 16/18 passed (89%). 2 failures due to timeout on diagnose/fix-all-blockers endpoints (slow operations). Frontend code review verified tradeable and first_precheck_failure_code fields are properly displayed in ScannerResultsTable and UserSignalsPage.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/user/signal/{id}/diagnose", "issue": "Timeout on diagnose endpoint with auto_fix=true (>15s response time)", "priority": "LOW"},
+      {"endpoint": "POST /api/user/signals/fix-all-blockers", "issue": "Timeout on fix-all-blockers endpoint (>15s response time)", "priority": "LOW"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration14_precheck_pipeline.py",
+    "/app/test_reports/pytest/iteration14_precheck_pipeline.xml"
+  ],
+  "action_items": [
+    "Consider increasing timeout for diagnose and fix-all-blockers endpoints in tests (these are slow operations by design)"
+  ],
+  "critical_code_review_comments": [
+    "ScannerResultsTable.jsx: tradeable and first_precheck_failure_code fields properly displayed in lines 172-177, 236-243",
+    "UserSignalsPage.jsx: tradeable and first_precheck_failure_code fields properly displayed in lines 659-660, 747-751",
+    "UserSignalsPage.jsx: Funnel metrics properly count non_tradeable separately from blocked (lines 155-169)",
+    "Backend exchange-readiness endpoint returns all required fields: is_ready, reason_code, permissions, market_types, last_check_at",
+    "Backend signals endpoint returns tradeable and first_precheck_failure_code fields",
+    "NON_TRADEABLE vs BLOCKED distinction is properly implemented in status handling"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration14_precheck_pipeline.py"
+  ],
+  "success_rate": {
+    "backend": "89% (16/18 passed)",
+    "frontend": "100% (code review verified)"
+  },
+  "test_credentials": "User: review.user@platform.local / ReviewUser123!",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend precheck pipeline tests created in test_iteration14_precheck_pipeline.py. Tests cover: exchange-readiness endpoint (spot/futures), scanner candidate precheck fields, NON_TRADEABLE vs BLOCKED distinction, run-async results with actionable_count and non_tradeable_count, execution preview pipeline, submit gate enforcement, bot start fail-fast, and auto-fix safe boundaries. 2 tests timeout due to slow diagnose/fix-all-blockers operations.",
+  "tests_passed": [
+    "test_exchange_readiness_spot_contract",
+    "test_exchange_readiness_futures_contract",
+    "test_exchange_readiness_with_symbol",
+    "test_scanner_results_contain_precheck_fields",
+    "test_signals_contain_precheck_fields",
+    "test_non_tradeable_status_exists",
+    "test_order_precheck_failed_shows_first_failure_code",
+    "test_run_async_returns_counts",
+    "test_run_async_both_returns_counts",
+    "test_preview_spot_returns_validation_status",
+    "test_preview_futures_returns_validation_status",
+    "test_submit_requires_valid_preview",
+    "test_preview_then_submit_flow",
+    "test_status_contract_returns_blocking_reasons",
+    "test_bot_runtime_summaries_contain_binding_validation",
+    "test_signals_funnel_counts"
+  ],
+  "tests_failed": [
+    "test_diagnose_auto_fix_does_not_increase_risk (timeout)",
+    "test_fix_all_blockers_safe_actions (timeout)"
+  ]
+}
