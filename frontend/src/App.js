@@ -101,6 +101,7 @@ import AdminIncidentIntelligencePage from "@/pages/AdminIncidentIntelligencePage
 import AdminIncidentDetailPage from "@/pages/AdminIncidentDetailPage";
 import AdminUnifiedControlRoomPage from "@/pages/AdminUnifiedControlRoomPage";
 import { AdminActionAuditPage } from "@/pages/AdminActionAuditPage";
+import { AdminLogPage } from "@/pages/AdminLogPage";
 import { PipelineOperationsPage } from "@/pages/PipelineOperationsPage";
 import { MfaSettingsPage } from "@/pages/MfaSettingsPage";
 import { AdminLiveGatePage } from "@/pages/AdminLiveGatePage";
@@ -233,6 +234,8 @@ function App() {
             <Route path="system-status" element={<MonitoringPage />} />
             <Route path="phase4-live" element={<Phase4LiveControlPage />} />
             <Route path="audit-logs" element={<AuditLogsPage />} />
+            <Route path="log" element={<AdminLogPage />} />
+            <Route path="logs" element={<Navigate to="/admin/log" replace />} />
             <Route path="core/logs" element={<AuditLogsPage />} />
 
             <Route path="strategy-allocation" element={<Navigate to="/admin/strategy/allocation" replace />} />

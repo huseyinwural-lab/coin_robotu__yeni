@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import String, cast, func
+from sqlalchemy import String, cast, func, or_
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -187,6 +187,110 @@ def _serialize_timeline_item(row: AuditLog) -> dict:
         "route": details.get("route"),
         "method": details.get("method"),
         "created_at": row.created_at.isoformat(),
+    }
+
+
+def _normalize_actor_roles(raw_roles: str | None) -> list[str]:
+    allowed = {"admin", "user", "super_admin", "ops", "system"}
+    source = raw_roles or "admin,user"
+    normalized = [segment.strip().lower() for segment in source.split(",") if segment and segment.strip()]
+    filtered = [role for role in normalized if role in allowed]
+    return filtered or ["admin", "user"]
+
+
+def _extract_status_code(details: dict) -> int | None:
+    candidates = [
+        details.get("status_code"),
+        details.get("http_status"),
+        details.get("status"),
+        details.get("response_status"),
+    ]
+    for value in candidates:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _is_error_log_entry(row: AuditLog, *, details: dict | None = None) -> bool:
+    payload = details if isinstance(details, dict) else (row.details or {})
+    severity = str(row.severity or "").strip().lower()
+    action = str(row.action or "").strip().lower()
+    status_code = _extract_status_code(payload)
+    error_keys = (
+        payload.get("error"),
+        payload.get("error_code"),
+        payload.get("detail"),
+        payload.get("message"),
+        payload.get("reason"),
+    )
+    has_error_text = any(str(item or "").strip() for item in error_keys)
+    action_has_error_keyword = any(keyword in action for keyword in ["error", "fail", "reject", "timeout", "blocked", "denied"])
+
+    if severity in {"warning", "critical", "error"}:
+        return True
+    if status_code is not None and status_code >= 400:
+        return True
+    if has_error_text:
+        return True
+    if action_has_error_keyword:
+        return True
+    return False
+
+
+def _derive_error_class(row: AuditLog, *, details: dict | None = None) -> str:
+    payload = details if isinstance(details, dict) else (row.details or {})
+    status_code = _extract_status_code(payload)
+    severity = str(row.severity or "").strip().lower()
+    error_text = " ".join(
+        [
+            str(payload.get("error") or ""),
+            str(payload.get("error_code") or ""),
+            str(payload.get("detail") or ""),
+            str(payload.get("message") or ""),
+            str(payload.get("reason") or ""),
+            str(row.action or ""),
+        ]
+    ).lower()
+
+    if status_code in {401, 403} or any(token in error_text for token in ["auth", "token", "session", "mfa", "forbidden", "unauthorized"]):
+        return "auth_error"
+    if (status_code is not None and status_code >= 500) or any(token in error_text for token in ["timeout", "network", "pool", "gateway", "db_pool_timeout", "service_unavailable"]):
+        return "infra_error"
+    if severity in {"warning", "critical", "error"} or _is_error_log_entry(row, details=payload):
+        return "trade_blocker"
+    return "none"
+
+
+def _serialize_admin_log_feed_item(row: AuditLog) -> dict:
+    details = row.details or {}
+    error_message = (
+        details.get("error")
+        or details.get("detail")
+        or details.get("message")
+        or details.get("reason")
+        or ""
+    )
+    is_error = _is_error_log_entry(row, details=details)
+    return {
+        "id": row.id,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "actor_user_id": row.actor_user_id,
+        "actor_role": str(row.actor_role or "system").lower(),
+        "action": row.action,
+        "entity_type": row.entity_type,
+        "entity_id": row.entity_id,
+        "severity": row.severity,
+        "route": details.get("route"),
+        "method": details.get("method"),
+        "request_id": details.get("request_id"),
+        "session_id": details.get("session_id"),
+        "status_code": _extract_status_code(details),
+        "is_error": is_error,
+        "error_class": _derive_error_class(row, details=details),
+        "error_message": str(error_message or ""),
+        "details": details,
     }
 
 
@@ -395,6 +499,56 @@ def list_audit_logs(
     limit: int = Query(default=100, ge=10, le=300),
 ):
     return db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit).all()
+
+
+@router.get("/admin/log-feed")
+def admin_log_feed(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = Query(default=50, ge=10, le=200),
+    actor_roles: str = Query(default="admin,user"),
+    include_error_only: bool = Query(default=False),
+    q: str | None = Query(default=None),
+):
+    normalized_roles = _normalize_actor_roles(actor_roles)
+    query = db.query(AuditLog).filter(func.lower(func.coalesce(AuditLog.actor_role, "system")).in_(normalized_roles))
+
+    if q and q.strip():
+        needle = f"%{q.strip()}%"
+        details_text = cast(AuditLog.details, String)
+        query = query.filter(
+            or_(
+                AuditLog.action.ilike(needle),
+                AuditLog.entity_type.ilike(needle),
+                AuditLog.entity_id.ilike(needle),
+                details_text.ilike(needle),
+            )
+        )
+
+    window_limit = min(max(limit * 6, 200), 1000)
+    rows = query.order_by(AuditLog.created_at.desc()).limit(window_limit).all()
+    serialized = [_serialize_admin_log_feed_item(row) for row in rows]
+    error_rows = [item for item in serialized if bool(item.get("is_error"))]
+
+    if include_error_only:
+        items = error_rows[:limit]
+    else:
+        items = serialized[:limit]
+
+    role_counter = Counter(str(item.get("actor_role") or "unknown") for item in serialized)
+    return {
+        "limit": limit,
+        "requested_roles": normalized_roles,
+        "include_error_only": include_error_only,
+        "query": q or "",
+        "refreshed_at": datetime.now(timezone.utc).isoformat(),
+        "total_scanned": len(serialized),
+        "returned_count": len(items),
+        "error_count_in_window": len(error_rows),
+        "role_breakdown": dict(role_counter),
+        "items": items,
+        "error_items": error_rows[:limit],
+    }
 
 
 @router.get("/timeline", response_model=AuditTimelineResponse)

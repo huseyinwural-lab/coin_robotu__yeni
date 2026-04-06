@@ -106,7 +106,7 @@ const adminOnlyItems = [
       { to: "/admin/live-gate", label: "Live Gate", icon: ClipboardList, testId: "nav-admin-live-gate-link" },
       { to: "/admin/live-trading-dashboard", label: "Live Trading Dashboard", icon: Activity, testId: "nav-admin-live-trading-dashboard-link" },
       { to: "/admin/system-status", label: "System Status", icon: Activity, testId: "nav-admin-system-status-link" },
-      { to: "/admin/audit-logs", label: "Logs", icon: FileText, testId: "nav-admin-logs-link" },
+      { to: "/admin/log", label: "Logs", icon: FileText, testId: "nav-admin-logs-link" },
       { to: "/admin/universe-monitor", label: "Scanner Monitor", icon: Gauge, testId: "nav-admin-scanner-monitor-link" },
       { to: "/admin/futures/strategy-control", label: "Strategy Control", icon: BarChart3, testId: "nav-admin-strategy-control-link" },
     ],
