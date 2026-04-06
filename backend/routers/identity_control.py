@@ -40,6 +40,8 @@ from services.identity_control_service import (
     update_custom_role,
     expire_invite,
     REQUEST_REASON_MIN_LEN,
+    _purge_user_fk_dependencies,
+    _rebind_identity_approval_targets_for_deleted_user,
 )
 from services.mfa_service import get_mfa_enforcement_context, get_mfa_settings
 from services.user_observability_service import (
@@ -136,6 +138,15 @@ class InlineUserUpdateRequest(BaseModel):
     reason: str = "inline_update"
     critical_confirmed: bool = False
     override_reason: str | None = None
+
+
+class DirectTradingTogglePayload(BaseModel):
+    trading_enabled: bool
+    reason: str = "direct_trading_toggle"
+
+
+class DirectHardDeletePayload(BaseModel):
+    reason: str = "direct_hard_delete"
 
 
 class ApprovalRequestCreatePayload(BaseModel):
@@ -572,6 +583,111 @@ def admin_identity_user_inline_update(
         "status": "updated",
         "user_id": target.id,
         "eligibility": eligibility,
+    }
+
+
+@router.patch("/users/{user_id}/trading-enabled-direct")
+def admin_identity_direct_trading_toggle(
+    user_id: str,
+    payload: DirectTradingTogglePayload,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.users.write")
+    if current_admin.role == UserRole.OPS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops_readonly")
+
+    target = db.query(User).filter(User.id == user_id, User.role == UserRole.USER).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+
+    if payload.trading_enabled and str(target.approval_status or "").lower() != "approved":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_not_approved")
+
+    profile = get_or_create_identity_profile(db, target.id)
+    profile.trading_enabled = bool(payload.trading_enabled)
+    if payload.trading_enabled:
+        profile.kill_switch_active = False
+        profile.live_trading_eligible = True
+    profile.updated_by = current_admin.id
+    profile.updated_at = datetime.now(timezone.utc)
+
+    create_audit_log(
+        db,
+        action="IDENTITY_DIRECT_TRADING_TOGGLE",
+        entity_type="user",
+        entity_id=target.id,
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        severity="warning",
+        details={
+            "trading_enabled": bool(payload.trading_enabled),
+            "reason": payload.reason,
+            "method": "direct",
+        },
+        commit=False,
+    )
+    db.commit()
+
+    return {
+        "status": "updated",
+        "user_id": target.id,
+        "trading_enabled": bool(profile.trading_enabled),
+    }
+
+
+@router.delete("/users/{user_id}/hard-delete-direct")
+def admin_identity_direct_hard_delete_user(
+    user_id: str,
+    payload: DirectHardDeletePayload | None = Body(default=None),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    enforce_permission(db, actor=current_admin, permission="identity.users.write")
+    if current_admin.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_only")
+
+    target = db.query(User).filter(User.id == user_id, User.role == UserRole.USER).first()
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="user_not_found")
+    if target.id == current_admin.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="cannot_delete_self")
+
+    try:
+        reason = (payload.reason if payload else "direct_hard_delete")
+        rebound_approval_rows = _rebind_identity_approval_targets_for_deleted_user(
+            db,
+            deleted_user_id=target.id,
+            fallback_user_id=current_admin.id,
+        )
+        purge_counts = _purge_user_fk_dependencies(db, user_id=target.id)
+
+        create_audit_log(
+            db,
+            action="IDENTITY_USER_HARD_DELETE_DIRECT",
+            entity_type="user",
+            entity_id=target.id,
+            actor_user_id=current_admin.id,
+            actor_role=current_admin.role.value,
+            severity="warning",
+            details={
+                "reason": reason,
+                "rebound_approval_rows": rebound_approval_rows,
+                "purge_counts": purge_counts,
+                "method": "direct",
+            },
+            commit=False,
+        )
+
+        db.delete(target)
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="hard_delete_failed") from exc
+
+    return {
+        "status": "hard_deleted",
+        "user_id": user_id,
     }
 
 

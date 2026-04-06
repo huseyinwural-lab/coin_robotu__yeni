@@ -1,0 +1,81 @@
+{
+  "summary": "Iteration 21 - Admin Panel Update Testing. Backend APIs verified working: trading-enabled-direct, hard-delete-direct, admin-create, user-approvals. Frontend routes properly configured with legacy redirects. UI components have proper data-testid attributes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/admin/users/admin-create",
+        "issue": "Only allows creating 'admin' role, not 'ops'. This may be intentional based on security policy.",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration21_admin_panel_update.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminUserUsersPage.jsx properly implements all required columns: Kullanıcı İsmi, Aktif/Pasif, Trade Aktif Et, Trade Durdur, Sil, Kayıt Tarihi",
+    "Trading toggle uses PATCH /api/admin/identity/users/{id}/trading-enabled-direct endpoint correctly",
+    "Hard delete uses DELETE /api/admin/identity/users/{id}/hard-delete-direct endpoint with super_admin check",
+    "Legacy routes properly redirect: /admin/users/customers -> /admin/kullanicilar/user-kullanicilar, /admin/users/admins -> /admin/kullanicilar/admin-kullanicilar, /admin/user-approvals -> /admin/kullanicilar/kullanici-onaylar, /admin/users/economics -> /admin/kullanicilar/kullanici-ekonomisi",
+    "Sidebar navigation updated with new Turkish route labels"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration21_admin_panel_update.py"
+  ],
+  "success_rate": {
+    "backend": "100% (all endpoints return expected responses)",
+    "frontend": "Routes configured correctly, UI components have proper structure"
+  },
+  "test_credentials": {
+    "super_admin": "canary.admin@platform.local / CanaryAdmin123!",
+    "user": "review.user@platform.local / ReviewUser123!"
+  },
+  "seed_data_creation": "None - used existing test users",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Admin panel update complete. New routes under /admin/kullanicilar/* working. Backend endpoints for trading toggle and hard delete verified. Frontend session management requires cookies for authenticated requests.",
+  "api_test_results": {
+    "health": "200 OK",
+    "admin_login": "200 OK - returns access_token",
+    "identity_users_list": "200 OK - returns paginated user list with identity_controls",
+    "identity_users_filter_role_user": "200 OK - filters by role=user correctly",
+    "trading_enabled_direct_enable": "200 OK - returns {status: 'updated', trading_enabled: true}",
+    "trading_enabled_direct_disable": "200 OK - returns {status: 'updated', trading_enabled: false}",
+    "hard_delete_direct": "200 OK - returns {status: 'hard_deleted'} (super_admin only)",
+    "admin_create": "201 Created - creates admin user (super_admin only)",
+    "user_approvals_list": "200 OK - returns pending approval requests",
+    "user_approval_approve": "200 OK - approves user, sets approval_status='approved'"
+  },
+  "route_verification": {
+    "new_routes": [
+      "/admin/kullanicilar/admin-kullanicilar - AdminUsersPage with scope='admin'",
+      "/admin/kullanicilar/user-kullanicilar - AdminUserUsersPage",
+      "/admin/kullanicilar/kullanici-onaylar - AdminUserApprovalsPage",
+      "/admin/kullanicilar/kullanici-ekonomisi - AdminUserEconomicsPage"
+    ],
+    "legacy_redirects": [
+      "/admin/users -> /admin/kullanicilar/user-kullanicilar",
+      "/admin/users/admins -> /admin/kullanicilar/admin-kullanicilar",
+      "/admin/users/customers -> /admin/kullanicilar/user-kullanicilar",
+      "/admin/user-approvals -> /admin/kullanicilar/kullanici-onaylar",
+      "/admin/users/economics -> /admin/kullanicilar/kullanici-ekonomisi"
+    ]
+  },
+  "column_verification": {
+    "AdminUserUsersPage": [
+      "Kullanıcı İsmi (email)",
+      "Aktif / Pasif (is_active badge)",
+      "Trade Aktif Et (button, disabled if already enabled)",
+      "Trade Durdur (button, disabled if already disabled)",
+      "Sil (hard delete button)",
+      "Kayıt Tarihi (created_at formatted)"
+    ]
+  }
+}

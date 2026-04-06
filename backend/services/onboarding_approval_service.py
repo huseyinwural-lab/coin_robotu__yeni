@@ -24,6 +24,7 @@ from models import (
     UserStrategyScope,
 )
 from services.audit_service import create_audit_log
+from services.identity_control_service import get_or_create_identity_profile
 from services.risk_policy_defaults_service import ensure_user_safe_default_risk_policy
 from services.venue_service import ensure_user_venue_assignment
 
@@ -241,7 +242,14 @@ def _append_activation_event(db: Session, *, user_id: str, event_type: str, payl
     db.add(UserActivationEvent(user_id=user_id, event_type=event_type, payload=payload))
 
 
-def run_post_approval_activation(db: Session, *, user: User, actor: User | None, commit: bool = True) -> dict:
+def run_post_approval_activation(
+    db: Session,
+    *,
+    user: User,
+    actor: User | None,
+    commit: bool = True,
+    enable_trading: bool = False,
+) -> dict:
     now = _now()
     actor_id = actor.id if actor else None
 
@@ -289,9 +297,23 @@ def run_post_approval_activation(db: Session, *, user: User, actor: User | None,
         event_type="user.activation.started",
         payload={"at": now.isoformat()},
     )
+
+    profile = get_or_create_identity_profile(db, user.id)
+    if enable_trading:
+        profile.trading_enabled = True
+        profile.live_trading_eligible = True
+        profile.kill_switch_active = False
+    profile.updated_by = actor_id
+    profile.updated_at = now
+
     if commit:
         db.commit()
-    return {"events": 4, "strategy_scope": "core-default"}
+    return {
+        "events": 4,
+        "strategy_scope": "core-default",
+        "trading_enabled": bool(profile.trading_enabled),
+        "live_trading_eligible": bool(profile.live_trading_eligible),
+    }
 
 
 def build_onboarding_context(db: Session, user_id: str) -> dict:
@@ -721,7 +743,14 @@ def execute_onboarding_decision(
 
     activation_result = None
     if normalized == "approve":
-        activation_result = run_post_approval_activation(db, user=user, actor=actor, commit=False)
+        actor_role_value = str(actor.role.value if hasattr(actor.role, "value") else actor.role).strip().lower()
+        activation_result = run_post_approval_activation(
+            db,
+            user=user,
+            actor=actor,
+            commit=False,
+            enable_trading=actor_role_value == UserRole.SUPER_ADMIN.value,
+        )
     try:
         log = append_decision_log(
             db,

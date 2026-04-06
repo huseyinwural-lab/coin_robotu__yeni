@@ -30,6 +30,7 @@ import AdminStrategyTimelineChainPage from "@/pages/AdminStrategyTimelineChainPa
 import { AdminSystemAlertsPage } from "@/pages/AdminSystemAlertsPage";
 import { AdminUserApprovalsPage } from "@/pages/AdminUserApprovalsPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
+import { AdminUserUsersPage } from "@/pages/AdminUserUsersPage";
 import { AuditLogsPage } from "@/pages/AuditLogsPage";
 import { BacktestCardsPage } from "@/pages/BacktestCardsPage";
 import { BacktestInsightsPage } from "@/pages/BacktestInsightsPage";
@@ -156,15 +157,26 @@ function App() {
             <Route path="live-gate" element={<AdminLiveGatePage />} />
             <Route path="live-trading-dashboard" element={<AdminLiveTradingDashboardPage />} />
             <Route path="cross-dashboard-consistency" element={<AdminCrossDashboardConsistencyPage />} />
-            <Route path="users" element={<Navigate to="/admin/users/customers" replace />} />
+            <Route path="users" element={<Navigate to="/admin/kullanicilar/user-kullanicilar" replace />} />
             <Route path="commercial-ops" element={<AdminCommercialOpsPage />} />
             <Route path="revenue" element={<AdminRevenuePage />} />
-            <Route path="users/economics" element={<AdminUserEconomicsPage />} />
+            <Route path="users/economics" element={<Navigate to="/admin/kullanicilar/kullanici-ekonomisi" replace />} />
             <Route path="snapshots" element={<AdminSnapshotsPage />} />
             <Route path="credential-orchestration" element={<AdminCredentialOrchestrationPage />} />
-            <Route path="users/admins" element={<AdminUsersPage scope="admin" />} />
-            <Route path="users/customers" element={<AdminUsersPage scope="user" />} />
-            <Route path="user-approvals" element={<AdminUserApprovalsPage />} />
+            <Route path="users/admins" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
+            <Route path="users/customers" element={<Navigate to="/admin/kullanicilar/user-kullanicilar" replace />} />
+            <Route path="user-approvals" element={<Navigate to="/admin/kullanicilar/kullanici-onaylar" replace />} />
+            <Route path="kullanicilar" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
+            <Route path="kullanıcılar" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
+            <Route path="kullanicilar/admin-kullanicilar" element={<AdminUsersPage scope="admin" />} />
+            <Route path="kullanicilar/user-kullanicilar" element={<AdminUserUsersPage />} />
+            <Route path="kullanicilar/kullanici-onaylar" element={<AdminUserApprovalsPage />} />
+            <Route path="kullanicilar/kullanici-ekonomisi" element={<AdminUserEconomicsPage />} />
+            <Route path="core/kullanicilar" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
+            <Route path="core/kullanicilar/admin-kullanicilar" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
+            <Route path="core/kullanicilar/user-kullanicilar" element={<Navigate to="/admin/kullanicilar/user-kullanicilar" replace />} />
+            <Route path="core/kullanicilar/kullanici-onaylar" element={<Navigate to="/admin/kullanicilar/kullanici-onaylar" replace />} />
+            <Route path="core/kullanicilar/kullanici-ekonomisi" element={<Navigate to="/admin/kullanicilar/kullanici-ekonomisi" replace />} />
             <Route path="onboarding-observability" element={<AdminOnboardingObservabilityPage />} />
             <Route path="system-alerts" element={<AdminSystemAlertsPage />} />
             <Route path="strategy/observability" element={<AdminStrategyObservabilityPage />} />

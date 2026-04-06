@@ -340,15 +340,13 @@ def create_admin_user(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    if current_admin.role == UserRole.OPS:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="ops_readonly")
+    if current_admin.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_only")
 
     validate_password_policy(payload.password, minimum_length=10)
 
     role_value = payload.role.strip().lower()
-    allowed_roles = {UserRole.ADMIN.value, UserRole.OPS.value}
-    if current_admin.role == UserRole.SUPER_ADMIN:
-        allowed_roles.add(UserRole.SUPER_ADMIN.value)
+    allowed_roles = {UserRole.ADMIN.value}
 
     if role_value not in allowed_roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="forbidden_target_role")

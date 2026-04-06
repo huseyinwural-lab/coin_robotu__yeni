@@ -555,6 +555,14 @@ def approve_user_request(
     confirm_token = payload.confirm_token if payload else None
     if payload is None:
         user = approve_user_account(db, user_id)
+        if current_admin.role == UserRole.SUPER_ADMIN:
+            profile = get_or_create_identity_profile(db, user.id)
+            profile.trading_enabled = True
+            profile.live_trading_eligible = True
+            profile.kill_switch_active = False
+            profile.updated_by = current_admin.id
+            profile.updated_at = datetime.now(timezone.utc)
+            db.commit()
     else:
         execute_onboarding_decision(
             db,

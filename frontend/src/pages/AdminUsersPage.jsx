@@ -754,14 +754,14 @@ export const AdminUsersPage = ({ scope = "user" }) => {
       <div className="flex flex-wrap gap-2" data-testid="admin-users-scope-menu-row">
         <Button
           className={isAdminScope ? "border border-black bg-lime-300 text-black hover:bg-lime-400" : "border border-black bg-orange-200 text-black hover:bg-orange-300"}
-          onClick={() => navigate("/admin/users/admins")}
+          onClick={() => navigate("/admin/kullanicilar/admin-kullanicilar")}
           data-testid="admin-users-scope-admins-button"
         >
           Admin Kullanıcıları
         </Button>
         <Button
           className={!isAdminScope ? "border border-black bg-lime-300 text-black hover:bg-lime-400" : "border border-black bg-orange-200 text-black hover:bg-orange-300"}
-          onClick={() => navigate("/admin/users/customers")}
+          onClick={() => navigate("/admin/kullanicilar/user-kullanicilar")}
           data-testid="admin-users-scope-customers-button"
         >
           User Kullanıcıları
