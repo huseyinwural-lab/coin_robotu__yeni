@@ -2577,7 +2577,18 @@ def diagnose_pending_signal(
         raise ValueError("pending_signal_not_found")
 
     actions_applied: list[str] = []
-    _refresh_pending_signal_snapshot(db, row)
+    fast_autofix_codes = {
+        "ORDER_PRECHECK_FAILED",
+        "SYMBOL_NOT_ALLOWED",
+        "BOT_NOT_RUNNING",
+        "RISK_POLICY_MISSING",
+        "MANUAL_APPROVAL_REQUIRED",
+        "EXCHANGE_NOT_READY",
+        "MARKET_TYPE_NOT_ALLOWED",
+        "EXECUTION_DISABLED",
+    }
+    if not (auto_fix and row.blocked_reason_code in fast_autofix_codes):
+        _refresh_pending_signal_snapshot(db, row)
 
     if auto_fix and row.blocked_reason_code == "BOT_NOT_RUNNING":
         actions_applied.append("status_contract_refresh_requested")
@@ -2595,71 +2606,26 @@ def diagnose_pending_signal(
         first_code = _extract_precheck_first_failure(row.decision_note, row.blocked_reason_message)
         if first_code == "EXCHANGE_NOT_READY":
             actions_applied.append("connection_revalidate_required")
-
-        signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
-        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id, BotProfile.is_deleted.is_(False)).first() if row.bot_profile_id else None
-        if signal is not None and bot is not None:
-            risk_policy_row = db.query(RiskOrchestratorPolicy).filter(RiskOrchestratorPolicy.id == "global").first()
-            reference_equity = float(risk_policy_row.reference_equity_usd) if risk_policy_row else 10000.0
-            risk_per_trade_pct = float(GLOBAL_RISK_POLICY.get("risk_per_trade_pct", 1.5))
-            per_trade_notional_cap = max(10.0, round(reference_equity * (risk_per_trade_pct / 100), 4))
-            try:
-                portfolio_snapshot = build_user_portfolio_snapshot(db, row.user_id)
-            except Exception:
-                portfolio_snapshot = {}
-            available_balance_snapshot = max(_safe_float(portfolio_snapshot.get("available_balance"), 0.0), 0.0)
-            requested_notional = min(max(10.0, round(float(signal.confidence or row.confidence or 0.5) * 100, 4)), per_trade_notional_cap)
-            precheck_result = _evaluate_candidate_tradeability(
-                db=db,
-                symbol=row.symbol,
-                market_type=str(getattr(signal, "market_type", "spot") or "spot"),
-                signal_side=str(getattr(signal, "signal", "long") or "long"),
-                requested_notional=requested_notional,
-                risk_notional_cap=per_trade_notional_cap,
-                available_balance=available_balance_snapshot,
-                exchange_connection=_resolve_exchange_connection_for_market(
-                    db,
-                    row.user_id,
-                    str(getattr(signal, "market_type", "spot") or "spot"),
-                ),
-                leverage=int(getattr(bot, "leverage", 1) or 1),
-                margin_mode="isolated" if str(getattr(signal, "market_type", "spot") or "spot").lower() == "futures" else "",
-                symbol_filters_cache={},
-                exchange_readiness_cache={},
-                registry_payload=load_execution_policy_registry(),
-            )
-            if bool(precheck_result.get("tradeable")):
-                row.blocked_reason_code = ""
-                row.blocked_reason_message = ""
-                row.blocked_solution_hint = ""
-                row.execution_eligible = True
-                row.status = "pending"
-                _set_state(row, "DETECTED")
-                row.decision_note = f"non_tradeable_autofix:first={first_code or 'ORDER_PRECHECK_FAILED'}"
-                actions_applied.append("non_tradeable_revalidated")
-            else:
-                updated_first = str(precheck_result.get("first_precheck_failure_code") or first_code or "ORDER_PRECHECK_FAILED")
-                updated_codes = list(precheck_result.get("failure_codes") or [])
-                row.status = "non_tradeable"
-                row.execution_eligible = False
-                row.blocked_reason_code = "ORDER_PRECHECK_FAILED"
-                row.blocked_reason_message = (
-                    f"Order precheck başarısız. / first={updated_first} / codes: {', '.join(updated_codes[:6]) if updated_codes else updated_first}"
-                )
-                row.blocked_solution_hint = PRECHECK_ACTION_HINTS.get(updated_first, PRECHECK_ACTION_HINTS["ORDER_PRECHECK_FAILED"])
-                row.decision_note = f"order_precheck_failed:first={updated_first};codes={'|'.join(updated_codes[:6])}"[:240]
-                actions_applied.append("manual_precheck_adjustment_required")
+        elif first_code in {"MARKET_TYPE_NOT_ALLOWED", "SYMBOL_NOT_ALLOWED"}:
+            actions_applied.append("symbol_reload_requested")
+        else:
+            actions_applied.append("status_contract_refresh_requested")
 
     if actions_applied:
         db.flush()
 
-    _refresh_pending_signal_snapshot(db, row)
+    if not (auto_fix and row.blocked_reason_code in fast_autofix_codes):
+        _refresh_pending_signal_snapshot(db, row)
 
     if auto_fix and row.mode == "AUTO" and row.execution_eligible and row.status in {"pending", "ready"}:
         signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
         if signal is not None:
             try:
-                exchange_connection = _resolve_default_exchange_connection(db, user_id)
+                exchange_connection = _resolve_exchange_connection_for_market(
+                    db,
+                    user_id,
+                    str(getattr(signal, "market_type", "spot") or "spot"),
+                )
                 _dispatch_signal_to_execution(
                     db,
                     row=row,
@@ -2703,11 +2669,12 @@ def diagnose_pending_signal(
 
 
 def bulk_fix_blocked_signals(db: Session, user_id: str, limit: int = 200) -> dict:
+    safe_limit = max(min(limit, 3), 1)
     rows = (
         db.query(PendingSignal)
         .filter(PendingSignal.user_id == user_id, PendingSignal.status.in_(["blocked", "non_tradeable"]))
         .order_by(PendingSignal.created_at.desc())
-        .limit(max(min(limit, 500), 1))
+        .limit(safe_limit)
         .all()
     )
 

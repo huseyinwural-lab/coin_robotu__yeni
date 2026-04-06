@@ -1295,7 +1295,7 @@ def diagnose_signal(
 
 @router.post("/signals/fix-all-blockers", response_model=UserSignalsBulkFixResponse)
 def fix_all_blocked_signals(
-    limit: int = Query(default=200, ge=1, le=500),
+    limit: int = Query(default=20, ge=1, le=50),
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
