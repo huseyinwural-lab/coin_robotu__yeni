@@ -1073,6 +1073,7 @@ export const UserScannerPage = () => {
       scanned_window_symbols: selectedWindow,
       result_count: Number(data?.result_count || 0),
       actionable_count: Number(data?.actionable_count || 0),
+      non_tradeable_count: Number(data?.non_tradeable_count || 0),
       queued_count: Number(data?.queued_count || 0),
       pending_total: Number(data?.pending_total || 0),
       warnings,
@@ -1263,12 +1264,14 @@ export const UserScannerPage = () => {
         scanner_runs: Array.isArray(data?.runs) ? data.runs : [],
         requested_markets: requestedMarkets,
         actionable_count: Number(data?.actionable_count || 0),
+        non_tradeable_count: Number(data?.non_tradeable_count || 0),
         bot_start_results: botStartResults,
       });
 
       await load();
 
       const actionable = Number(data?.actionable_count || 0);
+      const nonTradeable = Number(data?.non_tradeable_count || 0);
       if ((data?.warnings || []).length > 0) {
         toast.warning((data.warnings || []).join(","));
       }
@@ -1276,8 +1279,8 @@ export const UserScannerPage = () => {
       const noBotCount = botStartResults.filter((item) => item.status === "no_bot").length;
       toast.success(
         startedBotNames.length > 0
-          ? `Run tamamlandı · actionable=${actionable} · bot başlatıldı: ${startedBotNames.join(", ")}`
-          : `Run tamamlandı · actionable=${actionable} · bot başlatılamadı`,
+          ? `Run tamamlandı · actionable=${actionable} · non_tradeable=${nonTradeable} · bot başlatıldı: ${startedBotNames.join(", ")}`
+          : `Run tamamlandı · actionable=${actionable} · non_tradeable=${nonTradeable} · bot başlatılamadı`,
       );
       if (failedBotCount > 0 || noBotCount > 0) {
         toast.warning(`Bot start özeti: başarısız=${failedBotCount}, bot_yok=${noBotCount}`);
@@ -1901,7 +1904,7 @@ export const UserScannerPage = () => {
           <div className="rounded border border-amber-700 bg-amber-950/20 p-3" data-testid="user-scanner-run-both-start-bot-report-panel">
             <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="user-scanner-run-both-start-bot-report-title">Run + Start Bot Detay Raporu</p>
             <p className="mt-1 text-xs text-amber-100" data-testid="user-scanner-run-both-start-bot-report-meta">
-              executed_at={formatDateLabel(lastRunStartBotReport.executed_at)} · actionable={lastRunStartBotReport.actionable_count}
+              executed_at={formatDateLabel(lastRunStartBotReport.executed_at)} · actionable={lastRunStartBotReport.actionable_count} · non_tradeable={lastRunStartBotReport.non_tradeable_count || 0}
             </p>
 
             <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="user-scanner-run-both-scanner-runs-grid">

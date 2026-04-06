@@ -118,11 +118,12 @@ export const UserSignalsPage = () => {
     if (!blockedAlertEnabled) {
       return;
     }
-    const blockedRows = signalRows.filter((item) => item.status === "blocked" && item.blocked_reason_code);
+    const blockedRows = signalRows.filter((item) => ["blocked", "non_tradeable"].includes(String(item.status || "").toLowerCase()) && item.blocked_reason_code);
     for (const row of blockedRows) {
       if (!alertedSignalIdsRef.current.has(row.id)) {
         alertedSignalIdsRef.current.add(row.id);
-        toast.warning(`Signal blocked: ${row.symbol} / ${row.blocked_reason_code}`);
+        const tag = String(row.status || "").toLowerCase() === "non_tradeable" ? "non-tradeable" : "blocked";
+        toast.warning(`Signal ${tag}: ${row.symbol} / ${row.blocked_reason_code}`);
       }
     }
   }, [signalRows, blockedAlertEnabled]);
@@ -151,6 +152,7 @@ export const UserSignalsPage = () => {
       submitted: submittedSignals.length,
       filled: 0,
       blocked: 0,
+      non_tradeable: 0,
     };
     signalRows.forEach((row) => {
       if (["ready", "approved", "queued", "submitted", "filled"].includes(String(row.status))) {
@@ -161,6 +163,9 @@ export const UserSignalsPage = () => {
       }
       if (String(row.status) === "blocked") {
         counters.blocked += 1;
+      }
+      if (String(row.status) === "non_tradeable") {
+        counters.non_tradeable += 1;
       }
     });
     return counters;
@@ -253,7 +258,7 @@ export const UserSignalsPage = () => {
     if (["filled", "submitted", "queued", "ready", "approved"].includes(normalized)) {
       return `bg-emerald-200 text-emerald-900${pulseClass}`;
     }
-    if (["blocked", "rejected", "expired"].includes(normalized)) {
+    if (["blocked", "non_tradeable", "rejected", "expired"].includes(normalized)) {
       return `bg-rose-200 text-rose-900${pulseClass}`;
     }
     return `bg-amber-200 text-amber-900${pulseClass}`;
@@ -266,6 +271,9 @@ export const UserSignalsPage = () => {
     }
     if (value === "info") {
       return "Pending";
+    }
+    if (value === "non_tradeable") {
+      return "Non-Tradeable";
     }
     return value.charAt(0).toUpperCase() + value.slice(1);
   };
@@ -378,7 +386,7 @@ export const UserSignalsPage = () => {
   const controlPanelState = useMemo(() => {
     const rawMode = String(signalMode?.mode || "ASSISTED").toUpperCase();
     const latestSignal = gridSignals[0] || null;
-    const currentBlocker = gridSignals.find((item) => item.status === "blocked" && item.blocked_reason_code) || null;
+    const currentBlocker = gridSignals.find((item) => ["blocked", "non_tradeable"].includes(String(item.status || "").toLowerCase()) && item.blocked_reason_code) || null;
     let executionPath = "MANUAL_FLOW";
     if (rawMode === "AUTO" && activeBotCount > 0) {
       executionPath = "BOT_AUTO_ACTIVE";
@@ -515,7 +523,7 @@ export const UserSignalsPage = () => {
           <p className="text-sm" data-testid="user-signals-live-control-execution-path">Execution Path: {controlPanelState.executionPath}</p>
           <p className="text-sm" data-testid="user-signals-live-control-latest-signal-state">Last Signal State: {controlPanelState.latestSignalState}</p>
           <p className="text-sm" data-testid="user-signals-live-control-current-blocker">Current Blocker: {controlPanelState.currentBlocker}</p>
-          <p className="text-sm" data-testid="user-signals-live-control-note">Not: ORDER_PRECHECK_FAILED durumunda sinyal güvenlik için blocked kalır.</p>
+          <p className="text-sm" data-testid="user-signals-live-control-note">Not: ORDER_PRECHECK_FAILED durumunda sinyal NON_TRADEABLE olarak işaretlenir.</p>
         </div>
 
         {statusContract && (
@@ -564,6 +572,7 @@ export const UserSignalsPage = () => {
         <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-submitted-card"><p className="text-[11px] text-slate-500">Submitted</p><p className="text-lg font-semibold" data-testid="user-signals-funnel-submitted-value">{funnelMetrics.submitted}</p></div>
         <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-filled-card"><p className="text-[11px] text-slate-500">Filled</p><p className="text-lg font-semibold text-emerald-400">{funnelMetrics.filled}</p></div>
         <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-blocked-card"><p className="text-[11px] text-slate-500">Blocked</p><p className="text-lg font-semibold text-rose-400">{funnelMetrics.blocked}</p></div>
+        <div className="col-span-6 md:col-span-2 border border-slate-800 bg-slate-900 p-3" data-testid="user-signals-funnel-non-tradeable-card"><p className="text-[11px] text-slate-500">Non-Tradeable</p><p className="text-lg font-semibold text-amber-300">{funnelMetrics.non_tradeable}</p></div>
       </div>
 
       <div className="col-span-12 border border-amber-500/40 bg-amber-500/10 p-3" data-testid="user-signals-smart-recommendation-banner">
@@ -647,6 +656,8 @@ export const UserSignalsPage = () => {
             <p className="text-xs text-rose-300" data-testid={`user-signals-mobile-blocked-reason-${signal.id}`}>blocked: {signal.blocked_reason_code || "-"}</p>
             <p className="text-xs text-rose-200" data-testid={`user-signals-mobile-blocked-message-${signal.id}`}>message: {signal.blocked_reason_message || "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-solution-hint-${signal.id}`}>hint: {signal.blocked_solution_hint || "-"}</p>
+            <p className="text-xs text-slate-300" data-testid={`user-signals-mobile-tradeable-${signal.id}`}>tradeable: <span className={`font-semibold ${signal.tradeable ? "text-emerald-300" : "text-rose-300"}`}>{String(Boolean(signal.tradeable)).toUpperCase()}</span></p>
+            <p className="text-xs text-rose-200" data-testid={`user-signals-mobile-first-precheck-failure-${signal.id}`}>first_precheck_failure_code: {signal.first_precheck_failure_code || "-"}</p>
             <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-strategy-${signal.id}`}>{signal.strategy_code}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-intent-status-${signal.id}`}>intent: {signal.execution_intent_status || "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-proposed-notional-${signal.id}`}>notional: {signal.proposed_notional ?? "-"}</p>
@@ -655,9 +666,9 @@ export const UserSignalsPage = () => {
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-meta-decision-${signal.id}`}>meta: {signal.meta_engine_decision ?? "-"}</p>
             <div className="mt-2 flex flex-wrap gap-2" data-testid={`user-signals-mobile-actions-${signal.id}`}>
               <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-mobile-why-button-${signal.id}`}>Why this signal?</Button>
-              {(signal.status === "pending" || signal.status === "ready" || signal.status === "blocked") && (
+              {(["pending", "ready", "blocked", "non_tradeable"].includes(String(signal.status || "").toLowerCase())) && (
                 <>
-                  {(signal.status === "pending" || signal.status === "ready") && (
+                  {(["pending", "ready"].includes(String(signal.status || "").toLowerCase())) && (
                     <>
                       <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-mobile-approve-${signal.id}`}>Approve</Button>
                       <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-mobile-reject-${signal.id}`}>Reject</Button>
@@ -703,6 +714,8 @@ export const UserSignalsPage = () => {
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Status</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Execution Mode</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Blokaj Nedeni</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Tradeable</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>First Precheck</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Son Uygunluk Kontrolü</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Intent</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Runtime Sahibi</th>
@@ -731,6 +744,12 @@ export const UserSignalsPage = () => {
                     <p className="text-[11px] text-slate-400 break-words" data-testid={`user-signals-table-blocked-solution-${signal.id}`}>{signal.blocked_solution_hint || "-"}</p>
                   </div>
                 </td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-tradeable-${signal.id}`}>
+                  <span className={`rounded px-2 py-1 text-xs font-semibold ${signal.tradeable ? "bg-emerald-200 text-emerald-900" : "bg-rose-200 text-rose-900"}`}>{String(Boolean(signal.tradeable)).toUpperCase()}</span>
+                </td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-first-precheck-failure-${signal.id}`}>
+                  <span className="text-xs text-rose-200">{signal.first_precheck_failure_code || "-"}</span>
+                </td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-last-eligibility-check-${signal.id}`}>{signal.last_eligibility_check_at ? new Date(signal.last_eligibility_check_at).toLocaleString() : "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-intent-${signal.id}`}>
                   <div>
@@ -744,9 +763,9 @@ export const UserSignalsPage = () => {
                 <td className={compactMode ? "px-2 py-1 align-top min-w-[420px]" : "px-3 py-2 align-top min-w-[420px]"}>
                   <div className="flex min-w-max flex-nowrap gap-2 whitespace-nowrap" data-testid={`user-signals-actions-${signal.id}`}>
                     <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-why-button-${signal.id}`}>Why this signal?</Button>
-                    {(signal.status === "pending" || signal.status === "ready" || signal.status === "blocked") ? (
+                    {(["pending", "ready", "blocked", "non_tradeable"].includes(String(signal.status || "").toLowerCase())) ? (
                       <>
-                        {(signal.status === "pending" || signal.status === "ready") && (
+                        {(["pending", "ready"].includes(String(signal.status || "").toLowerCase())) && (
                           <>
                             <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-approve-button-${signal.id}`}>Approve</Button>
                             <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-reject-button-${signal.id}`}>Reject</Button>
@@ -773,7 +792,7 @@ export const UserSignalsPage = () => {
             ))}
             {gridSignals.length === 0 && (
               <tr data-testid="user-signals-table-empty-row">
-                <td className="px-3 py-6 text-center text-slate-400" colSpan={15} data-testid="user-signals-table-empty-text">
+                <td className="px-3 py-6 text-center text-slate-400" colSpan={17} data-testid="user-signals-table-empty-text">
                   Aktif sinyal bulunamadı. Scanner sonucu geldikçe grid otomatik güncellenir.
                 </td>
               </tr>

@@ -2318,6 +2318,7 @@ class UserScannerRunResponse(BaseModel):
     market_type: str
     result_count: int
     actionable_count: int
+    non_tradeable_count: int = 0
     queued_count: int
     pending_total: int
     generated_at: datetime
@@ -2433,6 +2434,8 @@ class UserScannerResultResponse(BaseModel):
     confidence: float
     score: float | None = None
     signal_score: float
+    tradeable: bool | None = None
+    first_precheck_failure_code: str | None = None
     reason_codes: list[str]
     explain: list[str] = Field(default_factory=list, min_length=1)
     payload: dict
@@ -2532,6 +2535,8 @@ class UserSignalResponse(BaseModel):
     blocked_reason_code: str | None = None
     blocked_reason_message: str | None = None
     blocked_solution_hint: str | None = None
+    tradeable: bool | None = None
+    first_precheck_failure_code: str | None = None
     requires_manual_approval: bool | None = None
     execution_eligible: bool | None = None
     bot_profile_id: str | None = None

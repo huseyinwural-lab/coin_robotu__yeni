@@ -106,7 +106,7 @@ def _normalize_blocked_payload(*, status: str | None, blocked_reason_code: str |
     message = str(blocked_reason_message or "").strip()
     hint = str(blocked_solution_hint or "").strip()
 
-    if normalized_status == "blocked":
+    if normalized_status in {"blocked", "non_tradeable"}:
         if not code:
             code = "BLOCKED_UNSPECIFIED"
         if not message:
@@ -114,6 +114,32 @@ def _normalize_blocked_payload(*, status: str | None, blocked_reason_code: str |
         if not hint:
             hint = "Diagnose (auto_fix=true) çalıştırıp precheck detayını inceleyin."
     return code, message, hint
+
+
+def _extract_first_precheck_failure_code(decision_note: str | None, blocked_reason_message: str | None) -> str:
+    note = str(decision_note or "")
+    marker = "first="
+    if marker in note:
+        suffix = note.split(marker, 1)[1]
+        first = suffix.split(";", 1)[0].split("|", 1)[0].strip().upper()
+        if first:
+            return first
+
+    message = str(blocked_reason_message or "")
+    marker_codes = "/ codes:"
+    if marker_codes in message:
+        suffix = message.split(marker_codes, 1)[1]
+        first = suffix.split(",", 1)[0].strip().upper()
+        if first:
+            return first
+    return ""
+
+
+def _normalize_signal_status_for_ui(*, status: str | None, blocked_reason_code: str | None) -> str:
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status == "blocked" and str(blocked_reason_code or "").strip().upper() == "ORDER_PRECHECK_FAILED":
+        return "non_tradeable"
+    return normalized_status or "pending"
 
 
 def _is_exchange_connection_ready(connection: UserExchangeConnection | None) -> bool:
@@ -163,7 +189,7 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
 
     blocked_rows = (
         db.query(PendingSignal)
-        .filter(PendingSignal.user_id == user_id, PendingSignal.status == "blocked")
+        .filter(PendingSignal.user_id == user_id, PendingSignal.status.in_(["blocked", "non_tradeable"]))
         .order_by(PendingSignal.created_at.desc())
         .limit(200)
         .all()
@@ -304,6 +330,7 @@ def _run_scanner_async_dual_market_job(
     run_items: list[dict] = []
     total_result_count = 0
     total_actionable_count = 0
+    total_non_tradeable_count = 0
     total_queued_count = 0
     pending_total = 0
     try:
@@ -329,6 +356,7 @@ def _run_scanner_async_dual_market_job(
                 )
                 total_result_count += int(result.get("result_count") or 0)
                 total_actionable_count += int(result.get("actionable_count") or 0)
+                total_non_tradeable_count += int(result.get("non_tradeable_count") or 0)
                 total_queued_count += int(result.get("queued_count") or 0)
                 pending_total = max(pending_total, int(result.get("pending_total") or 0))
             except Exception as market_exc:  # noqa: BLE001
@@ -372,6 +400,7 @@ def _run_scanner_async_dual_market_job(
                     "runs": run_items,
                     "result_count": total_result_count,
                     "actionable_count": total_actionable_count,
+                    "non_tradeable_count": total_non_tradeable_count,
                     "queued_count": total_queued_count,
                     "pending_total": pending_total,
                     "selected_symbols": selected_symbols,
@@ -625,6 +654,7 @@ def scanner_run(
             "selected_symbols": result.get("selected_symbols") or [],
             "result_count": result["result_count"],
             "actionable_count": result["actionable_count"],
+            "non_tradeable_count": result.get("non_tradeable_count", 0),
             "queued_count": result["queued_count"],
             "scanner_perf": result.get("scanner_perf") or {},
         },
@@ -640,6 +670,7 @@ def scanner_run(
             "mode": result["mode"],
             "result_count": result["result_count"],
             "actionable_count": result["actionable_count"],
+            "non_tradeable_count": result.get("non_tradeable_count", 0),
             "queued_count": result["queued_count"],
         },
     )
@@ -775,6 +806,8 @@ def scanner_results(
             confidence=float(row.confidence),
             score=float(row.signal_score),
             signal_score=float(row.signal_score),
+            tradeable=((row.payload or {}).get("tradeable") if "tradeable" in (row.payload or {}) else None),
+            first_precheck_failure_code=str((row.payload or {}).get("first_precheck_failure_code") or "") or None,
             reason_codes=list(row.reason_codes or []),
             explain=build_screener_explain(payload=dict(row.payload or {}), signal=row.signal, signal_score=row.signal_score),
             payload=dict(row.payload or {}),
@@ -956,6 +989,13 @@ def signals(
             blocked_reason_message=row.blocked_reason_message,
             blocked_solution_hint=row.blocked_solution_hint,
         )
+        first_precheck_failure_code = _extract_first_precheck_failure_code(row.decision_note, blocked_reason_message)
+        normalized_status = _normalize_signal_status_for_ui(status=row.status, blocked_reason_code=blocked_reason_code)
+        tradeable = bool(row.execution_eligible)
+        if normalized_status in {"blocked", "non_tradeable"}:
+            tradeable = False
+        if first_precheck_failure_code:
+            tradeable = False
 
         normalized_responses.append(
             UserSignalResponse(
@@ -970,7 +1010,7 @@ def signals(
                 signal_generated_at=signal_event.generated_at if signal_event else None,
                 confidence=_safe_float((signal_event.confidence if signal_event is not None else row.confidence)),
                 mode=row.mode,
-                status=row.status,
+                status=normalized_status,
                 market_type=getattr(row, "market_type", "spot"),
                 order_position_id=row.order_position_id,
                 created_at=row.created_at,
@@ -984,6 +1024,8 @@ def signals(
                 blocked_reason_code=blocked_reason_code,
                 blocked_reason_message=blocked_reason_message,
                 blocked_solution_hint=blocked_solution_hint,
+                tradeable=tradeable,
+                first_precheck_failure_code=first_precheck_failure_code or None,
                 requires_manual_approval=row.requires_manual_approval,
                 execution_eligible=row.execution_eligible,
                 bot_profile_id=row.bot_profile_id,
@@ -1048,6 +1090,8 @@ def signals(
                 blocked_reason_code="",
                 blocked_reason_message="",
                 blocked_solution_hint="",
+                tradeable=True,
+                first_precheck_failure_code=None,
                 requires_manual_approval=False,
                 execution_eligible=True,
                 bot_profile_id=None,

@@ -56,7 +56,7 @@ export const ScannerResultsTable = ({
     const qualified = filtered.filter((item) => Number(item.signal_score || 0) >= 60).length;
     const actionable = filtered.filter((item) => {
       const signal = String(item.signal || "none").toLowerCase();
-      return signal === "long" || signal === "short";
+      return (signal === "long" || signal === "short") && Boolean(item.tradeable);
     }).length;
     return {
       symbols_scanned: candidates,
@@ -169,6 +169,12 @@ export const ScannerResultsTable = ({
             <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-signal-${item.id}`}>Signal: {item.signal}</p>
             <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-confidence-${item.id}`}>Confidence: {item.confidence}</p>
             <p className={`text-xs ${scoreClassName(item.signal_score)}`} data-testid={`scanner-results-mobile-score-${item.id}`}>Score: {item.signal_score}</p>
+            <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-tradeable-${item.id}`}>
+              tradeable: <span className={`font-semibold ${item.tradeable ? "text-emerald-300" : "text-rose-300"}`}>{String(Boolean(item.tradeable)).toUpperCase()}</span>
+            </p>
+            <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-first-precheck-failure-${item.id}`}>
+              first_precheck_failure_code: <span className="font-semibold text-rose-200">{item.first_precheck_failure_code || "-"}</span>
+            </p>
             {unsupported && (
               <p className="text-xs text-amber-300" data-testid={`scanner-results-mobile-policy-warning-${item.id}`}>
                 Desteklenmeyen parite: yalnızca USDT/USDC sembolleri işleme alınır.
@@ -195,6 +201,8 @@ export const ScannerResultsTable = ({
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-signal">Signal</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-confidence">Confidence</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-score">Score</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-tradeable">Tradeable</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-first-precheck-failure">First Precheck Failure</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-strategy">Strategy</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-policy">Strategy Policy</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-actions">Actions</th>
@@ -225,6 +233,14 @@ export const ScannerResultsTable = ({
                     <td className={`${compactMode ? "px-2 py-1" : "px-3 py-2"} ${scoreClassName(item.signal_score)}`} data-testid={`scanner-results-row-score-${item.id}`}>
                       {item.signal_score}
                     </td>
+                    <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-tradeable-${item.id}`}>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${item.tradeable ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"}`}>
+                        {String(Boolean(item.tradeable)).toUpperCase()}
+                      </span>
+                    </td>
+                    <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-first-precheck-failure-${item.id}`}>
+                      <span className="text-xs text-rose-200">{item.first_precheck_failure_code || "-"}</span>
+                    </td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-strategy-${item.id}`}>{item.strategy_code}</td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-policy-${item.id}`}>
                       {unsupported ? "UNSUPPORTED" : "SUPPORTED"}
@@ -239,12 +255,14 @@ export const ScannerResultsTable = ({
                   </tr>
                   {expanded && (
                     <tr className="border-t border-slate-800 bg-slate-950/60" data-testid={`scanner-results-explainability-row-${item.id}`}>
-                      <td colSpan={8} className="px-3 py-2" data-testid={`scanner-results-explainability-cell-${item.id}`}>
+                      <td colSpan={10} className="px-3 py-2" data-testid={`scanner-results-explainability-cell-${item.id}`}>
                         <div className="grid gap-2 md:grid-cols-4" data-testid={`scanner-results-explainability-grid-${item.id}`}>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-volume-spike-${item.id}`}>volume spike: {snapshot?.volume_spike ?? snapshot?.relative_volume ?? "-"}</p>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-rsi-${item.id}`}>RSI: {snapshot?.rsi ?? snapshot?.rsi14 ?? snapshot?.indicator_snapshot?.rsi14 ?? "-"}</p>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-spread-regime-${item.id}`}>spread regime: {snapshot?.spread_regime ?? snapshot?.spread_state ?? "-"}</p>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-market-volatility-${item.id}`}>market volatility: {snapshot?.market_volatility ?? snapshot?.atr_pct ?? "-"}</p>
+                          <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-precheck-tradeable-${item.id}`}>precheck tradeable: {String(Boolean(snapshot?.tradeable)).toUpperCase()}</p>
+                          <p className="text-xs text-rose-200" data-testid={`scanner-results-explainability-precheck-first-failure-${item.id}`}>first_precheck_failure_code: {snapshot?.first_precheck_failure_code || "-"}</p>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2" data-testid={`scanner-results-explain-list-${item.id}`}>
                           {(item.explain || []).map((entry, index) => (

@@ -26,6 +26,7 @@ from services.execution_intent_service import (
     preview_execution_intent,
     submit_execution_intent,
 )
+from services.execution_precheck_service import load_execution_policy_registry, validate_execution_payload
 from core.users.user_portfolio_engine import build_user_portfolio_snapshot
 from services.explainability_service import record_decision_trace
 from services.meta_strategy_engine_service import run_meta_strategy_engine
@@ -89,6 +90,30 @@ SIGNAL_REASON_PRIORITY = [
     "ORDER_PRECHECK_FAILED",
     "MANUAL_APPROVAL_REQUIRED",
 ]
+
+PRECHECK_FAILURE_PRIORITY = [
+    "EXCHANGE_NOT_READY",
+    "MARKET_TYPE_NOT_ALLOWED",
+    "INSUFFICIENT_BALANCE",
+    "RISK_NOTIONAL_LIMIT_EXCEEDED",
+    "MIN_NOTIONAL_NOT_MET",
+    "MIN_QTY_NOT_MET",
+    "TICK_SIZE_INVALID",
+    "LEVERAGE_MARGIN_MISMATCH",
+    "EXECUTION_POLICY_REJECTED",
+]
+
+PRECHECK_ACTION_HINTS = {
+    "ORDER_PRECHECK_FAILED": "Order size artır / min_notional üstüne çık.",
+    "SYMBOL_NOT_ALLOWED": "Symbol universe'a ekle veya scanner filtresini daralt.",
+    "EXCHANGE_NOT_READY": "Connection revalidate et / permission kontrol et.",
+    "MARKET_TYPE_NOT_ALLOWED": "Bot market_type ile execution connection market_type eşleşmeli.",
+    "MIN_NOTIONAL_NOT_MET": "Order size değerini venue min_notional üstüne çıkar.",
+    "MIN_QTY_NOT_MET": "Min qty altında, qty veya notional artır.",
+    "INSUFFICIENT_BALANCE": "Bakiye yetersiz, notional düşür veya bakiye artır.",
+    "LEVERAGE_MARGIN_MISMATCH": "Leverage/margin ayarını venue kurallarıyla eşleştir.",
+    "RISK_NOTIONAL_LIMIT_EXCEEDED": "Risk cap aşımı: pozisyon boyutunu azalt.",
+}
 
 
 def _ensure_scanner_tables(db: Session):
@@ -678,6 +703,240 @@ def _resolve_default_exchange_connection(db: Session, user_id: str) -> UserExcha
     )
 
 
+def _safe_float(value, fallback: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _first_precheck_failure_code(failure_codes: list[str]) -> str:
+    normalized = [str(code or "").strip().upper() for code in failure_codes if str(code or "").strip()]
+    for candidate in PRECHECK_FAILURE_PRIORITY:
+        if candidate in normalized:
+            return candidate
+    return normalized[0] if normalized else ""
+
+
+def _extract_precheck_first_failure(decision_note: str | None, blocked_reason_message: str | None) -> str:
+    note = str(decision_note or "")
+    marker = "first="
+    if marker in note:
+        tail = note.split(marker, 1)[1]
+        first = tail.split(";", 1)[0].split("|", 1)[0].strip().upper()
+        if first:
+            return first
+
+    message = str(blocked_reason_message or "")
+    marker_codes = "/ codes:"
+    if marker_codes in message:
+        tail = message.split(marker_codes, 1)[1]
+        first = tail.split(",", 1)[0].strip().upper()
+        if first:
+            return first
+    return ""
+
+
+def _extract_ticker_price(symbol: str) -> float:
+    payload = get_json(redis_client, f"market:ticker:{str(symbol or '').upper()}") or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    return max(
+        _safe_float(payload.get("last_price"), 0.0),
+        _safe_float(payload.get("mid_price"), 0.0),
+        _safe_float(payload.get("price"), 0.0),
+    )
+
+
+def _is_connection_trade_ready(connection: UserExchangeConnection | None) -> bool:
+    if connection is None:
+        return False
+    snapshot = dict(getattr(connection, "readiness_snapshot", {}) or {})
+    health = str(snapshot.get("connection_health") or "unknown").strip().lower()
+    can_trade = snapshot.get("can_trade_effective")
+    if can_trade is None:
+        can_trade = snapshot.get("can_trade_snapshot")
+    if can_trade is None:
+        can_trade = snapshot.get("can_trade")
+    return bool(can_trade) and health in {"online", "degraded"}
+
+
+def _build_execution_allowed_scope(
+    *,
+    market_scope: list[str],
+    scoped_symbols: set[str],
+    bot_symbols: set[str],
+    registry_payload: dict,
+) -> tuple[list[str], dict]:
+    market_scope_set = {str(symbol or "").upper() for symbol in market_scope if str(symbol or "").strip()}
+    user_allowed_symbols = {str(symbol or "").upper() for symbol in scoped_symbols if str(symbol or "").strip()}
+    bot_selected_symbols = {str(symbol or "").upper() for symbol in bot_symbols if str(symbol or "").strip()}
+
+    symbols_allowlist = {
+        str(symbol or "").upper()
+        for symbol in (registry_payload.get("symbols_allowlist") or [])
+        if str(symbol or "").strip()
+    }
+    enforce_allowlist = bool(registry_payload.get("enforce_symbols_allowlist", False))
+
+    if len(symbols_allowlist) == 0:
+        venue_allowed_symbols = set(market_scope_set)
+    elif enforce_allowlist:
+        venue_allowed_symbols = set(symbols_allowlist)
+    else:
+        venue_allowed_symbols = set(market_scope_set).intersection(symbols_allowlist) or set(market_scope_set)
+
+    effective = set(market_scope_set)
+    if user_allowed_symbols:
+        effective = effective.intersection(user_allowed_symbols)
+    if bot_selected_symbols:
+        effective = effective.intersection(bot_selected_symbols)
+    effective = effective.intersection(venue_allowed_symbols)
+
+    ordered = [symbol for symbol in market_scope if symbol in effective]
+    return ordered, {
+        "market_type_allowed_symbols": sorted(market_scope_set),
+        "user_allowed_symbols": sorted(user_allowed_symbols),
+        "bot_selected_symbols": sorted(bot_selected_symbols),
+        "venue_allowed_symbols": sorted(venue_allowed_symbols),
+        "effective_symbols": list(ordered),
+    }
+
+
+def _evaluate_candidate_tradeability(
+    *,
+    symbol: str,
+    market_type: str,
+    signal_side: str,
+    requested_notional: float,
+    risk_notional_cap: float,
+    available_balance: float,
+    exchange_connection: UserExchangeConnection | None,
+    leverage: int,
+    margin_mode: str,
+    symbol_filters_cache: dict[str, dict],
+    registry_payload: dict | None = None,
+) -> dict:
+    normalized_symbol = str(symbol or "").upper()
+    normalized_market_type = str(market_type or "spot").lower()
+
+    if normalized_symbol not in symbol_filters_cache:
+        source_registry = registry_payload if isinstance(registry_payload, dict) else load_execution_policy_registry()
+        min_notional_map = dict(source_registry.get("min_notional_by_symbol") or {})
+        symbol_filters_cache[normalized_symbol] = {
+            "min_qty": 0.001,
+            "step_size": 0.001,
+            "quantity_precision": 3,
+            "min_notional": _safe_float(min_notional_map.get(normalized_symbol), 0.0),
+            "tick_size": 0.01,
+        }
+
+    symbol_filters = dict(symbol_filters_cache.get(normalized_symbol) or {})
+    min_qty = max(_safe_float(symbol_filters.get("min_qty"), 0.0), 0.0)
+    tick_size = max(_safe_float(symbol_filters.get("tick_size"), 0.0), 0.0)
+    venue_min_notional = max(_safe_float(symbol_filters.get("min_notional"), 0.0), 0.0)
+
+    calculated_notional = max(_safe_float(requested_notional, 0.0), 0.0)
+    effective_notional = max(calculated_notional, venue_min_notional)
+
+    market_price = _extract_ticker_price(normalized_symbol)
+    estimated_qty = (effective_notional / market_price) if market_price > 0 else 0.0
+    tick_steps = (market_price / tick_size) if tick_size > 0 and market_price > 0 else 0.0
+    tick_aligned = True if tick_size <= 0 or market_price <= 0 else abs(round(tick_steps) - tick_steps) <= 1e-6
+
+    precheck_payload = {
+        "symbol": normalized_symbol,
+        "market_type": normalized_market_type,
+        "side": "buy" if str(signal_side or "long").lower() == "long" else "sell",
+        "order_type": "market",
+        "margin_mode": str(margin_mode or ""),
+        "leverage": int(max(int(leverage or 1), 1)),
+        "position_size_mode": "fixed_notional",
+        "position_size_value": round(effective_notional, 4),
+        "execution_mode": "bot_assisted",
+        "strategy_binding": "scanner_precheck",
+    }
+    validation = validate_execution_payload(precheck_payload)
+    reject_reason_codes = [str(code or "").strip().lower() for code in (validation.get("reject_reason_codes") or []) if str(code or "").strip()]
+
+    mapped_failures: list[str] = []
+    if any(code in {"min_notional_not_met"} for code in reject_reason_codes):
+        mapped_failures.append("MIN_NOTIONAL_NOT_MET")
+    if any(code in {"leverage_cap_exceeded", "margin_mode_not_allowed", "margin_mode_invalid", "margin_mode_invalid_for_spot"} for code in reject_reason_codes):
+        mapped_failures.append("LEVERAGE_MARGIN_MISMATCH")
+    if any(code in {"invalid_market_type", "execution_mode_not_allowed", "order_type_not_allowed"} for code in reject_reason_codes):
+        mapped_failures.append("EXECUTION_POLICY_REJECTED")
+
+    if effective_notional > max(float(risk_notional_cap or 0.0), 0.0):
+        mapped_failures.append("RISK_NOTIONAL_LIMIT_EXCEEDED")
+    if min_qty > 0 and estimated_qty < min_qty:
+        mapped_failures.append("MIN_QTY_NOT_MET")
+    if not tick_aligned:
+        mapped_failures.append("TICK_SIZE_INVALID")
+    if available_balance > 0 and effective_notional > available_balance:
+        mapped_failures.append("INSUFFICIENT_BALANCE")
+    if exchange_connection is not None:
+        connection_market_type = str(getattr(exchange_connection, "market_type", "") or "").lower().strip()
+        if connection_market_type and connection_market_type != normalized_market_type:
+            mapped_failures.append("MARKET_TYPE_NOT_ALLOWED")
+    if not _is_connection_trade_ready(exchange_connection):
+        mapped_failures.append("EXCHANGE_NOT_READY")
+
+    deduped_failures = list(dict.fromkeys(mapped_failures))
+    first_failure_code = _first_precheck_failure_code(deduped_failures)
+    tradeable = len(deduped_failures) == 0
+
+    if not tradeable:
+        blocker_hint = PRECHECK_ACTION_HINTS.get(first_failure_code, "Diagnose çalıştırıp precheck ihlalini düzelt.")
+        message = f"Precheck failed: {first_failure_code or 'ORDER_PRECHECK_FAILED'}"
+    else:
+        blocker_hint = "Tradeable candidate."
+        message = "Precheck pass"
+
+    return {
+        "tradeable": bool(tradeable),
+        "status": "TRADEABLE" if tradeable else "NON_TRADEABLE",
+        "first_precheck_failure_code": first_failure_code,
+        "failure_codes": deduped_failures,
+        "message": message,
+        "action_hint": blocker_hint,
+        "calculated_order_notional": round(calculated_notional, 6),
+        "effective_order_notional": round(effective_notional, 6),
+        "checks": {
+            "min_notional": {
+                "required": round(venue_min_notional, 6),
+                "actual": round(effective_notional, 6),
+                "ok": effective_notional >= venue_min_notional,
+            },
+            "min_qty": {
+                "required": round(min_qty, 8),
+                "actual": round(estimated_qty, 8),
+                "ok": estimated_qty >= min_qty if min_qty > 0 else True,
+            },
+            "tick_size": {
+                "required": round(tick_size, 8),
+                "price": round(market_price, 8),
+                "ok": tick_aligned,
+            },
+            "leverage_margin": {
+                "leverage": int(max(int(leverage or 1), 1)),
+                "margin_mode": str(margin_mode or ""),
+                "ok": "LEVERAGE_MARGIN_MISMATCH" not in deduped_failures,
+            },
+            "balance": {
+                "available": round(max(float(available_balance or 0.0), 0.0), 6),
+                "required": round(effective_notional, 6),
+                "ok": not (available_balance > 0 and effective_notional > available_balance),
+            },
+            "exchange_readiness": {
+                "ok": _is_connection_trade_ready(exchange_connection),
+                "connection_id": str(getattr(exchange_connection, "id", "") or ""),
+                "market_type": str(getattr(exchange_connection, "market_type", "") or ""),
+            },
+        },
+    }
+
+
 def _parse_iso_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -720,23 +979,22 @@ def _apply_order_precheck_failed(
 
     base_message, base_hint = _signal_reason_details("ORDER_PRECHECK_FAILED")
     normalized_codes = [str(code).strip() for code in (reason_codes or []) if str(code).strip()]
+    first_failure = str(normalized_codes[0]).upper() if normalized_codes else ""
 
     if normalized_codes:
         compact_codes = normalized_codes[:5]
         row.blocked_reason_message = f"{base_message} / codes: {', '.join(compact_codes)}"
-        row.blocked_solution_hint = (
-            f"Precheck kodları: {', '.join(compact_codes)}. Exchange connection, permission snapshot ve risk limitlerini doğrulayın."
-        )
-        row.decision_note = f"order_precheck_failed:{'|'.join(compact_codes)}"[:240]
+        row.blocked_solution_hint = PRECHECK_ACTION_HINTS.get(first_failure, base_hint)
+        row.decision_note = f"order_precheck_failed:first={first_failure};codes={'|'.join(compact_codes)}"[:240]
     elif error_detail:
         compact_detail = str(error_detail).replace("\n", " ").strip()[:180]
         row.blocked_reason_message = f"{base_message} / detail: {compact_detail}"
         row.blocked_solution_hint = "Exchange connection ve execution preview parametrelerini kontrol edin."
-        row.decision_note = f"order_precheck_failed:{compact_detail}"[:240]
+        row.decision_note = f"order_precheck_failed:first=ORDER_PRECHECK_FAILED;detail={compact_detail}"[:240]
     else:
         row.blocked_reason_message = base_message
         row.blocked_solution_hint = base_hint
-        row.decision_note = "order_precheck_failed"
+        row.decision_note = "order_precheck_failed:first=ORDER_PRECHECK_FAILED"
 
     _set_state(row, "BLOCKED")
 
@@ -840,6 +1098,11 @@ def _evaluate_signal_blockers(
 
 def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> PendingSignal:
     if row.current_state in {"ORDER_SUBMITTED", "FILLED", "REJECTED"}:
+        return row
+    if row.current_state == "NON_TRADEABLE" and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
+        row.status = "non_tradeable"
+        row.execution_eligible = False
+        row.last_eligibility_check_at = datetime.now(timezone.utc)
         return row
     if row.current_state == "BLOCKED" and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
         row.status = "blocked"
@@ -1240,6 +1503,29 @@ def run_user_scanner(
     engine_version = "canonical-engine.v3"
     schema_version = "decision-card.v1"
     scoped_symbols = _user_symbols_scope(db, user_id)
+    if normalized_market_type == "all":
+        scoped_bot_rows = db.query(BotProfile).filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False)).all()
+    else:
+        scoped_bot_rows = (
+            db.query(BotProfile)
+            .filter(BotProfile.user_id == user_id, BotProfile.is_deleted.is_(False), BotProfile.market_type == normalized_market_type)
+            .all()
+        )
+    bot_selected_symbols_scope = {
+        str(symbol).upper()
+        for row in scoped_bot_rows
+        for symbol in (row.symbols or [])
+        if str(symbol).strip()
+    }
+    execution_policy_registry = load_execution_policy_registry()
+    execution_allowed_scope, execution_scope_meta = _build_execution_allowed_scope(
+        market_scope=market_scope,
+        scoped_symbols=scoped_symbols,
+        bot_symbols=bot_selected_symbols_scope,
+        registry_payload=execution_policy_registry,
+    )
+    if len(execution_scope_meta.get("effective_symbols") or []) < len(market_scope):
+        warning_set.add("execution_universe_aligned")
     normalized_selected_symbols = filter_allowed_quote_symbols(
         [str(item).strip().upper() for item in (selected_symbols or []) if str(item).strip()]
     )
@@ -1272,12 +1558,15 @@ def run_user_scanner(
             manual_scope = sorted(scoped_symbols)
 
         scanner_scope = apply_scanner_mode(
-            market_scope,
+            execution_allowed_scope,
             mode=effective_selection_mode,
             selected_symbols=manual_scope,
             top_n=max(max_results, 120),
             volume_map=volume_lookup,
         )
+        if execution_allowed_scope:
+            scope_set = set(execution_allowed_scope)
+            scanner_scope = [symbol for symbol in scanner_scope if symbol in scope_set]
 
     candidate_tiers = {
         "candidate_high": [],
@@ -1349,7 +1638,7 @@ def run_user_scanner(
 
     fallback_seed_symbols = normalized_selected_symbols[:max_results]
     if len(fallback_seed_symbols) == 0:
-        fallback_seed_symbols = [str(symbol).upper() for symbol in (market_scope or []) if str(symbol).strip()][:max_results]
+        fallback_seed_symbols = [str(symbol).upper() for symbol in (execution_allowed_scope or []) if str(symbol).strip()][:max_results]
 
     if len(selected) == 0 and len(fallback_seed_symbols) > 0:
         fallback_symbols = fallback_seed_symbols
@@ -1406,6 +1695,12 @@ def run_user_scanner(
     reference_equity = float(risk_policy_row.reference_equity_usd) if risk_policy_row else 10000.0
     risk_per_trade_pct = float(GLOBAL_RISK_POLICY.get("risk_per_trade_pct", 1.5))
     per_trade_notional_cap = max(10.0, round(reference_equity * (risk_per_trade_pct / 100), 4))
+    try:
+        portfolio_snapshot = build_user_portfolio_snapshot(db, user_id)
+    except Exception:
+        portfolio_snapshot = {}
+    available_balance_snapshot = max(_safe_float(portfolio_snapshot.get("available_balance"), 0.0), 0.0)
+
     max_positions = min(3, int(GLOBAL_RISK_POLICY.get("max_positions", 5)))
     ignore_position_limit = str(os.getenv("LIVE_SCANNER_IGNORE_POSITION_LIMIT", "1")).strip().lower() in {
         "1",
@@ -1464,6 +1759,9 @@ def run_user_scanner(
     }
 
     runtime_strategy_code = str(getattr(bot, "strategy_type", "") or "").strip().lower()
+    default_exchange_connection = _resolve_default_exchange_connection(db, user_id)
+    symbol_filters_cache: dict[str, dict] = {}
+    non_tradeable_count = 0
 
     for item in selected:
         signal_value = str(item.get("signal", "none") or "none").lower()
@@ -1713,20 +2011,6 @@ def run_user_scanner(
         symbol_direction_seen[symbol] = signal_value
 
         requested_notional = min(max(10.0, round(score, 4)), per_trade_notional_cap)
-        meta_summary = run_meta_strategy_engine(
-            db,
-            user_id=user_id,
-            strategy_id=strategy_code,
-            symbol=symbol,
-            signal_confidence=max(confidence, round(score / 100, 4)),
-            requested_notional=requested_notional,
-        )
-        meta_decision = str(meta_summary.get("meta_engine_decision") or "ALLOW")
-        allocation_source = str(meta_summary.get("allocation_source") or "weight_based")
-        strategy_weight = float(meta_summary.get("strategy_weight") or 1.0)
-        allocation_reason = str(meta_summary.get("strategy_allocation_reason") or "normal_allocation")
-
-        actionable_count += 1
         signal_event = SignalEvent(
             id=str(uuid.uuid4()),
             bot_profile_id=bot.id,
@@ -1742,6 +2026,103 @@ def run_user_scanner(
         )
         db.add(signal_event)
         db.flush()
+
+        candidate_precheck = _evaluate_candidate_tradeability(
+            symbol=symbol,
+            market_type=bot_market_type,
+            signal_side=signal_value,
+            requested_notional=requested_notional,
+            risk_notional_cap=per_trade_notional_cap,
+            available_balance=available_balance_snapshot,
+            exchange_connection=default_exchange_connection,
+            leverage=int(getattr(bot, "leverage", 1) or 1),
+            margin_mode="isolated" if str(bot_market_type or "spot").lower() == "futures" else "",
+            symbol_filters_cache=symbol_filters_cache,
+            registry_payload=execution_policy_registry,
+        )
+        scanner_row.payload = {
+            **(scanner_row.payload or {}),
+            "tradeable": bool(candidate_precheck.get("tradeable")),
+            "first_precheck_failure_code": candidate_precheck.get("first_precheck_failure_code") or "",
+            "candidate_precheck": candidate_precheck,
+        }
+
+        if not bool(candidate_precheck.get("tradeable")):
+            non_tradeable_count += 1
+            first_failure_code = str(candidate_precheck.get("first_precheck_failure_code") or "ORDER_PRECHECK_FAILED")
+            failure_codes = list(candidate_precheck.get("failure_codes") or [])
+            failure_codes_text = ", ".join(failure_codes[:6]) if failure_codes else first_failure_code
+            non_tradeable_note = f"order_precheck_failed:first={first_failure_code};codes={'|'.join(failure_codes[:6])}"[:240]
+
+            pending_row = PendingSignal(
+                id=str(uuid.uuid4()),
+                signal_id=signal_event.id,
+                user_id=user_id,
+                symbol=symbol,
+                strategy_code=strategy_code,
+                confidence=signal_event.confidence,
+                mode=mode,
+                status="non_tradeable",
+                strategy_weight=1.0,
+                allocation_source="precheck_gate",
+                meta_engine_decision="ALLOW",
+                previous_state="DETECTED",
+                current_state="NON_TRADEABLE",
+                blocked_reason_code="ORDER_PRECHECK_FAILED",
+                blocked_reason_message=f"Order precheck başarısız. / first={first_failure_code} / codes: {failure_codes_text}",
+                blocked_solution_hint=PRECHECK_ACTION_HINTS.get(first_failure_code, PRECHECK_ACTION_HINTS["ORDER_PRECHECK_FAILED"]),
+                requires_manual_approval=False,
+                execution_eligible=False,
+                bot_profile_id=bot.id,
+                runtime_owner=bot.name,
+                created_at=datetime.now(timezone.utc),
+                decision_note=non_tradeable_note,
+            )
+            db.add(pending_row)
+            db.flush()
+
+            record_decision_trace(
+                db,
+                user_id=user_id,
+                trace_scope="signal",
+                trace_type="scanner_signal_non_tradeable",
+                entity_id=pending_row.id,
+                strategy_code=strategy_code,
+                decision_status="NON_TRADEABLE",
+                reason_codes=["ORDER_PRECHECK_FAILED", first_failure_code],
+                feature_snapshot={
+                    "confidence": float(signal_event.confidence or 0),
+                    "signal_score": score,
+                    "mode": mode,
+                    "signal": signal_value,
+                    "execution_eligible": False,
+                    "tradeable": False,
+                },
+                context_payload={
+                    "run_id": run_id,
+                    "symbol": symbol,
+                    "signal_event_id": signal_event.id,
+                    "pending_status": pending_row.status,
+                    "current_state": pending_row.current_state,
+                    "candidate_precheck": candidate_precheck,
+                },
+            )
+            continue
+
+        meta_summary = run_meta_strategy_engine(
+            db,
+            user_id=user_id,
+            strategy_id=strategy_code,
+            symbol=symbol,
+            signal_confidence=max(confidence, round(score / 100, 4)),
+            requested_notional=requested_notional,
+        )
+        meta_decision = str(meta_summary.get("meta_engine_decision") or "ALLOW")
+        allocation_source = str(meta_summary.get("allocation_source") or "weight_based")
+        strategy_weight = float(meta_summary.get("strategy_weight") or 1.0)
+        allocation_reason = str(meta_summary.get("strategy_allocation_reason") or "normal_allocation")
+
+        actionable_count += 1
 
         pending_row = PendingSignal(
             id=str(uuid.uuid4()),
@@ -1835,6 +2216,8 @@ def run_user_scanner(
         "candidate_high": len(candidate_tiers.get("candidate_high") or []),
         "candidate_medium": len(candidate_tiers.get("candidate_medium") or []),
         "candidate_low": len(candidate_tiers.get("candidate_low") or []),
+        "execution_allowed_scope": len(execution_allowed_scope),
+        "non_tradeable_count": int(non_tradeable_count),
         "ignore_for_now": len(candidate_tiers.get("ignore_for_now") or []),
         "cycle_duration_ms": cycle_duration_ms,
         "symbols_evaluated": symbols_evaluated,
@@ -1860,6 +2243,7 @@ def run_user_scanner(
         "fallback_exit_reason": fallback_exit_reason,
         "fallback_state": fallback_state,
         "rollout_stage": rollout_stage,
+        "execution_scope_meta": execution_scope_meta,
         "top_slow_symbols": top_slow_symbols,
         "top_slow_strategies": top_slow_strategies,
     }
@@ -1883,6 +2267,7 @@ def run_user_scanner(
         "market_type": bot_market_type,
         "result_count": len(selected),
         "actionable_count": actionable_count,
+        "non_tradeable_count": int(non_tradeable_count),
         "queued_count": queued_count,
         "pending_total": pending_total,
         "generated_at": datetime.now(timezone.utc),
@@ -2087,6 +2472,59 @@ def diagnose_pending_signal(
             row.mode = "AUTO"
             actions_applied.append("signal_mode_switched_to_auto")
 
+    if auto_fix and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
+        first_code = _extract_precheck_first_failure(row.decision_note, row.blocked_reason_message)
+        if first_code == "EXCHANGE_NOT_READY":
+            actions_applied.append("connection_revalidate_required")
+
+        signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
+        bot = db.query(BotProfile).filter(BotProfile.id == row.bot_profile_id, BotProfile.is_deleted.is_(False)).first() if row.bot_profile_id else None
+        if signal is not None and bot is not None:
+            risk_policy_row = db.query(RiskOrchestratorPolicy).filter(RiskOrchestratorPolicy.id == "global").first()
+            reference_equity = float(risk_policy_row.reference_equity_usd) if risk_policy_row else 10000.0
+            risk_per_trade_pct = float(GLOBAL_RISK_POLICY.get("risk_per_trade_pct", 1.5))
+            per_trade_notional_cap = max(10.0, round(reference_equity * (risk_per_trade_pct / 100), 4))
+            try:
+                portfolio_snapshot = build_user_portfolio_snapshot(db, row.user_id)
+            except Exception:
+                portfolio_snapshot = {}
+            available_balance_snapshot = max(_safe_float(portfolio_snapshot.get("available_balance"), 0.0), 0.0)
+            requested_notional = min(max(10.0, round(float(signal.confidence or row.confidence or 0.5) * 100, 4)), per_trade_notional_cap)
+            precheck_result = _evaluate_candidate_tradeability(
+                symbol=row.symbol,
+                market_type=str(getattr(signal, "market_type", "spot") or "spot"),
+                signal_side=str(getattr(signal, "signal", "long") or "long"),
+                requested_notional=requested_notional,
+                risk_notional_cap=per_trade_notional_cap,
+                available_balance=available_balance_snapshot,
+                exchange_connection=_resolve_default_exchange_connection(db, row.user_id),
+                leverage=int(getattr(bot, "leverage", 1) or 1),
+                margin_mode="isolated" if str(getattr(signal, "market_type", "spot") or "spot").lower() == "futures" else "",
+                symbol_filters_cache={},
+                registry_payload=load_execution_policy_registry(),
+            )
+            if bool(precheck_result.get("tradeable")):
+                row.blocked_reason_code = ""
+                row.blocked_reason_message = ""
+                row.blocked_solution_hint = ""
+                row.execution_eligible = True
+                row.status = "pending"
+                _set_state(row, "DETECTED")
+                row.decision_note = f"non_tradeable_autofix:first={first_code or 'ORDER_PRECHECK_FAILED'}"
+                actions_applied.append("non_tradeable_revalidated")
+            else:
+                updated_first = str(precheck_result.get("first_precheck_failure_code") or first_code or "ORDER_PRECHECK_FAILED")
+                updated_codes = list(precheck_result.get("failure_codes") or [])
+                row.status = "non_tradeable"
+                row.execution_eligible = False
+                row.blocked_reason_code = "ORDER_PRECHECK_FAILED"
+                row.blocked_reason_message = (
+                    f"Order precheck başarısız. / first={updated_first} / codes: {', '.join(updated_codes[:6]) if updated_codes else updated_first}"
+                )
+                row.blocked_solution_hint = PRECHECK_ACTION_HINTS.get(updated_first, PRECHECK_ACTION_HINTS["ORDER_PRECHECK_FAILED"])
+                row.decision_note = f"order_precheck_failed:first={updated_first};codes={'|'.join(updated_codes[:6])}"[:240]
+                actions_applied.append("manual_precheck_adjustment_required")
+
     if actions_applied:
         db.flush()
 
@@ -2142,7 +2580,7 @@ def diagnose_pending_signal(
 def bulk_fix_blocked_signals(db: Session, user_id: str, limit: int = 200) -> dict:
     rows = (
         db.query(PendingSignal)
-        .filter(PendingSignal.user_id == user_id, PendingSignal.status == "blocked")
+        .filter(PendingSignal.user_id == user_id, PendingSignal.status.in_(["blocked", "non_tradeable"]))
         .order_by(PendingSignal.created_at.desc())
         .limit(max(min(limit, 500), 1))
         .all()
@@ -2158,12 +2596,12 @@ def bulk_fix_blocked_signals(db: Session, user_id: str, limit: int = 200) -> dic
             updated_signal_ids.append(updated.id)
         for action in actions_applied:
             actions_summary[action] = actions_summary.get(action, 0) + 1
-        if actions_applied or str(updated.status).lower() != "blocked":
+        if actions_applied or str(updated.status).lower() not in {"blocked", "non_tradeable"}:
             fixed_count += 1
 
     remaining_blocked = (
         db.query(PendingSignal)
-        .filter(PendingSignal.user_id == user_id, PendingSignal.status == "blocked")
+        .filter(PendingSignal.user_id == user_id, PendingSignal.status.in_(["blocked", "non_tradeable"]))
         .count()
     )
 

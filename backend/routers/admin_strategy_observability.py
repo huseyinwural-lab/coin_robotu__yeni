@@ -245,7 +245,7 @@ def _build_admin_status_contract(db: Session) -> dict:
 
         blocked_rows = (
             db.query(PendingSignal)
-            .filter(PendingSignal.user_id == bot_row.user_id, PendingSignal.status == "blocked")
+            .filter(PendingSignal.user_id == bot_row.user_id, PendingSignal.status.in_(["blocked", "non_tradeable"]))
             .order_by(PendingSignal.created_at.desc())
             .limit(200)
             .all()
