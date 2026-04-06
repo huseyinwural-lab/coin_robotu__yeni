@@ -1,3 +1,20 @@
+## 2026-04-06 — Admin Kullanıcılar Paneli Sadeleştirme (UI Temizlik) ✅
+
+### Yapılanlar
+- `AdminUsersPage` içinde aşağıdaki öğeler kaldırıldı/gizlendi:
+  - `User Kullanıcıları` scope butonu
+  - `Onay Kuyruğu` paneli
+  - `Onay Politikaları` paneli
+  - `Özel Roller` paneli
+  - `Davet Yaşam Döngüsü` paneli
+- Sidebar’dan `Kullanıcılar / User` linki kaldırıldı.
+
+### Doğrulama
+- Frontend uzman test ajanı doğrulaması PASS:
+  - İstenen 5 panel+buton görünmüyor
+  - Sidebar user-link görünmüyor
+  - `Admin Kullanıcıları` akışı çalışır durumda
+
 ## 2026-04-06 — Admin Kullanıcılar Bilgi Mimarisi Güncellemesi (8 Madde) ✅
 
 ### Yeni yapı
