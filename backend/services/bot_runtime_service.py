@@ -122,6 +122,10 @@ def _resolve_bindings(db, bot: BotProfile) -> dict:
             strategy_type=bot.strategy_type,
         )
     except Exception as exc:  # noqa: BLE001
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
         logger.exception(
             "BOT_STRATEGY_RESOLUTION_FALLBACK",
             extra={"bot_id": getattr(bot, "id", None), "strategy_type": getattr(bot, "strategy_type", None)},
@@ -135,6 +139,36 @@ def _resolve_bindings(db, bot: BotProfile) -> dict:
                 "runtime_eligible": True,
             },
             "effective_runtime_config": {},
+        }
+
+    runtime_strategy_type = str(getattr(bot, "strategy_type", "") or "").strip()
+    validation_result = dict((resolved_template or {}).get("validation_result") or {})
+    validation_reason = str(validation_result.get("reason") or "").strip().lower()
+    if runtime_strategy_type and (not validation_result.get("ok")) and validation_reason in {"template_not_found", "template_not_found_for_strategy_type"}:
+        resolved_template = {
+            **(resolved_template or {}),
+            "template_id": None,
+            "template_code": runtime_strategy_type,
+            "effective_runtime_config": {
+                "strategy_type": runtime_strategy_type,
+                "template_name": "legacy_runtime_strategy_fallback",
+                "parameters": {},
+                "logic_schema": {},
+                "indicator_schema": {},
+                "execution_profile_ref": None,
+                "risk_hint_ref": None,
+                "allowed_venues": [str(getattr(bot, "exchange", "binance") or "binance")],
+                "allowed_modes": ["live_ready"],
+            },
+            "validation_result": {
+                "ok": True,
+                "errors": [],
+                "override_used": False,
+                "execution_compatibility": "PASS",
+                "runtime_eligible": True,
+                "lifecycle_state": "LEGACY_FALLBACK",
+                "reason": "template_not_found_fallback_to_strategy_type",
+            },
         }
     risk_policy = (
         db.query(RiskPolicy)

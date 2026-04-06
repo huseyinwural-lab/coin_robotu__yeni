@@ -205,6 +205,10 @@ def resolve_strategy_template(db, *, template_id: str | None = None, strategy_ty
         return None
     except Exception as exc:  # noqa: BLE001
         if _is_strategy_template_schema_mismatch(exc):
+            try:
+                db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
             logger.warning(
                 "STRATEGY_TEMPLATE_SCHEMA_MISMATCH_FALLBACK",
                 extra={"template_id": template_id, "strategy_type": strategy_type},
