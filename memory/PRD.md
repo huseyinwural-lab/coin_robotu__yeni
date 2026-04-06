@@ -1,3 +1,28 @@
+## 2026-04-06 — P0 Infra/Auth Stabilizasyon Patch (DB Pool Timeout + 401 Burst + UI Sınıflandırma) ✅
+
+### Tamamlananlar
+- **DB pool timeout sözleşmesi eklendi (backend):**
+  - `server.py` içine SQLAlchemy timeout/operational hata yakalama eklendi.
+  - Pool timeout pattern’lerinde deterministik dönüş:
+    - `503 SERVICE_UNAVAILABLE`
+    - `code: DB_POOL_TIMEOUT`
+    - `retryable: true`
+    - `error_class: infra_error`
+    - `trace_id` + `X-Request-ID`
+- **Auth 401 burst/race azaltıldı (backend + frontend):**
+  - `deps.py`: strict mismatch durumlarında zincir revoke davranışı yumuşatıldı; transient device/ip/fingerprint uyuşmazlıklarında toplu oturum düşürme zinciri engellendi.
+  - `api.js`: `session_device_mismatch` için tek seferlik rebind-retry eklendi; `platform-auth-expired` event dispatch cooldown ile dedupe edildi.
+- **UI sınıflandırma + anomaly düzeltmesi (frontend):**
+  - `UserScannerPage`: anomaly metriği artık yalnızca `trade_blocker` kaynaklı başarısızlıkları sayıyor; `auth_error/infra_error` hariç tutuluyor.
+  - `UserScannerPage`: auth/infra/trade_blocker ayrı sayaçlar + load failure sınıf özeti + toast dedupe.
+  - `UserSignalsPage`: `loadIssue` banner ile `infra_error | auth_error | trade_blocker` görsel ayrımı + toast dedupe.
+
+### Doğrulama
+- Test agent raporu: `/app/test_reports/iteration_18.json`
+  - Backend/Frontend patch doğrulamaları **PASS**.
+  - Kod kontratı doğrulamaları: **25/27 PASS**.
+  - Kalan timeoutlar preview altyapı intermittency kaynaklı (bilinen infra limiti), uygulama regressionsız.
+
 ## 2026-04-06 — Bot Start `SYMBOLS_NOT_RESOLVED` False-Positive Fix
 
 - Sorun kaynağı doğrulandı: `symbol_source_type=scanner` iken scanner kaynağı boşsa bot UI’da symbol görünse bile start tarafı `SYMBOLS_NOT_RESOLVED` verebiliyordu.
