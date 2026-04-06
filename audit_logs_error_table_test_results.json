@@ -1,0 +1,63 @@
+{
+  "timestamp": "2026-04-06T18:48:32.558634",
+  "backend_url": "https://trade-trace-engine.preview.emergentagent.com",
+  "overall_success": true,
+  "results": [
+    {
+      "test": "Admin Login",
+      "success": true,
+      "details": "Login successful. Token length: 601 chars",
+      "evidence": "HTTP 200, access_token received",
+      "timestamp": "2026-04-06T18:48:18.709555"
+    },
+    {
+      "test": "Error Table window_days=1",
+      "success": true,
+      "details": "Success: 57 items with all 8 required columns",
+      "evidence": "HTTP 200, 57 items, all 8 columns present: ['trace_id', 'time_utc', 'error_class', 'endpoint', 'http_status', 'error_message', 'retryable', 'user_id']",
+      "timestamp": "2026-04-06T18:48:20.692457"
+    },
+    {
+      "test": "Error Table window_days=7",
+      "success": true,
+      "details": "Success: Response received with 100 items",
+      "evidence": "HTTP 200, 100 items",
+      "timestamp": "2026-04-06T18:48:22.746157"
+    },
+    {
+      "test": "Error Table window_days=30",
+      "success": true,
+      "details": "Success: Response received with 100 items",
+      "evidence": "HTTP 200, 100 items",
+      "timestamp": "2026-04-06T18:48:24.961826"
+    },
+    {
+      "test": "Error Table Custom Range",
+      "success": true,
+      "details": "Success: Custom range query with 57 items",
+      "evidence": "HTTP 200, start_time/end_time accepted, 57 items",
+      "timestamp": "2026-04-06T18:48:26.845818"
+    },
+    {
+      "test": "Error Table Invalid window_days=2",
+      "success": true,
+      "details": "Success: Invalid window_days=2 correctly returned 400",
+      "evidence": "HTTP 400 (expected for invalid window_days=2)",
+      "timestamp": "2026-04-06T18:48:28.036800"
+    },
+    {
+      "test": "Error Table Download JSON",
+      "success": true,
+      "details": "Success: JSON download with content-disposition: attachment; filename=\"error_report_20260406_184830.json\"",
+      "evidence": "HTTP 200, content-disposition: attachment; filename=\"error_report_20260406_184830.json\", .json filename: True",
+      "timestamp": "2026-04-06T18:48:30.250024"
+    },
+    {
+      "test": "Error Table Download XLSX",
+      "success": true,
+      "details": "Success: XLSX download with content-disposition: attachment; filename=\"error_report_20260406_184832.xlsx\"",
+      "evidence": "HTTP 200, content-disposition: attachment; filename=\"error_report_20260406_184832.xlsx\", .xlsx filename: True",
+      "timestamp": "2026-04-06T18:48:32.558442"
+    }
+  ]
+}
