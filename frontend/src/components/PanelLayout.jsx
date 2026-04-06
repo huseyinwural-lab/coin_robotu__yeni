@@ -150,7 +150,6 @@ const adminOnlyItems = [
     items: [
       { to: "/admin/strategies", label: "Bots", icon: ClipboardList, testId: "nav-admin-bots-link" },
       { to: "/admin/kullanicilar/admin-kullanicilar", label: "Kullanıcılar / Admin", icon: UserCog, testId: "nav-admin-users-admin-link" },
-      { to: "/admin/kullanicilar/user-kullanicilar", label: "Kullanıcılar / User", icon: UserCog, testId: "nav-admin-users-user-link" },
       { to: "/admin/kullanicilar/kullanici-onaylar", label: "Kullanıcılar / Onaylar", icon: UserCog, testId: "nav-admin-user-approvals-link" },
       { to: "/admin/kullanicilar/kullanici-ekonomisi", label: "Kullanıcılar / Ekonomi", icon: BarChart3, testId: "nav-admin-user-economics-link", superAdminOnly: true },
       { to: "/admin/commercial-ops", label: "Commercial Ops", icon: BarChartBig, testId: "nav-admin-commercial-ops-link", superAdminOnly: true },

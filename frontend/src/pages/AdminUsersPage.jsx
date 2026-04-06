@@ -737,6 +737,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
 
   const nextPage = () => setFilters((prev) => ({ ...prev, page: Math.min((pagination.pages || 1), prev.page + 1) }));
   const prevPage = () => setFilters((prev) => ({ ...prev, page: Math.max(1, prev.page - 1) }));
+  const showLegacyUserOperationPanels = false;
 
   return (
     <section className="space-y-4" data-testid="admin-users-page">
@@ -758,13 +759,6 @@ export const AdminUsersPage = ({ scope = "user" }) => {
           data-testid="admin-users-scope-admins-button"
         >
           Admin Kullanıcıları
-        </Button>
-        <Button
-          className={!isAdminScope ? "border border-black bg-lime-300 text-black hover:bg-lime-400" : "border border-black bg-orange-200 text-black hover:bg-orange-300"}
-          onClick={() => navigate("/admin/kullanicilar/user-kullanicilar")}
-          data-testid="admin-users-scope-customers-button"
-        >
-          User Kullanıcıları
         </Button>
       </div>
 
@@ -1167,6 +1161,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
         </div>
       )}
 
+      {showLegacyUserOperationPanels && (
       <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-users-control-panels-grid">
         <div className="space-y-3 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-approval-queue-panel">
           <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-users-approval-queue-header-row">
@@ -1582,6 +1577,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
           </div>
         </div>
       </div>
+      )}
 
       {selectedDeletedLifecycleUser && (
         <div className="space-y-2 border border-black/30 bg-orange-50 p-3" data-testid="admin-users-delete-detail-panel">
