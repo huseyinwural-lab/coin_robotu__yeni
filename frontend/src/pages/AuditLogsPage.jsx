@@ -59,6 +59,7 @@ export const AuditLogsPage = () => {
   const [selectedEventId, setSelectedEventId] = useState("");
   const [expandedEventRows, setExpandedEventRows] = useState({});
   const [errorWindowDays, setErrorWindowDays] = useState(1);
+  const [missingCorrelationEventIds, setMissingCorrelationEventIds] = useState([]);
   const [errorLogLoading, setErrorLogLoading] = useState(false);
   const [errorLogItems, setErrorLogItems] = useState([]);
   const [errorLogPage, setErrorLogPage] = useState(1);
@@ -147,8 +148,10 @@ export const AuditLogsPage = () => {
       setHasMore(Boolean(data?.has_more));
       setVisibleCount(40);
       setQueryLatencyMs(data?.query_latency_ms || null);
-      if (data?.missing_correlation_event_ids?.length) {
-        toast.warning(`Correlation eksik event sayısı: ${data.missing_correlation_event_ids.length}`);
+      const missingIds = Array.isArray(data?.missing_correlation_event_ids) ? data.missing_correlation_event_ids : [];
+      setMissingCorrelationEventIds(missingIds);
+      if (missingIds.length) {
+        toast.warning(`Correlation eksik event sayısı: ${missingIds.length}`);
       }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Trading lifecycle listesi alınamadı");
@@ -540,6 +543,16 @@ export const AuditLogsPage = () => {
     return "Replay + Verify Integrity ile doğrula.";
   }, [detail?.broken_chain, detail?.missing_critical_stages, failureExplanation?.broken_step, rootCauseBreakdown?.critical_blockers, selectedCorrelation]);
 
+  const missingCorrelationRows = useMemo(() => {
+    return (missingCorrelationEventIds || []).map((eventId, index) => ({
+      row_no: index + 1,
+      event_id: String(eventId || ""),
+      error_address: "/api/audit-logs/trading-lifecycle",
+      error_message: "Correlation zincirinde eksik event tespit edildi",
+      resolution_hint: "Lifecycle detayını açıp replay + integrity doğrulaması çalıştır",
+    }));
+  }, [missingCorrelationEventIds]);
+
   return (
     <section className="space-y-6" data-testid="audit-logs-page">
       <header className="rounded-2xl border border-cyan-800/50 bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-950 p-6" data-testid="audit-logs-header">
@@ -554,6 +567,46 @@ export const AuditLogsPage = () => {
           <span data-testid="audit-logs-meta-query-latency">query_latency_ms: {queryLatencyMs ?? "-"}</span>
         </div>
       </header>
+
+      {missingCorrelationRows.length > 0 && (
+        <section className="rounded-2xl border border-rose-700/50 bg-rose-950/20 p-4" data-testid="audit-missing-correlation-table-section">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="audit-missing-correlation-table-header">
+            <h3 className="text-base font-semibold text-rose-200" data-testid="audit-missing-correlation-table-title">
+              Correlation Eksik Event Listesi
+            </h3>
+            <span className="text-xs text-rose-100" data-testid="audit-missing-correlation-table-count">
+              toplam_hata: {missingCorrelationRows.length}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-rose-100/90" data-testid="audit-missing-correlation-table-subtitle">
+            Hata adresi ve hata açıklaması satır/sütun formatında listelenir.
+          </p>
+          <div className="mt-3 overflow-x-auto" data-testid="audit-missing-correlation-table-wrap">
+            <Table data-testid="audit-missing-correlation-table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Event ID</TableHead>
+                  <TableHead>Hata Adresi</TableHead>
+                  <TableHead>Hata</TableHead>
+                  <TableHead>Öneri</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {missingCorrelationRows.map((row, index) => (
+                  <TableRow key={`${row.event_id}-${index}`} data-testid={`audit-missing-correlation-table-row-${index}`}>
+                    <TableCell data-testid={`audit-missing-correlation-table-row-no-${index}`}>{row.row_no}</TableCell>
+                    <TableCell className="font-mono text-xs" data-testid={`audit-missing-correlation-table-event-id-${index}`}>{row.event_id || "-"}</TableCell>
+                    <TableCell className="font-mono text-xs" data-testid={`audit-missing-correlation-table-error-address-${index}`}>{row.error_address}</TableCell>
+                    <TableCell data-testid={`audit-missing-correlation-table-error-message-${index}`}>{row.error_message}</TableCell>
+                    <TableCell data-testid={`audit-missing-correlation-table-resolution-${index}`}>{row.resolution_hint}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </section>
+      )}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4" data-testid="audit-debug-flow-panel">
         <div className="flex flex-wrap items-start justify-between gap-2" data-testid="audit-debug-flow-header">
