@@ -1,3 +1,33 @@
+## 2026-04-06 — User Tarafı Geniş Kapsam Test + Stabilizasyon (Iteration 20) ✅
+
+### Kullanıcı talebine göre kapsam
+- Scope: **Sadece user tarafı**
+- Mod: **SIM create/update akışları dahil**
+- Ortam: **Lokal backend + preview UI karma**
+
+### Uygulanan kalıcı iyileştirmeler
+- `backend/db.py`:
+  - Supabase pooler bağlantıları için `NullPool` kaldırılıp sınırlı queue pool + keepalive ayarları eklendi.
+  - Amaç: bağlantı churn ve SSL/pool timeout etkisini azaltmak.
+- `frontend/src/context/AuthContext.jsx`:
+  - Login için total hard timeout (`30s`) + kısa deneme yapısı (fail-fast).
+- `frontend/src/pages/UserLoginPage.jsx`:
+  - Login timeout için kullanıcıya net hata mesajı.
+- `frontend/src/pages/UserSignalsPage.jsx`:
+  - Slow-loading hint (4s) + hard-timeout error-state (35s) eklendi.
+- `backend/services/user_live_dashboard_service.py`:
+  - `/user/trades` okuma yolunda bloklayıcı projection sync azaltıldı; stale durumda mevcut veri varsa hızlı dönüş.
+
+### Test Sonuçları
+- Testing agent raporu: `/app/test_reports/iteration_20.json`
+  - Backend: 100% (8/8 endpoint 200)
+  - Frontend: 100% (user sayfaları yükleniyor, loading state/hata state doğrulandı)
+  - Iteration 19’daki HIGH bulgular doğrulandı: login timeout handling + skeleton/slow-loading state.
+- Lokal kapsam testi: `test_iteration19_user_comprehensive.py` full run **21 passed** (local backend hedefi ile).
+
+### Kalan gözlem (non-blocker)
+- Login latency bazı koşullarda yüksek (raporda ~23s gözlenmiş). Mevcut fail-fast/timeout yönetimi var; canlı öncesi login path için ek performans tuning backlog’a alındı.
+
 ## 2026-04-06 — `/admin/core/logs` Linked Incidents 8 Kolon Hata Rapor Tablosu ✅
 
 ### İstenen tasarım uygulandı (mevcut logs yapısı korunarak)
