@@ -22,6 +22,7 @@ export const AdminUniverseMonitorPage = () => {
   const [rollout, setRollout] = useState(null);
   const [fallbackEvents, setFallbackEvents] = useState([]);
   const [runtimeSummary, setRuntimeSummary] = useState(null);
+  const [statusContract, setStatusContract] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,6 +52,12 @@ export const AdminUniverseMonitorPage = () => {
       setRollout(rolloutRes.data || null);
       setFallbackEvents(fallbackEventsRes?.data?.items || []);
       setRuntimeSummary(runtimeSummaryRes?.data || null);
+      try {
+        const statusContractRes = await apiClient.get("/admin/strategy/status-contract", { timeout: 8000 });
+        setStatusContract(statusContractRes?.data || null);
+      } catch {
+        setStatusContract(null);
+      }
     } catch (error) {
       const detail = error?.response?.data?.detail;
       const errorMessage = typeof detail === "string" ? detail : (Array.isArray(detail) ? detail.map(d => d?.msg || JSON.stringify(d)).join(", ") : "Universe monitor verisi alınamadı");
@@ -160,6 +167,37 @@ export const AdminUniverseMonitorPage = () => {
           <Button type="button" variant="outline" data-testid="admin-universe-monitor-open-heatmap-button">Freshness Heatmap Sayfası</Button>
         </Link>
       </div>
+
+      {statusContract && (
+        <section className="rounded border border-emerald-700/40 bg-emerald-950/20 p-3" data-testid="admin-universe-monitor-status-contract-panel">
+          <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="admin-universe-monitor-status-contract-title">Unified Status Contract</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="admin-universe-monitor-status-contract-grid">
+            <p className="text-xs" data-testid="admin-universe-monitor-status-contract-scanner-ready">scanner_ready: <span className="font-semibold">{String(Boolean(statusContract.scanner_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="admin-universe-monitor-status-contract-strategy-ready">strategy_ready: <span className="font-semibold">{String(Boolean(statusContract.strategy_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="admin-universe-monitor-status-contract-risk-ready">risk_ready: <span className="font-semibold">{String(Boolean(statusContract.risk_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="admin-universe-monitor-status-contract-execution-ready">execution_ready: <span className="font-semibold">{String(Boolean(statusContract.execution_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="admin-universe-monitor-status-contract-symbols-ready">symbols_ready: <span className="font-semibold">{String(Boolean(statusContract.symbols_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="admin-universe-monitor-status-contract-exchange-ready">exchange_ready: <span className="font-semibold">{String(Boolean(statusContract.exchange_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="admin-universe-monitor-status-contract-bot-status">bot_status: <span className="font-semibold">{statusContract.bot_status || "-"}</span></p>
+            <p className="text-xs" data-testid="admin-universe-monitor-status-contract-health">health: <span className="font-semibold">{statusContract.health || "-"}</span></p>
+            <p className="text-xs" data-testid="admin-universe-monitor-status-contract-latest-run">latest_scanner_run_at: <span className="font-semibold">{statusContract.latest_scanner_run_at ? new Date(statusContract.latest_scanner_run_at).toLocaleString() : "-"}</span></p>
+          </div>
+          <div className="mt-2" data-testid="admin-universe-monitor-status-contract-blocking-reasons">
+            <p className="text-xs text-emerald-100" data-testid="admin-universe-monitor-status-contract-blocking-reasons-title">blocking_reasons</p>
+            {(statusContract.blocking_reasons || []).length === 0 ? (
+              <p className="text-xs text-emerald-300" data-testid="admin-universe-monitor-status-contract-blocking-reasons-empty">Blokaj yok.</p>
+            ) : (
+              <ul className="mt-1 space-y-1" data-testid="admin-universe-monitor-status-contract-blocking-reasons-list">
+                {(statusContract.blocking_reasons || []).map((reason, index) => (
+                  <li key={`${reason.code || "reason"}-${index}`} className="text-xs" data-testid={`admin-universe-monitor-status-contract-blocking-reason-${index}`}>
+                    <span className="font-semibold">{reason.code || "UNKNOWN"}</span>: {reason.message || "-"}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-3 md:grid-cols-5 xl:grid-cols-10" data-testid="admin-universe-monitor-metrics-grid">
         {[

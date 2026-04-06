@@ -187,6 +187,48 @@ export const UserSignalsPage = () => {
     return "Signal->Execution hattı sağlıklı. Filled oranını artırmak için confidence >= 0.7 filtreleyin.";
   }, [signalRows]);
 
+  const blockedPlaybookItems = useMemo(() => {
+    const blockedByCode = signalRows.reduce((acc, row) => {
+      const code = String(row.blocked_reason_code || "").trim().toUpperCase();
+      if (!code) return acc;
+      acc[code] = (acc[code] || 0) + 1;
+      return acc;
+    }, {});
+
+    const catalog = {
+      ORDER_PRECHECK_FAILED: {
+        title: "Order precheck parametrelerini düzelt",
+        steps: ["min_notional / qty / step-size kontrolü", "order preview ile limit/market farkını doğrula", "diagnose?auto_fix=true çalıştır"],
+      },
+      EXECUTION_DISABLED: {
+        title: "Execution hattını tekrar aç",
+        steps: ["exchange_ready=true doğrula", "execution profile bağlantısını güncelle", "bot start fail-fast blocker listesini temizle"],
+      },
+      RISK_POLICY_MISSING: {
+        title: "Risk policy ataması yap",
+        steps: ["Varsayılan risk policy oluştur/ata", "Bot binding kontrolünü yenile", "Sinyali yeniden diagnose et"],
+      },
+      BOT_NOT_RUNNING: {
+        title: "Bot runtime durumunu toparla",
+        steps: ["Bot status=RUNNING yap", "status_contract blocking_reasons temizle", "Sinyali tekrar queue et"],
+      },
+      BLOCKED_UNSPECIFIED: {
+        title: "Genel blokaj teşhisi",
+        steps: ["diagnose?auto_fix=true çalıştır", "latest trace reason_details incele", "status_contract blokaj kodlarını temizle"],
+      },
+    };
+
+    return Object.entries(blockedByCode)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([code, count]) => ({
+        code,
+        count,
+        title: catalog[code]?.title || "Özel blokaj için manuel inceleme",
+        steps: catalog[code]?.steps || ["Trace reason_details aç", "diagnose?auto_fix=true çalıştır", "Execution/Risk binding doğrula"],
+      }));
+  }, [signalRows]);
+
   const gridSignals = useMemo(() => signalRows, [signalRows]);
 
   const resolveSignalSide = (signal) => {
@@ -528,6 +570,27 @@ export const UserSignalsPage = () => {
         <p className="text-xs uppercase tracking-wider text-amber-300" data-testid="user-signals-smart-recommendation-title">Akıllı Öneri</p>
         <p className="mt-1 text-sm text-amber-100" data-testid="user-signals-smart-recommendation-text">{recommendationText}</p>
       </div>
+
+      <section className="col-span-12 rounded border border-fuchsia-700/40 bg-fuchsia-950/20 p-3" data-testid="user-signals-blocked-playbook-panel">
+        <p className="text-xs uppercase tracking-widest text-fuchsia-300" data-testid="user-signals-blocked-playbook-title">Blocked Playbook (Auto Öneri)</p>
+        {(blockedPlaybookItems || []).length === 0 ? (
+          <p className="mt-1 text-sm text-emerald-300" data-testid="user-signals-blocked-playbook-empty">Aktif blocked pattern yok.</p>
+        ) : (
+          <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="user-signals-blocked-playbook-grid">
+            {blockedPlaybookItems.map((item, index) => (
+              <article key={`${item.code}-${index}`} className="rounded border border-fuchsia-700/40 bg-slate-950 p-2" data-testid={`user-signals-blocked-playbook-item-${index}`}>
+                <p className="text-xs font-semibold" data-testid={`user-signals-blocked-playbook-code-${index}`}>{item.code} · count={item.count}</p>
+                <p className="text-xs text-fuchsia-100" data-testid={`user-signals-blocked-playbook-item-title-${index}`}>{item.title}</p>
+                <ul className="mt-1 space-y-1" data-testid={`user-signals-blocked-playbook-steps-${index}`}>
+                  {item.steps.map((step, stepIndex) => (
+                    <li key={`${item.code}-step-${stepIndex}`} className="text-[11px] text-slate-300" data-testid={`user-signals-blocked-playbook-step-${index}-${stepIndex}`}>• {step}</li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
 
       <aside className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="user-signals-explain-panel">
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-signals-explain-panel-title">Why this signal?</p>

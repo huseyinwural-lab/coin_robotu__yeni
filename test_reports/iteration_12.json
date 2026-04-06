@@ -1,0 +1,94 @@
+{
+  "summary": "Iteration 12 - Status Contract & Blocked Playbook Testing. Backend: 2/2 policy mapping regression tests PASSED. API smoke tests verified (status-contract, run-async-both). Frontend: AdminUniverseMonitorPage, UserScannerPage, UserSignalsPage verified with status_contract panels and blocked playbook cards.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/admin/strategy/status-contract",
+        "issue": "Returns session_device_mismatch when using curl with token from login - requires fresh session per request",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "policy_builder_mapping_regression": {
+      "status": "PASS",
+      "test_file": "/app/backend/tests/test_policy_builder_mapping_regression.py",
+      "tests_passed": 2,
+      "tests_total": 2,
+      "verification": "test_policy_builder_validate_maps_scope_strategy_symbol and test_policy_builder_create_version_persists_scope_mapping both PASSED"
+    },
+    "user_scanner_status_contract_api": {
+      "status": "PASS",
+      "endpoint": "GET /api/user/scanner/status-contract",
+      "verification": "Returns all required fields: scanner_ready, strategy_ready, risk_ready, execution_ready, symbols_ready, exchange_ready, bot_status, health, blocking_reasons, latest_scanner_run_at, active_bot_id"
+    },
+    "user_scanner_run_async_both_api": {
+      "status": "PASS",
+      "endpoint": "POST /api/user/scanner/run-async-both",
+      "verification": "Creates job with market_type=both, returns job_id and status=queued"
+    },
+    "admin_universe_monitor_status_contract_panel": {
+      "status": "PASS",
+      "page": "AdminUniverseMonitorPage",
+      "verification": "Unified Status Contract panel renders with all fields: scanner_ready, strategy_ready, risk_ready, execution_ready, symbols_ready, exchange_ready, bot_status, health, blocking_reasons, latest_scanner_run_at"
+    },
+    "execution_states_status_contract_panel": {
+      "status": "PASS (code review)",
+      "page": "ExecutionStatesPage",
+      "verification": "Code review confirms status_contract panel at lines 1003-1030 with all required fields and blocking_reasons list"
+    },
+    "user_scanner_run_start_bot_report_panel": {
+      "status": "PASS",
+      "page": "UserScannerPage",
+      "verification": "Run + Start Bot Detay Raporu panel renders with scanner_runs, bot_start_results, and blocking_reasons per market"
+    },
+    "user_signals_blocked_playbook_panel": {
+      "status": "PASS",
+      "page": "UserSignalsPage",
+      "verification": "Blocked Playbook (Auto Öneri) panel renders with 4 blocked pattern items, each showing code, count, title, and recommended steps"
+    },
+    "user_signals_status_contract_panel": {
+      "status": "PASS",
+      "page": "UserSignalsPage",
+      "verification": "Status Contract card renders with all readiness flags and blocking_reasons list"
+    }
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_policy_builder_mapping_regression.py",
+    "/app/test_reports/pytest/iteration12_policy_mapping.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AdminUniverseMonitorPage: status_contract panel correctly fetches from /admin/strategy/status-contract and displays all 9 fields + blocking_reasons",
+    "ExecutionStatesPage: status_contract panel at lines 1003-1030 with proper data-testid attributes for all fields",
+    "UserScannerPage: lastRunStartBotReport panel at lines 1900-1938 shows market-based partial success/failure with blocking_reasons per bot",
+    "UserSignalsPage: blockedPlaybookItems computed at lines 190-229 with catalog of fix steps for ORDER_PRECHECK_FAILED, EXECUTION_DISABLED, RISK_POLICY_MISSING, BOT_NOT_RUNNING codes",
+    "Policy mapping regression tests verify policy_code, scope.strategy, scope.symbol mapping in validate and create_version endpoints"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (2/2 tests passed)",
+    "frontend": "100% (all UI components verified)"
+  },
+  "test_credentials": {
+    "admin": {
+      "email": "canary.admin@platform.local",
+      "password": "CanaryAdmin123!"
+    },
+    "user": {
+      "email": "review.user@platform.local",
+      "password": "ReviewUser123!"
+    }
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All scope features verified: (1) AdminUniverseMonitorPage and ExecutionStatesPage have status_contract panels with all required fields, (2) UserScannerPage has Run + Start Bot report panel with market-based partial success/failure and blocking_reasons, (3) UserSignalsPage has blocked playbook card with auto-suggested fix steps, (4) Policy mapping regression tests pass for policy_code/scope.strategy/scope.symbol mapping, (5) API smoke tests pass for status-contract and run-async-both endpoints.",
+  "verification_method": "pytest + Playwright UI testing + code review"
+}

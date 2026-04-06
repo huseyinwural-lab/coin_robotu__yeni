@@ -44,6 +44,7 @@ export const ExecutionStatesPage = () => {
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState({});
   const [stateCounters, setStateCounters] = useState({});
+  const [statusContract, setStatusContract] = useState(null);
   const [selectedEventId, setSelectedEventId] = useState("");
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -129,10 +130,20 @@ export const ExecutionStatesPage = () => {
     setLoading(true);
     try {
       const params = buildControlParams();
-      const { data } = await apiClient.get(`/admin-phase3/execution-state-transitions/control?${params.toString()}`);
+      const [controlRes, statusContractRes] = await Promise.allSettled([
+        apiClient.get(`/admin-phase3/execution-state-transitions/control?${params.toString()}`),
+        apiClient.get("/admin/strategy/status-contract", { timeout: 8000 }),
+      ]);
+      if (controlRes.status !== "fulfilled") {
+        throw controlRes.reason;
+      }
+      const data = controlRes.value?.data || {};
       setRows(data?.rows || []);
       setSummary(data?.summary_counts || {});
       setStateCounters(data?.state_counters || {});
+      if (statusContractRes.status === "fulfilled") {
+        setStatusContract(statusContractRes.value?.data || null);
+      }
       try {
         const historyRes = await apiClient.get("/admin-phase3/incident-snapshots/history", { params: { limit: 5 } });
         setSnapshotHistory(historyRes?.data?.items || []);
@@ -989,6 +1000,37 @@ export const ExecutionStatesPage = () => {
 
   return (
     <section className="space-y-4" data-testid="execution-control-states-page">
+      {statusContract && (
+        <section className="rounded border border-cyan-700/40 bg-cyan-950/20 p-3" data-testid="execution-control-status-contract-panel">
+          <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="execution-control-status-contract-title">Unified Status Contract</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="execution-control-status-contract-grid">
+            <p className="text-xs" data-testid="execution-control-status-contract-scanner-ready">scanner_ready: <span className="font-semibold">{String(Boolean(statusContract.scanner_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="execution-control-status-contract-strategy-ready">strategy_ready: <span className="font-semibold">{String(Boolean(statusContract.strategy_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="execution-control-status-contract-risk-ready">risk_ready: <span className="font-semibold">{String(Boolean(statusContract.risk_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="execution-control-status-contract-execution-ready">execution_ready: <span className="font-semibold">{String(Boolean(statusContract.execution_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="execution-control-status-contract-symbols-ready">symbols_ready: <span className="font-semibold">{String(Boolean(statusContract.symbols_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="execution-control-status-contract-exchange-ready">exchange_ready: <span className="font-semibold">{String(Boolean(statusContract.exchange_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="execution-control-status-contract-bot-status">bot_status: <span className="font-semibold">{statusContract.bot_status || "-"}</span></p>
+            <p className="text-xs" data-testid="execution-control-status-contract-health">health: <span className="font-semibold">{statusContract.health || "-"}</span></p>
+            <p className="text-xs" data-testid="execution-control-status-contract-latest-run">latest_scanner_run_at: <span className="font-semibold">{statusContract.latest_scanner_run_at ? new Date(statusContract.latest_scanner_run_at).toLocaleString() : "-"}</span></p>
+          </div>
+          <div className="mt-2" data-testid="execution-control-status-contract-blocking-reasons">
+            <p className="text-xs text-cyan-200" data-testid="execution-control-status-contract-blocking-reasons-title">blocking_reasons</p>
+            {(statusContract.blocking_reasons || []).length === 0 ? (
+              <p className="text-xs text-emerald-300" data-testid="execution-control-status-contract-blocking-reasons-empty">Blokaj yok.</p>
+            ) : (
+              <ul className="mt-1 space-y-1" data-testid="execution-control-status-contract-blocking-reasons-list">
+                {(statusContract.blocking_reasons || []).map((reason, index) => (
+                  <li key={`${reason.code || "reason"}-${index}`} className="text-xs" data-testid={`execution-control-status-contract-blocking-reason-${index}`}>
+                    <span className="font-semibold">{reason.code || "UNKNOWN"}</span>: {reason.message || "-"}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-3 md:grid-cols-6" data-testid="execution-control-states-filters">
         <div>
           <Label>Search</Label>

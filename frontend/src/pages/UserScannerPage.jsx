@@ -329,6 +329,7 @@ export const UserScannerPage = () => {
   const [scannerTemplates, setScannerTemplates] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [lastRunEnvelope, setLastRunEnvelope] = useState(null);
+  const [lastRunStartBotReport, setLastRunStartBotReport] = useState(null);
   const [requestTrend, setRequestTrend] = useState(() => buildTrendPoints([], 5));
   const [requestEndpointBreakdown, setRequestEndpointBreakdown] = useState({
     oneMinute: summarizeEndpointBreakdown([], { windowMs: 60_000 }),
@@ -1167,6 +1168,7 @@ export const UserScannerPage = () => {
         targetMarketType: marketType,
       });
       setLastRunEnvelope(data);
+      setLastRunStartBotReport(null);
       await load();
       if ((data?.warnings || []).length > 0) {
         toast.warning((data.warnings || []).join(","));
@@ -1206,6 +1208,7 @@ export const UserScannerPage = () => {
       const requestedMarkets = String(marketType || "spot").toLowerCase() === "both" ? ["spot", "futures"] : [String(marketType || "spot").toLowerCase()];
 
       const startedBotNames = [];
+      const botStartResults = [];
       for (const requestedMarket of requestedMarkets) {
         const candidates = botRows.filter((bot) => {
           const botMarket = String(bot?.market_type || "spot").toLowerCase();
@@ -1213,12 +1216,55 @@ export const UserScannerPage = () => {
           const modeOk = String(bot?.mode || "live_ready") === "live_ready";
           return isEnabled && modeOk && botMarket === requestedMarket;
         });
-        if (candidates.length > 0) {
-          const target = candidates[0];
+        if (candidates.length === 0) {
+          botStartResults.push({
+            market_type: requestedMarket,
+            status: "no_bot",
+            message: "Bu market için uygun bot bulunamadı.",
+            blocking_reasons: [],
+            status_contract: null,
+            bot_name: null,
+            bot_id: null,
+          });
+          continue;
+        }
+
+        const target = candidates[0];
+        try {
           await apiClient.post(`/bot-profiles/${target.id}/start`, null, { timeout: 12000 });
-          startedBotNames.push(String(target.name || target.id || requestedMarket));
+          const startedName = String(target.name || target.id || requestedMarket);
+          startedBotNames.push(startedName);
+          botStartResults.push({
+            market_type: requestedMarket,
+            status: "started",
+            message: "Bot başarıyla başlatıldı.",
+            blocking_reasons: [],
+            status_contract: null,
+            bot_name: startedName,
+            bot_id: target.id,
+          });
+        } catch (startError) {
+          const detail = startError?.response?.data?.detail;
+          const blockingReasons = Array.isArray(detail?.blocking_reasons) ? detail.blocking_reasons : [];
+          botStartResults.push({
+            market_type: requestedMarket,
+            status: "failed",
+            message: toApiErrorMessage(startError, "Bot start başarısız"),
+            blocking_reasons: blockingReasons,
+            status_contract: detail?.status_contract || null,
+            bot_name: String(target.name || target.id || requestedMarket),
+            bot_id: target.id,
+          });
         }
       }
+
+      setLastRunStartBotReport({
+        executed_at: new Date().toISOString(),
+        scanner_runs: Array.isArray(data?.runs) ? data.runs : [],
+        requested_markets: requestedMarkets,
+        actionable_count: Number(data?.actionable_count || 0),
+        bot_start_results: botStartResults,
+      });
 
       await load();
 
@@ -1226,11 +1272,16 @@ export const UserScannerPage = () => {
       if ((data?.warnings || []).length > 0) {
         toast.warning((data.warnings || []).join(","));
       }
+      const failedBotCount = botStartResults.filter((item) => item.status === "failed").length;
+      const noBotCount = botStartResults.filter((item) => item.status === "no_bot").length;
       toast.success(
         startedBotNames.length > 0
           ? `Run tamamlandı · actionable=${actionable} · bot başlatıldı: ${startedBotNames.join(", ")}`
-          : `Run tamamlandı · actionable=${actionable} · uygun bot bulunamadı`,
+          : `Run tamamlandı · actionable=${actionable} · bot başlatılamadı`,
       );
+      if (failedBotCount > 0 || noBotCount > 0) {
+        toast.warning(`Bot start özeti: başarısız=${failedBotCount}, bot_yok=${noBotCount}`);
+      }
     } catch (error) {
       toast.error(toApiErrorMessage(error, "Run + Start akışı başarısız"));
     } finally {
@@ -1274,6 +1325,7 @@ export const UserScannerPage = () => {
         targetMarketType: marketType,
       });
       setLastRunEnvelope(data);
+      setLastRunStartBotReport(null);
       await load();
       if ((data?.warnings || []).length > 0) {
         toast.warning((data.warnings || []).join(","));
@@ -1843,6 +1895,45 @@ export const UserScannerPage = () => {
             <p>selected template: {lastRunEnvelope.selected_template.template_code || '-'}</p>
             <pre className="mt-2 overflow-x-auto bg-slate-950 p-2 text-[11px] text-slate-200">{JSON.stringify(lastRunEnvelope.selected_template.effective_params || {}, null, 2)}</pre>
             {lastRunEnvelope.selected_template.template_id && <Link to={`/user/strategies/${lastRunEnvelope.selected_template.template_id}`} className="mt-2 inline-flex underline text-cyan-300" data-testid="user-scanner-selected-template-detail-link">Open template detail</Link>}
+          </div>
+        )}
+        {lastRunStartBotReport && (
+          <div className="rounded border border-amber-700 bg-amber-950/20 p-3" data-testid="user-scanner-run-both-start-bot-report-panel">
+            <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="user-scanner-run-both-start-bot-report-title">Run + Start Bot Detay Raporu</p>
+            <p className="mt-1 text-xs text-amber-100" data-testid="user-scanner-run-both-start-bot-report-meta">
+              executed_at={formatDateLabel(lastRunStartBotReport.executed_at)} · actionable={lastRunStartBotReport.actionable_count}
+            </p>
+
+            <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="user-scanner-run-both-scanner-runs-grid">
+              {(lastRunStartBotReport.scanner_runs || []).map((run, index) => (
+                <article key={`scanner-run-${index}`} className="rounded border border-amber-700/50 bg-slate-950 p-2" data-testid={`user-scanner-run-both-scanner-run-${index}`}>
+                  <p className="text-xs font-semibold" data-testid={`user-scanner-run-both-scanner-run-market-${index}`}>{String(run.market_type || "-").toUpperCase()}</p>
+                  <p className="text-[11px]" data-testid={`user-scanner-run-both-scanner-run-status-${index}`}>scanner_status: {run.status || "-"}</p>
+                  {run.error && <p className="text-[11px] text-rose-300" data-testid={`user-scanner-run-both-scanner-run-error-${index}`}>{run.error}</p>}
+                </article>
+              ))}
+            </div>
+
+            <div className="mt-3 space-y-2" data-testid="user-scanner-run-both-bot-start-results-list">
+              {(lastRunStartBotReport.bot_start_results || []).map((row, index) => (
+                <article key={`bot-start-${index}`} className="rounded border border-amber-700/50 bg-slate-950 p-2" data-testid={`user-scanner-run-both-bot-start-result-${index}`}>
+                  <p className="text-xs font-semibold" data-testid={`user-scanner-run-both-bot-start-result-market-${index}`}>
+                    market={String(row.market_type || "-").toUpperCase()} · status={row.status}
+                  </p>
+                  <p className="text-[11px] text-slate-300" data-testid={`user-scanner-run-both-bot-start-result-message-${index}`}>{row.message || "-"}</p>
+                  <p className="text-[11px] text-slate-400" data-testid={`user-scanner-run-both-bot-start-result-bot-${index}`}>bot={row.bot_name || "-"}</p>
+                  {(row.blocking_reasons || []).length > 0 && (
+                    <ul className="mt-1 space-y-1" data-testid={`user-scanner-run-both-bot-start-blocking-reasons-${index}`}>
+                      {(row.blocking_reasons || []).map((reason, reasonIndex) => (
+                        <li key={`${reason.code || "reason"}-${reasonIndex}`} className="text-[11px] text-rose-300" data-testid={`user-scanner-run-both-bot-start-blocking-reason-${index}-${reasonIndex}`}>
+                          <span className="font-semibold">{reason.code || "UNKNOWN"}</span>: {reason.message || "-"}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </article>
+              ))}
+            </div>
           </div>
         )}
         {showSlowLoadingHint && (
