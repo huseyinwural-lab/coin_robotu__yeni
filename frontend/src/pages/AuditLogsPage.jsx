@@ -59,8 +59,9 @@ export const AuditLogsPage = () => {
   const [selectedEventId, setSelectedEventId] = useState("");
   const [expandedEventRows, setExpandedEventRows] = useState({});
   const [errorWindowDays, setErrorWindowDays] = useState(1);
-  const [missingCorrelationEventIds, setMissingCorrelationEventIds] = useState([]);
+  const [missingCorrelationEvents, setMissingCorrelationEvents] = useState([]);
   const [missingCorrelationPage, setMissingCorrelationPage] = useState(1);
+  const [expandedMissingCorrelationRows, setExpandedMissingCorrelationRows] = useState({});
   const [errorLogLoading, setErrorLogLoading] = useState(false);
   const [errorLogItems, setErrorLogItems] = useState([]);
   const [errorLogPage, setErrorLogPage] = useState(1);
@@ -150,8 +151,22 @@ export const AuditLogsPage = () => {
       setVisibleCount(40);
       setQueryLatencyMs(data?.query_latency_ms || null);
       const missingIds = Array.isArray(data?.missing_correlation_event_ids) ? data.missing_correlation_event_ids : [];
-      setMissingCorrelationEventIds(missingIds);
+      const missingEvents = Array.isArray(data?.missing_correlation_events) ? data.missing_correlation_events : [];
+      const fallbackEvents = missingIds.map((eventId) => ({
+        event_id: String(eventId || ""),
+        event_type: "unknown_event",
+        lifecycle_stage: "request",
+        severity: "WARNING",
+        parent_event_id: null,
+        relation_status: "root",
+        error_address: "/api/audit-logs/trading-lifecycle",
+        error_message: "Correlation zincirinde eksik event tespit edildi",
+        payload: {},
+      }));
+
+      setMissingCorrelationEvents(missingEvents.length > 0 ? missingEvents : fallbackEvents);
       setMissingCorrelationPage(1);
+      setExpandedMissingCorrelationRows({});
       if (missingIds.length) {
         toast.warning(`Correlation eksik event sayısı: ${missingIds.length}`);
       }
@@ -546,14 +561,24 @@ export const AuditLogsPage = () => {
   }, [detail?.broken_chain, detail?.missing_critical_stages, failureExplanation?.broken_step, rootCauseBreakdown?.critical_blockers, selectedCorrelation]);
 
   const missingCorrelationRows = useMemo(() => {
-    return (missingCorrelationEventIds || []).map((eventId, index) => ({
-      row_no: index + 1,
-      event_id: String(eventId || ""),
-      error_address: "/api/audit-logs/trading-lifecycle",
-      error_message: "Correlation zincirinde eksik event tespit edildi",
-      resolution_hint: "Lifecycle detayını açıp replay + integrity doğrulaması çalıştır",
-    }));
-  }, [missingCorrelationEventIds]);
+    return (missingCorrelationEvents || []).map((item, index) => {
+      const payload = item?.payload && typeof item.payload === "object" ? item.payload : {};
+      const eventId = String(item?.event_id || item?.id || "");
+      return {
+        row_no: index + 1,
+        event_id: eventId,
+        event_type: String(item?.event_type || "unknown_event"),
+        lifecycle_stage: String(item?.lifecycle_stage || "request"),
+        severity: String(item?.severity || "WARNING").toUpperCase(),
+        parent_event_id: String(item?.parent_event_id || "") || "-",
+        relation_status: String(item?.relation_status || (item?.parent_event_id ? "child_unlinked" : "root")),
+        payload,
+        error_address: String(item?.error_address || item?.route || "/api/audit-logs/trading-lifecycle"),
+        error_message: String(item?.error_message || item?.error_code || "Correlation ID eksik"),
+        resolution_hint: String(item?.resolution_hint || "Correlation üretimini zorunlu hale getir"),
+      };
+    });
+  }, [missingCorrelationEvents]);
 
   const missingCorrelationPageCount = useMemo(
     () => Math.max(Math.ceil((missingCorrelationRows.length || 0) / 50), 1),
@@ -609,28 +634,66 @@ export const AuditLogsPage = () => {
             </div>
           </div>
           <p className="mt-2 text-xs text-rose-100/90" data-testid="audit-missing-correlation-table-subtitle">
-            Hata adresi ve hata açıklaması satır/sütun formatında listelenir.
+            Hata adresi + hata açıklaması, lifecycle tablo formatında satır/sütun gösterilir.
           </p>
           <div className="mt-3 overflow-x-auto" data-testid="audit-missing-correlation-table-wrap">
             <Table data-testid="audit-missing-correlation-table">
               <TableHeader>
                 <TableRow>
                   <TableHead>#</TableHead>
-                  <TableHead>Event ID</TableHead>
-                  <TableHead>Hata Adresi</TableHead>
-                  <TableHead>Hata</TableHead>
-                  <TableHead>Öneri</TableHead>
+                  <TableHead>event_type</TableHead>
+                  <TableHead>stage</TableHead>
+                  <TableHead>severity</TableHead>
+                  <TableHead>parent</TableHead>
+                  <TableHead>relation</TableHead>
+                  <TableHead>hata_adresi</TableHead>
+                  <TableHead>hata</TableHead>
+                  <TableHead>payload</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pagedMissingCorrelationRows.map((row, index) => (
-                  <TableRow key={`${row.event_id}-${index}`} data-testid={`audit-missing-correlation-table-row-${index}`}>
+                  <Fragment key={`${row.event_id}-${index}`}>
+                    <TableRow data-testid={`audit-missing-correlation-table-row-${index}`}>
                     <TableCell data-testid={`audit-missing-correlation-table-row-no-${index}`}>{row.row_no}</TableCell>
-                    <TableCell className="font-mono text-xs" data-testid={`audit-missing-correlation-table-event-id-${index}`}>{row.event_id || "-"}</TableCell>
+                    <TableCell data-testid={`audit-missing-correlation-table-event-type-${index}`}>
+                      <p>{row.event_type || "-"}</p>
+                      <p className="font-mono text-xs text-slate-400" data-testid={`audit-missing-correlation-table-event-id-${index}`}>{row.event_id || "-"}</p>
+                    </TableCell>
+                    <TableCell data-testid={`audit-missing-correlation-table-stage-${index}`}>{row.lifecycle_stage || "-"}</TableCell>
+                    <TableCell data-testid={`audit-missing-correlation-table-severity-${index}`}>{row.severity || "-"}</TableCell>
+                    <TableCell data-testid={`audit-missing-correlation-table-parent-${index}`}>{row.parent_event_id || "-"}</TableCell>
+                    <TableCell data-testid={`audit-missing-correlation-table-relation-${index}`}>{row.relation_status || "root"}</TableCell>
                     <TableCell className="font-mono text-xs" data-testid={`audit-missing-correlation-table-error-address-${index}`}>{row.error_address}</TableCell>
                     <TableCell data-testid={`audit-missing-correlation-table-error-message-${index}`}>{row.error_message}</TableCell>
-                    <TableCell data-testid={`audit-missing-correlation-table-resolution-${index}`}>{row.resolution_hint}</TableCell>
-                  </TableRow>
+                    <TableCell data-testid={`audit-missing-correlation-table-payload-toggle-${index}`}>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setExpandedMissingCorrelationRows((prev) => ({
+                          ...prev,
+                          [row.event_id || `${index}`]: !prev[row.event_id || `${index}`],
+                        }))}
+                        data-testid={`audit-missing-correlation-table-expand-json-button-${index}`}
+                      >
+                        {expandedMissingCorrelationRows[row.event_id || `${index}`] ? "Collapse" : "Expand JSON"}
+                      </Button>
+                    </TableCell>
+                    </TableRow>
+                    {expandedMissingCorrelationRows[row.event_id || `${index}`] && (
+                      <TableRow data-testid={`audit-missing-correlation-table-json-row-${index}`}>
+                        <TableCell colSpan={9}>
+                          <pre className="max-h-64 overflow-auto rounded bg-slate-950 p-3 text-xs text-emerald-200" data-testid={`audit-missing-correlation-table-json-${index}`}>
+                            {JSON.stringify(row.payload || {}, null, 2)}
+                          </pre>
+                          <p className="mt-2 text-xs text-rose-100" data-testid={`audit-missing-correlation-table-resolution-${index}`}>
+                            öneri: {row.resolution_hint}
+                          </p>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

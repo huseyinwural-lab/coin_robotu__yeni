@@ -665,13 +665,34 @@ def list_lifecycle_summaries(
     rows = query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(max(limit * 40, 2000)).all()
     grouped: dict[str, list[dict]] = defaultdict(list)
     missing_correlation: list[str] = []
+    missing_correlation_events: list[dict] = []
 
     for row in rows:
         normalized = normalize_audit_log_event(row).envelope
         correlation_id = str(normalized.get("correlation_id") or "").strip()
         if not correlation_id:
             if _requires_correlation_tracking(row, normalized):
-                missing_correlation.append(str(normalized.get("event_id") or ""))
+                event_id = str(normalized.get("event_id") or "").strip()
+                missing_correlation.append(event_id)
+                payload = normalized.get("payload") if isinstance(normalized.get("payload"), dict) else {}
+                missing_correlation_events.append(
+                    {
+                        "event_id": event_id,
+                        "timestamp": normalized.get("timestamp"),
+                        "event_type": normalized.get("event_type"),
+                        "lifecycle_stage": normalized.get("lifecycle_stage"),
+                        "severity": normalized.get("severity"),
+                        "parent_event_id": normalized.get("parent_event_id"),
+                        "relation_status": "root" if not normalized.get("parent_event_id") else "child_unlinked",
+                        "route": payload.get("route"),
+                        "method": payload.get("method"),
+                        "error_address": payload.get("route") or "/api/audit-logs/trading-lifecycle",
+                        "error_code": "MISSING_CORRELATION_ID",
+                        "error_message": "Correlation ID boş veya bulunamadı",
+                        "resolution_hint": "Event üretim katmanında correlation_id zorunlu hale getirilmeli",
+                        "payload": payload,
+                    }
+                )
             continue
         grouped[correlation_id].append(normalized)
 
@@ -718,6 +739,7 @@ def list_lifecycle_summaries(
         "total": len(summaries),
         "items": paged_items,
         "missing_correlation_event_ids": missing_correlation,
+        "missing_correlation_events": missing_correlation_events[:250],
         "has_more": has_more,
         "next_cursor": next_cursor,
         "page_size": page_limit,
