@@ -237,7 +237,29 @@ def start_bot_profile_runtime(bot_id: str, current_user: User = Depends(get_curr
     if bot_profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bot profile not found")
     payload = start_bot_runtime(db, bot=bot_profile, actor_id=current_user.id)
-    create_audit_log(db, action="bot_runtime_start", entity_type="bot_profile", entity_id=bot_profile.id, actor_user_id=current_user.id, actor_role=current_user.role.value, details={"status": payload.get("status"), "binding_ok": payload.get("binding_ok")})
+    create_audit_log(
+        db,
+        action="bot_runtime_start",
+        entity_type="bot_profile",
+        entity_id=bot_profile.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        details={
+            "status": payload.get("status"),
+            "binding_ok": payload.get("binding_ok"),
+            "blocking_reasons": payload.get("blocking_reasons") or [],
+        },
+    )
+    if payload.get("binding_ok") is False:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "bot_start_binding_failed",
+                "message": "Bot başlatma öncesi binding doğrulaması başarısız.",
+                "status_contract": payload.get("status_contract") or {},
+                "blocking_reasons": payload.get("blocking_reasons") or [],
+            },
+        )
     return BotRuntimeActionResponse(**payload)
 
 

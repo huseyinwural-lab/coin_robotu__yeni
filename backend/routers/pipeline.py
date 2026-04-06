@@ -33,8 +33,24 @@ def start_bot(bot_id: str, current_user: User = Depends(get_current_user), db: S
         entity_id=bot.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
-        details={"name": bot.name, "market_type": bot.market_type, "runtime_status": payload.get("status")},
+        details={
+            "name": bot.name,
+            "market_type": bot.market_type,
+            "runtime_status": payload.get("status"),
+            "binding_ok": payload.get("binding_ok"),
+            "blocking_reasons": payload.get("blocking_reasons") or [],
+        },
     )
+    if payload.get("binding_ok") is False:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "bot_start_binding_failed",
+                "message": "Bot başlatma öncesi binding doğrulaması başarısız.",
+                "status_contract": payload.get("status_contract") or {},
+                "blocking_reasons": payload.get("blocking_reasons") or [],
+            },
+        )
     return {"id": bot.id, "is_running": True, "status": payload.get("status")}
 
 

@@ -22,6 +22,7 @@ export const UserSignalsPage = () => {
   const [selectedSignalId, setSelectedSignalId] = useState("");
   const [signalTrace, setSignalTrace] = useState(null);
   const [strategyExplain, setStrategyExplain] = useState(null);
+  const [statusContract, setStatusContract] = useState(null);
   const [explainLoadingId, setExplainLoadingId] = useState("");
   const [blockedAlertEnabled, setBlockedAlertEnabled] = useState(() => localStorage.getItem("signals-blocked-alerts") !== "off");
   const [diagnoseBusyId, setDiagnoseBusyId] = useState("");
@@ -35,12 +36,13 @@ export const UserSignalsPage = () => {
       setIsLoading(true);
     }
     try {
-      const [signalsRes, portfolioRes, tradesRes, modeRes, botsRes] = await Promise.allSettled([
+      const [signalsRes, portfolioRes, tradesRes, modeRes, botsRes, statusContractRes] = await Promise.allSettled([
         apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 15000 }),
         apiClient.get("/user/portfolio", { timeout: 8000 }),
         apiClient.get("/user/trades", { params: { limit: 120 }, timeout: 8000 }),
         apiClient.get("/user/signal-mode", { timeout: 8000 }),
         apiClient.get("/bot-profiles", { timeout: 8000 }),
+        apiClient.get("/user/scanner/status-contract", { timeout: 8000 }),
       ]);
 
       if (signalsRes?.status === "fulfilled") {
@@ -71,10 +73,14 @@ export const UserSignalsPage = () => {
         setBotProfiles(nextBots);
       }
 
-      const rejected = [signalsRes, portfolioRes, tradesRes, modeRes, botsRes].filter((item) => item?.status === "rejected");
+      if (statusContractRes?.status === "fulfilled") {
+        setStatusContract(statusContractRes.value?.data ?? null);
+      }
+
+      const rejected = [signalsRes, portfolioRes, tradesRes, modeRes, botsRes, statusContractRes].filter((item) => item?.status === "rejected");
       if (!silent && rejected.length > 0) {
         const signalsFailed = signalsRes?.status === "rejected";
-        const allFailed = rejected.length === 5;
+        const allFailed = rejected.length === 6;
         if (signalsFailed || allFailed) {
           const root = signalsRes?.reason || rejected[0]?.reason;
           const detail = root?.response?.data?.detail || root?.message || "Signals verisi yüklenemedi";
@@ -469,6 +475,37 @@ export const UserSignalsPage = () => {
           <p className="text-sm" data-testid="user-signals-live-control-current-blocker">Current Blocker: {controlPanelState.currentBlocker}</p>
           <p className="text-sm" data-testid="user-signals-live-control-note">Not: ORDER_PRECHECK_FAILED durumunda sinyal güvenlik için blocked kalır.</p>
         </div>
+
+        {statusContract && (
+          <div className="mt-4 rounded border border-cyan-700/50 bg-slate-950/70 p-3" data-testid="user-signals-status-contract-card">
+            <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-signals-status-contract-title">Status Contract</p>
+            <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="user-signals-status-contract-grid">
+              <p className="text-xs" data-testid="user-signals-status-contract-scanner-ready">scanner_ready: <span className="font-semibold">{String(Boolean(statusContract.scanner_ready)).toUpperCase()}</span></p>
+              <p className="text-xs" data-testid="user-signals-status-contract-strategy-ready">strategy_ready: <span className="font-semibold">{String(Boolean(statusContract.strategy_ready)).toUpperCase()}</span></p>
+              <p className="text-xs" data-testid="user-signals-status-contract-risk-ready">risk_ready: <span className="font-semibold">{String(Boolean(statusContract.risk_ready)).toUpperCase()}</span></p>
+              <p className="text-xs" data-testid="user-signals-status-contract-execution-ready">execution_ready: <span className="font-semibold">{String(Boolean(statusContract.execution_ready)).toUpperCase()}</span></p>
+              <p className="text-xs" data-testid="user-signals-status-contract-symbols-ready">symbols_ready: <span className="font-semibold">{String(Boolean(statusContract.symbols_ready)).toUpperCase()}</span></p>
+              <p className="text-xs" data-testid="user-signals-status-contract-exchange-ready">exchange_ready: <span className="font-semibold">{String(Boolean(statusContract.exchange_ready)).toUpperCase()}</span></p>
+              <p className="text-xs" data-testid="user-signals-status-contract-bot-status">bot_status: <span className="font-semibold">{statusContract.bot_status || "-"}</span></p>
+              <p className="text-xs" data-testid="user-signals-status-contract-health">health: <span className="font-semibold">{statusContract.health || "-"}</span></p>
+              <p className="text-xs" data-testid="user-signals-status-contract-latest-run">latest_scanner_run_at: <span className="font-semibold">{statusContract.latest_scanner_run_at ? new Date(statusContract.latest_scanner_run_at).toLocaleString() : "-"}</span></p>
+            </div>
+            <div className="mt-3" data-testid="user-signals-status-contract-blocking-reasons">
+              <p className="text-xs text-slate-400" data-testid="user-signals-status-contract-blocking-reasons-title">blocking_reasons</p>
+              {(statusContract.blocking_reasons || []).length === 0 ? (
+                <p className="text-xs text-emerald-300" data-testid="user-signals-status-contract-blocking-reasons-empty">Blokaj yok.</p>
+              ) : (
+                <ul className="mt-1 space-y-1" data-testid="user-signals-status-contract-blocking-reasons-list">
+                  {(statusContract.blocking_reasons || []).map((reason, index) => (
+                    <li key={`${reason.code || "reason"}-${index}`} className="text-xs text-amber-100" data-testid={`user-signals-status-contract-blocking-reason-${index}`}>
+                      <span className="font-semibold">{reason.code || "UNKNOWN"}</span>: {reason.message || "-"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       <div className="col-span-12 grid grid-cols-12 gap-3" data-testid="user-signals-metrics-grid">
@@ -545,6 +582,7 @@ export const UserSignalsPage = () => {
             </p>
             <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-execution-mode-${signal.id}`}>mode: {signal.execution_mode_label || modeLabelFromRaw(signal.mode)}</p>
             <p className="text-xs text-rose-300" data-testid={`user-signals-mobile-blocked-reason-${signal.id}`}>blocked: {signal.blocked_reason_code || "-"}</p>
+            <p className="text-xs text-rose-200" data-testid={`user-signals-mobile-blocked-message-${signal.id}`}>message: {signal.blocked_reason_message || "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-solution-hint-${signal.id}`}>hint: {signal.blocked_solution_hint || "-"}</p>
             <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-strategy-${signal.id}`}>{signal.strategy_code}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-intent-status-${signal.id}`}>intent: {signal.execution_intent_status || "-"}</p>
@@ -572,7 +610,7 @@ export const UserSignalsPage = () => {
                       Risk Policy Auto-Fix
                     </Button>
                   )}
-                  <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-mobile-diagnose-fix-${signal.id}`}>Auto Fix</Button>
+                  <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-mobile-diagnose-fix-${signal.id}`}>diagnose?auto_fix=true</Button>
                 </>
               )}
               {!(signal.status === "pending" || signal.status === "ready") && (
@@ -626,6 +664,7 @@ export const UserSignalsPage = () => {
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-blocked-reason-${signal.id}`}>
                   <div className="max-w-[260px]">
                     <p className="text-xs font-semibold">{signal.blocked_reason_code || "-"}</p>
+                    <p className="text-[11px] text-rose-200 break-words" data-testid={`user-signals-table-blocked-message-${signal.id}`}>{signal.blocked_reason_message || "-"}</p>
                     <p className="text-[11px] text-slate-400 break-words" data-testid={`user-signals-table-blocked-solution-${signal.id}`}>{signal.blocked_solution_hint || "-"}</p>
                   </div>
                 </td>
@@ -660,7 +699,7 @@ export const UserSignalsPage = () => {
                             Risk Policy Auto-Fix
                           </Button>
                         )}
-                        <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-diagnose-fix-button-${signal.id}`}>Auto Fix</Button>
+                        <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-diagnose-fix-button-${signal.id}`}>diagnose?auto_fix=true</Button>
                       </>
                     ) : (
                       <span className="text-xs text-slate-400" data-testid={`user-signals-final-status-text-${signal.id}`}>{signal.status}</span>

@@ -12,7 +12,18 @@ from sqlalchemy.orm import Session
 
 from db import get_db, redis_client
 from deps import require_admin, require_super_admin
-from models import AuditLog, SignalGovernanceDecision, StrategyObservabilityEvent, SystemAlert, User
+from models import (
+    AuditLog,
+    BotProfile,
+    PendingSignal,
+    SignalGovernanceDecision,
+    StrategyObservabilityEvent,
+    SystemAlert,
+    User,
+    UserExchangeConnection,
+    UserScannerResult,
+)
+from core.users.user_scanner_signal_service import diagnose_pending_signal
 from services.audit_service import create_audit_log
 from services.strategy_observability_service import (
     get_rejection_analytics,
@@ -118,6 +129,142 @@ def _signal_to_dict(row: StrategyObservabilityEvent, governance_status: str = "p
         "governance_status": governance_status,
         "governance_reason": governance_reason,
         "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def _normalize_blocked_payload(*, blocked_reason_code: str | None, blocked_reason_message: str | None, blocked_solution_hint: str | None) -> tuple[str, str, str]:
+    code = str(blocked_reason_code or "").strip()
+    message = str(blocked_reason_message or "").strip()
+    hint = str(blocked_solution_hint or "").strip()
+    if code:
+        if not message:
+            message = "Signal blocked durumda."
+        if not hint:
+            hint = "diagnose?auto_fix=true ile teknik çözüm önerisini tetikleyin."
+    return code, message, hint
+
+
+def _pending_signal_map(db: Session, signal_ids: list[str]) -> dict[str, PendingSignal]:
+    if not signal_ids:
+        return {}
+    rows = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.signal_id.in_(signal_ids))
+        .order_by(PendingSignal.created_at.desc())
+        .all()
+    )
+    latest_by_signal: dict[str, PendingSignal] = {}
+    for row in rows:
+        key = str(row.signal_id or "").strip()
+        if not key or key in latest_by_signal:
+            continue
+        latest_by_signal[key] = row
+    return latest_by_signal
+
+
+def _is_exchange_ready(connection: UserExchangeConnection | None) -> bool:
+    if connection is None:
+        return False
+    snapshot = dict(getattr(connection, "readiness_snapshot", {}) or {})
+    health = str(snapshot.get("connection_health") or "unknown").strip().lower()
+    can_trade = snapshot.get("can_trade_effective")
+    if can_trade is None:
+        can_trade = snapshot.get("can_trade_snapshot")
+    if can_trade is None:
+        can_trade = snapshot.get("can_trade")
+    return bool(can_trade) and health in {"online", "degraded"}
+
+
+def _build_admin_status_contract(db: Session) -> dict:
+    latest_scanner_row = db.query(UserScannerResult).order_by(UserScannerResult.generated_at.desc()).first()
+    scanner_ready = latest_scanner_row is not None
+
+    bot_row = (
+        db.query(BotProfile)
+        .filter(BotProfile.is_deleted.is_(False))
+        .order_by(BotProfile.is_running.desc(), BotProfile.updated_at.desc())
+        .first()
+    )
+
+    strategy_ready = False
+    risk_ready = False
+    execution_ready = False
+    symbols_ready = False
+    exchange_ready = False
+    bot_status = "NOT_CONFIGURED"
+    health = "UNKNOWN"
+    blocked_reason_counts: dict[str, int] = {}
+
+    if bot_row is not None:
+        bot_status = "RUNNING" if bool(bot_row.is_running) else "IDLE"
+        symbols_ready = len(list(bot_row.symbols or [])) > 0
+        strategy_ready = bool(str(getattr(bot_row, "strategy_type", "") or "").strip())
+
+        snapshot = dict(getattr(bot_row, "symbol_resolution_snapshot", {}) or {})
+        selected_risk_policy_id = str(snapshot.get("selected_risk_policy_id") or "").strip()
+        risk_ready = bool(selected_risk_policy_id)
+        selected_connection_id = str(snapshot.get("selected_exchange_connection_id") or "").strip()
+        execution_ready = bool(selected_connection_id)
+        if selected_connection_id:
+            connection = db.query(UserExchangeConnection).filter(UserExchangeConnection.id == selected_connection_id).first()
+            exchange_ready = _is_exchange_ready(connection)
+
+        blocked_rows = (
+            db.query(PendingSignal)
+            .filter(PendingSignal.user_id == bot_row.user_id, PendingSignal.status == "blocked")
+            .order_by(PendingSignal.created_at.desc())
+            .limit(200)
+            .all()
+        )
+        for row in blocked_rows:
+            code, _, _ = _normalize_blocked_payload(
+                blocked_reason_code=row.blocked_reason_code,
+                blocked_reason_message=row.blocked_reason_message,
+                blocked_solution_hint=row.blocked_solution_hint,
+            )
+            if code:
+                blocked_reason_counts[code] = blocked_reason_counts.get(code, 0) + 1
+
+    blocking_reasons: list[dict] = []
+    if not scanner_ready:
+        blocking_reasons.append({"code": "SCANNER_NOT_READY", "message": "Scanner sonucu bulunamadı.", "hint": "Run-async akışını tetikleyin."})
+    if not strategy_ready:
+        blocking_reasons.append({"code": "STRATEGY_NOT_READY", "message": "Strategy binding hazır değil.", "hint": "Bot strategy/template eşleşmesini doğrulayın."})
+    if not risk_ready:
+        blocking_reasons.append({"code": "RISK_NOT_READY", "message": "Risk policy bağlı değil.", "hint": "Bot için risk policy atayın."})
+    if not execution_ready:
+        blocking_reasons.append({"code": "EXECUTION_NOT_READY", "message": "Execution connection seçilmemiş.", "hint": "Exchange connection bağlayın."})
+    if not symbols_ready:
+        blocking_reasons.append({"code": "SYMBOLS_NOT_READY", "message": "Symbols boş.", "hint": "manual_selection listesi güncelleyin."})
+    if not exchange_ready:
+        blocking_reasons.append({"code": "EXCHANGE_NOT_READY", "message": "Exchange trade-ready değil.", "hint": "can_trade_effective + connection_health kontrol edin."})
+
+    for code, count in sorted(blocked_reason_counts.items(), key=lambda item: (-item[1], item[0]))[:5]:
+        blocking_reasons.append(
+            {
+                "code": f"SIGNAL_BLOCKED::{code}",
+                "message": f"{count} sinyal {code} nedeniyle blocked.",
+                "hint": "Top Signals satırından diagnose?auto_fix=true aksiyonunu kullanın.",
+            }
+        )
+
+    if len(blocking_reasons) == 0:
+        health = "HEALTHY"
+    elif health == "UNKNOWN":
+        health = "ERROR"
+
+    return {
+        "scanner_ready": bool(scanner_ready),
+        "strategy_ready": bool(strategy_ready),
+        "risk_ready": bool(risk_ready),
+        "execution_ready": bool(execution_ready),
+        "symbols_ready": bool(symbols_ready),
+        "exchange_ready": bool(exchange_ready),
+        "bot_status": bot_status,
+        "health": health,
+        "blocking_reasons": blocking_reasons,
+        "latest_scanner_run_at": latest_scanner_row.generated_at.isoformat() if latest_scanner_row and latest_scanner_row.generated_at else None,
+        "active_bot_id": bot_row.id if bot_row is not None else None,
     }
 
 
@@ -810,20 +957,90 @@ def top_signals(
     payload = get_top_signals(db, window=window, top_n=top_n)
     signal_ids = [str(item.get("signal_id")) for item in (payload.get("items") or []) if item.get("signal_id")]
     governance = _governance_map(db, signal_ids)
+    pending_map = _pending_signal_map(db, signal_ids)
     items = []
     for item in payload.get("items") or []:
         signal_id = str(item.get("signal_id") or "")
         decision = governance.get(signal_id)
+        pending_signal = pending_map.get(signal_id)
+        blocked_code, blocked_message, blocked_solution_hint = _normalize_blocked_payload(
+            blocked_reason_code=(pending_signal.blocked_reason_code if pending_signal is not None else ""),
+            blocked_reason_message=(pending_signal.blocked_reason_message if pending_signal is not None else ""),
+            blocked_solution_hint=(pending_signal.blocked_solution_hint if pending_signal is not None else ""),
+        )
         items.append(
             {
                 **item,
                 "governance_status": decision.status if decision else "pending",
                 "governance_reason": decision.reason if decision else None,
+                "pending_signal_id": pending_signal.id if pending_signal is not None else None,
+                "pending_signal_status": pending_signal.status if pending_signal is not None else None,
+                "blocked_reason_code": blocked_code,
+                "blocked_reason_message": blocked_message,
+                "blocked_solution_hint": blocked_solution_hint,
             }
         )
     return {
         **payload,
         "items": items,
+    }
+
+
+@router.get("/status-contract")
+def strategy_status_contract(
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return _build_admin_status_contract(db)
+
+
+@router.post("/signals/{signal_id}/diagnose")
+def diagnose_signal_from_observability(
+    signal_id: str,
+    auto_fix: bool = Query(default=True),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    pending_row = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.signal_id == signal_id)
+        .order_by(PendingSignal.created_at.desc())
+        .first()
+    )
+    if pending_row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="pending_signal_not_found")
+
+    row, actions_applied = diagnose_pending_signal(db, pending_row.user_id, pending_row.id, auto_fix=auto_fix)
+    blocked_code, blocked_message, blocked_solution_hint = _normalize_blocked_payload(
+        blocked_reason_code=row.blocked_reason_code,
+        blocked_reason_message=row.blocked_reason_message,
+        blocked_solution_hint=row.blocked_solution_hint,
+    )
+    create_audit_log(
+        db,
+        action="strategy_top_signal_diagnose",
+        entity_type="pending_signal",
+        entity_id=row.id,
+        actor_user_id=current_admin.id,
+        actor_role=_role_value(current_admin),
+        details={
+            "signal_id": signal_id,
+            "auto_fix": bool(auto_fix),
+            "actions_applied": actions_applied,
+            "blocked_reason_code": blocked_code,
+        },
+    )
+    db.commit()
+    return {
+        "status": "success",
+        "pending_signal_id": row.id,
+        "signal_id": signal_id,
+        "current_state": row.current_state,
+        "pending_signal_status": row.status,
+        "blocked_reason_code": blocked_code,
+        "blocked_reason_message": blocked_message,
+        "blocked_solution_hint": blocked_solution_hint,
+        "actions_applied": actions_applied,
     }
 
 

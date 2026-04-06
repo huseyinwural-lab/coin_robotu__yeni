@@ -86,7 +86,12 @@ def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
         "risk_profile_id": None,
         "execution_profile_id": None,
         "last_heartbeat": _now_iso(),
-        "runtime_context": {"error": "summary_fallback", "reason": reason},
+        "runtime_context": {
+            "error": reason or "summary_fallback",
+            "error_code": "summary_fallback",
+            "reason": reason,
+            "summary_fallback": True,
+        },
         "symbol_source": "manual",
         "symbol_source_summary": {
             "ok": False,
@@ -129,6 +134,95 @@ def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
             "regime_adjustment": "fallback",
         },
         "health": "ERROR",
+    }
+
+
+def _build_start_status_contract(
+    db,
+    *,
+    bot: BotProfile,
+    bindings: dict,
+    symbol_resolution: dict,
+    strategy_ok: bool,
+) -> dict:
+    resolved_symbols = list(symbol_resolution.get("symbols") or [])
+    strategy_ready = bool(bindings.get("strategy_id")) and bool(strategy_ok)
+    risk_ready = bool(bindings.get("risk_profile_id"))
+    execution_profile_id = str(bindings.get("execution_profile_id") or "").strip()
+    execution_ready = bool(execution_profile_id)
+    symbols_ready = bool(symbol_resolution.get("ok")) and len(resolved_symbols) > 0
+
+    exchange_ready = False
+    if execution_profile_id:
+        selected_connection = (
+            db.query(UserExchangeConnection)
+            .filter(UserExchangeConnection.id == execution_profile_id, UserExchangeConnection.user_id == bot.user_id)
+            .first()
+        )
+        exchange_ready = _is_trade_ready_connection(selected_connection)
+
+    scanner_ready = bool(resolved_symbols)
+    if str(getattr(bot, "scanner_id", "") or "").strip():
+        scanner_ready = (
+            db.query(UserScannerResult)
+            .filter(UserScannerResult.user_id == bot.user_id)
+            .order_by(UserScannerResult.generated_at.desc())
+            .first()
+            is not None
+        )
+
+    blocking_reasons: list[dict] = []
+    if not strategy_ready:
+        blocking_reasons.append(
+            {
+                "code": "STRATEGY_BINDING_MISSING",
+                "message": "Strategy binding çözülemedi.",
+                "hint": "strategy_type ve aktif strategy template eşleşmesini doğrulayın.",
+            }
+        )
+    if not risk_ready:
+        blocking_reasons.append(
+            {
+                "code": "RISK_BINDING_MISSING",
+                "message": "Risk policy bağlantısı bulunamadı.",
+                "hint": "Bot için aktif risk policy seçin veya varsayılan policy oluşturun.",
+            }
+        )
+    if not execution_ready:
+        blocking_reasons.append(
+            {
+                "code": "EXECUTION_BINDING_MISSING",
+                "message": "Execution profile/connection bağlanamadı.",
+                "hint": "Geçerli exchange connection seçildiğinden emin olun.",
+            }
+        )
+    if not symbols_ready:
+        blocking_reasons.append(
+            {
+                "code": "SYMBOLS_NOT_RESOLVED",
+                "message": "İşlenecek semboller çözülemedi.",
+                "hint": "Scanner selection veya manuel symbol listesini güncelleyin.",
+            }
+        )
+    if not exchange_ready:
+        blocking_reasons.append(
+            {
+                "code": "EXCHANGE_NOT_READY",
+                "message": "Exchange bağlantısı trade-ready değil.",
+                "hint": "Connection health=online/degraded ve can_trade_effective=true olmalı.",
+            }
+        )
+
+    return {
+        "scanner_ready": bool(scanner_ready),
+        "strategy_ready": bool(strategy_ready),
+        "risk_ready": bool(risk_ready),
+        "execution_ready": bool(execution_ready),
+        "symbols_ready": bool(symbols_ready),
+        "exchange_ready": bool(exchange_ready),
+        "bot_status": "RUNNING" if bool(getattr(bot, "is_running", False)) else "IDLE",
+        "health": "HEALTHY" if len(blocking_reasons) == 0 else "ERROR",
+        "blocking_reasons": blocking_reasons,
     }
 
 
@@ -603,11 +697,33 @@ def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
     strategy_resolution = dict(bindings.get("strategy_resolution") or {})
     strategy_ok = bool(strategy_resolution.get("validation_result", {}).get("runtime_eligible", True))
     preferred_mode = "live_ready"
-    if not bindings["strategy_id"] or not bindings["execution_profile_id"] or not symbol_resolution.get("ok") or not strategy_ok:
+    status_contract = _build_start_status_contract(
+        db,
+        bot=bot,
+        bindings=bindings,
+        symbol_resolution=symbol_resolution,
+        strategy_ok=strategy_ok,
+    )
+
+    if status_contract.get("blocking_reasons"):
+        first_block = status_contract["blocking_reasons"][0]
         runtime = set_bot_runtime_state(redis_client, bot_id=bot.id, state="ERROR", error="binding_failed")
         runtime["mode"] = preferred_mode
         runtime.setdefault("runtime_context", {})["preferred_mode"] = preferred_mode
-        return {**runtime, "binding_ok": False}
+        runtime.setdefault("runtime_context", {})["binding_validation_result"] = {
+            "compatibility": "failed",
+            "status_contract": status_contract,
+            "blocking_reasons": status_contract.get("blocking_reasons") or [],
+        }
+        runtime.setdefault("runtime_context", {})["last_error"] = str(first_block.get("code") or "binding_failed")
+        bot.is_running = False
+        db.commit()
+        return {
+            **runtime,
+            "binding_ok": False,
+            "status_contract": status_contract,
+            "blocking_reasons": status_contract.get("blocking_reasons") or [],
+        }
     bot.symbol_resolution_snapshot = _json_safe(
         {
             **(getattr(bot, "symbol_resolution_snapshot", {}) or {}),
@@ -645,7 +761,17 @@ def start_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:
     runtime = set_bot_runtime_state(redis_client, bot_id=bot.id, state="RUNNING")
     bot.is_running = True
     db.commit()
-    return {**runtime, "binding_ok": True, "actor_id": actor_id, "activated_at": _now_iso()}
+    status_contract["bot_status"] = "RUNNING"
+    status_contract["health"] = "HEALTHY"
+    status_contract["blocking_reasons"] = []
+    return {
+        **runtime,
+        "binding_ok": True,
+        "actor_id": actor_id,
+        "activated_at": _now_iso(),
+        "status_contract": status_contract,
+        "blocking_reasons": [],
+    }
 
 
 def pause_bot_runtime(db, *, bot: BotProfile, actor_id: str) -> dict:

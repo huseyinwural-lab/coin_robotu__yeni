@@ -81,6 +81,13 @@ const parseApiErrorMessage = (error, fallback) => {
     return detail;
   }
   if (detail && typeof detail === "object") {
+    const blockingReasons = Array.isArray(detail.blocking_reasons)
+      ? detail.blocking_reasons.map((item) => item?.code || item?.message || "").filter(Boolean)
+      : [];
+    if (blockingReasons.length > 0) {
+      const base = detail.message || detail.code || detail.error || detail.detail || fallback;
+      return `${base} (${blockingReasons.join(", ")})`;
+    }
     const known = normalizeKnownCode(detail.message || detail.code || detail.error || detail.detail);
     if (known) return known;
     return detail.message || detail.code || detail.error || detail.detail || fallback;

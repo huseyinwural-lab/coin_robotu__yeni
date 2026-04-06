@@ -61,9 +61,11 @@ export const AdminStrategyObservabilityPage = () => {
   const [loading, setLoading] = useState(false);
 
   const [topSignals, setTopSignals] = useState([]);
+  const [statusContract, setStatusContract] = useState(null);
   const [selectedSignalIds, setSelectedSignalIds] = useState([]);
   const [governanceReasons, setGovernanceReasons] = useState({});
   const [governanceActionLoading, setGovernanceActionLoading] = useState({});
+  const [diagnoseLoadingMap, setDiagnoseLoadingMap] = useState({});
   const [selectedSimulation, setSelectedSimulation] = useState({
     previewToken: "",
     signalIds: [],
@@ -332,9 +334,10 @@ export const AdminStrategyObservabilityPage = () => {
         apiClient.get("/admin/strategy/report", { params: { window: windowRange } }),
         apiClient.get("/admin/strategy/risk-capital/status", { params: { include_alerts: true } }),
         apiClient.get("/admin/strategy/score-config"),
+        apiClient.get("/admin/strategy/status-contract"),
       ]);
 
-      const [topRes, rejectionRes, scoreRes, reportRes, riskCapitalRes, scoreConfigRes] = results;
+      const [topRes, rejectionRes, scoreRes, reportRes, riskCapitalRes, scoreConfigRes, statusContractRes] = results;
 
       if (topRes.status === "fulfilled") {
         const nextTopSignals = topRes.value?.data?.items || [];
@@ -366,6 +369,9 @@ export const AdminStrategyObservabilityPage = () => {
       }
       if (scoreConfigRes.status === "fulfilled") {
         syncScoreForm(scoreConfigRes.value?.data?.config || null);
+      }
+      if (statusContractRes.status === "fulfilled") {
+        setStatusContract(statusContractRes.value?.data || null);
       }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Strategy observability verisi alınamadı");
@@ -448,6 +454,20 @@ export const AdminStrategyObservabilityPage = () => {
       toast.error(error?.response?.data?.detail || "Explainability detayı alınamadı");
     } finally {
       setExplainabilityLoading(false);
+    }
+  };
+
+  const diagnoseTopSignal = async (signalId) => {
+    setDiagnoseLoadingMap((prev) => ({ ...prev, [signalId]: true }));
+    try {
+      const { data } = await apiClient.post(`/admin/strategy/signals/${signalId}/diagnose`, null, { params: { auto_fix: true } });
+      const blockedCode = data?.blocked_reason_code || "-";
+      toast.success(`diagnose?auto_fix=true tamamlandı · ${blockedCode}`);
+      await Promise.all([loadData(), loadAuditLog(), loadActionImpactTimeline()]);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Top signal diagnose başarısız");
+    } finally {
+      setDiagnoseLoadingMap((prev) => ({ ...prev, [signalId]: false }));
     }
   };
 
@@ -1124,6 +1144,42 @@ export const AdminStrategyObservabilityPage = () => {
         </div>
       )}
 
+      {statusContract && (
+        <section className="border border-black/30 bg-emerald-100 p-4" data-testid="strategy-status-contract-panel">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="strategy-status-contract-header-row">
+            <h3 className="text-lg font-bold" data-testid="strategy-status-contract-title">Pipeline Status Contract</h3>
+            <Badge className="border-emerald-700 bg-emerald-50 text-emerald-900" data-testid="strategy-status-contract-health-badge">
+              health: {statusContract.health || "-"}
+            </Badge>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-3" data-testid="strategy-status-contract-grid">
+            <p className="text-xs" data-testid="strategy-status-contract-scanner-ready">scanner_ready: <span className="font-semibold">{String(Boolean(statusContract.scanner_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="strategy-status-contract-strategy-ready">strategy_ready: <span className="font-semibold">{String(Boolean(statusContract.strategy_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="strategy-status-contract-risk-ready">risk_ready: <span className="font-semibold">{String(Boolean(statusContract.risk_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="strategy-status-contract-execution-ready">execution_ready: <span className="font-semibold">{String(Boolean(statusContract.execution_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="strategy-status-contract-symbols-ready">symbols_ready: <span className="font-semibold">{String(Boolean(statusContract.symbols_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="strategy-status-contract-exchange-ready">exchange_ready: <span className="font-semibold">{String(Boolean(statusContract.exchange_ready)).toUpperCase()}</span></p>
+            <p className="text-xs" data-testid="strategy-status-contract-bot-status">bot_status: <span className="font-semibold">{statusContract.bot_status || "-"}</span></p>
+            <p className="text-xs" data-testid="strategy-status-contract-health">health: <span className="font-semibold">{statusContract.health || "-"}</span></p>
+            <p className="text-xs" data-testid="strategy-status-contract-latest-run">latest_scanner_run_at: <span className="font-semibold">{statusContract.latest_scanner_run_at ? new Date(statusContract.latest_scanner_run_at).toLocaleString() : "-"}</span></p>
+          </div>
+          <div className="mt-3" data-testid="strategy-status-contract-blocking-reasons">
+            <p className="text-xs text-black/70" data-testid="strategy-status-contract-blocking-reasons-title">blocking_reasons</p>
+            {(statusContract.blocking_reasons || []).length === 0 ? (
+              <p className="text-xs text-emerald-900" data-testid="strategy-status-contract-blocking-reasons-empty">Blokaj yok.</p>
+            ) : (
+              <ul className="mt-1 space-y-1" data-testid="strategy-status-contract-blocking-reasons-list">
+                {(statusContract.blocking_reasons || []).map((reason, index) => (
+                  <li key={`${reason.code || "reason"}-${index}`} className="text-xs" data-testid={`strategy-status-contract-blocking-reason-${index}`}>
+                    <span className="font-semibold">{reason.code || "UNKNOWN"}</span>: {reason.message || "-"}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
+
       <section className="border border-black/30 bg-orange-100" data-testid="top-signals-control-layer-panel">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/20 px-4 py-3" data-testid="top-signals-header-row">
           <div>
@@ -1201,6 +1257,7 @@ export const AdminStrategyObservabilityPage = () => {
                 <TableHead data-testid="top-signals-head-adjusted">Adjusted Score</TableHead>
                 <TableHead data-testid="top-signals-head-base">Base Score</TableHead>
                 <TableHead data-testid="top-signals-head-delta">Delta</TableHead>
+                <TableHead data-testid="top-signals-head-blocked">Blocked Visibility</TableHead>
                 <TableHead data-testid="top-signals-head-time">Timestamp</TableHead>
                 <TableHead data-testid="top-signals-head-actions">Actions</TableHead>
               </TableRow>
@@ -1227,11 +1284,28 @@ export const AdminStrategyObservabilityPage = () => {
                     <TableCell data-testid={`top-signals-adjusted-${signalId}`}>{item.adjusted_score}</TableCell>
                     <TableCell data-testid={`top-signals-base-${signalId}`}>{item.base_score}</TableCell>
                     <TableCell data-testid={`top-signals-delta-${signalId}`}>{item.score_delta}</TableCell>
+                    <TableCell data-testid={`top-signals-blocked-${signalId}`}>
+                      <div className="max-w-[320px] space-y-1" data-testid={`top-signals-blocked-detail-${signalId}`}>
+                        <p className="text-xs font-semibold" data-testid={`top-signals-blocked-code-${signalId}`}>{item.blocked_reason_code || "-"}</p>
+                        <p className="text-[11px] text-black/80" data-testid={`top-signals-blocked-message-${signalId}`}>{item.blocked_reason_message || "-"}</p>
+                        <p className="text-[11px] text-black/60" data-testid={`top-signals-blocked-hint-${signalId}`}>{item.blocked_solution_hint || "-"}</p>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-xs" data-testid={`top-signals-time-${signalId}`}>
                       {item.timestamp ? new Date(item.timestamp).toLocaleString() : "-"}
                     </TableCell>
                     <TableCell data-testid={`top-signals-actions-${signalId}`}>
                       <div className="flex flex-wrap items-center gap-2" data-testid={`top-signals-row-actions-group-${signalId}`}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 border-black bg-white text-black"
+                          onClick={() => diagnoseTopSignal(signalId)}
+                          disabled={Boolean(diagnoseLoadingMap[signalId])}
+                          data-testid={`top-signals-diagnose-autofix-button-${signalId}`}
+                        >
+                          {diagnoseLoadingMap[signalId] ? "Çalışıyor..." : "diagnose?auto_fix=true"}
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
@@ -1312,7 +1386,7 @@ export const AdminStrategyObservabilityPage = () => {
 
               {!loading && topSignals.length === 0 && (
                 <TableRow data-testid="top-signals-empty-row">
-                  <TableCell colSpan={10} className="text-center text-sm text-black/70" data-testid="top-signals-empty-text">
+                  <TableCell colSpan={11} className="text-center text-sm text-black/70" data-testid="top-signals-empty-text">
                     Bu zaman penceresinde executable signal yok.
                   </TableCell>
                 </TableRow>

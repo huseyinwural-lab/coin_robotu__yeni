@@ -998,14 +998,16 @@ export const UserScannerPage = () => {
     return true;
   };
 
-  const executeScannerRunWithChunks = async ({ runMode, maxResults, effectiveMode, selectedForRun }) => {
+  const executeScannerRunWithChunks = async ({ runMode, maxResults, effectiveMode, selectedForRun, targetMarketType = marketType }) => {
     const runScannerAsync = async (requestPayload) => {
       if (!SIMPLE_SCANNER_V2) {
         const { data } = await apiClient.post("/user/scanner/run", requestPayload);
         return data;
       }
 
-      const { data: queued } = await apiClient.post("/user/scanner/run-async", requestPayload, { timeout: 12000 });
+      const normalizedMarketType = String(requestPayload?.market_type || "spot").toLowerCase();
+      const endpoint = normalizedMarketType === "both" ? "/user/scanner/run-async-both" : "/user/scanner/run-async";
+      const { data: queued } = await apiClient.post(endpoint, requestPayload, { timeout: 12000 });
       const jobId = String(queued?.job_id || "").trim();
       if (!jobId) {
         throw new Error("scanner_async_job_id_missing");
@@ -1028,14 +1030,14 @@ export const UserScannerPage = () => {
     };
 
     const symbols = normalizeSymbolsForRun(selectedForRun || []);
-    const isChunked = SIMPLE_SCANNER_V2 && effectiveMode === "manual_selection" && symbols.length > RUN_CHUNK_SIZE;
+    const isChunked = SIMPLE_SCANNER_V2 && targetMarketType !== "both" && effectiveMode === "manual_selection" && symbols.length > RUN_CHUNK_SIZE;
 
     if (!isChunked) {
       const data = await runScannerAsync({
         mode: runMode,
         max_results: maxResults,
         symbol_source: symbolSource,
-        market_type: marketType,
+        market_type: targetMarketType,
         symbol_selection_mode: effectiveMode,
         selected_symbols: symbols,
         strategy_template_id: selectedTemplateId || null,
@@ -1052,7 +1054,7 @@ export const UserScannerPage = () => {
       mode: runMode,
       max_results: Math.min(40, Math.max(10, maxResults)),
       symbol_source: symbolSource,
-      market_type: marketType,
+      market_type: targetMarketType,
       symbol_selection_mode: "manual_selection",
       selected_symbols: selectedWindow,
       strategy_template_id: selectedTemplateId || null,
@@ -1064,7 +1066,7 @@ export const UserScannerPage = () => {
     return {
       run_id: data?.run_id || null,
       mode: runMode,
-      market_type: marketType,
+      market_type: targetMarketType,
       symbol_selection_mode: "manual_selection",
       selected_symbols: symbols,
       scanned_window_symbols: selectedWindow,
@@ -1162,6 +1164,7 @@ export const UserScannerPage = () => {
         maxResults: SIMPLE_SCANNER_V2 ? 120 : 25,
         effectiveMode,
         selectedForRun: selectedSymbols,
+        targetMarketType: marketType,
       });
       setLastRunEnvelope(data);
       await load();
@@ -1194,24 +1197,27 @@ export const UserScannerPage = () => {
         maxResults: SIMPLE_SCANNER_V2 ? 120 : 25,
         effectiveMode,
         selectedForRun: selectedSymbols,
+        targetMarketType: marketType,
       });
       setLastRunEnvelope(data);
 
       const botsRes = await apiClient.get("/bot-profiles", { timeout: 10000 });
       const botRows = Array.isArray(botsRes?.data) ? botsRes.data : [];
-      const normalizedMarket = String(marketType || "spot").toLowerCase();
-      const candidates = botRows.filter((bot) => {
-        const botMarket = String(bot?.market_type || "spot").toLowerCase();
-        const isEnabled = Boolean(bot?.is_enabled);
-        const modeOk = String(bot?.mode || "live_ready") === "live_ready";
-        return isEnabled && modeOk && botMarket === normalizedMarket;
-      });
+      const requestedMarkets = String(marketType || "spot").toLowerCase() === "both" ? ["spot", "futures"] : [String(marketType || "spot").toLowerCase()];
 
-      let startedBotName = "";
-      if (candidates.length > 0) {
-        const target = candidates[0];
-        await apiClient.post(`/bot-profiles/${target.id}/start`, null, { timeout: 12000 });
-        startedBotName = String(target.name || target.id || "");
+      const startedBotNames = [];
+      for (const requestedMarket of requestedMarkets) {
+        const candidates = botRows.filter((bot) => {
+          const botMarket = String(bot?.market_type || "spot").toLowerCase();
+          const isEnabled = Boolean(bot?.is_enabled);
+          const modeOk = String(bot?.mode || "live_ready") === "live_ready";
+          return isEnabled && modeOk && botMarket === requestedMarket;
+        });
+        if (candidates.length > 0) {
+          const target = candidates[0];
+          await apiClient.post(`/bot-profiles/${target.id}/start`, null, { timeout: 12000 });
+          startedBotNames.push(String(target.name || target.id || requestedMarket));
+        }
       }
 
       await load();
@@ -1221,8 +1227,8 @@ export const UserScannerPage = () => {
         toast.warning((data.warnings || []).join(","));
       }
       toast.success(
-        startedBotName
-          ? `Run tamamlandı · actionable=${actionable} · bot başlatıldı: ${startedBotName}`
+        startedBotNames.length > 0
+          ? `Run tamamlandı · actionable=${actionable} · bot başlatıldı: ${startedBotNames.join(", ")}`
           : `Run tamamlandı · actionable=${actionable} · uygun bot bulunamadı`,
       );
     } catch (error) {
@@ -1265,6 +1271,7 @@ export const UserScannerPage = () => {
         maxResults: preset.maxResults,
         effectiveMode,
         selectedForRun: selectedSymbols,
+        targetMarketType: marketType,
       });
       setLastRunEnvelope(data);
       await load();
@@ -1781,6 +1788,7 @@ export const UserScannerPage = () => {
             >
               <option value="spot">SPOT</option>
               <option value="futures">FUTURES</option>
+              <option value="both">BOTH</option>
             </select>
           </label>
 

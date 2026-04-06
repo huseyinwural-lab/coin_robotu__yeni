@@ -63,6 +63,7 @@ from services.live_mode_service import (
 from services.quote_asset_constraints import allowed_quote_assets
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
 from services.pipeline.cache_store import get_json, set_json
+from services.bot_runtime_service import list_bot_runtime_summaries
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
 
@@ -97,6 +98,123 @@ def _set_scanner_async_payload(job_key: str, payload: dict) -> None:
             redis_client.expire(job_key, SCANNER_ASYNC_JOB_TTL_SECONDS)
     except Exception:  # noqa: BLE001
         pass
+
+
+def _normalize_blocked_payload(*, status: str | None, blocked_reason_code: str | None, blocked_reason_message: str | None, blocked_solution_hint: str | None) -> tuple[str, str, str]:
+    normalized_status = str(status or "").strip().lower()
+    code = str(blocked_reason_code or "").strip()
+    message = str(blocked_reason_message or "").strip()
+    hint = str(blocked_solution_hint or "").strip()
+
+    if normalized_status == "blocked":
+        if not code:
+            code = "BLOCKED_UNSPECIFIED"
+        if not message:
+            message = "Sinyal execution öncesi bir precheck tarafından bloklandı."
+        if not hint:
+            hint = "Diagnose (auto_fix=true) çalıştırıp precheck detayını inceleyin."
+    return code, message, hint
+
+
+def _is_exchange_connection_ready(connection: UserExchangeConnection | None) -> bool:
+    if connection is None:
+        return False
+    snapshot = dict(getattr(connection, "readiness_snapshot", {}) or {})
+    health = str(snapshot.get("connection_health") or "unknown").strip().lower()
+    can_trade = snapshot.get("can_trade_effective")
+    if can_trade is None:
+        can_trade = snapshot.get("can_trade_snapshot")
+    if can_trade is None:
+        can_trade = snapshot.get("can_trade")
+    return bool(can_trade) and health in {"online", "degraded"}
+
+
+def _build_user_status_contract(db: Session, user_id: str) -> dict:
+    latest_scanner_row = (
+        db.query(UserScannerResult)
+        .filter(UserScannerResult.user_id == user_id)
+        .order_by(UserScannerResult.generated_at.desc())
+        .first()
+    )
+    scanner_ready = latest_scanner_row is not None
+
+    bot_summaries = list_bot_runtime_summaries(db, user_id=user_id)
+    primary_bot = (
+        next((item for item in bot_summaries if bool(item.get("is_enabled")) and str(item.get("status") or "").upper() == "RUNNING"), None)
+        or next((item for item in bot_summaries if bool(item.get("is_enabled"))), None)
+        or (bot_summaries[0] if bot_summaries else None)
+    )
+
+    binding_validation = dict((primary_bot or {}).get("binding_validation") or {})
+    strategy_ready = bool(binding_validation.get("strategy_bound"))
+    risk_ready = bool(binding_validation.get("risk_bound"))
+    execution_ready = bool(binding_validation.get("execution_bound"))
+    symbols_ready = bool(binding_validation.get("symbols_resolved"))
+
+    selected_connection_id = str((primary_bot or {}).get("selected_exchange_connection_id") or "").strip()
+    selected_connection = None
+    if selected_connection_id:
+        selected_connection = (
+            db.query(UserExchangeConnection)
+            .filter(UserExchangeConnection.id == selected_connection_id, UserExchangeConnection.user_id == user_id)
+            .first()
+        )
+    exchange_ready = _is_exchange_connection_ready(selected_connection) if selected_connection is not None else bool(execution_ready)
+
+    blocked_rows = (
+        db.query(PendingSignal)
+        .filter(PendingSignal.user_id == user_id, PendingSignal.status == "blocked")
+        .order_by(PendingSignal.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    blocked_reason_counts: dict[str, int] = {}
+    for row in blocked_rows:
+        code, _, _ = _normalize_blocked_payload(
+            status=row.status,
+            blocked_reason_code=row.blocked_reason_code,
+            blocked_reason_message=row.blocked_reason_message,
+            blocked_solution_hint=row.blocked_solution_hint,
+        )
+        if code:
+            blocked_reason_counts[code] = blocked_reason_counts.get(code, 0) + 1
+
+    blocking_reasons: list[dict] = []
+    if not scanner_ready:
+        blocking_reasons.append({"code": "SCANNER_NOT_READY", "message": "Henüz scanner sonucu yok.", "hint": "Scanner run-async tetikleyin."})
+    if not strategy_ready:
+        blocking_reasons.append({"code": "STRATEGY_NOT_READY", "message": "Strategy binding hazır değil.", "hint": "Bot strategy/template eşleşmesini kontrol edin."})
+    if not risk_ready:
+        blocking_reasons.append({"code": "RISK_NOT_READY", "message": "Risk binding hazır değil.", "hint": "Bot için risk policy atayın."})
+    if not execution_ready:
+        blocking_reasons.append({"code": "EXECUTION_NOT_READY", "message": "Execution binding hazır değil.", "hint": "Exchange connection bağlayın."})
+    if not symbols_ready:
+        blocking_reasons.append({"code": "SYMBOLS_NOT_READY", "message": "Symbol resolution tamamlanmadı.", "hint": "manual_selection sembollerini güncelleyin."})
+    if not exchange_ready:
+        blocking_reasons.append({"code": "EXCHANGE_NOT_READY", "message": "Exchange trade-ready değil.", "hint": "connection health ve can_trade_effective alanlarını doğrulayın."})
+
+    for code, count in sorted(blocked_reason_counts.items(), key=lambda item: (-item[1], item[0]))[:5]:
+        blocking_reasons.append(
+            {
+                "code": f"SIGNAL_BLOCKED::{code}",
+                "message": f"{count} sinyal {code} nedeniyle blocked.",
+                "hint": "Signals ekranından diagnose?auto_fix=true aksiyonunu çalıştırın.",
+            }
+        )
+
+    return {
+        "scanner_ready": bool(scanner_ready),
+        "strategy_ready": bool(strategy_ready),
+        "risk_ready": bool(risk_ready),
+        "execution_ready": bool(execution_ready),
+        "symbols_ready": bool(symbols_ready),
+        "exchange_ready": bool(exchange_ready),
+        "bot_status": str((primary_bot or {}).get("status") or "NOT_CONFIGURED"),
+        "health": str((primary_bot or {}).get("health") or ("HEALTHY" if len(blocking_reasons) == 0 else "ERROR")),
+        "blocking_reasons": blocking_reasons,
+        "latest_scanner_run_at": latest_scanner_row.generated_at.isoformat() if latest_scanner_row and latest_scanner_row.generated_at else None,
+        "active_bot_id": (primary_bot or {}).get("id"),
+    }
 
 
 def _run_scanner_async_job(
@@ -154,6 +272,111 @@ def _run_scanner_async_job(
                 "started_at": started_at.isoformat(),
                 "failed_at": datetime.now(timezone.utc).isoformat(),
                 "error": str(exc),
+            },
+        )
+    finally:
+        db.close()
+
+
+def _run_scanner_async_dual_market_job(
+    *,
+    job_key: str,
+    user_id: str,
+    mode: str,
+    max_results: int,
+    symbol_source: str,
+    selected_symbols: list[str],
+    symbol_selection_mode: str,
+) -> None:
+    db = SessionLocal()
+    started_at = datetime.now(timezone.utc)
+    _set_scanner_async_payload(
+        job_key,
+        {
+            "status": "running",
+            "started_at": started_at.isoformat(),
+            "mode": mode,
+            "market_type": "both",
+            "selected_count": len(selected_symbols),
+            "job_type": "dual_market",
+        },
+    )
+    run_items: list[dict] = []
+    total_result_count = 0
+    total_actionable_count = 0
+    total_queued_count = 0
+    pending_total = 0
+    try:
+        for market in ["spot", "futures"]:
+            try:
+                result = run_user_scanner(
+                    db,
+                    user_id,
+                    requested_mode=mode,
+                    max_results=max_results,
+                    symbol_source=symbol_source,
+                    market_type=market,
+                    selected_symbols=selected_symbols,
+                    symbol_selection_mode=symbol_selection_mode,
+                )
+                encoded_result = jsonable_encoder(result)
+                run_items.append(
+                    {
+                        "market_type": market,
+                        "status": "completed",
+                        "result": encoded_result,
+                    }
+                )
+                total_result_count += int(result.get("result_count") or 0)
+                total_actionable_count += int(result.get("actionable_count") or 0)
+                total_queued_count += int(result.get("queued_count") or 0)
+                pending_total = max(pending_total, int(result.get("pending_total") or 0))
+            except Exception as market_exc:  # noqa: BLE001
+                try:
+                    db.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
+                run_items.append(
+                    {
+                        "market_type": market,
+                        "status": "failed",
+                        "error": str(market_exc),
+                    }
+                )
+
+        completed_count = len([item for item in run_items if item.get("status") == "completed"])
+        failed_count = len([item for item in run_items if item.get("status") == "failed"])
+        if completed_count == 0:
+            _set_scanner_async_payload(
+                job_key,
+                {
+                    "status": "failed",
+                    "started_at": started_at.isoformat(),
+                    "failed_at": datetime.now(timezone.utc).isoformat(),
+                    "error": "dual_market_scan_all_failed",
+                    "runs": run_items,
+                },
+            )
+            return
+
+        _set_scanner_async_payload(
+            job_key,
+            {
+                "status": "completed",
+                "started_at": started_at.isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "result": {
+                    "mode": mode,
+                    "market_type": "both",
+                    "status": "partial_failed" if failed_count > 0 else "success",
+                    "runs": run_items,
+                    "result_count": total_result_count,
+                    "actionable_count": total_actionable_count,
+                    "queued_count": total_queued_count,
+                    "pending_total": pending_total,
+                    "selected_symbols": selected_symbols,
+                    "symbol_selection_mode": symbol_selection_mode,
+                },
             },
         )
     finally:
@@ -480,6 +703,59 @@ def scanner_run_async_status(
     return payload
 
 
+@router.post("/scanner/run-async-both")
+def scanner_run_async_both(
+    payload: UserScannerRunRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_user),
+):
+    selected_symbols = payload.selected_symbols or []
+    valid_symbols = filter_allowed_quote_symbols(selected_symbols)
+    if payload.symbol_selection_mode == "manual_selection" and len(valid_symbols) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_allowed_quote_notice())
+
+    job_id = str(uuid4())
+    job_key = _scanner_async_job_key(current_user.id, job_id)
+    _set_scanner_async_payload(
+        job_key,
+        {
+            "job_id": job_id,
+            "status": "queued",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "mode": payload.mode,
+            "market_type": "both",
+            "selected_count": len(valid_symbols),
+            "job_type": "dual_market",
+        },
+    )
+
+    background_tasks.add_task(
+        _run_scanner_async_dual_market_job,
+        job_key=job_key,
+        user_id=current_user.id,
+        mode=payload.mode,
+        max_results=payload.max_results,
+        symbol_source=payload.symbol_source,
+        selected_symbols=valid_symbols,
+        symbol_selection_mode=payload.symbol_selection_mode,
+    )
+
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "selected_count": len(valid_symbols),
+        "market_type": "both",
+    }
+
+
+@router.get("/scanner/status-contract")
+def scanner_status_contract(
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return _build_user_status_contract(db, current_user.id)
+
+
 @router.get("/scanner/results", response_model=list[UserScannerResultResponse])
 def scanner_results(
     limit: int = Query(default=50, ge=5, le=200),
@@ -674,6 +950,13 @@ def signals(
         linked_open_count = sum(1 for trade in linked_trades if str(trade.status or "").upper() in {"OPEN", "PARTIALLY_FILLED"})
         linked_primary = linked_trades[0] if linked_trades else None
 
+        blocked_reason_code, blocked_reason_message, blocked_solution_hint = _normalize_blocked_payload(
+            status=row.status,
+            blocked_reason_code=row.blocked_reason_code,
+            blocked_reason_message=row.blocked_reason_message,
+            blocked_solution_hint=row.blocked_solution_hint,
+        )
+
         normalized_responses.append(
             UserSignalResponse(
                 id=row.id,
@@ -698,9 +981,9 @@ def signals(
                 meta_engine_decision=row.meta_engine_decision,
                 previous_state=row.previous_state,
                 current_state=row.current_state,
-                blocked_reason_code=row.blocked_reason_code,
-                blocked_reason_message=row.blocked_reason_message,
-                blocked_solution_hint=row.blocked_solution_hint,
+                blocked_reason_code=blocked_reason_code,
+                blocked_reason_message=blocked_reason_message,
+                blocked_solution_hint=blocked_solution_hint,
                 requires_manual_approval=row.requires_manual_approval,
                 execution_eligible=row.execution_eligible,
                 bot_profile_id=row.bot_profile_id,
@@ -887,13 +1170,20 @@ def diagnose_signal(
         details={"auto_fix": bool(auto_fix), "actions_applied": actions_applied},
     )
 
+    blocked_reason_code, blocked_reason_message, blocked_solution_hint = _normalize_blocked_payload(
+        status=row.status,
+        blocked_reason_code=row.blocked_reason_code,
+        blocked_reason_message=row.blocked_reason_message,
+        blocked_solution_hint=row.blocked_solution_hint,
+    )
+
     return UserSignalDiagnoseResponse(
         id=row.id,
         status=row.status,
         current_state=row.current_state or "DETECTED",
-        blocked_reason_code=row.blocked_reason_code or "",
-        blocked_reason_message=row.blocked_reason_message or "",
-        blocked_solution_hint=row.blocked_solution_hint or "",
+        blocked_reason_code=blocked_reason_code,
+        blocked_reason_message=blocked_reason_message,
+        blocked_solution_hint=blocked_solution_hint,
         requires_manual_approval=bool(row.requires_manual_approval),
         execution_eligible=bool(row.execution_eligible),
         bot_profile_id=row.bot_profile_id,

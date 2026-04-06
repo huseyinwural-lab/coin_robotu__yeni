@@ -369,6 +369,8 @@ class BotRuntimeActionResponse(BaseModel):
     runtime_context: dict = Field(default_factory=dict)
     binding_ok: bool | None = None
     actor_id: str | None = None
+    status_contract: dict = Field(default_factory=dict)
+    blocking_reasons: list[dict] = Field(default_factory=list)
 
 
 class BotRuntimeStatusResponse(BaseModel):
