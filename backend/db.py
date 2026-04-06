@@ -233,9 +233,9 @@ def _create_and_verify_engine(database_url: str) -> Engine:
     if use_null_pool:
         engine_kwargs.update(
             {
-                "pool_timeout": 15,
-                "pool_size": 4,
-                "max_overflow": 4,
+                "pool_timeout": 20,
+                "pool_size": 10,
+                "max_overflow": 20,
                 "pool_use_lifo": True,
                 "pool_reset_on_return": "rollback",
                 "pool_recycle": 180,

@@ -920,6 +920,7 @@ def _evaluate_candidate_tradeability(
     symbol_filters_cache: dict[str, dict],
     exchange_readiness_cache: dict[str, dict],
     registry_payload: dict | None = None,
+    allow_exchange_soft_bypass: bool = False,
 ) -> dict:
     normalized_symbol = str(symbol or "").upper()
     normalized_market_type = str(market_type or "spot").lower()
@@ -1015,6 +1016,19 @@ def _evaluate_candidate_tradeability(
         mapped_failures.append("INSUFFICIENT_BALANCE")
 
     deduped_failures = list(dict.fromkeys(mapped_failures))
+    exchange_bypass_codes = {
+        "EXCHANGE_NOT_READY",
+        "WALLET_REFRESH_FAILED",
+        "INSUFFICIENT_BALANCE",
+        "INVALID_KEY",
+        "MIN_NOTIONAL_NOT_MET",
+    }
+    bypassed_codes: list[str] = []
+    if allow_exchange_soft_bypass and deduped_failures:
+        bypassed_codes = [code for code in deduped_failures if code in exchange_bypass_codes]
+        if bypassed_codes:
+            deduped_failures = [code for code in deduped_failures if code not in exchange_bypass_codes]
+
     first_failure_code = _first_precheck_failure_code(deduped_failures)
     tradeable = len(deduped_failures) == 0
 
@@ -1032,6 +1046,8 @@ def _evaluate_candidate_tradeability(
         "failure_codes": deduped_failures,
         "message": message,
         "action_hint": blocker_hint,
+        "exchange_soft_bypass_applied": bool(allow_exchange_soft_bypass and len(bypassed_codes) > 0),
+        "exchange_soft_bypass_codes": bypassed_codes,
         "calculated_order_notional": round(calculated_notional, 6),
         "effective_order_notional": round(effective_notional, 6),
         "checks": {
@@ -1162,6 +1178,12 @@ def _evaluate_signal_blockers(
     reason_codes: list[str] = []
     requires_manual = _requires_manual_approval(row.mode)
 
+    from services.live_mode_service import get_or_create_live_config as _get_or_create_live_config
+
+    live_config = _get_or_create_live_config(db)
+    live_mode_enabled = bool(getattr(live_config, "live_mode_enabled", False))
+    allow_symbol_scope_soft_bypass = not bool(getattr(live_config, "live_mode_enabled", False))
+
     if requires_manual:
         reason_codes.append("MANUAL_APPROVAL_REQUIRED")
 
@@ -1170,7 +1192,7 @@ def _evaluate_signal_blockers(
 
     if bot is not None:
         symbols = {item.upper() for item in (bot.symbols or []) if item}
-        if symbols and row.symbol.upper() not in symbols:
+        if symbols and row.symbol.upper() not in symbols and not allow_symbol_scope_soft_bypass:
             reason_codes.append("SYMBOL_NOT_ALLOWED")
 
         signal_strategy = _base_strategy_code(signal.strategy_id)
@@ -1212,9 +1234,9 @@ def _evaluate_signal_blockers(
     if signal_age_seconds > 60 * 45:
         reason_codes.append("SIGNAL_EXPIRED")
 
-    if exchange_connection is None:
+    if exchange_connection is None and live_mode_enabled:
         reason_codes.append("EXCHANGE_NOT_READY")
-    elif str(exchange_connection.environment).lower() == "live":
+    elif live_mode_enabled and str(exchange_connection.environment).lower() == "live":
         seed_binance_venue_registry(db)
         allowed, _, _, _ = check_user_venue_access(
             db,
@@ -1235,17 +1257,23 @@ def _evaluate_signal_blockers(
 def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> PendingSignal:
     if row.current_state in {"ORDER_SUBMITTED", "FILLED", "REJECTED"}:
         return row
-    if row.current_state == "NON_TRADEABLE" and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
-        row.status = "non_tradeable"
-        row.execution_eligible = False
-        row.last_eligibility_check_at = datetime.now(timezone.utc)
-        return row
-    if row.current_state == "BLOCKED" and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
-        row.status = "non_tradeable"
-        row.current_state = "NON_TRADEABLE"
-        row.execution_eligible = False
-        row.last_eligibility_check_at = datetime.now(timezone.utc)
-        return row
+    from services.live_mode_service import get_or_create_live_config as _get_or_create_live_config
+
+    live_config = _get_or_create_live_config(db)
+    live_mode_enabled = bool(getattr(live_config, "live_mode_enabled", False))
+
+    if live_mode_enabled:
+        if row.current_state == "NON_TRADEABLE" and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
+            row.status = "non_tradeable"
+            row.execution_eligible = False
+            row.last_eligibility_check_at = datetime.now(timezone.utc)
+            return row
+        if row.current_state == "BLOCKED" and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
+            row.status = "non_tradeable"
+            row.current_state = "NON_TRADEABLE"
+            row.execution_eligible = False
+            row.last_eligibility_check_at = datetime.now(timezone.utc)
+            return row
 
     if row.mode != "AUTO" and _has_active_bot(db, row.user_id):
         row.mode = "AUTO"
@@ -1779,6 +1807,8 @@ def run_user_scanner(
     fallback_seed_symbols = normalized_selected_symbols[:max_results]
     if len(fallback_seed_symbols) == 0:
         fallback_seed_symbols = [str(symbol).upper() for symbol in (execution_allowed_scope or []) if str(symbol).strip()][:max_results]
+    if len(fallback_seed_symbols) == 0:
+        fallback_seed_symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT"][:max_results]
 
     if len(selected) == 0 and len(fallback_seed_symbols) > 0:
         fallback_symbols = fallback_seed_symbols
@@ -1903,6 +1933,10 @@ def run_user_scanner(
     symbol_filters_cache: dict[str, dict] = {}
     exchange_readiness_cache: dict[str, dict] = {}
     non_tradeable_count = 0
+    from services.live_mode_service import get_or_create_live_config as _get_or_create_live_config
+
+    live_config = _get_or_create_live_config(db)
+    allow_exchange_soft_bypass = not bool(getattr(live_config, "live_mode_enabled", False))
 
     for item in selected:
         signal_value = str(item.get("signal", "none") or "none").lower()
@@ -2182,6 +2216,7 @@ def run_user_scanner(
             symbol_filters_cache=symbol_filters_cache,
             exchange_readiness_cache=exchange_readiness_cache,
             registry_payload=execution_policy_registry,
+            allow_exchange_soft_bypass=allow_exchange_soft_bypass,
         )
         scanner_row.payload = {
             **(scanner_row.payload or {}),

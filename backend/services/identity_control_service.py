@@ -347,6 +347,30 @@ def ensure_identity_control_seed(db: Session) -> None:
 def get_or_create_identity_profile(db: Session, user_id: str, *, commit: bool = True) -> UserIdentityProfile:
     row = db.query(UserIdentityProfile).filter(UserIdentityProfile.user_id == user_id).first()
     if row is not None:
+        user = db.query(User).filter(User.id == user_id).first()
+        is_legacy_approved_user = bool(
+            user
+            and user.role == UserRole.USER
+            and str(user.approval_status or "").lower() == "approved"
+            and row.updated_by is None
+            and not bool(row.trading_enabled)
+            and not bool(row.live_trading_eligible)
+            and not bool(row.kill_switch_active)
+            and row.deleted_at is None
+            and row.soft_deleted_at is None
+            and row.hard_deleted_at is None
+        )
+        if is_legacy_approved_user:
+            now = datetime.now(timezone.utc)
+            row.trading_enabled = True
+            row.live_trading_eligible = True
+            row.updated_at = now
+            row.updated_by = user_id
+            if commit:
+                db.commit()
+                db.refresh(row)
+            else:
+                db.flush()
         return row
     row = UserIdentityProfile(user_id=user_id)
     db.add(row)

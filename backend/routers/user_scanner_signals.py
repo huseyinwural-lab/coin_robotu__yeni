@@ -56,6 +56,7 @@ from services.explainability_rules_service import build_screener_explain
 from services.indicator_screener.indicator_query_engine_service import indicator_screener_presets
 from services.live_mode_service import (
     adapter as live_adapter,
+    get_or_create_live_config,
     validate_exchange_credentials_for_user,
     _fetch_symbol_filters,
     _quantize_to_step,
@@ -191,6 +192,9 @@ def _is_exchange_connection_ready(connection: UserExchangeConnection | None) -> 
 
 
 def _build_user_status_contract(db: Session, user_id: str) -> dict:
+    live_config = get_or_create_live_config(db)
+    live_mode_enabled = bool(getattr(live_config, "live_mode_enabled", False))
+
     latest_scanner_row = (
         db.query(UserScannerResult)
         .filter(UserScannerResult.user_id == user_id)
@@ -262,6 +266,12 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
             blocked_reason_message=row.blocked_reason_message,
             blocked_solution_hint=row.blocked_solution_hint,
         )
+        row_message = str(getattr(row, "blocked_reason_message", "") or "").upper()
+        if (not live_mode_enabled) and code == "ORDER_PRECHECK_FAILED":
+            if any(token in row_message for token in ["EXCHANGE_NOT_READY", "INVALID_KEY", "MIN_NOTIONAL_NOT_MET"]):
+                continue
+        if (not live_mode_enabled) and code == "SYMBOL_NOT_ALLOWED":
+            continue
         if code:
             blocked_reason_counts[code] = blocked_reason_counts.get(code, 0) + 1
 
@@ -276,9 +286,9 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         blocking_reasons.append({"code": "EXECUTION_NOT_READY", "message": "Execution binding hazır değil.", "hint": "Exchange connection bağlayın."})
     if not symbols_ready:
         blocking_reasons.append({"code": "SYMBOLS_NOT_READY", "message": "Symbol resolution tamamlanmadı.", "hint": "manual_selection sembollerini güncelleyin."})
-    if not exchange_ready:
+    if not exchange_ready and live_mode_enabled:
         blocking_reasons.append({"code": "EXCHANGE_NOT_READY", "message": f"Exchange trade-ready değil ({exchange_reason_code}).", "hint": "connection revalidate / permission kontrol / market_type doğrulaması yapın."})
-    if exchange_ready and wallet_available_balance in {None, 0, 0.0} and wallet_balance in {None, 0, 0.0}:
+    if exchange_ready and wallet_available_balance in {None, 0, 0.0} and wallet_balance in {None, 0, 0.0} and live_mode_enabled:
         blocking_reasons.append({"code": "WALLET_REFRESH_FAILED", "message": "Cüzdan snapshot güncel değil veya boş.", "hint": "wallet refresh tetikleyin; güncel balance olmadan trade açılmaz."})
 
     for code, count in sorted(blocked_reason_counts.items(), key=lambda item: (-item[1], item[0]))[:5]:
