@@ -5,13 +5,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from core.security import decode_access_token
 from db import get_db, redis_client
-from deps import require_admin, require_super_admin
+from deps import is_admin_role, require_admin, require_super_admin
 from models import (
     AuditLog,
     BotProfile,
@@ -24,6 +26,7 @@ from models import (
     UserScannerResult,
 )
 from core.users.user_scanner_signal_service import diagnose_pending_signal
+from services.identity_control_service import is_access_token_revoked
 from services.audit_service import create_audit_log
 from services.strategy_observability_service import (
     get_rejection_analytics,
@@ -39,6 +42,37 @@ PREVIEW_TOKEN_TTL_SECONDS = 600
 PREVIEW_TOKEN_KEY_PREFIX = "strategy:signal_preview"
 SCORE_CONFIG_KEY = "strategy:score_config:v1"
 SCORE_OVERRIDE_LOG_KEY = "strategy:score_override_logs:v1"
+status_contract_bearer = HTTPBearer(auto_error=False)
+
+
+def require_admin_relaxed_for_status_contract(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(status_contract_bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    _ = request
+    if credentials is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    raw_token = str(credentials.credentials or "").strip()
+    if not raw_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    if is_access_token_revoked(db, access_token=raw_token):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_revoked")
+    try:
+        payload = decode_access_token(raw_token)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
+    subject = str(payload.get("sub") or "").strip()
+    if not subject:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token_subject")
+
+    user = db.query(User).filter(User.id == subject).first()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="user_not_found_or_inactive")
+    if not is_admin_role(user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+    return user
 
 
 class TopSignalsSimulateRequest(BaseModel):
@@ -988,7 +1022,7 @@ def top_signals(
 
 @router.get("/status-contract")
 def strategy_status_contract(
-    _: User = Depends(require_admin),
+    _: User = Depends(require_admin_relaxed_for_status_contract),
     db: Session = Depends(get_db),
 ):
     return _build_admin_status_contract(db)

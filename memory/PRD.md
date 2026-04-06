@@ -1,3 +1,41 @@
+## 2026-04-06 — Next Action Items Batch (Hepsi)
+
+### 1) Observability Tek Kaynak (`status_contract`) Bağlantısı
+- `AdminUniverseMonitorPage.jsx`
+  - `/api/admin/strategy/status-contract` entegrasyonu eklendi.
+  - Panelde zorunlu alanlar gösteriliyor: `scanner_ready`, `strategy_ready`, `risk_ready`, `execution_ready`, `symbols_ready`, `exchange_ready`, `bot_status`, `health`, `blocking_reasons`.
+- `ExecutionStatesPage.jsx`
+  - Aynı `status_contract` endpointi bağlandı.
+  - Sayfa üstünde unified panel ile aynı sözleşme alanları gösteriliyor.
+
+### 2) Run Both + Start Bot Detay Paneli
+- `UserScannerPage.jsx`
+  - Run+Start akışı market bazlı rapor üretir hale getirildi.
+  - Yeni panel: scanner run durumu (spot/futures), bot start sonucu (`started` / `failed` / `no_bot`), fail-fast blocker listesi.
+  - Kısmi başarı/başarısızlık net görünür; toast özetleri eklendi.
+
+### 3) Policy Mapping Regression Paketi
+- Yeni test dosyası: `/app/backend/tests/test_policy_builder_mapping_regression.py`
+  - `validate` endpointinde `policy_code`, `scope.strategy`, `scope.symbol` mapping doğrulaması.
+  - `builder/versions` + `versions/{id}/validate` zincirinde mapping persist doğrulaması.
+- Test sonucu: `2 passed`.
+
+### 4) Blocked Reason Auto Playbook
+- `UserSignalsPage.jsx`
+  - "Blocked Playbook (Auto Öneri)" paneli eklendi.
+  - Kod bazlı öneri adımları: `ORDER_PRECHECK_FAILED`, `EXECUTION_DISABLED`, `RISK_POLICY_MISSING`, `BOT_NOT_RUNNING`, `BLOCKED_UNSPECIFIED`.
+
+### Ek Stabilizasyon (Iteration-12 low issue closure)
+- `GET /api/admin/strategy/status-contract` için admin token + cookie olmayan çağrılarda görülen `session_device_mismatch` problemi bu endpoint özelinde giderildi.
+  - Yeni relaxed admin dependency yalnızca bu read-only endpoint için eklendi.
+
+### Doğrulama
+- JS lint: ilgili tüm frontend dosyaları temiz.
+- Python lint: ilgili backend dosyaları temiz.
+- `pytest -q /app/backend/tests/test_policy_builder_mapping_regression.py` → `2 passed`.
+- API smoke: user/admin status-contract ve run-async-both akışları 200.
+- Testing Agent iteration_12: kapsam PASS (backend+frontend), low issue kapatıldı.
+
 ## 2026-04-06 — Phase 3/4 Kapanış (Blocked Visibility + Status Contract + Run Both)
 
 ### Tamamlananlar (P0/P1/P2 Scope)
