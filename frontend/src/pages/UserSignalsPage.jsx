@@ -71,14 +71,26 @@ export const UserSignalsPage = () => {
       setIsLoading(true);
     }
     try {
-      const [signalsRes, portfolioRes, tradesRes, modeRes, botsRes, statusContractRes] = await Promise.allSettled([
-        apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 15000 }),
-        apiClient.get("/user/portfolio", { timeout: 8000 }),
-        apiClient.get("/user/trades", { params: { limit: 120 }, timeout: 8000 }),
-        apiClient.get("/user/signal-mode", { timeout: 8000 }),
-        apiClient.get("/bot-profiles", { timeout: 8000 }),
-        apiClient.get("/user/scanner/status-contract", { timeout: 8000 }),
-      ]);
+      const requestDescriptors = [
+        { key: "signals", label: "signals", request: () => apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 15000 }) },
+        { key: "portfolio", label: "portfolio", request: () => apiClient.get("/user/portfolio", { timeout: 8000 }) },
+        { key: "trades", label: "trades", request: () => apiClient.get("/user/trades", { params: { limit: 120 }, timeout: 8000 }) },
+        { key: "signal_mode", label: "signal_mode", request: () => apiClient.get("/user/signal-mode", { timeout: 8000 }) },
+        { key: "bot_profiles", label: "bot_profiles", request: () => apiClient.get("/bot-profiles", { timeout: 8000 }) },
+        { key: "status_contract", label: "status_contract", request: () => apiClient.get("/user/scanner/status-contract", { timeout: 8000 }) },
+      ];
+      const settled = await Promise.allSettled(requestDescriptors.map((item) => item.request()));
+      const byKey = requestDescriptors.reduce((acc, descriptor, index) => {
+        acc[descriptor.key] = settled[index];
+        return acc;
+      }, {});
+
+      const signalsRes = byKey.signals;
+      const portfolioRes = byKey.portfolio;
+      const tradesRes = byKey.trades;
+      const modeRes = byKey.signal_mode;
+      const botsRes = byKey.bot_profiles;
+      const statusContractRes = byKey.status_contract;
 
       if (signalsRes?.status === "fulfilled") {
         const payload = signalsRes.value?.data;
@@ -112,24 +124,46 @@ export const UserSignalsPage = () => {
         setStatusContract(statusContractRes.value?.data ?? null);
       }
 
-      const rejected = [signalsRes, portfolioRes, tradesRes, modeRes, botsRes, statusContractRes].filter((item) => item?.status === "rejected");
-      if (rejected.length > 0) {
-        const primaryError = signalsRes?.status === "rejected" ? signalsRes.reason : rejected[0]?.reason;
+      const rejectedEntries = requestDescriptors
+        .map((descriptor, index) => {
+          const result = settled[index];
+          if (result?.status !== "rejected") {
+            return null;
+          }
+          return {
+            key: descriptor.key,
+            label: descriptor.label,
+            reason: result.reason,
+            errorClass: classifyApiError(result.reason),
+            status: Number(result?.reason?.response?.status || 0),
+            message: resolveLoadErrorMessage(result.reason, `${descriptor.label} servisi yüklenemedi`),
+          };
+        })
+        .filter(Boolean);
+
+      if (rejectedEntries.length > 0) {
+        const primary = rejectedEntries[0];
+        const primaryError = primary.reason;
         const primaryClass = classifyApiError(primaryError);
         const loadIssueMessage = resolveLoadErrorMessage(primaryError, "Signals verisi yüklenemedi");
+        const endpointSummary = rejectedEntries
+          .slice(0, 4)
+          .map((entry) => `${entry.label}${entry.status ? `(${entry.status})` : ""}`)
+          .join(", ");
         setLoadIssue({
           errorClass: primaryClass,
           message: loadIssueMessage,
-          rejectedCount: rejected.length,
+          rejectedCount: rejectedEntries.length,
+          endpointsSummary: endpointSummary,
         });
 
         if (!silent) {
           if (primaryClass === "infra_error") {
-            emitDedupedToast("warning", "user-signals-load-infra-error", `Altyapı hatası: ${loadIssueMessage}`);
+            emitDedupedToast("warning", "user-signals-load-infra-error", `Altyapı hatası: ${endpointSummary} · ${loadIssueMessage}`);
           } else if (primaryClass === "auth_error") {
-            emitDedupedToast("warning", "user-signals-load-auth-error", `Auth hatası: ${loadIssueMessage}`);
+            emitDedupedToast("warning", "user-signals-load-auth-error", `Auth hatası: ${endpointSummary} · ${loadIssueMessage}`);
           } else {
-            emitDedupedToast("error", "user-signals-load-trade-blocker", loadIssueMessage);
+            emitDedupedToast("error", "user-signals-load-trade-blocker", `${endpointSummary} · ${loadIssueMessage}`);
           }
         }
       } else {
@@ -606,6 +640,9 @@ export const UserSignalsPage = () => {
           <p className="mt-1" data-testid="user-signals-load-issue-message">{loadIssue.message}</p>
           <p className="mt-1 text-xs opacity-90" data-testid="user-signals-load-issue-count">
             rejected_requests={loadIssue.rejectedCount}
+          </p>
+          <p className="mt-1 text-xs opacity-90" data-testid="user-signals-load-issue-endpoints">
+            endpoints={loadIssue.endpointsSummary || "-"}
           </p>
         </section>
       )}

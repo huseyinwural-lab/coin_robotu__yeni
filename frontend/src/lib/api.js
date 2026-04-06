@@ -248,6 +248,10 @@ const shouldRetryRequest = (error) => {
     return true;
   }
 
+  if (Number(error?.response?.status) === 500 && classifyApiError(error) === "infra_error") {
+    return true;
+  }
+
   if (retryableCodes.has(String(error?.code || "").toUpperCase())) {
     return true;
   }

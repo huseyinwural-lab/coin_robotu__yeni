@@ -200,6 +200,13 @@ DB_POOL_TIMEOUT_HINTS = (
     "too many connections",
     "connection pool",
     "could not obtain a connection",
+    "ssl connection has been closed unexpectedly",
+    "server closed the connection unexpectedly",
+    "connection to server at",
+    "could not connect to server",
+    "connection refused",
+    "connection reset by peer",
+    "broken pipe",
 )
 
 

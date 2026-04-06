@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SymbolSelectorPanel } from "@/components/SymbolSelectorPanel";
-import { apiClient } from "@/lib/api";
+import { apiClient, classifyApiError } from "@/lib/api";
 
 const initialForm = {
   name: "",
@@ -94,6 +94,10 @@ const parseApiErrorMessage = (error, fallback) => {
   }
   const knownFromMessage = normalizeKnownCode(error?.message || "");
   if (knownFromMessage) return knownFromMessage;
+  const status = Number(error?.response?.status || 0);
+  if (status > 0) {
+    return `${fallback} (HTTP ${status})`;
+  }
   return fallback;
 };
 
@@ -217,6 +221,7 @@ export const BotProfilesPage = () => {
       failures.push({
         label: meta.label,
         message: parseApiErrorMessage(result.reason, "servise ulaşılamadı"),
+        errorClass: classifyApiError(result.reason),
       });
     });
 
@@ -252,7 +257,8 @@ export const BotProfilesPage = () => {
     if (failures.length > 0) {
       const summary = failures.slice(0, 2).map((item) => `${item.label}: ${item.message}`).join(" · ");
       const extra = failures.length > 2 ? ` (+${failures.length - 2} servis)` : "";
-      toast.error(`Kısmi yükleme: ${summary}${extra}`);
+      const classes = Array.from(new Set(failures.map((item) => item.errorClass))).join(", ");
+      toast.error(`Kısmi yükleme [${classes}]: ${summary}${extra}`);
     }
   }, []);
 

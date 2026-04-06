@@ -888,6 +888,12 @@ export const UserScannerPage = () => {
         infra_error: failedEntries.filter((entry) => entry.errorClass === "infra_error").length,
         trade_blocker: failedEntries.filter((entry) => entry.errorClass === "trade_blocker").length,
       };
+      const infraErrorKeys = failedEntries
+        .filter((entry) => entry.errorClass === "infra_error")
+        .map((entry) => `${entry.key}${entry.status ? `(${entry.status})` : ""}`);
+      const authErrorKeys = failedEntries
+        .filter((entry) => entry.errorClass === "auth_error")
+        .map((entry) => `${entry.key}${entry.status ? `(${entry.status})` : ""}`);
 
       const criticalTradeBlockerKeys = (SIMPLE_SCANNER_V2
         ? failedEntries.filter((entry) => entry.key !== "strategy_templates")
@@ -912,14 +918,14 @@ export const UserScannerPage = () => {
           emitScannerToast(
             "warning",
             "scanner-load-infra-error",
-            `Altyapı sorunu algılandı: ${failureSummary.infra_error} endpoint (anomaly hesabına dahil edilmedi).`,
+            `Altyapı sorunu: ${infraErrorKeys.slice(0, 5).join(", ") || `${failureSummary.infra_error} endpoint`} (anomaly hariç).`,
           );
         }
         if (failureSummary.auth_error > 0) {
           emitScannerToast(
             "warning",
             "scanner-load-auth-error",
-            `Auth sorunu algılandı: ${failureSummary.auth_error} endpoint (anomaly hesabına dahil edilmedi).`,
+            `Auth sorunu: ${authErrorKeys.slice(0, 5).join(", ") || `${failureSummary.auth_error} endpoint`} (anomaly hariç).`,
           );
         }
       }

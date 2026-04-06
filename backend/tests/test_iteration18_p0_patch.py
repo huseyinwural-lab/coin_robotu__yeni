@@ -39,7 +39,22 @@ class TestDBPoolTimeoutContract:
         assert "pooler timeout" in content.lower(), "Should include 'pooler timeout' hint"
         assert "timeout expired" in content.lower(), "Should include 'timeout expired' hint"
         assert "queuepool limit" in content.lower(), "Should include 'queuepool limit' hint"
+        assert "ssl connection has been closed unexpectedly" in content.lower(), \
+            "Should include SSL closed hint for retryable DB failures"
         print("PASS: DB_POOL_TIMEOUT_HINTS constant defined with expected hints")
+
+    def test_observability_middleware_maps_retryable_db_errors_to_503(self):
+        """Verify middleware maps retryable DB failures to 503 DB_POOL_TIMEOUT"""
+        with open("/app/backend/core/observability/http_logging_middleware.py", "r") as f:
+            content = f.read()
+
+        assert "def _is_retryable_db_error" in content, \
+            "Middleware should include retryable DB detector"
+        assert '"code": "DB_POOL_TIMEOUT"' in content, \
+            "Middleware response should include DB_POOL_TIMEOUT code"
+        assert "status_code=503" in content, \
+            "Middleware should return 503 for retryable DB failures"
+        print("PASS: Middleware retryable DB mapping verified")
 
     def test_is_db_pool_timeout_error_function_exists(self):
         """Verify _is_db_pool_timeout_error function exists"""
@@ -309,6 +324,17 @@ class TestFrontendSignalsLoadIssueBanner:
             "trade_blocker should use rose styling"
         print("PASS: Load issue banner classification verified")
 
+    def test_load_issue_banner_contains_failed_endpoint_summary(self):
+        """Verify banner includes failed endpoint summary for debugging"""
+        with open("/app/frontend/src/pages/UserSignalsPage.jsx", "r") as f:
+            content = f.read()
+
+        assert "endpointsSummary" in content, \
+            "Load issue should track endpointsSummary"
+        assert "user-signals-load-issue-endpoints" in content, \
+            "Banner should render failed endpoint summary"
+        print("PASS: Load issue endpoint summary verified")
+
     def test_toast_dedupe_in_signals(self):
         """Verify toast dedupe exists in UserSignalsPage"""
         with open("/app/frontend/src/pages/UserSignalsPage.jsx", "r") as f:
@@ -369,6 +395,17 @@ class TestFrontendApiClassifyError:
         assert 'return "trade_blocker"' in content, \
             "Should return trade_blocker as default"
         print("PASS: classifyApiError returns trade_blocker as default")
+
+    def test_should_retry_request_includes_infra_500(self):
+        """Verify shouldRetryRequest retries infra-classified 500 responses"""
+        with open("/app/frontend/src/lib/api.js", "r") as f:
+            content = f.read()
+
+        assert "Number(error?.response?.status) === 500" in content, \
+            "shouldRetryRequest should check 500 status"
+        assert "classifyApiError(error) === \"infra_error\"" in content, \
+            "500 retry should be limited to infra_error classification"
+        print("PASS: shouldRetryRequest infra 500 retry verified")
 
 
 class TestAPIIntegration:
