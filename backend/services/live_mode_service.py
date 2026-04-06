@@ -2066,10 +2066,17 @@ def run_controlled_test_order(db: Session, user: User) -> LiveExecutionLog:
     if use_spot_market_fallback:
         execution_route = "spot_market_quote_order_qty"
         state_path.append("spot_market_submit")
+        fallback_correlation_id = f"canary-fallback:{user.id}:{symbol}:{uuid.uuid4().hex[:10]}"
         fallback_alert_details = {
             "symbol": symbol,
             "environment": environment,
             "route": execution_route,
+            "api_route": "/api/exchange/test-order",
+            "method": "POST",
+            "correlation_id": fallback_correlation_id,
+            "request_id": fallback_correlation_id,
+            "event_type": "canary_auto_heal_spot_fallback",
+            "parent_event_id": None,
             "target_notional_usdt": target_notional_usdt,
             "futures_candidate_notional": futures_candidate_notional,
             "futures_min_notional": futures_min_notional,
