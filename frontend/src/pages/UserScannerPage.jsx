@@ -43,6 +43,8 @@ const PROFILE_INTERVAL_OPTIONS = [
   { value: 900, label: "15 dakika" },
 ];
 
+const SIMPLE_SCANNER_V2 = true;
+
 const normalizeIntervalSeconds = (value) => {
   const allowed = new Set(PROFILE_INTERVAL_OPTIONS.map((option) => Number(option.value)));
   const parsed = Number(value || AUTO_SCAN_INTERVAL_SECONDS);
@@ -256,7 +258,7 @@ export const UserScannerPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [symbolSource, setSymbolSource] = useState("crypto");
-  const [symbolMode, setSymbolMode] = useState("all_market_symbols");
+  const [symbolMode, setSymbolMode] = useState("manual_selection");
   const [selectedSymbols, setSelectedSymbols] = useState([]);
   const [watchlistOnly, setWatchlistOnly] = useState(false);
   const [automationConfig, setAutomationConfig] = useState(null);
@@ -292,7 +294,7 @@ export const UserScannerPage = () => {
     updatedAt: null,
   });
   const [selectedTrendWindowMinutes, setSelectedTrendWindowMinutes] = useState(5);
-  const [scannerSection, setScannerSection] = useState(searchParams.get("section") === "screener" ? "screener" : "results");
+  const [scannerSection, setScannerSection] = useState(SIMPLE_SCANNER_V2 ? "results" : (searchParams.get("section") === "screener" ? "screener" : "results"));
   const [scannerTemplates, setScannerTemplates] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [lastRunEnvelope, setLastRunEnvelope] = useState(null);
@@ -571,7 +573,7 @@ export const UserScannerPage = () => {
         interval_seconds: normalizeIntervalSeconds(autoScanInterval),
         max_results: 25,
         symbol_source: symbolSource,
-        symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
+        symbol_selection_mode: SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode),
         selected_symbols: selectedSymbols,
       });
       setAutomationConfig(data || null);
@@ -632,7 +634,7 @@ export const UserScannerPage = () => {
         interval_seconds: normalizeIntervalSeconds(activeProfile.interval_seconds),
         max_results: 25,
         symbol_source: symbolSource,
-        symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
+        symbol_selection_mode: SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode),
         selected_symbols: selectedSymbols,
       });
       setAutomationProfiles((prev) => prev.map((item) => (item.id === data.id ? data : { ...item, is_active: false })));
@@ -664,7 +666,7 @@ export const UserScannerPage = () => {
         interval_seconds: normalizeIntervalSeconds(profileIntervalInput),
         max_results: 25,
         symbol_source: symbolSource,
-        symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
+        symbol_selection_mode: SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode),
         selected_symbols: selectedSymbols,
       });
       setProfileNameInput("");
@@ -708,29 +710,48 @@ export const UserScannerPage = () => {
       setIsLoading(true);
     }
     try {
-      const requestDescriptors = [
-        { key: "signal_mode", request: apiClient.get("/user/signal-mode", { timeout: 8000 }) },
-        { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 8000 }) },
-        {
-          key: "scanner_results",
-          request: apiClient.get("/screener", {
-            params: {
-              limit: 80,
-              filters: JSON.stringify(compactMinimalFilters(minimalFiltersRef.current)),
+      const requestDescriptors = SIMPLE_SCANNER_V2
+        ? [
+            { key: "signal_mode", request: apiClient.get("/user/signal-mode", { timeout: 8000 }) },
+            { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 8000 }) },
+            {
+              key: "scanner_results",
+              request: apiClient.get("/screener", {
+                params: {
+                  limit: 120,
+                  filters: JSON.stringify(compactMinimalFilters(minimalFiltersRef.current)),
+                },
+                timeout: 12000,
+              }),
             },
-            timeout: 10000,
-          }),
-        },
-        { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 8000 }) },
-        { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 8000 }) },
-        { key: "scanner_profiles", request: apiClient.get("/user/scanner/automation-profiles", { timeout: 8000 }) },
-        { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 }, timeout: 8000 }) },
-        { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 8000 }) },
-        { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", { timeout: 8000 }) },
-        { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" }, timeout: 8000 }) },
-        { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, timeout: 8000 }) },
-        { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 8000 }) },
-      ];
+            { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 8000 }) },
+            { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 8000 }) },
+            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 8000 }) },
+            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 8000 }) },
+          ]
+        : [
+            { key: "signal_mode", request: apiClient.get("/user/signal-mode", { timeout: 8000 }) },
+            { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 8000 }) },
+            {
+              key: "scanner_results",
+              request: apiClient.get("/screener", {
+                params: {
+                  limit: 80,
+                  filters: JSON.stringify(compactMinimalFilters(minimalFiltersRef.current)),
+                },
+                timeout: 10000,
+              }),
+            },
+            { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 8000 }) },
+            { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 8000 }) },
+            { key: "scanner_profiles", request: apiClient.get("/user/scanner/automation-profiles", { timeout: 8000 }) },
+            { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 }, timeout: 8000 }) },
+            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 8000 }) },
+            { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", { timeout: 8000 }) },
+            { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" }, timeout: 8000 }) },
+            { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, timeout: 8000 }) },
+            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 8000 }) },
+          ];
       const responses = await Promise.allSettled(requestDescriptors.map((entry) => entry.request));
       const responsesWithEndpointMeta = responses.map((entry, index) => ({
         ...entry,
@@ -751,18 +772,24 @@ export const UserScannerPage = () => {
         toast.error(`Scanner kısmi yüklendi: ${failedKeys.join(", ")}`);
       }
 
-      const modeRes = responses[0].status === "fulfilled" ? responses[0].value : null;
-      const overviewRes = responses[1].status === "fulfilled" ? responses[1].value : null;
-      const resultsRes = responses[2].status === "fulfilled" ? responses[2].value : null;
-      const templatesRes = responses[3].status === "fulfilled" ? responses[3].value : null;
-      const automationRes = responses[4].status === "fulfilled" ? responses[4].value : null;
-      const profilesRes = responses[5].status === "fulfilled" ? responses[5].value : null;
-      const cardsRes = responses[6].status === "fulfilled" ? responses[6].value : null;
-      const persistedSelectionRes = responses[7].status === "fulfilled" ? responses[7].value : null;
-      const runtimeRes = responses[8].status === "fulfilled" ? responses[8].value : null;
-      const readinessRes = responses[9].status === "fulfilled" ? responses[9].value : null;
-      const dailyRes = responses[10].status === "fulfilled" ? responses[10].value : null;
-      const schedulerRes = responses[11].status === "fulfilled" ? responses[11].value : null;
+      const byKey = requestDescriptors.reduce((acc, descriptor, index) => {
+        const result = responses[index];
+        acc[descriptor.key] = result?.status === "fulfilled" ? result.value : null;
+        return acc;
+      }, {});
+
+      const modeRes = byKey.signal_mode;
+      const overviewRes = byKey.scanner_overview;
+      const resultsRes = byKey.scanner_results;
+      const templatesRes = byKey.strategy_templates;
+      const automationRes = byKey.scanner_automation;
+      const profilesRes = byKey.scanner_profiles;
+      const cardsRes = byKey.decision_cards;
+      const persistedSelectionRes = byKey.symbol_selection;
+      const runtimeRes = byKey.runtime_snapshot;
+      const readinessRes = byKey.live_readiness;
+      const dailyRes = byKey.daily_report;
+      const schedulerRes = byKey.scheduler_next_run;
 
       setMode((prev) => modeRes?.data?.mode || prev || "ASSISTED");
       setOverview((prev) => overviewRes?.data || prev || null);
@@ -798,23 +825,26 @@ export const UserScannerPage = () => {
           setProfileIntervalInput(normalizeIntervalSeconds(selectedProfile.interval_seconds));
             setAutoScanInterval(normalizeIntervalSeconds(selectedProfile.interval_seconds));
           setSymbolSource(selectedProfile.symbol_source || "crypto");
-          setSymbolMode(selectedProfile.symbol_selection_mode || "all_market_symbols");
+          setSymbolMode(selectedProfile.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"));
           setSelectedSymbols(Array.isArray(selectedProfile.selected_symbols) ? selectedProfile.selected_symbols : []);
         } else if (automation) {
           setActiveProfileId("");
             setAutoScanInterval(normalizeIntervalSeconds(automation.interval_seconds));
           setSymbolSource(automation.symbol_source || "crypto");
-          setSymbolMode(automation.symbol_selection_mode || "all_market_symbols");
+          setSymbolMode(automation.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"));
           setSelectedSymbols(Array.isArray(automation.selected_symbols) ? automation.selected_symbols : []);
         }
         if (persistedSelection) {
           setSymbolSource(persistedSelection.symbol_source || "crypto");
-          setSymbolMode(persistedSelection.symbol_selection_mode || "all_market_symbols");
+          setSymbolMode(persistedSelection.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"));
           setSelectedSymbols(Array.isArray(persistedSelection.selected_symbols) ? persistedSelection.selected_symbols : []);
           setSelectionSavedAt(persistedSelection.saved_at || null);
         }
-          const normalizedMode = String((persistedSelection?.symbol_selection_mode || selectedProfile?.symbol_selection_mode || automation?.symbol_selection_mode || "all_market_symbols")).toLowerCase();
+          const normalizedMode = String((persistedSelection?.symbol_selection_mode || selectedProfile?.symbol_selection_mode || automation?.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"))).toLowerCase();
           setWatchlistOnly(normalizedMode === "manual_selection" && Array.isArray(persistedSelection?.selected_symbols || selectedProfile?.selected_symbols || automation?.selected_symbols) && (persistedSelection?.selected_symbols || selectedProfile?.selected_symbols || automation?.selected_symbols || []).length > 0);
+        if (SIMPLE_SCANNER_V2) {
+          setSymbolMode("manual_selection");
+        }
         setSelectionHydrated(true);
       }
     } finally {
@@ -843,11 +873,50 @@ export const UserScannerPage = () => {
   }, [selectionHydrated, minimalFilters, load]);
 
   useEffect(() => {
+    const intervalMs = SIMPLE_SCANNER_V2 ? 30_000 : 10_000;
     const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
       load({ silent: true, notifyAutoRuns: true });
-    }, 10000);
+    }, intervalMs);
     return () => clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (!SIMPLE_SCANNER_V2 || !selectionHydrated || !activeAutomation?.id) {
+      return;
+    }
+    if (String(activeAutomation.symbol_selection_mode || "").toLowerCase() === "manual_selection") {
+      return;
+    }
+
+    let cancelled = false;
+    const normalizeAutomationMode = async () => {
+      try {
+        await apiClient.put("/user/scanner/automation", {
+          auto_enabled: Boolean(activeAutomation.auto_enabled),
+          interval_seconds: Number(activeAutomation.interval_seconds || autoScanInterval || AUTO_SCAN_INTERVAL_SECONDS),
+          max_results: Number(activeAutomation.max_results || 120),
+          symbol_source: symbolSource,
+          symbol_selection_mode: "manual_selection",
+          selected_symbols: selectedSymbols,
+        });
+        if (!cancelled) {
+          setActiveAutomation((prev) => (prev ? { ...prev, symbol_selection_mode: "manual_selection" } : prev));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(toApiErrorMessage(error, "Automation modu manual_selection olarak sabitlenemedi"));
+        }
+      }
+    };
+
+    normalizeAutomationMode();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAutomation?.id, activeAutomation?.symbol_selection_mode, activeAutomation?.auto_enabled, activeAutomation?.interval_seconds, activeAutomation?.max_results, autoScanInterval, selectedSymbols, selectionHydrated, symbolSource]);
 
   useEffect(() => {
     if (!watchlistOnly) {
@@ -870,7 +939,7 @@ export const UserScannerPage = () => {
         const { data } = await apiClient.put("/user/scanner/symbol-selection", {
           scanner_id: "default",
           symbol_source: symbolSource,
-          symbol_selection_mode: watchlistOnly ? "manual_selection" : symbolMode,
+          symbol_selection_mode: SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode),
           selected_symbols: selectedSymbols,
         });
         setSelectionSavedAt(data?.saved_at || null);
@@ -962,7 +1031,7 @@ export const UserScannerPage = () => {
       return;
     }
 
-    const effectiveMode = watchlistOnly ? "manual_selection" : symbolMode;
+    const effectiveMode = SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode);
     setIsRunning(true);
     setShowSlowLoadingHint(false);
     try {
@@ -972,7 +1041,7 @@ export const UserScannerPage = () => {
       await apiClient.put("/user/signal-mode", { mode });
       const { data } = await apiClient.post("/user/scanner/run", {
         mode,
-        max_results: 25,
+        max_results: SIMPLE_SCANNER_V2 ? 120 : 25,
         symbol_source: symbolSource,
         market_type: marketType,
         symbol_selection_mode: effectiveMode,
@@ -992,6 +1061,65 @@ export const UserScannerPage = () => {
     }
   };
 
+  const runScannerAndStartBot = async () => {
+    if (!ensureScannerRunReady()) {
+      return;
+    }
+
+    const effectiveMode = SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode);
+    setIsRunning(true);
+    setShowSlowLoadingHint(false);
+    try {
+      if (activeAutomation?.auto_enabled) {
+        await saveActiveProfile({ autoEnabled: true, withToast: false });
+      }
+      await apiClient.put("/user/signal-mode", { mode });
+      const { data } = await apiClient.post("/user/scanner/run", {
+        mode,
+        max_results: SIMPLE_SCANNER_V2 ? 120 : 25,
+        symbol_source: symbolSource,
+        market_type: marketType,
+        symbol_selection_mode: effectiveMode,
+        selected_symbols: selectedSymbols,
+        strategy_template_id: selectedTemplateId || null,
+      });
+      setLastRunEnvelope(data);
+
+      const botsRes = await apiClient.get("/bot-profiles", { timeout: 10000 });
+      const botRows = Array.isArray(botsRes?.data) ? botsRes.data : [];
+      const normalizedMarket = String(marketType || "spot").toLowerCase();
+      const candidates = botRows.filter((bot) => {
+        const botMarket = String(bot?.market_type || "spot").toLowerCase();
+        const isEnabled = Boolean(bot?.is_enabled);
+        const modeOk = String(bot?.mode || "live_ready") === "live_ready";
+        return isEnabled && modeOk && botMarket === normalizedMarket;
+      });
+
+      let startedBotName = "";
+      if (candidates.length > 0) {
+        const target = candidates[0];
+        await apiClient.post(`/bot-profiles/${target.id}/start`, null, { timeout: 12000 });
+        startedBotName = String(target.name || target.id || "");
+      }
+
+      await load();
+
+      const actionable = Number(data?.actionable_count || 0);
+      if ((data?.warnings || []).length > 0) {
+        toast.warning((data.warnings || []).join(","));
+      }
+      toast.success(
+        startedBotName
+          ? `Run tamamlandı · actionable=${actionable} · bot başlatıldı: ${startedBotName}`
+          : `Run tamamlandı · actionable=${actionable} · uygun bot bulunamadı`,
+      );
+    } catch (error) {
+      toast.error(toApiErrorMessage(error, "Run + Start akışı başarısız"));
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
   useEffect(() => {
     if (!isRunning) {
       setShowSlowLoadingHint(false);
@@ -1002,6 +1130,10 @@ export const UserScannerPage = () => {
   }, [isRunning]);
 
   useEffect(() => {
+    if (SIMPLE_SCANNER_V2) {
+      setScannerSection("results");
+      return;
+    }
     const nextSection = searchParams.get("section") === "screener" ? "screener" : "results";
     setScannerSection(nextSection);
   }, [searchParams]);
@@ -1011,7 +1143,7 @@ export const UserScannerPage = () => {
       return;
     }
 
-    const effectiveMode = watchlistOnly ? "manual_selection" : symbolMode;
+    const effectiveMode = SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode);
     setIsRunning(true);
     try {
       await apiClient.put("/user/signal-mode", { mode: preset.mode });
@@ -1124,21 +1256,34 @@ export const UserScannerPage = () => {
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
 
-      <section className="order-2 col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-section-toggle-panel">
+      {!SIMPLE_SCANNER_V2 && <section className="order-2 col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-section-toggle-panel">
         <div className="flex flex-wrap items-center gap-2" data-testid="user-scanner-section-toggle-group">
           <Button type="button" variant={scannerSection === "results" ? "default" : "outline"} onClick={() => switchScannerSection("results")} data-testid="user-scanner-section-results-button">Scan Results</Button>
           <Button type="button" variant={scannerSection === "screener" ? "default" : "outline"} onClick={() => switchScannerSection("screener")} data-testid="user-scanner-section-screener-button">Indicator Screener</Button>
         </div>
-      </section>
+      </section>}
 
-      {scannerSection === "screener" ? (
+      {!SIMPLE_SCANNER_V2 && scannerSection === "screener" ? (
         <div className="col-span-12" data-testid="user-scanner-embedded-screener-wrapper">
           <UserIndicatorScreenerPage embedded />
         </div>
       ) : (
       <>
 
-      <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-request-health-mini-indicator">
+      <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-health-summary-card">
+        <div className="flex flex-wrap items-center gap-3" data-testid="user-scanner-health-summary-row">
+          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-health-summary-title">Scanner Health Summary</p>
+          <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${requestHealthBadgeClass}`} data-testid="user-scanner-health-summary-badge">
+            {requestHealth.health}
+          </span>
+          <p className="text-xs text-slate-300" data-testid="user-scanner-health-summary-window">Son 60s req: <span className="font-semibold">{requestHealth.total}</span></p>
+          <p className="text-xs text-slate-300" data-testid="user-scanner-health-summary-ok-fail">ok/fail: <span className="font-semibold">{requestHealth.success}/{requestHealth.failed}</span></p>
+          <p className="text-xs text-slate-300" data-testid="user-scanner-health-summary-ratio">başarı: <span className="font-semibold">{(requestHealth.successRatio * 100).toFixed(1)}%</span></p>
+          <p className="text-xs text-slate-400" data-testid="user-scanner-health-summary-updated">güncelleme: {formatDateLabel(requestHealth.updatedAt)}</p>
+        </div>
+      </section>
+
+      {!SIMPLE_SCANNER_V2 && <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-request-health-mini-indicator">
         <div className="flex flex-wrap items-center gap-3" data-testid="user-scanner-request-health-row">
           <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-request-health-title">Scanner Request Health</p>
           <div className="flex items-center gap-1" data-testid="user-scanner-request-health-trend-window-toggle">
@@ -1314,7 +1459,7 @@ export const UserScannerPage = () => {
             </div>
           </div>
         </section>
-      </section>
+      </section>}
 
       {scannerLoadDegraded && (
         <div className="order-1 col-span-12 rounded border border-amber-700 bg-amber-950/20 p-3 text-sm text-amber-200" data-testid="user-scanner-degraded-load-banner">
@@ -1322,7 +1467,7 @@ export const UserScannerPage = () => {
         </div>
       )}
 
-      <section className="order-2 col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-active-mode-indicator-card">
+      {!SIMPLE_SCANNER_V2 && <section className="order-2 col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-active-mode-indicator-card">
         <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-scanner-active-mode-indicator-title">Scanner Active Mode Indicator</p>
         <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="user-scanner-active-mode-indicator-grid">
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-mode">Active Mode: {activeModeLabel}</p>
@@ -1333,9 +1478,9 @@ export const UserScannerPage = () => {
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-market-type">Market: {marketType.toUpperCase()}</p>
         </div>
         <p className="mt-2 text-xs text-cyan-100" data-testid="user-scanner-active-mode-indicator-run-type-detail">{scannerRunTypeDetail}</p>
-      </section>
+      </section>}
 
-      <section className="order-3 col-span-12 rounded border border-emerald-800/50 bg-emerald-950/20 p-4" data-testid="user-scanner-automation-card">
+      {!SIMPLE_SCANNER_V2 && <section className="order-3 col-span-12 rounded border border-emerald-800/50 bg-emerald-950/20 p-4" data-testid="user-scanner-automation-card">
         <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="user-scanner-automation-title">
           {activeProfile ? `Scanner Otomasyon Profili: ${activeProfile.name}` : "Scanner Otomasyon (Legacy)"}
         </p>
@@ -1370,9 +1515,9 @@ export const UserScannerPage = () => {
         <p className="mt-1 text-xs text-emerald-100" data-testid="user-scanner-selection-persisted-at">
           Sembol Kaydı: {formatDateLabel(selectionSavedAt)}
         </p>
-      </section>
+      </section>}
 
-      <section className="order-4 col-span-12 rounded border border-violet-800/50 bg-violet-950/20 p-4" data-testid="user-scanner-automation-profiles-card">
+      {!SIMPLE_SCANNER_V2 && <section className="order-4 col-span-12 rounded border border-violet-800/50 bg-violet-950/20 p-4" data-testid="user-scanner-automation-profiles-card">
         <p className="text-xs uppercase tracking-widest text-violet-300" data-testid="user-scanner-automation-profiles-title">Çoklu Otomasyon Profilleri</p>
         <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="user-scanner-automation-profiles-create-grid">
           <input
@@ -1424,9 +1569,9 @@ export const UserScannerPage = () => {
             </div>
           ))}
         </div>
-      </section>
+      </section>}
 
-      <section className="order-8 col-span-12 rounded border border-amber-800/50 bg-amber-950/20 p-4" data-testid="user-scanner-auto-alerts-card">
+      {!SIMPLE_SCANNER_V2 && <section className="order-8 col-span-12 rounded border border-amber-800/50 bg-amber-950/20 p-4" data-testid="user-scanner-auto-alerts-card">
         <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="user-scanner-auto-alerts-title">Otomatik Run Uyarıları</p>
         <div className="mt-2 space-y-1" data-testid="user-scanner-auto-alerts-list">
           {autoRunAlerts.length === 0 && <p className="text-xs text-amber-100" data-testid="user-scanner-auto-alerts-empty">Henüz yeni otomatik sinyal bildirimi yok.</p>}
@@ -1436,9 +1581,9 @@ export const UserScannerPage = () => {
             </p>
           ))}
         </div>
-      </section>
+      </section>}
 
-      <section className="order-9 col-span-12 rounded border border-blue-800/50 bg-blue-950/20 p-4" data-testid="user-decision-card-section">
+      {!SIMPLE_SCANNER_V2 && <section className="order-9 col-span-12 rounded border border-blue-800/50 bg-blue-950/20 p-4" data-testid="user-decision-card-section">
         <div className="flex items-center justify-between" data-testid="user-decision-card-header">
           <p className="text-xs uppercase tracking-widest text-blue-300" data-testid="user-decision-card-title">Symbol-level Decision Cards</p>
           <div className="flex items-center gap-2" data-testid="user-decision-card-toolbar-actions">
@@ -1458,9 +1603,9 @@ export const UserScannerPage = () => {
             />
           ))}
         </div>
-      </section>
+      </section>}
 
-      <section className="order-10 col-span-12 rounded border border-fuchsia-800/50 bg-fuchsia-950/20 p-4" data-testid="user-explainability-panel">
+      {!SIMPLE_SCANNER_V2 && <section className="order-10 col-span-12 rounded border border-fuchsia-800/50 bg-fuchsia-950/20 p-4" data-testid="user-explainability-panel">
         <p className="text-xs uppercase tracking-widest text-fuchsia-300" data-testid="user-explainability-title">User Explainability Panel</p>
         {!selectedDecisionSymbol && <p className="mt-2 text-xs" data-testid="user-explainability-empty">Önce bir symbol decision card seçin.</p>}
         {selectedDecisionSymbol && (
@@ -1475,16 +1620,18 @@ export const UserScannerPage = () => {
             )}
           </div>
         )}
-      </section>
+      </section>}
 
-      <ExplainabilityDrawer
-        isOpen={isExplainabilityDrawerOpen}
-        onOpenChange={setIsExplainabilityDrawerOpen}
-        selectedSymbol={selectedDecisionSymbol}
-        isLoading={isExplainabilityLoading}
-        explainability={symbolExplainability}
-        formatDateLabel={formatDateLabel}
-      />
+      {!SIMPLE_SCANNER_V2 && (
+        <ExplainabilityDrawer
+          isOpen={isExplainabilityDrawerOpen}
+          onOpenChange={setIsExplainabilityDrawerOpen}
+          selectedSymbol={selectedDecisionSymbol}
+          isLoading={isExplainabilityLoading}
+          explainability={symbolExplainability}
+          formatDateLabel={formatDateLabel}
+        />
+      )}
 
       <section className="order-5 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-control-section">
         <div data-testid="user-scanner-control-header">
@@ -1544,8 +1691,11 @@ export const UserScannerPage = () => {
             </select>
           </label>
 
-          <Button onClick={runScanner} disabled={isRunning} data-testid="user-scanner-run-button" aria-label="Scanner çalıştır">
-            {isRunning ? "Çalışıyor..." : "Scanner Run"}
+          <Button onClick={runScannerAndStartBot} disabled={isRunning} data-testid="user-scanner-run-start-bot-button" aria-label="Run scanner ve bot start">
+            {isRunning ? "Çalışıyor..." : "Run Scanner + Start Bot"}
+          </Button>
+          <Button variant="outline" onClick={runScanner} disabled={isRunning} data-testid="user-scanner-run-button" aria-label="Scanner çalıştır">
+            {isRunning ? "Çalışıyor..." : "Sadece Scanner Run"}
           </Button>
           <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)} className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-scanner-template-select">
             <option value="">No template</option>
@@ -1585,12 +1735,34 @@ export const UserScannerPage = () => {
         )}
       </section>
 
-      <section className="order-6 col-span-12" data-testid="user-scanner-symbol-selection-section">
+      <section className="order-6 col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-parameters-card">
+        <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-parameters-title">Çalışma Parametreleri</p>
+        <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="user-scanner-parameters-grid">
+          <p className="text-sm" data-testid="user-scanner-parameters-market">Market: <span className="font-semibold">{String(marketType || "spot").toUpperCase()}</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-mode">Signal Mode: <span className="font-semibold">{String(mode || "ASSISTED").toUpperCase()}</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-auto">Auto Scan: <span className="font-semibold">{activeAutomation?.auto_enabled ? "ON" : "OFF"}</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-interval">Interval: <span className="font-semibold">{Number(activeAutomation?.interval_seconds || autoScanInterval || AUTO_SCAN_INTERVAL_SECONDS)}s</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-selected-count">Selected Symbols: <span className="font-semibold">{selectedSymbols.length}</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-max-results">Max Results: <span className="font-semibold">{SIMPLE_SCANNER_V2 ? 120 : 25}</span></p>
+          <p className="text-sm md:col-span-3" data-testid="user-scanner-parameters-selected-sample">
+            Örnek Semboller: <span className="font-mono text-xs">{(selectedSymbols || []).slice(0, 12).join(", ") || "-"}{selectedSymbols.length > 12 ? ` +${selectedSymbols.length - 12}` : ""}</span>
+          </p>
+          <p className="text-sm md:col-span-3" data-testid="user-scanner-parameters-strategy-mapping">Strategy Mapping: <span className="font-semibold">signal.execution_strategy_type = bot.strategy_type</span></p>
+        </div>
+      </section>
+
+      <section className="order-7 col-span-12" data-testid="user-scanner-symbol-selection-section">
         <TradeSymbolSelection
           source={symbolSource}
           onSourceChange={setSymbolSource}
-          mode={symbolMode}
-          onModeChange={setSymbolMode}
+          mode={SIMPLE_SCANNER_V2 ? "manual_selection" : symbolMode}
+          onModeChange={(value) => {
+            if (SIMPLE_SCANNER_V2) {
+              setSymbolMode("manual_selection");
+              return;
+            }
+            setSymbolMode(value);
+          }}
           selectedSymbols={selectedSymbols}
           onSelectedSymbolsChange={setSelectedSymbols}
           watchlistOnly={watchlistOnly}
@@ -1598,7 +1770,7 @@ export const UserScannerPage = () => {
         />
       </section>
 
-      <section className="order-7 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-minimal-filter-section">
+      {!SIMPLE_SCANNER_V2 && <section className="order-7 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-minimal-filter-section">
         <div data-testid="user-scanner-minimal-filter-header">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-minimal-filter-kicker">Filter Layer</p>
           <h3 className="text-base font-semibold" data-testid="user-scanner-minimal-filter-title">Minimal Set</h3>
@@ -1680,9 +1852,9 @@ export const UserScannerPage = () => {
             Clear All
           </Button>
         </div>
-      </section>
+      </section>}
 
-      <section className="order-8 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-strategy-presets-section">
+      {!SIMPLE_SCANNER_V2 && <section className="order-8 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-strategy-presets-section">
         <div data-testid="user-scanner-strategy-presets-header">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-strategy-presets-kicker">Strategy Presets</p>
           <h3 className="text-base font-semibold" data-testid="user-scanner-strategy-presets-title">Preset Runner</h3>
@@ -1698,7 +1870,7 @@ export const UserScannerPage = () => {
           </article>
         ))}
         </div>
-      </section>
+      </section>}
 
       <section className="order-1 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-statistics-section">
         <div data-testid="user-scanner-statistics-header">
@@ -1718,7 +1890,7 @@ export const UserScannerPage = () => {
         </div>
       </section>
 
-      <section className="order-11 col-span-12 space-y-3 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-live-readiness-section">
+      {!SIMPLE_SCANNER_V2 && <section className="order-11 col-span-12 space-y-3 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-live-readiness-section">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-scanner-live-readiness-header">
           <div data-testid="user-scanner-live-readiness-title-wrap">
             <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-scanner-live-readiness-kicker">Live Readiness</p>
@@ -1754,7 +1926,7 @@ export const UserScannerPage = () => {
         <pre className="overflow-x-auto rounded border border-cyan-900 bg-slate-950 p-3 text-xs text-cyan-100" data-testid="user-scanner-daily-report-json">
           {JSON.stringify(scannerDailyReport || {}, null, 2)}
         </pre>
-      </section>
+      </section>}
 
       <section className="order-12 col-span-12" data-testid="user-scanner-results-main-section">
         <ScannerResultsTable

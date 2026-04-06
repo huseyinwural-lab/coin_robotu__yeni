@@ -1463,6 +1463,8 @@ def run_user_scanner(
         if row.symbol
     }
 
+    runtime_strategy_code = str(getattr(bot, "strategy_type", "") or "").strip().lower()
+
     for item in selected:
         signal_value = str(item.get("signal", "none") or "none").lower()
         final_decision = str(item.get("final_decision") or ("LONG" if signal_value == "long" else "SHORT" if signal_value == "short" else "NO_TRADE")).upper()
@@ -1478,6 +1480,21 @@ def run_user_scanner(
             warning_set.add("invalid_quote_asset")
             continue
         strategy_code = str(item.get("strategy_code") or "canonical_unknown")
+        normalized_strategy_code = strategy_code.strip().lower()
+        if runtime_strategy_code and normalized_strategy_code in {"", "manual_selection_fallback", "canonical_unknown"}:
+            strategy_code = runtime_strategy_code
+            item = {
+                **item,
+                "strategy_code": runtime_strategy_code,
+                "source_strategies": [
+                    {
+                        "strategy_code": runtime_strategy_code,
+                        "signal": signal_value,
+                        "score": float(item.get("signal_score") or 0),
+                        "status": "accepted",
+                    }
+                ],
+            }
         snapshot_age_sec = item.get("indicator_snapshot_age_sec")
         if snapshot_age_sec is None:
             snapshot_age_sec = _snapshot_age_seconds(symbol, "15m")
