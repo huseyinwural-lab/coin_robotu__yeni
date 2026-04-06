@@ -1,3 +1,39 @@
+## 2026-04-06 — Precheck-First Tradeability (B+A+A Kararı) ✅
+
+### Kapsam (Uygulandı)
+- **P0: Signal öncesi precheck katmanı**
+  - Candidate bazında hesap: `min_notional`, `min_qty`, `tick_size`, `leverage/margin uyumu`, `balance yeterliliği`, `exchange readiness`.
+  - Yeni alanlar:
+    - Scanner sonuçları: `tradeable`, `first_precheck_failure_code`, `candidate_precheck`.
+    - Signals: `tradeable`, `first_precheck_failure_code`, `status=non_tradeable` desteği.
+  - `ORDER_PRECHECK_FAILED` detay kodları (örn. `EXCHANGE_NOT_READY`, `MIN_QTY_NOT_MET`, `MARKET_TYPE_NOT_ALLOWED`) görünür.
+
+- **P1: Scanner universe = Execution universe alignment**
+  - Scanner scope artık tek kesişimden üretiliyor:
+    - `user allowed symbols`
+    - `venue/policy allowed symbols`
+    - `market_type allowed symbols`
+    - `bot selected symbols`
+  - Sonradan `SYMBOL_NOT_ALLOWED` sürprizini düşürmek için üretim öncesi filtreleme aktif.
+
+- **P2: Exchange readiness gate**
+  - `exchange_ready=false` ise candidate sinyal üretilebiliyor fakat **AUTO intent dispatch yok**.
+  - Signal `NON_TRADEABLE` olarak işaretleniyor; aksiyonel hint dönüyor (`connection revalidate / permission kontrol`).
+
+- **P3: Aksiyonel blocker gösterimi + güvenli tek tık akış**
+  - Signals tarafında blocker playbook ve `diagnose?auto_fix=true` akışları non-tradeable statüsüyle uyumlu.
+  - Güvenli auto-fix kapsamı korunuyor; para yönetimine otomatik müdahale yok.
+
+### Position Sizing Mantığı (Clamp)
+- `effective_order_notional = max(calculated_notional, venue_min_notional)`
+- Risk cap aşımı varsa candidate `NON_TRADEABLE`.
+
+### Doğrulama
+- Testing Agent raporu: `/app/test_reports/iteration_13.json`
+  - Backend: **100% PASS**
+  - Frontend: **100% PASS**
+  - Doğrulanan ana maddeler: tradeable alanları, first precheck failure kodu, non-tradeable status görünürlüğü, run-async & run-async-both, status-contract bütünlüğü.
+
 ## 2026-04-06 — Next Action Items Batch (Hepsi)
 
 ### 1) Observability Tek Kaynak (`status_contract`) Bağlantısı
