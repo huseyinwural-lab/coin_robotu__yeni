@@ -24,6 +24,7 @@ class RequestObservabilityMiddleware(BaseHTTPMiddleware):
             path=request.url.path,
             method=request.method,
         )
+        request.state.request_id = request_id
 
         try:
             response = await call_next(request)

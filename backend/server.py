@@ -2,10 +2,12 @@ import asyncio
 import logging
 import os
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import OperationalError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -190,6 +192,85 @@ def _is_production_runtime() -> bool:
 
 fastapi_app = FastAPI(title="Algorithmic Trading Platform API", version="0.2.0")
 api_router = APIRouter(prefix="/api")
+
+DB_POOL_TIMEOUT_HINTS = (
+    "pooler timeout",
+    "timeout expired",
+    "queuepool limit",
+    "too many connections",
+    "connection pool",
+    "could not obtain a connection",
+)
+
+
+def _resolve_trace_id(request: Request) -> str:
+    request_state_id = str(getattr(getattr(request, "state", None), "request_id", "") or "").strip()
+    header_id = str(request.headers.get("X-Request-ID") or "").strip() if request else ""
+    return request_state_id or header_id or str(uuid4())
+
+
+def _is_db_pool_timeout_error(exc: Exception) -> bool:
+    text_parts = [str(exc or "")]
+    origin = getattr(exc, "orig", None)
+    if origin is not None:
+        text_parts.append(str(origin))
+    normalized = " | ".join(text_parts).strip().lower()
+    return any(hint in normalized for hint in DB_POOL_TIMEOUT_HINTS)
+
+
+def _db_pool_timeout_response(request: Request, *, error_text: str | None = None) -> JSONResponse:
+    trace_id = _resolve_trace_id(request)
+    logger.error(
+        "db_pool_timeout_intercepted",
+        extra={
+            "event_type": "db_pool_timeout",
+            "trace_id": trace_id,
+            "path": str(request.url.path),
+            "method": str(request.method),
+            "error": str(error_text or "")[:300],
+        },
+    )
+    payload = {
+        "detail": "SERVICE_UNAVAILABLE",
+        "code": "DB_POOL_TIMEOUT",
+        "retryable": True,
+        "error_class": "infra_error",
+        "trace_id": trace_id,
+    }
+    return JSONResponse(status_code=503, content=payload, headers={"X-Request-ID": trace_id})
+
+
+@fastapi_app.exception_handler(SQLAlchemyTimeoutError)
+async def sqlalchemy_pool_timeout_exception_handler(request: Request, exc: SQLAlchemyTimeoutError):
+    return _db_pool_timeout_response(request, error_text=str(exc))
+
+
+@fastapi_app.exception_handler(OperationalError)
+async def sqlalchemy_operational_exception_handler(request: Request, exc: OperationalError):
+    if _is_db_pool_timeout_error(exc):
+        return _db_pool_timeout_response(request, error_text=str(exc))
+
+    trace_id = _resolve_trace_id(request)
+    logger.exception(
+        "database_operational_error",
+        extra={
+            "event_type": "database_operational_error",
+            "trace_id": trace_id,
+            "path": str(request.url.path),
+            "method": str(request.method),
+        },
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "INTERNAL_SERVER_ERROR",
+            "code": "DB_OPERATIONAL_ERROR",
+            "retryable": False,
+            "error_class": "infra_error",
+            "trace_id": trace_id,
+        },
+        headers={"X-Request-ID": trace_id},
+    )
 
 
 @api_router.get("/health")

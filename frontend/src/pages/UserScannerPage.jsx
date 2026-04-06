@@ -6,7 +6,7 @@ import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { ScannerResultsTable } from "@/components/ScannerResultsTable";
 import { TradeSymbolSelection } from "@/components/TradeSymbolSelection";
 import { Button } from "@/components/ui/button";
-import { apiClient } from "@/lib/api";
+import { apiClient, classifyApiError } from "@/lib/api";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { saveExecutionContext } from "@/lib/userFlowContext";
 import { DecisionCard } from "@/pages/user/components/DecisionCard";
@@ -111,6 +111,17 @@ const REQUEST_TREND_BUCKETS = 5;
 const REQUEST_TREND_OPTIONS = [5, 15];
 const SCANNER_ANOMALY_TOAST_PREF_KEY = "scanner-anomaly-toast-enabled-v1";
 const SCANNER_ANOMALY_SOUND_PREF_KEY = "scanner-anomaly-sound-enabled-v1";
+const SCANNER_TOAST_DEDUPE_WINDOW_MS = 8000;
+
+const isAnomalyEligibleEvent = (item) => {
+  if (!item) {
+    return false;
+  }
+  if (item.ok) {
+    return true;
+  }
+  return String(item.errorClass || "").toLowerCase() === "trade_blocker";
+};
 
 const readScannerAlertPreference = (key, fallbackValue = true) => {
   if (typeof window === "undefined") {
@@ -140,12 +151,15 @@ const buildTrendPoints = (events, windowMinutes = 5, nowTs = Date.now()) => {
   return Array.from({ length: REQUEST_TREND_BUCKETS }, (_, index) => {
     const bucketStart = startTs + (index * bucketMs);
     const bucketEnd = bucketStart + bucketMs;
-    const bucketEvents = events.filter((item) => item.timestamp >= bucketStart && item.timestamp < bucketEnd);
+    const bucketEventsRaw = events.filter((item) => item.timestamp >= bucketStart && item.timestamp < bucketEnd);
+    const bucketEvents = bucketEventsRaw.filter((item) => isAnomalyEligibleEvent(item));
     const total = bucketEvents.length;
     const success = bucketEvents.filter((item) => item.ok).length;
     const failed = Math.max(total - success, 0);
     const successRatio = total > 0 ? success / total : 1;
     const minutesAgo = Math.max(1, normalizedWindowMinutes - (index * labelStep));
+    const infraErrorCount = bucketEventsRaw.filter((item) => String(item.errorClass || "") === "infra_error").length;
+    const authErrorCount = bucketEventsRaw.filter((item) => String(item.errorClass || "") === "auth_error").length;
 
     const endpointMap = bucketEvents.reduce((acc, item) => {
       const endpoint = String(item.endpoint || "unknown_endpoint");
@@ -178,6 +192,9 @@ const buildTrendPoints = (events, windowMinutes = 5, nowTs = Date.now()) => {
       success,
       failed,
       successRatio,
+      excluded: Math.max(bucketEventsRaw.length - bucketEvents.length, 0),
+      infra_error_count: infraErrorCount,
+      auth_error_count: authErrorCount,
       endpoint_breakdown: endpointBreakdown,
       most_impacted_endpoint: endpointBreakdown[0]?.endpoint || null,
     };
@@ -186,7 +203,8 @@ const buildTrendPoints = (events, windowMinutes = 5, nowTs = Date.now()) => {
 
 const summarizeEndpointBreakdown = (events, { windowMs = 60_000, nowTs = Date.now() } = {}) => {
   const threshold = nowTs - windowMs;
-  const scoped = events.filter((item) => Number(item.timestamp || 0) >= threshold);
+  const scopedRaw = events.filter((item) => Number(item.timestamp || 0) >= threshold);
+  const scoped = scopedRaw.filter((item) => isAnomalyEligibleEvent(item));
   const endpointMap = scoped.reduce((acc, item) => {
     const endpoint = String(item.endpoint || "unknown_endpoint");
     const current = acc.get(endpoint) || { endpoint, total: 0, success: 0, fail: 0 };
@@ -215,6 +233,8 @@ const summarizeEndpointBreakdown = (events, { windowMs = 60_000, nowTs = Date.no
   const success = scoped.filter((item) => item.ok).length;
   const failed = Math.max(total - success, 0);
   const successRatio = total > 0 ? success / total : 1;
+  const infraErrorCount = scopedRaw.filter((item) => String(item.errorClass || "") === "infra_error").length;
+  const authErrorCount = scopedRaw.filter((item) => String(item.errorClass || "") === "auth_error").length;
 
   return {
     rows,
@@ -222,6 +242,9 @@ const summarizeEndpointBreakdown = (events, { windowMs = 60_000, nowTs = Date.no
     success,
     failed,
     successRatio,
+    excluded: Math.max(scopedRaw.length - scoped.length, 0),
+    infraErrorCount,
+    authErrorCount,
     mostImpactedEndpoint: rows[0]?.endpoint || null,
   };
 };
@@ -255,8 +278,9 @@ const toApiErrorMessage = (error, fallback = "İşlem başarısız") => {
 };
 
 const deriveRequestHealth = (events) => {
-  const total = events.length;
-  const success = events.filter((event) => event.ok).length;
+  const eligible = events.filter((event) => isAnomalyEligibleEvent(event));
+  const total = eligible.length;
+  const success = eligible.filter((event) => event.ok).length;
   const failed = Math.max(total - success, 0);
   const successRatio = total > 0 ? success / total : 1;
 
@@ -336,6 +360,16 @@ export const UserScannerPage = () => {
     oneMinute: summarizeEndpointBreakdown([], { windowMs: 60_000 }),
     fiveMinute: summarizeEndpointBreakdown([], { windowMs: 300_000 }),
   });
+  const [requestErrorBreakdown, setRequestErrorBreakdown] = useState({
+    auth_error: 0,
+    infra_error: 0,
+    trade_blocker: 0,
+  });
+  const [scannerFailureSummary, setScannerFailureSummary] = useState({
+    auth_error: 0,
+    infra_error: 0,
+    trade_blocker: 0,
+  });
   const [anomalyToastEnabled, setAnomalyToastEnabled] = useState(() => readScannerAlertPreference(SCANNER_ANOMALY_TOAST_PREF_KEY, true));
   const [anomalySoundEnabled, setAnomalySoundEnabled] = useState(() => readScannerAlertPreference(SCANNER_ANOMALY_SOUND_PREF_KEY, true));
   const [hoveredTrendPointKey, setHoveredTrendPointKey] = useState(null);
@@ -347,6 +381,7 @@ export const UserScannerPage = () => {
   const requestTrendRef = useRef([]);
   const selectedTrendWindowRef = useRef(5);
   const anomalyAlertArmedRef = useRef(false);
+  const scannerToastTrackerRef = useRef(new Map());
 
   const activeProfile = useMemo(() => {
     if (!automationProfiles.length) {
@@ -471,15 +506,36 @@ export const UserScannerPage = () => {
     }
   }, [anomalySoundEnabled, anomalyToastEnabled]);
 
+  const emitScannerToast = useCallback((level, key, message) => {
+    if (!message) {
+      return;
+    }
+    const now = Date.now();
+    const previous = scannerToastTrackerRef.current.get(key) || 0;
+    if (now - previous < SCANNER_TOAST_DEDUPE_WINDOW_MS) {
+      return;
+    }
+    scannerToastTrackerRef.current.set(key, now);
+    const notifier = toast[level] || toast.info;
+    notifier(message, { id: key });
+  }, []);
+
   const updateRequestHealthWindow = useCallback((settledResponses = []) => {
     const now = Date.now();
     const retained = (requestWindowRef.current || []).filter((item) => now - item.timestamp <= REQUEST_HEALTH_WINDOW_MS);
     const incoming = Array.isArray(settledResponses)
-      ? settledResponses.map((item) => ({
-        timestamp: now,
-        ok: item?.status === "fulfilled",
-        endpoint: String(item?.endpoint || item?.meta?.endpoint || "unknown_endpoint"),
-      }))
+      ? settledResponses.map((item) => {
+        const ok = item?.status === "fulfilled";
+        const reason = ok ? null : item?.reason;
+        return {
+          timestamp: now,
+          ok,
+          endpoint: String(item?.endpoint || item?.meta?.endpoint || "unknown_endpoint"),
+          statusCode: ok ? Number(item?.value?.status || 200) : Number(reason?.response?.status || 0),
+          errorCode: ok ? "" : String(reason?.response?.data?.code || "").toUpperCase(),
+          errorClass: ok ? "success" : classifyApiError(reason),
+        };
+      })
       : [];
     const merged = [...retained, ...incoming];
     requestWindowRef.current = merged;
@@ -498,6 +554,13 @@ export const UserScannerPage = () => {
     setRequestEndpointBreakdown({
       oneMinute: summarizeEndpointBreakdown(mergedTrend, { windowMs: 60_000, nowTs: now }),
       fiveMinute: summarizeEndpointBreakdown(mergedTrend, { windowMs: 300_000, nowTs: now }),
+    });
+
+    const latestFailures = merged.filter((item) => !item.ok);
+    setRequestErrorBreakdown({
+      auth_error: latestFailures.filter((item) => String(item.errorClass || "") === "auth_error").length,
+      infra_error: latestFailures.filter((item) => String(item.errorClass || "") === "infra_error").length,
+      trade_blocker: latestFailures.filter((item) => String(item.errorClass || "") === "trade_blocker").length,
     });
   }, []);
 
@@ -546,7 +609,11 @@ export const UserScannerPage = () => {
     }
     anomalyAlertArmedRef.current = true;
     if (anomalyToastEnabled) {
-      toast.error(`Anomaly tespit edildi: son 1 dakikada fail oranı %${(latestFailRatio * 100).toFixed(1)}`);
+      emitScannerToast(
+        "error",
+        "scanner-trade-anomaly-alert",
+        `Anomaly tespit edildi (trade_blocker): son 1 dakikada fail oranı %${(latestFailRatio * 100).toFixed(1)}`,
+      );
     }
     if (anomalySoundEnabled) {
       playAnomalyAlertBeep();
@@ -571,6 +638,7 @@ export const UserScannerPage = () => {
   }, [
     anomalySoundEnabled,
     anomalyToastEnabled,
+    emitScannerToast,
     hasAnomaly,
     latestFailRatio,
     playAnomalyAlertBeep,
@@ -799,14 +867,61 @@ export const UserScannerPage = () => {
         .filter(({ item }) => item.status === "rejected")
         .map(({ index }) => index);
 
-      const failedKeys = failedIndexes.map((index) => requestDescriptors[index]?.key).filter(Boolean);
-      const criticalFailedKeys = SIMPLE_SCANNER_V2
-        ? failedKeys.filter((key) => key !== "strategy_templates")
-        : failedKeys;
+      const failedEntries = failedIndexes
+        .map((index) => {
+          const key = requestDescriptors[index]?.key;
+          const reason = responses[index]?.reason;
+          if (!key) {
+            return null;
+          }
+          return {
+            key,
+            errorClass: classifyApiError(reason),
+            status: Number(reason?.response?.status || 0),
+          };
+        })
+        .filter(Boolean);
+
+      const failedKeys = failedEntries.map((entry) => entry.key);
+      const failureSummary = {
+        auth_error: failedEntries.filter((entry) => entry.errorClass === "auth_error").length,
+        infra_error: failedEntries.filter((entry) => entry.errorClass === "infra_error").length,
+        trade_blocker: failedEntries.filter((entry) => entry.errorClass === "trade_blocker").length,
+      };
+
+      const criticalTradeBlockerKeys = (SIMPLE_SCANNER_V2
+        ? failedEntries.filter((entry) => entry.key !== "strategy_templates")
+        : failedEntries
+      )
+        .filter((entry) => entry.errorClass === "trade_blocker")
+        .map((entry) => entry.key);
+
       setScannerLoadFailures(failedKeys);
-      setScannerLoadDegraded(criticalFailedKeys.length > 0);
-      if (criticalFailedKeys.length > 0 && !silent) {
-        toast.error(`Scanner kısmi yüklendi: ${criticalFailedKeys.join(", ")}`);
+      setScannerFailureSummary(failureSummary);
+      setScannerLoadDegraded(failedEntries.length > 0);
+
+      if (!silent && failedEntries.length > 0) {
+        if (failureSummary.trade_blocker > 0 && criticalTradeBlockerKeys.length > 0) {
+          emitScannerToast(
+            "error",
+            "scanner-load-trade-blocker",
+            `Scanner kısmi yüklendi (trade blocker): ${criticalTradeBlockerKeys.join(", ")}`,
+          );
+        }
+        if (failureSummary.infra_error > 0) {
+          emitScannerToast(
+            "warning",
+            "scanner-load-infra-error",
+            `Altyapı sorunu algılandı: ${failureSummary.infra_error} endpoint (anomaly hesabına dahil edilmedi).`,
+          );
+        }
+        if (failureSummary.auth_error > 0) {
+          emitScannerToast(
+            "warning",
+            "scanner-load-auth-error",
+            `Auth sorunu algılandı: ${failureSummary.auth_error} endpoint (anomaly hesabına dahil edilmedi).`,
+          );
+        }
       }
 
       const byKey = requestDescriptors.reduce((acc, descriptor, index) => {
@@ -915,7 +1030,7 @@ export const UserScannerPage = () => {
         setIsLoading(false);
       }
     }
-  }, [selectedDecisionSymbol, updateRequestHealthWindow]);
+  }, [emitScannerToast, selectedDecisionSymbol, updateRequestHealthWindow]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1477,6 +1592,9 @@ export const UserScannerPage = () => {
           <p className="text-xs text-slate-300" data-testid="user-scanner-health-summary-window">Son 60s req: <span className="font-semibold">{requestHealth.total}</span></p>
           <p className="text-xs text-slate-300" data-testid="user-scanner-health-summary-ok-fail">ok/fail: <span className="font-semibold">{requestHealth.success}/{requestHealth.failed}</span></p>
           <p className="text-xs text-slate-300" data-testid="user-scanner-health-summary-ratio">başarı: <span className="font-semibold">{(requestHealth.successRatio * 100).toFixed(1)}%</span></p>
+          <p className="text-xs text-slate-400" data-testid="user-scanner-health-summary-error-classes">
+            auth={requestErrorBreakdown.auth_error} · infra={requestErrorBreakdown.infra_error} · trade_blocker={requestErrorBreakdown.trade_blocker}
+          </p>
           <p className="text-xs text-slate-400" data-testid="user-scanner-health-summary-updated">güncelleme: {formatDateLabel(requestHealth.updatedAt)}</p>
         </div>
       </section>
@@ -1606,14 +1724,17 @@ export const UserScannerPage = () => {
           data-testid="user-scanner-request-health-anomaly-flag"
         >
           {hasAnomaly
-            ? `⚠️ Anomaly: son 1 dakikada fail oranı %${(latestFailRatio * 100).toFixed(1)} (>10)`
-            : `✅ Anomaly yok: son 1 dakikada fail oranı %${(latestFailRatio * 100).toFixed(1)} (≤10)`}
+            ? `⚠️ Trade anomaly: son 1 dakikada trade_blocker fail oranı %${(latestFailRatio * 100).toFixed(1)} (>10)`
+            : `✅ Trade anomaly yok: son 1 dakikada trade_blocker fail oranı %${(latestFailRatio * 100).toFixed(1)} (≤10)`}
         </p>
         <section className="mt-2 grid gap-2 md:grid-cols-2" data-testid="user-scanner-request-health-endpoint-breakdown-card">
           <div className="rounded border border-slate-700 bg-slate-950 p-2 text-xs text-slate-300" data-testid="user-scanner-request-health-endpoint-breakdown-1m-card">
             <p className="font-semibold text-cyan-300" data-testid="user-scanner-request-health-endpoint-breakdown-1m-title">Son 1m Endpoint Katkı</p>
             <p data-testid="user-scanner-request-health-endpoint-breakdown-1m-summary">
               req={requestEndpointBreakdown.oneMinute.total}, ok/fail={requestEndpointBreakdown.oneMinute.success}/{requestEndpointBreakdown.oneMinute.failed}, success={(requestEndpointBreakdown.oneMinute.successRatio * 100).toFixed(1)}%
+            </p>
+            <p data-testid="user-scanner-request-health-endpoint-breakdown-1m-excluded">
+              excluded(auth+infra)={requestEndpointBreakdown.oneMinute.excluded || 0}
             </p>
             <p data-testid="user-scanner-request-health-endpoint-breakdown-1m-most-impacted">
               most impacted: <span className="font-semibold text-amber-300">{formatEndpointLabel(requestEndpointBreakdown.oneMinute.mostImpactedEndpoint || "n/a")}</span>
@@ -1638,6 +1759,9 @@ export const UserScannerPage = () => {
             <p data-testid="user-scanner-request-health-endpoint-breakdown-5m-summary">
               req={requestEndpointBreakdown.fiveMinute.total}, ok/fail={requestEndpointBreakdown.fiveMinute.success}/{requestEndpointBreakdown.fiveMinute.failed}, success={(requestEndpointBreakdown.fiveMinute.successRatio * 100).toFixed(1)}%
             </p>
+            <p data-testid="user-scanner-request-health-endpoint-breakdown-5m-excluded">
+              excluded(auth+infra)={requestEndpointBreakdown.fiveMinute.excluded || 0}
+            </p>
             <p data-testid="user-scanner-request-health-endpoint-breakdown-5m-most-impacted">
               most impacted: <span className="font-semibold text-amber-300">{formatEndpointLabel(requestEndpointBreakdown.fiveMinute.mostImpactedEndpoint || "n/a")}</span>
             </p>
@@ -1661,7 +1785,12 @@ export const UserScannerPage = () => {
 
       {scannerLoadDegraded && (
         <div className="order-1 col-span-12 rounded border border-amber-700 bg-amber-950/20 p-3 text-sm text-amber-200" data-testid="user-scanner-degraded-load-banner">
-          Kısmi veri yüklendi. Etkilenen endpointler: {scannerLoadFailures.join(", ") || "-"}
+          <p data-testid="user-scanner-degraded-load-banner-summary">
+            Kısmi veri yüklendi · auth={scannerFailureSummary.auth_error} · infra={scannerFailureSummary.infra_error} · trade_blocker={scannerFailureSummary.trade_blocker}
+          </p>
+          <p className="mt-1 text-xs text-amber-100" data-testid="user-scanner-degraded-load-banner-endpoints">
+            Etkilenen endpointler: {scannerLoadFailures.join(", ") || "-"}
+          </p>
         </div>
       )}
 

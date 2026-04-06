@@ -4,10 +4,28 @@ import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
-import { apiClient } from "@/lib/api";
+import { apiClient, classifyApiError } from "@/lib/api";
 import { saveExecutionContext } from "@/lib/userFlowContext";
 
 const SIGNAL_POLL_INTERVAL_MS = 30000;
+const TOAST_DEDUPE_WINDOW_MS = 8000;
+
+const ERROR_CLASS_LABELS = {
+  infra_error: "infra_error",
+  auth_error: "auth_error",
+  trade_blocker: "trade_blocker",
+};
+
+const resolveLoadErrorMessage = (error, fallback) => {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (detail && typeof detail === "object") {
+    return detail.message || detail.msg || detail.code || fallback;
+  }
+  return error?.message || fallback;
+};
 
 export const UserSignalsPage = () => {
   const navigate = useNavigate();
@@ -30,7 +48,23 @@ export const UserSignalsPage = () => {
   const [bulkFixJob, setBulkFixJob] = useState(null);
   const [isStaleCleanupRunning, setIsStaleCleanupRunning] = useState(false);
   const [animatedSignalIds, setAnimatedSignalIds] = useState([]);
+  const [loadIssue, setLoadIssue] = useState(null);
   const alertedSignalIdsRef = useRef(new Set());
+  const toastTrackerRef = useRef(new Map());
+
+  const emitDedupedToast = (level, key, message) => {
+    if (!message) {
+      return;
+    }
+    const now = Date.now();
+    const lastShownAt = toastTrackerRef.current.get(key) || 0;
+    if (now - lastShownAt < TOAST_DEDUPE_WINDOW_MS) {
+      return;
+    }
+    toastTrackerRef.current.set(key, now);
+    const notifier = toast[level] || toast.info;
+    notifier(message, { id: key });
+  };
 
   const load = async ({ silent = false } = {}) => {
     if (!silent) {
@@ -79,14 +113,27 @@ export const UserSignalsPage = () => {
       }
 
       const rejected = [signalsRes, portfolioRes, tradesRes, modeRes, botsRes, statusContractRes].filter((item) => item?.status === "rejected");
-      if (!silent && rejected.length > 0) {
-        const signalsFailed = signalsRes?.status === "rejected";
-        const allFailed = rejected.length === 6;
-        if (signalsFailed || allFailed) {
-          const root = signalsRes?.reason || rejected[0]?.reason;
-          const detail = root?.response?.data?.detail || root?.message || "Signals verisi yüklenemedi";
-          toast.error(typeof detail === "string" ? detail : "Signals verisi yüklenemedi");
+      if (rejected.length > 0) {
+        const primaryError = signalsRes?.status === "rejected" ? signalsRes.reason : rejected[0]?.reason;
+        const primaryClass = classifyApiError(primaryError);
+        const loadIssueMessage = resolveLoadErrorMessage(primaryError, "Signals verisi yüklenemedi");
+        setLoadIssue({
+          errorClass: primaryClass,
+          message: loadIssueMessage,
+          rejectedCount: rejected.length,
+        });
+
+        if (!silent) {
+          if (primaryClass === "infra_error") {
+            emitDedupedToast("warning", "user-signals-load-infra-error", `Altyapı hatası: ${loadIssueMessage}`);
+          } else if (primaryClass === "auth_error") {
+            emitDedupedToast("warning", "user-signals-load-auth-error", `Auth hatası: ${loadIssueMessage}`);
+          } else {
+            emitDedupedToast("error", "user-signals-load-trade-blocker", loadIssueMessage);
+          }
         }
+      } else {
+        setLoadIssue(null);
       }
     } finally {
       if (!silent) {
@@ -541,6 +588,27 @@ export const UserSignalsPage = () => {
           <span className="text-xs text-slate-400" data-testid="user-signals-auto-refresh-indicator">Auto Refresh: 10s</span>
         </div>
       </header>
+
+      {loadIssue && (
+        <section
+          className={`col-span-12 rounded border p-3 text-sm ${
+            loadIssue.errorClass === "infra_error"
+              ? "border-amber-600 bg-amber-950/20 text-amber-200"
+              : loadIssue.errorClass === "auth_error"
+                ? "border-sky-600 bg-sky-950/20 text-sky-200"
+                : "border-rose-600 bg-rose-950/20 text-rose-200"
+          }`}
+          data-testid="user-signals-load-issue-banner"
+        >
+          <p className="text-xs uppercase tracking-widest" data-testid="user-signals-load-issue-class">
+            {ERROR_CLASS_LABELS[loadIssue.errorClass] || "trade_blocker"}
+          </p>
+          <p className="mt-1" data-testid="user-signals-load-issue-message">{loadIssue.message}</p>
+          <p className="mt-1 text-xs opacity-90" data-testid="user-signals-load-issue-count">
+            rejected_requests={loadIssue.rejectedCount}
+          </p>
+        </section>
+      )}
 
       <section className="col-span-12 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-signals-live-control-status-card">
         <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-signals-live-control-status-title">Live Control Status</p>

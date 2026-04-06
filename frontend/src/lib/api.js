@@ -148,6 +148,50 @@ export const buildSessionHeaders = () => ({
   "X-Request-ID": generateRequestId(),
 });
 
+const AUTH_EXPIRED_EVENT_COOLDOWN_MS = 4000;
+let lastAuthExpiredEventAt = 0;
+
+const dispatchAuthExpiredOnce = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const now = Date.now();
+  if (now - lastAuthExpiredEventAt < AUTH_EXPIRED_EVENT_COOLDOWN_MS) {
+    return;
+  }
+  lastAuthExpiredEventAt = now;
+  window.dispatchEvent(new Event("platform-auth-expired"));
+};
+
+export const classifyApiError = (error) => {
+  const status = Number(error?.response?.status || 0);
+  const code = String(error?.response?.data?.code || "").toUpperCase();
+  const reasonDetail = String(error?.response?.data?.detail || "").toLowerCase();
+  const transportCode = String(error?.code || "").toUpperCase();
+  const message = String(error?.message || "").toLowerCase();
+
+  if (status === 401 || code.includes("AUTH") || reasonDetail.includes("auth") || reasonDetail.includes("token")) {
+    return "auth_error";
+  }
+
+  if (
+    status >= 500 ||
+    [502, 503, 504].includes(status) ||
+    code === "DB_POOL_TIMEOUT" ||
+    code === "SERVICE_UNAVAILABLE" ||
+    transportCode === "ERR_NETWORK" ||
+    transportCode === "ECONNABORTED" ||
+    transportCode === "ERR_BAD_RESPONSE" ||
+    message.includes("timeout") ||
+    message.includes("network") ||
+    message.includes("pool")
+  ) {
+    return "infra_error";
+  }
+
+  return "trade_blocker";
+};
+
 apiClient.interceptors.request.use((config) => {
   const nextConfig = config;
   nextConfig.headers = nextConfig.headers || {};
@@ -235,9 +279,29 @@ apiClient.interceptors.response.use(
       url.includes("/mfa/verify") ||
       url.includes("/auth/step-up");
     const detail401 = String(error?.response?.data?.detail || "").toLowerCase();
+
+    if (
+      status === 401 &&
+      !isLoginLike &&
+      detail401.includes("session_device_mismatch") &&
+      !config.__sessionRebindRetried
+    ) {
+      config.__sessionRebindRetried = true;
+      const latestToken = readStoredToken();
+      if (latestToken) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${latestToken}`;
+        config.headers["X-Session-ID"] = ensureSessionId();
+        config.headers["X-Session-Device"] = ensureDeviceId();
+        config.headers["X-Request-ID"] = generateRequestId();
+        await wait(240);
+        return apiClient.request(config);
+      }
+    }
+
     const shouldForceLogout =
-      detail401.includes("session_device_mismatch") ||
       detail401.includes("token_expired") ||
+      detail401.includes("session_revoked") ||
       detail401.includes("token_revoked") ||
       detail401.includes("invalid_token") ||
       detail401.includes("not_authenticated");
@@ -245,9 +309,7 @@ apiClient.interceptors.response.use(
     if (status === 401 && !isLoginLike && shouldForceLogout && (!latestStoredToken || latestStoredToken === authSnapshot)) {
       clearStoredAuth();
       setAuthToken(null);
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("platform-auth-expired"));
-      }
+      dispatchAuthExpiredOnce();
     }
 
     if (status === 403) {
@@ -257,6 +319,9 @@ apiClient.interceptors.response.use(
         window.dispatchEvent(new Event("platform-step-up-required"));
       }
     }
+
+    error.apiErrorClass = classifyApiError(error);
+    error.apiErrorCode = String(error?.response?.data?.code || "").toUpperCase();
 
     return Promise.reject(error);
   },

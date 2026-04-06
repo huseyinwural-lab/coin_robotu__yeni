@@ -9,7 +9,6 @@ from core.security import decode_access_token
 from db import get_db
 from models import User, UserRole
 from services.identity_control_service import (
-    invalidate_session_by_token,
     is_access_token_revoked,
     resolve_device_fingerprint,
     resolve_ip_hash,
@@ -73,16 +72,15 @@ def get_current_user(
     bound_device_id = header_device_id or cookie_device_id
     is_local_client = bool(getattr(getattr(request, "client", None), "host", None) in {"127.0.0.1", "localhost"})
     strict_binding = _is_strict_session_binding(payload)
-    if not bound_device_id or bound_device_id != token_device_id:
+    if not bound_device_id:
         if is_local_client or not strict_binding:
             bound_device_id = token_device_id
         else:
-            invalidate_session_by_token(
-                db,
-                access_token=raw_token,
-                reason="session_device_mismatch",
-                actor_user_id=str(subject),
-            )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_device_missing")
+    elif bound_device_id != token_device_id:
+        if is_local_client or not strict_binding:
+            bound_device_id = token_device_id
+        else:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_device_mismatch")
 
     if payload.get("mfa_verified") is None:
@@ -97,24 +95,12 @@ def get_current_user(
         if is_local_client or not strict_binding:
             token_ip_hash = current_ip_hash
         else:
-            invalidate_session_by_token(
-                db,
-                access_token=raw_token,
-                reason="reauth_required_ip_change",
-                actor_user_id=str(subject),
-            )
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="reauth_required_ip_change")
 
     if not token_device_fingerprint or token_device_fingerprint != current_device_fingerprint:
         if is_local_client or not strict_binding:
             token_device_fingerprint = current_device_fingerprint
         else:
-            invalidate_session_by_token(
-                db,
-                access_token=raw_token,
-                reason="reauth_required_device_change",
-                actor_user_id=str(subject),
-            )
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="reauth_required_device_change")
 
     if request is not None:
