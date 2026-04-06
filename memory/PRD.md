@@ -1,3 +1,24 @@
+## 2026-04-06 — Admin `/admin/log` Canlı Log Ekranı (50 kayıt + 5sn auto-refresh) ✅
+
+### Tamamlananlar
+- **Yeni backend endpoint:** `GET /api/audit-logs/admin/log-feed`
+  - Varsayılan `limit=50`, sıralama **en yeni en üstte**.
+  - `actor_roles=admin,user` filtresi ile hem admin hem user kaynaklı loglar.
+  - `include_error_only=true` ile yalnızca hata kayıtları.
+  - Response: `limit, requested_roles, include_error_only, refreshed_at, total_scanned, returned_count, error_count_in_window, role_breakdown, items, error_items`.
+- **Yeni frontend sayfa:** `/admin/log`
+  - Ana log listesi (50 kayıt) + altta ayrı **Hata Logları** listesi.
+  - 5 saniye auto-refresh ve manuel yenileme butonu.
+  - Role dağılımı, taranan kayıt sayısı, hata sayısı özet kartları.
+- **Routing/Navigasyon**
+  - `App.js`: `/admin/log` route eklendi, `/admin/logs` -> `/admin/log` redirect eklendi.
+  - Sidebar `Logs` menüsü `/admin/log` olarak güncellendi.
+
+### Doğrulama
+- Frontend uzman test ajanı: `/admin/log` ekranı için 6/6 PASS (login, render, newest-first, auto-refresh, error listesi).
+- Backend uzman test ajanı: `/api/audit-logs/admin/log-feed` için 6/6 PASS (limit, sorting, include_error_only, is_error doğrulaması).
+- `CI=true yarn build` başarılı.
+
 ## 2026-04-06 — P0 Infra/Auth Stabilizasyon Patch (DB Pool Timeout + 401 Burst + UI Sınıflandırma) ✅
 
 ### Tamamlananlar
