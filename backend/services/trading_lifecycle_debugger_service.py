@@ -162,6 +162,15 @@ def _extract_correlation_id(row: AuditLog, details: dict) -> str | None:
         text = str(value or "").strip()
         if text:
             return text
+
+    action = str(getattr(row, "action", "") or "").strip().lower()
+    if action == "canary_auto_heal_spot_fallback":
+        entity = str(getattr(row, "entity_id", "") or "").strip()
+        symbol = str(details.get("symbol") or "").strip().upper()
+        if entity and symbol:
+            return f"{entity}:{symbol}:fallback"
+        if entity:
+            return f"{entity}:fallback"
     return None
 
 
