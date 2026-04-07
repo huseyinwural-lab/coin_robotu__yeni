@@ -1,0 +1,27 @@
+{
+  "phase": "FAZ_D0_TASK_9",
+  "status": "PASS",
+  "generated_at": "2026-04-07T13:13:12.882038+00:00",
+  "alembic": {
+    "current_output": "REDIS_CONNECT_OK\nINFO  [alembic.runtime.migration] Context impl PostgresqlImpl.\nINFO  [alembic.runtime.migration] Will assume transactional DDL.\n20260405_2101_user_venue_assignment_testnet_allowed (head)",
+    "heads_output": "20260405_2101_user_venue_assignment_testnet_allowed (head)",
+    "current_revision": "ed",
+    "head_revision": "ed",
+    "current_equals_head": true
+  },
+  "critical_table_check": {
+    "required_tables": [
+      "users",
+      "audit_logs",
+      "execution_intents",
+      "risk_policies",
+      "user_scanner_results",
+      "user_scanner_automation_profiles",
+      "user_scanner_symbol_selections",
+      "live_activation_config"
+    ],
+    "existing_table_count": 163,
+    "missing_tables": [],
+    "error": null
+  }
+}

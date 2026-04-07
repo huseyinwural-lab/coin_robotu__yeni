@@ -191,6 +191,17 @@ def _save_overrides_payload(overrides: dict[str, str]) -> None:
 
 def build_runtime_env(overrides: dict[str, str] | None = None) -> dict[str, str]:
     env = dict(os.environ)
+    backend_env = _parse_env_file(BACKEND_ENV_PATH)
+    frontend_env = _parse_env_file(FRONTEND_ENV_PATH)
+
+    # Stable default: tracked config fields should prefer explicit .env values
+    # over container-injected process env for remediation checks.
+    for key in TRACKED_FIELDS:
+        if backend_env.get(key):
+            env[key] = backend_env[key]
+        elif frontend_env.get(key):
+            env[key] = frontend_env[key]
+
     active_overrides = overrides if overrides is not None else load_saved_overrides()
     for key, value in active_overrides.items():
         if str(value or "").strip():
@@ -296,12 +307,12 @@ def _resolve_value_with_source(
 ) -> tuple[str, str]:
     if overrides.get(env_key):
         return overrides[env_key], "runtime_override"
-    if process_env.get(env_key):
-        return str(process_env[env_key]).strip(), "process_env"
     if backend_env.get(env_key):
         return backend_env[env_key], "backend/.env"
     if frontend_env.get(env_key):
         return frontend_env[env_key], "frontend/.env"
+    if process_env.get(env_key):
+        return str(process_env[env_key]).strip(), "process_env"
     return "", "missing"
 
 
@@ -441,11 +452,23 @@ def build_prod_config_remediation_state(db: Session) -> dict:
     secret_status = str(secret_payload.get("status") or "UNKNOWN").upper()
     final_decision = str(final_payload.get("final_decision") or "UNKNOWN").upper()
 
+    gate_status = str(gate_payload.get("status") or "").upper()
     release_gate_status = "PASS"
-    if final_decision != "GO" or str(gate_payload.get("status") or "").upper() == "BLOCKED":
+    if gate_status == "BLOCKED":
         release_gate_status = "BLOCKED"
 
     reason_codes = _build_reason_codes(preflight_payload, secret_payload, final_payload, gate_payload)
+
+    # Advisory mode: final_release_gate NO_GO tek başına blokaj üretmesin.
+    # Kritik blokaj kaynağı release gate BLOCKED ve preflight/secret FAIL durumlarıdır.
+    if (
+        release_gate_status == "PASS"
+        and preflight_status == "PASS"
+        and secret_status == "PASS"
+        and final_decision != "GO"
+        and set(reason_codes) == {"final_release_gate_no_go"}
+    ):
+        reason_codes = []
     field_errors = _compose_field_validation_errors(preflight_payload, secret_payload)
 
     backend_env = _parse_env_file(BACKEND_ENV_PATH)

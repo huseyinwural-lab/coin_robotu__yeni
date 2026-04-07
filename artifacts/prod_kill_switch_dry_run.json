@@ -1,0 +1,68 @@
+{
+  "phase": "FAZ_D0_TASK_6",
+  "status": "FAIL",
+  "generated_at": "2026-04-07T13:13:04.761149+00:00",
+  "base_url": "https://trade-trace-engine.preview.emergentagent.com",
+  "checks": [
+    {
+      "name": "admin_login",
+      "code": 200,
+      "expected": [
+        200
+      ],
+      "status": "PASS"
+    },
+    {
+      "name": "state_before",
+      "code": 401,
+      "expected": [
+        200
+      ],
+      "status": "FAIL"
+    },
+    {
+      "name": "toggle_off",
+      "code": 401,
+      "expected": [
+        200
+      ],
+      "status": "FAIL"
+    },
+    {
+      "name": "state_after_off",
+      "code": 401,
+      "expected": [
+        200
+      ],
+      "status": "FAIL"
+    },
+    {
+      "name": "toggle_on",
+      "code": 401,
+      "expected": [
+        200
+      ],
+      "status": "FAIL"
+    },
+    {
+      "name": "state_after_on",
+      "code": 401,
+      "expected": [
+        200
+      ],
+      "status": "FAIL"
+    }
+  ],
+  "state_probe": {
+    "before": {
+      "detail": "session_device_missing"
+    },
+    "after_off": {
+      "detail": "session_device_missing"
+    },
+    "after_on": {
+      "detail": "session_device_missing"
+    },
+    "state_ok": false
+  }
+}

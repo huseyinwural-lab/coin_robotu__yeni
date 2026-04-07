@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_10",
-  "generated_at": "2026-04-07T13:14:41.919809+00:00",
-  "run_id": "20260407T131441Z",
+  "generated_at": "2026-04-07T13:11:44.611653+00:00",
+  "run_id": "20260407T131144Z",
   "final_decision": "NO_GO",
   "artifact_status": {
     "prod_env_preflight": {
@@ -18,30 +18,30 @@
     },
     "prod_like_smoke": {
       "path": "/app/artifacts/prod_like_smoke_summary.json",
-      "exists": true,
-      "status": "FAIL",
-      "raw_status": "FAIL"
+      "exists": false,
+      "status": "MISSING",
+      "raw_status": null
     },
     "kill_switch_dry_run": {
       "path": "/app/artifacts/prod_kill_switch_dry_run.json",
-      "exists": true,
-      "status": "FAIL",
-      "raw_status": "FAIL"
+      "exists": false,
+      "status": "MISSING",
+      "raw_status": null
     },
     "rollback_drill": {
       "path": "/app/artifacts/prod_rollback_drill.json",
-      "exists": true,
-      "status": "FAIL",
-      "raw_status": "FAIL"
+      "exists": false,
+      "status": "MISSING",
+      "raw_status": null
     },
     "migration_integrity": {
       "path": "/app/artifacts/final_migration_integrity_report.json",
-      "exists": true,
-      "status": "PASS",
-      "raw_status": "PASS"
+      "exists": false,
+      "status": "MISSING",
+      "raw_status": null
     },
     "production_gate_snapshot": {
-      "path": "/app/artifacts/final/production_gate_snapshot_20260407T131441Z.json",
+      "path": "/app/artifacts/final/production_gate_snapshot_20260407T131144Z.json",
       "exists": true,
       "status": "FAIL",
       "raw_status": {
@@ -53,11 +53,11 @@
         "updated_at": "2026-04-07T12:28:37.381099Z",
         "fresh": false,
         "source": "snapshot_file",
-        "run_snapshot_path": "/app/artifacts/final/production_gate_snapshot_20260407T131441Z.json"
+        "run_snapshot_path": "/app/artifacts/final/production_gate_snapshot_20260407T131144Z.json"
       }
     },
     "production_gate_snapshot_consistency": {
-      "path": "/app/artifacts/final/production_gate_snapshot_20260407T131441Z.json",
+      "path": "/app/artifacts/final/production_gate_snapshot_20260407T131144Z.json",
       "exists": true,
       "status": "PASS",
       "raw_status": {
@@ -73,15 +73,19 @@
   "blocking_items": [
     {
       "artifact": "prod_like_smoke",
-      "reason": "status=FAIL"
+      "reason": "missing_artifact"
     },
     {
       "artifact": "kill_switch_dry_run",
-      "reason": "status=FAIL"
+      "reason": "missing_artifact"
     },
     {
       "artifact": "rollback_drill",
-      "reason": "status=FAIL"
+      "reason": "missing_artifact"
+    },
+    {
+      "artifact": "migration_integrity",
+      "reason": "missing_artifact"
     },
     {
       "artifact": "production_gate_snapshot",

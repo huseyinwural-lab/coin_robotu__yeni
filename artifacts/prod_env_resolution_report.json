@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_1",
-  "status": "PASS",
-  "generated_at": "2026-04-07T12:28:38.807507+00:00",
+  "status": "FAIL",
+  "generated_at": "2026-04-07T13:14:40.763469+00:00",
   "source_policy": {
     "runtime_env": "unknown",
     "is_production_runtime": false,
@@ -36,7 +36,7 @@
       "is_set": true,
       "contains_localhost": false,
       "contains_container_local": false,
-      "resolved_source": "frontend/.env",
+      "resolved_source": "process_env",
       "source_policy": "process_env_or_repo",
       "source_policy_violation": false,
       "value_preview": "https://trade-trace-engine.preview.emergentagent.com",
@@ -58,8 +58,8 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "{\"appendonly\": \"skipped\", \"save\": \"skipped\"}",
-      "status": "PASS",
+      "value_preview": "{\"appendonly\": \"no\", \"save\": \"\"}",
+      "status": "FAIL",
       "detail": "Redis AOF veya RDB aktif olmalı"
     },
     {
@@ -68,8 +68,8 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "1000",
-      "status": "PASS",
+      "value_preview": "0",
+      "status": "FAIL",
       "detail": "Redis maxclients >= 1000 olmalı"
     },
     {
@@ -78,19 +78,19 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "{\"timeout\": 60, \"policy\": \"allkeys-lru\"}",
-      "status": "PASS",
+      "value_preview": "{\"timeout\": 0, \"policy\": \"\"}",
+      "status": "FAIL",
       "detail": "Redis timeout>0 ve eviction policy noeviction dışı olmalı"
     }
   ],
   "redis_runtime": {
     "reachable": true,
-    "appendonly": "skipped",
-    "save_rules": "skipped",
-    "maxclients": 1000,
-    "timeout": 60,
-    "maxmemory_policy": "allkeys-lru",
-    "error": "runtime_checks_disabled_or_redis_module_missing"
+    "appendonly": "no",
+    "save_rules": "",
+    "maxclients": 0,
+    "timeout": 0,
+    "maxmemory_policy": "",
+    "error": null
   },
   "notes": [
     "Production runtime değerlerinde localhost/container-local host kalmamalı.",
