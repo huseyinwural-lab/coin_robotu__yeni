@@ -9,8 +9,6 @@ import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 
 const WEIGHT_TOLERANCE = 0.0001;
-const DOUBLE_CONFIRM_PRIMARY = "CONFIRM";
-const DOUBLE_CONFIRM_SECONDARY = "STATE CHANGE";
 
 const toNumber = (value) => {
   const parsed = Number(value);
@@ -62,12 +60,7 @@ const stateReasonBadgeClass = (code) => {
   return "border border-slate-700 bg-slate-950 text-slate-300";
 };
 
-const stateReasonInlineText = (row) => {
-  if (row?.is_drift_override) return "Manual change overridden by drift rule";
-  if (row?.state_reason_code === "AUTO_DISABLED_BY_DRIFT") return "Drift rule: auto disabled";
-  if (row?.state_reason_code === "AUTO_THROTTLED_BY_DRIFT") return "Drift rule: auto throttled";
-  return "Manual / stable";
-};
+const stateReasonInlineText = () => "Manual / advisory";
 
 const confidenceBand = (confidenceValue) => {
   const raw = Number(confidenceValue);
@@ -139,16 +132,9 @@ export const AdminStrategyAllocationPage = () => {
   const [bulkAutoNormalize, setBulkAutoNormalize] = useState(false);
   const [isGeneratingRebalance, setIsGeneratingRebalance] = useState(false);
   const [rebalanceSuggestion, setRebalanceSuggestion] = useState(null);
-  const [createPayload, setCreatePayload] = useState({
-    strategy_id: "",
-    capital_weight: "0",
-    max_capital: "0",
-    current_capital: "0",
-    state: "ACTIVE",
-  });
-  const [isCreating, setIsCreating] = useState(false);
   const [globalActionError, setGlobalActionError] = useState("");
   const [driftOverrideNotice, setDriftOverrideNotice] = useState("");
+  const [editingStrategyIds, setEditingStrategyIds] = useState([]);
   const [reasonNote, setReasonNote] = useState("");
   const [approvalReviewNote, setApprovalReviewNote] = useState("phase5_review");
   const [approvalRequests, setApprovalRequests] = useState([]);
@@ -227,6 +213,7 @@ export const AdminStrategyAllocationPage = () => {
       });
       setDrafts(initialDrafts);
       setSelectedStrategyIds((prev) => prev.filter((id) => rowsData.some((row) => row.strategy_id === id)));
+      setEditingStrategyIds([]);
       setRebalanceSuggestion(null);
       setWhatIfResult(null);
       setLastUpdatedAt(new Date().toISOString());
@@ -250,9 +237,9 @@ export const AdminStrategyAllocationPage = () => {
 
   const stateStats = useMemo(() => {
     const total = rows.length;
-    const throttled = rows.filter((item) => item.state === "THROTTLED").length;
-    const disabled = rows.filter((item) => item.state === "DISABLED").length;
-    return { total, throttled, disabled };
+    const active = rows.filter((item) => item.state === "ACTIVE").length;
+    const passive = rows.filter((item) => item.state === "DISABLED").length;
+    return { total, active, passive };
   }, [rows]);
 
   const draftRows = useMemo(
@@ -302,12 +289,6 @@ export const AdminStrategyAllocationPage = () => {
     }));
   };
 
-  const isStateChanged = (strategyId) => {
-    const current = rows.find((item) => item.strategy_id === strategyId);
-    const draft = drafts[strategyId] || {};
-    return current && String(current.state || "") !== String(draft.state || "");
-  };
-
   const getRowErrors = (strategyId) => {
     const draft = drafts[strategyId] || {};
     const baseValidation = validateDraft(draft);
@@ -315,16 +296,14 @@ export const AdminStrategyAllocationPage = () => {
 
     if (!weightIsBalanced) errors.push("Toplam weight = 1 olmalı");
     if (hasOverAllocation) errors.push("Capital limit aşılıyor");
-    if (isStateChanged(strategyId)) {
-      if ((draft.confirm_primary || "").toUpperCase().trim() !== DOUBLE_CONFIRM_PRIMARY) {
-        errors.push("confirm_primary = CONFIRM olmalı");
-      }
-      if ((draft.confirm_secondary || "").toUpperCase().trim() !== DOUBLE_CONFIRM_SECONDARY) {
-        errors.push("confirm_secondary = STATE CHANGE olmalı");
-      }
-    }
 
     return errors;
+  };
+
+  const isEditing = (strategyId) => editingStrategyIds.includes(strategyId);
+
+  const startEdit = (strategyId) => {
+    setEditingStrategyIds((prev) => (prev.includes(strategyId) ? prev : [...prev, strategyId]));
   };
 
   const ensureReasonNote = () => {
@@ -373,6 +352,7 @@ export const AdminStrategyAllocationPage = () => {
         return;
       }
       toast.success(`Allocation güncellendi: ${strategyId}`);
+      setEditingStrategyIds((prev) => prev.filter((id) => id !== strategyId));
       setRevisionConflict(null);
       if (data?.is_drift_override) {
         const notice = `Manual change overridden by drift rule (${data?.state_reason_code || "AUTO"})`;
@@ -409,124 +389,6 @@ export const AdminStrategyAllocationPage = () => {
       handleConflictError(error, "Normalize işlemi başarısız");
     } finally {
       setIsNormalizing(false);
-    }
-  };
-
-  const createStrategy = async () => {
-    if (isOpsReadOnly) {
-      toast.error("ops role read-only");
-      return;
-    }
-    const note = ensureReasonNote();
-    if (!note) return;
-
-    setIsCreating(true);
-    setGlobalActionError("");
-    const strategyId = String(createPayload.strategy_id || "").trim();
-    if (!strategyId) {
-      setIsCreating(false);
-      toast.error("strategy_id zorunlu");
-      return;
-    }
-
-    const validation = validateDraft(createPayload);
-    if (validation.hasError) {
-      setIsCreating(false);
-      toast.error(validation.errors[0] || "Create form geçersiz");
-      return;
-    }
-
-    try {
-      const { data } = await apiClient.post("/admin/strategy-allocation", {
-        strategy_id: strategyId,
-        capital_weight: Number(createPayload.capital_weight),
-        max_capital: Number(createPayload.max_capital),
-        current_capital: Number(createPayload.current_capital),
-        state: createPayload.state,
-        reason_note: note,
-      });
-      if (data?.status === "pending_approval") {
-        toast.success(data?.message || `Create onaya gönderildi: ${strategyId}`);
-        await load();
-        return;
-      }
-      toast.success(`Strategy eklendi: ${strategyId}`);
-      setCreatePayload({ strategy_id: "", capital_weight: "0", max_capital: "0", current_capital: "0", state: "ACTIVE" });
-      await load();
-    } catch (error) {
-      const message = error?.response?.data?.detail || "Strategy eklenemedi";
-      setGlobalActionError(message);
-      toast.error(message);
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const deleteStrategy = async (strategyId) => {
-    if (isOpsReadOnly) {
-      toast.error("ops role read-only");
-      return;
-    }
-    const note = ensureReasonNote();
-    if (!note) return;
-
-    const ok = window.confirm(`${strategyId} silinsin mi? (auto-normalize açık)`);
-    if (!ok) return;
-
-    const sourceRow = rows.find((row) => row.strategy_id === strategyId);
-    const expectedRevision = Number(drafts[strategyId]?.expected_revision || sourceRow?.revision_id || 1);
-
-    setGlobalActionError("");
-    try {
-      const { data } = await apiClient.delete(`/admin/strategy-allocation/${encodeURIComponent(strategyId)}`, {
-        params: { auto_normalize: true, reason_note: note, expected_revision: expectedRevision },
-      });
-      if (data?.status === "pending_approval") {
-        toast.success(data?.message || `Delete onaya gönderildi: ${strategyId}`);
-        await load();
-        return;
-      }
-      toast.success(`Strategy silindi: ${strategyId}`);
-      setRevisionConflict(null);
-      await load();
-    } catch (error) {
-      handleConflictError(error, "Strategy silinemedi");
-    }
-  };
-
-  const toggleThrottle = async (strategyId) => {
-    if (isOpsReadOnly) {
-      toast.error("ops role read-only");
-      return;
-    }
-    const note = ensureReasonNote();
-    if (!note) return;
-
-    const first = window.confirm(`${strategyId} için throttle toggle başlatılsın mı?`);
-    if (!first) return;
-    const second = window.confirm("İkinci onay: state değişimi uygulanacak. Devam?");
-    if (!second) return;
-
-    const sourceRow = rows.find((row) => row.strategy_id === strategyId);
-    const expectedRevision = Number(drafts[strategyId]?.expected_revision || sourceRow?.revision_id || 1);
-
-    try {
-      const { data } = await apiClient.post(`/admin/strategy-allocation/${encodeURIComponent(strategyId)}/throttle-toggle`, {
-        expected_revision: expectedRevision,
-        confirm_primary: DOUBLE_CONFIRM_PRIMARY,
-        confirm_secondary: DOUBLE_CONFIRM_SECONDARY,
-        reason_note: note,
-      });
-      if (data?.status === "pending_approval") {
-        toast.success(data?.message || `Throttle isteği onaya gönderildi: ${strategyId}`);
-        await load();
-        return;
-      }
-      toast.success(`Throttle toggle tamamlandı: ${strategyId}`);
-      setRevisionConflict(null);
-      await load();
-    } catch (error) {
-      handleConflictError(error, "Throttle toggle başarısız");
     }
   };
 
@@ -881,7 +743,7 @@ export const AdminStrategyAllocationPage = () => {
         <div className="flex flex-wrap items-start justify-between gap-3" data-testid="admin-strategy-allocation-header-row">
           <div data-testid="admin-strategy-allocation-header-left">
             <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="admin-strategy-allocation-title">Strategy Allocation Dashboard</h2>
-            <p className="mt-2 text-sm text-slate-400" data-testid="admin-strategy-allocation-description">Capital usage, confidence, throttle/disability kontrol paneli.</p>
+            <p className="mt-2 text-sm text-slate-400" data-testid="admin-strategy-allocation-description">Capital usage, confidence, aktif/pasif kontrol paneli (12 hazır strateji).</p>
             <p className="mt-1 text-xs text-slate-500" data-testid="admin-strategy-allocation-last-updated">Son güncelleme: {lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleString() : "-"}</p>
           </div>
           <Button onClick={load} data-testid="admin-strategy-allocation-refresh-button">Yenile</Button>
@@ -1156,71 +1018,18 @@ export const AdminStrategyAllocationPage = () => {
         </div>
       </div>
 
-      <div className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-allocation-create-panel">
-        <h3 className="text-base font-semibold" data-testid="admin-strategy-allocation-create-title">Strategy Ekle</h3>
-        <div className="mt-2 grid gap-2 md:grid-cols-6" data-testid="admin-strategy-allocation-create-grid">
-          <Input
-            placeholder="strategy_id"
-            value={createPayload.strategy_id}
-            onChange={(event) => setCreatePayload((prev) => ({ ...prev, strategy_id: event.target.value }))}
-            data-testid="admin-strategy-allocation-create-strategy-id-input"
-          />
-          <Input
-            type="number"
-            min="0"
-            max="1"
-            step="0.0001"
-            placeholder="weight"
-            value={createPayload.capital_weight}
-            onChange={(event) => setCreatePayload((prev) => ({ ...prev, capital_weight: event.target.value }))}
-            data-testid="admin-strategy-allocation-create-weight-input"
-          />
-          <Input
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="max capital"
-            value={createPayload.max_capital}
-            onChange={(event) => setCreatePayload((prev) => ({ ...prev, max_capital: event.target.value }))}
-            data-testid="admin-strategy-allocation-create-max-capital-input"
-          />
-          <Input
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="current capital"
-            value={createPayload.current_capital}
-            onChange={(event) => setCreatePayload((prev) => ({ ...prev, current_capital: event.target.value }))}
-            data-testid="admin-strategy-allocation-create-current-capital-input"
-          />
-          <select
-            className="w-full border border-slate-700 bg-slate-950 px-2 py-1"
-            value={createPayload.state}
-            onChange={(event) => setCreatePayload((prev) => ({ ...prev, state: event.target.value }))}
-            data-testid="admin-strategy-allocation-create-state-select"
-          >
-            <option value="ACTIVE">ACTIVE</option>
-            <option value="THROTTLED">THROTTLED</option>
-            <option value="DISABLED">DISABLED</option>
-          </select>
-          <Button onClick={createStrategy} disabled={isCreating || isOpsReadOnly} data-testid="admin-strategy-allocation-create-button">
-            {isCreating ? "Ekleniyor..." : "Strategy Ekle"}
-          </Button>
-        </div>
-      </div>
-
       <div className="col-span-12 grid gap-3 md:grid-cols-3" data-testid="admin-strategy-allocation-summary-grid">
         <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-allocation-summary-total">
           <p className="text-xs text-slate-500">Toplam Strategy</p>
           <p className="text-xl font-semibold">{stateStats.total}</p>
         </article>
-        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-allocation-summary-throttled">
-          <p className="text-xs text-slate-500">THROTTLED</p>
-          <p className="text-xl font-semibold text-amber-400">{stateStats.throttled}</p>
+        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-allocation-summary-active">
+          <p className="text-xs text-slate-500">AKTİF</p>
+          <p className="text-xl font-semibold text-emerald-400">{stateStats.active}</p>
         </article>
-        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-allocation-summary-disabled">
-          <p className="text-xs text-slate-500">DISABLED</p>
-          <p className="text-xl font-semibold text-rose-400">{stateStats.disabled}</p>
+        <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-allocation-summary-passive">
+          <p className="text-xs text-slate-500">PASİF</p>
+          <p className="text-xl font-semibold text-rose-400">{stateStats.passive}</p>
         </article>
       </div>
 
@@ -1254,7 +1063,6 @@ export const AdminStrategyAllocationPage = () => {
             {rows.map((item) => {
               const draft = drafts[item.strategy_id] || {};
               const rowErrors = getRowErrors(item.strategy_id);
-              const stateChanged = isStateChanged(item.strategy_id);
               const simulationRow = whatIfByStrategy[item.strategy_id];
               return (
                 <tr
@@ -1276,14 +1084,13 @@ export const AdminStrategyAllocationPage = () => {
                       revision={item.revision_id}
                     </p>
                   </td>
-                  <td className="px-3 py-2"><Input value={draft.capital_weight ?? ""} type="number" min="0" max="1" step="0.0001" onChange={(event) => updateDraft(item.strategy_id, "capital_weight", event.target.value)} data-testid={`admin-strategy-allocation-weight-input-${item.strategy_id}`} /></td>
-                  <td className="px-3 py-2"><Input value={draft.max_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "max_capital", event.target.value)} data-testid={`admin-strategy-allocation-max-capital-input-${item.strategy_id}`} /></td>
-                  <td className="px-3 py-2"><Input value={draft.current_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "current_capital", event.target.value)} data-testid={`admin-strategy-allocation-current-capital-input-${item.strategy_id}`} /></td>
+                  <td className="px-3 py-2"><Input value={draft.capital_weight ?? ""} type="number" min="0" max="1" step="0.0001" disabled={!isEditing(item.strategy_id)} onChange={(event) => updateDraft(item.strategy_id, "capital_weight", event.target.value)} data-testid={`admin-strategy-allocation-weight-input-${item.strategy_id}`} /></td>
+                  <td className="px-3 py-2"><Input value={draft.max_capital ?? ""} type="number" min="0" step="0.01" disabled={!isEditing(item.strategy_id)} onChange={(event) => updateDraft(item.strategy_id, "max_capital", event.target.value)} data-testid={`admin-strategy-allocation-max-capital-input-${item.strategy_id}`} /></td>
+                  <td className="px-3 py-2"><Input value={draft.current_capital ?? ""} type="number" min="0" step="0.01" disabled={!isEditing(item.strategy_id)} onChange={(event) => updateDraft(item.strategy_id, "current_capital", event.target.value)} data-testid={`admin-strategy-allocation-current-capital-input-${item.strategy_id}`} /></td>
                   <td className="px-3 py-2">
-                    <select className="w-full border border-slate-700 bg-slate-950 px-2 py-1" value={draft.state || "ACTIVE"} onChange={(event) => updateDraft(item.strategy_id, "state", event.target.value)} data-testid={`admin-strategy-allocation-state-select-${item.strategy_id}`}>
-                      <option value="ACTIVE">ACTIVE</option>
-                      <option value="THROTTLED">THROTTLED</option>
-                      <option value="DISABLED">DISABLED</option>
+                    <select className="w-full border border-slate-700 bg-slate-950 px-2 py-1" value={draft.state || "ACTIVE"} disabled={!isEditing(item.strategy_id)} onChange={(event) => updateDraft(item.strategy_id, "state", event.target.value)} data-testid={`admin-strategy-allocation-state-select-${item.strategy_id}`}>
+                      <option value="ACTIVE">AKTİF</option>
+                      <option value="DISABLED">PASİF</option>
                     </select>
                     <div className="mt-1 flex flex-wrap items-center gap-1" data-testid={`admin-strategy-allocation-state-reason-row-${item.strategy_id}`}>
                       <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${stateReasonBadgeClass(item.state_reason_code)}`} data-testid={`admin-strategy-allocation-state-reason-badge-${item.strategy_id}`}>
@@ -1335,26 +1142,9 @@ export const AdminStrategyAllocationPage = () => {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-2" data-testid={`admin-strategy-allocation-actions-${item.strategy_id}`}>
-                      <Button variant="outline" onClick={() => saveStrategy(item.strategy_id)} disabled={rowErrors.length > 0 || isOpsReadOnly} data-testid={`admin-strategy-allocation-save-button-${item.strategy_id}`}>Kaydet</Button>
-                      <Button variant="outline" onClick={() => toggleThrottle(item.strategy_id)} disabled={isOpsReadOnly} data-testid={`admin-strategy-allocation-throttle-toggle-button-${item.strategy_id}`}>Throttle Toggle</Button>
-                      <Button variant="outline" onClick={() => deleteStrategy(item.strategy_id)} disabled={isOpsReadOnly} data-testid={`admin-strategy-allocation-delete-button-${item.strategy_id}`}>Sil</Button>
+                      <Button variant="outline" onClick={() => startEdit(item.strategy_id)} disabled={isOpsReadOnly} data-testid={`admin-strategy-allocation-edit-button-${item.strategy_id}`}>Düzenle</Button>
+                      <Button variant="outline" onClick={() => saveStrategy(item.strategy_id)} disabled={!isEditing(item.strategy_id) || rowErrors.length > 0 || isOpsReadOnly} data-testid={`admin-strategy-allocation-save-button-${item.strategy_id}`}>Kaydet</Button>
                     </div>
-                    {stateChanged && (
-                      <div className="mt-2 grid gap-1" data-testid={`admin-strategy-allocation-double-confirm-panel-${item.strategy_id}`}>
-                        <Input
-                          placeholder="confirm_primary: CONFIRM"
-                          value={draft.confirm_primary || ""}
-                          onChange={(event) => updateDraft(item.strategy_id, "confirm_primary", event.target.value)}
-                          data-testid={`admin-strategy-allocation-confirm-primary-input-${item.strategy_id}`}
-                        />
-                        <Input
-                          placeholder="confirm_secondary: STATE CHANGE"
-                          value={draft.confirm_secondary || ""}
-                          onChange={(event) => updateDraft(item.strategy_id, "confirm_secondary", event.target.value)}
-                          data-testid={`admin-strategy-allocation-confirm-secondary-input-${item.strategy_id}`}
-                        />
-                      </div>
-                    )}
                     {rowErrors.length > 0 && (
                       <p className="mt-1 text-xs text-rose-300" data-testid={`admin-strategy-allocation-row-error-${item.strategy_id}`}>{rowErrors[0]}</p>
                     )}

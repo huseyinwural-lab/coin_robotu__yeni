@@ -1,0 +1,43 @@
+{
+  "summary": "Strategy Allocation UX changes verified - All requirements met. Backend returns 12 canonical strategies with ACTIVE/DISABLED states only. Frontend shows no 'Strategy Ekle' panel, state select has only AKTİF/PASİF options, Action column has Düzenle+Kaydet buttons only, no Sil buttons, drift is advisory mode (MANUAL_STATE).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_strategy_allocation_ux.py",
+    "/app/test_reports/pytest/iteration27_strategy_allocation_ux.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_strategy_allocation_ux.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin_email": "canary.admin@platform.local",
+    "admin_password": "CanaryAdmin123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Strategy Allocation UX changes are complete. 12 canonical strategies are auto-listed, state options are AKTİF/PASİF only, Action column has Düzenle+Kaydet only, drift is advisory mode.",
+  "verified_requirements": {
+    "frontend_strategy_ekle_removed": "PASS - 'Strategy Ekle' panel is NOT visible",
+    "frontend_state_select_aktif_pasif_only": "PASS - State select has only AKTİF and PASİF options",
+    "frontend_action_column_duzenle_kaydet_only": "PASS - Found 12 Düzenle buttons and 13 Kaydet buttons, no Sil buttons",
+    "frontend_row_inputs_edit_mode": "PASS - Inputs are disabled until Düzenle is clicked",
+    "backend_12_canonical_strategies": "PASS - GET /api/admin/strategy-allocation returns 12 strategies",
+    "backend_state_active_disabled_only": "PASS - All states are ACTIVE or DISABLED",
+    "backend_drift_advisory_mode": "PASS - state_reason_code is MANUAL_STATE, no AUTO_DISABLED_BY_DRIFT",
+    "backend_no_double_confirm": "PASS - Update endpoint does not require double-confirm for state changes"
+  }
+}

@@ -4,6 +4,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from models import ExecutionMetric, SignalEvent, StrategyAllocation
+from services.canonical_strategy_registry_service import CANONICAL_STRATEGIES
 
 
 def _now() -> datetime:
@@ -17,13 +18,14 @@ def _safe_float(value, fallback: float = 0.0) -> float:
         return fallback
 
 
-ALLOWED_STATES = {"ACTIVE", "THROTTLED", "DISABLED"}
+ALLOWED_STATES = {"ACTIVE", "DISABLED"}
 DOUBLE_CONFIRM_PRIMARY = "CONFIRM"
 DOUBLE_CONFIRM_SECONDARY = "STATE CHANGE"
 EXPOSURE_WARNING_THRESHOLD_PCT = 80.0
 DRAWDOWN_WARNING_THRESHOLD_PCT = 8.0
 DRAWDOWN_ENFORCE_THRESHOLD_PCT = 12.0
 DRAWDOWN_REDUCE_RATIO = 0.15
+WEIGHT_SUM_TOLERANCE = 0.0001
 
 
 def _normalize_confidence_for_projection(value: float) -> float:
@@ -140,6 +142,8 @@ def _apply_revision_metadata(
 
 def _normalized_state(value: str | None, fallback: str = "ACTIVE") -> str:
     state = str(value or fallback).upper().strip()
+    if state in {"THROTTLED", "PASSIVE", "PASIF", "INACTIVE"}:
+        return "DISABLED"
     return state if state in ALLOWED_STATES else fallback
 
 
@@ -198,20 +202,8 @@ def _build_drift_reason(row: StrategyAllocation, *, requested_state: str | None 
         "execution_quality_score": round(_safe_float(row.execution_quality_score, 0), 4),
         "performance_score": round(_safe_float(row.performance_score, 0), 4),
     }
-    severe = metrics["signal_decay"] >= 0.8 or metrics["execution_quality_score"] < 40
-    medium = (
-        metrics["signal_decay"] >= 0.55
-        or metrics["execution_quality_score"] < 60
-        or metrics["performance_score"] < 35
-    )
-
     requested = _normalized_state(requested_state, state) if requested_state else None
-    if state == "DISABLED" and severe:
-        code = "AUTO_DISABLED_BY_DRIFT"
-    elif state == "THROTTLED" and medium:
-        code = "AUTO_THROTTLED_BY_DRIFT"
-    else:
-        code = "MANUAL_STATE"
+    code = "MANUAL_STATE"
 
     detail = (
         f"decay={metrics['signal_decay']} · quality={metrics['execution_quality_score']} · "
@@ -500,7 +492,8 @@ def _apply_normalize(rows: list[StrategyAllocation]) -> None:
 
 
 def _state_change_requires_double_confirm(before_state: str, after_state: str) -> bool:
-    return _normalized_state(before_state) != _normalized_state(after_state)
+    _ = (before_state, after_state)
+    return False
 
 
 def _ensure_double_confirm(payload: dict) -> None:
@@ -549,7 +542,6 @@ def get_existing_strategy_allocation(db: Session, strategy_id: str) -> StrategyA
 
 def recalculate_strategy_drift(db: Session, strategy_id: str) -> StrategyAllocation:
     row = get_or_create_strategy_allocation(db, strategy_id)
-    manual_lock = str(row.state or "").upper() in {"DISABLED", "THROTTLED"}
     lookback_from = _now() - timedelta(days=7)
 
     exec_rows = (
@@ -586,13 +578,7 @@ def recalculate_strategy_drift(db: Session, strategy_id: str) -> StrategyAllocat
     row.realized_return = round(realized_return, 4)
     row.performance_score = round((row.realized_return / max(row.expected_return, 0.1)) * 100, 4)
 
-    if not manual_lock:
-        if row.signal_decay >= 0.8 or row.execution_quality_score < 40:
-            row.state = "DISABLED"
-        elif row.signal_decay >= 0.55 or row.execution_quality_score < 60 or row.performance_score < 35:
-            row.state = "THROTTLED"
-        else:
-            row.state = "ACTIVE"
+    row.state = _normalized_state(row.state, "DISABLED")
 
     row.updated_at = _now()
     db.flush()
@@ -666,11 +652,52 @@ def run_meta_strategy_engine(
 
 
 def list_strategy_allocations(db: Session, limit: int = 200) -> list[StrategyAllocation]:
-    rows = db.query(StrategyAllocation).order_by(StrategyAllocation.updated_at.desc()).limit(limit).all()
+    canonical_ids = list(CANONICAL_STRATEGIES.keys())
+    default_weight = round(1 / max(len(canonical_ids), 1), 8)
+    for strategy_id in canonical_ids:
+        row = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
+        if not row:
+            row = StrategyAllocation(
+                strategy_id=strategy_id,
+                capital_weight=default_weight,
+                max_capital=100000,
+                current_capital=0,
+                confidence_score=0,
+                performance_score=0,
+                state="DISABLED",
+                expected_return=2.0,
+                realized_return=0,
+                signal_decay=0,
+                execution_quality_score=75,
+                revision_id=1,
+                updated_by="system",
+                change_reason="canonical_auto_seed",
+                updated_at=_now(),
+            )
+            db.add(row)
+        else:
+            row.state = _normalized_state(row.state, "DISABLED")
+
+    rows = (
+        db.query(StrategyAllocation)
+        .filter(StrategyAllocation.strategy_id.in_(canonical_ids))
+        .order_by(StrategyAllocation.strategy_id.asc())
+        .limit(limit)
+        .all()
+    )
     for row in rows:
         recalculate_strategy_drift(db, row.strategy_id)
+    total_weight = sum(_safe_float(item.capital_weight, 0) for item in rows)
+    if rows and abs(total_weight - 1.0) > WEIGHT_SUM_TOLERANCE:
+        _apply_normalize(rows)
     db.commit()
-    return db.query(StrategyAllocation).order_by(StrategyAllocation.updated_at.desc()).limit(limit).all()
+    return (
+        db.query(StrategyAllocation)
+        .filter(StrategyAllocation.strategy_id.in_(canonical_ids))
+        .order_by(StrategyAllocation.strategy_id.asc())
+        .limit(limit)
+        .all()
+    )
 
 
 def list_strategy_allocation_dashboard_rows(db: Session, limit: int = 200) -> list[dict]:
@@ -846,7 +873,6 @@ def update_strategy_allocation(
 ) -> StrategyAllocation:
     row = get_existing_strategy_allocation(db, strategy_id)
     previous_state = _normalized_state(row.state)
-    requested_state = payload.get("state")
 
     if "capital_weight" in payload:
         row.capital_weight = _assert_non_negative_numeric("capital_weight", payload.get("capital_weight"))
@@ -866,9 +892,6 @@ def update_strategy_allocation(
         raise ValueError("current_capital max_capital değerini aşamaz")
 
     try:
-        if requested_state is not None and _normalized_state(requested_state, previous_state) == "ACTIVE":
-            recalculate_strategy_drift(db, row.strategy_id)
-
         rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
         _apply_critical_drawdown_reduce(rows)
         _ensure_capital_limit(rows)
@@ -895,11 +918,8 @@ def toggle_strategy_throttle(
     change_reason: str | None = None,
 ) -> StrategyAllocation:
     row = get_existing_strategy_allocation(db, strategy_id)
-    if _normalized_state(row.state) == "DISABLED":
-        raise ValueError("DISABLED strategy throttle toggle ile değiştirilemez")
-
     _ensure_double_confirm(payload)
-    row.state = "ACTIVE" if _normalized_state(row.state) == "THROTTLED" else "THROTTLED"
+    row.state = "ACTIVE" if _normalized_state(row.state) == "DISABLED" else "DISABLED"
     try:
         rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
         _apply_critical_drawdown_reduce(rows)
@@ -969,10 +989,6 @@ def bulk_update_strategy_allocations(
             target_weight_map[item.strategy_id] = _safe_float(item.capital_weight, 0)
 
     try:
-        for strategy_id, requested_state in requested_state_map.items():
-            if requested_state == "ACTIVE":
-                recalculate_strategy_drift(db, strategy_id)
-
         rows = db.query(StrategyAllocation).order_by(StrategyAllocation.strategy_id.asc()).all()
         enforced = _apply_critical_drawdown_reduce(rows)
         _ensure_capital_limit(rows)
