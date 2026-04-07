@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 import requests
@@ -289,3 +290,107 @@ class BinanceMarketDataProvider:
         }
         _set_cache_json(cache_key, result, ttl_seconds=45)
         return result
+
+    def get_tradable_symbols_parallel(
+        self,
+        *,
+        exchange: str,
+        include_spot: bool = True,
+        include_futures: bool = True,
+        force_refresh: bool = False,
+    ) -> dict:
+        normalized_exchange = (exchange or "binance").strip().lower()
+        if normalized_exchange != "binance":
+            raise MarketDataProviderError("İlk sürümde yalnızca Binance destekleniyor")
+
+        market_types: list[str] = []
+        if include_spot:
+            market_types.append("spot")
+        if include_futures:
+            market_types.append("futures")
+        if not market_types:
+            raise MarketDataProviderError("En az bir market türü seçilmelidir")
+
+        markets: dict[str, dict] = {}
+        errors: list[dict] = []
+        with ThreadPoolExecutor(max_workers=min(2, len(market_types))) as executor:
+            future_map = {
+                executor.submit(
+                    self.get_tradable_symbols,
+                    exchange=normalized_exchange,
+                    market_type=market_type,
+                    force_refresh=force_refresh,
+                ): market_type
+                for market_type in market_types
+            }
+            for future in as_completed(future_map):
+                market_type = future_map[future]
+                try:
+                    payload = future.result()
+                    markets[market_type] = payload
+                except Exception as exc:
+                    errors.append({"market_type": market_type, "error": str(exc)[:300]})
+
+        combined_rows: list[dict] = []
+        for market_type, payload in markets.items():
+            for row in payload.get("rows") or []:
+                combined_rows.append({**row, "market_type": market_type})
+
+        combined_rows.sort(key=lambda item: float(item.get("volume_24h") or 0), reverse=True)
+
+        return {
+            "exchange": normalized_exchange,
+            "include_spot": bool(include_spot),
+            "include_futures": bool(include_futures),
+            "generated_at": _utc_now_iso(),
+            "markets": markets,
+            "rows": combined_rows,
+            "symbol_count": len(combined_rows),
+            "error_count": len(errors),
+            "errors": errors,
+        }
+
+    def fetch_indicator_and_execution_candles(
+        self,
+        *,
+        exchange: str,
+        market_type: str,
+        symbol: str,
+        indicator_timeframe: str = "1h",
+        execution_timeframe: str = "15m",
+        indicator_limit: int = 180,
+        execution_limit: int = 140,
+        force_refresh: bool = False,
+    ) -> dict:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            indicator_future = executor.submit(
+                self.fetch_candles,
+                exchange=exchange,
+                market_type=market_type,
+                symbol=symbol,
+                timeframe=indicator_timeframe,
+                candle_limit=indicator_limit,
+                force_refresh=force_refresh,
+            )
+            execution_future = executor.submit(
+                self.fetch_candles,
+                exchange=exchange,
+                market_type=market_type,
+                symbol=symbol,
+                timeframe=execution_timeframe,
+                candle_limit=execution_limit,
+                force_refresh=force_refresh,
+            )
+            indicator_payload = indicator_future.result()
+            execution_payload = execution_future.result()
+
+        return {
+            "exchange": exchange,
+            "market_type": market_type,
+            "symbol": symbol,
+            "indicator_timeframe": indicator_timeframe,
+            "execution_timeframe": execution_timeframe,
+            "indicator": indicator_payload,
+            "execution": execution_payload,
+            "generated_at": _utc_now_iso(),
+        }

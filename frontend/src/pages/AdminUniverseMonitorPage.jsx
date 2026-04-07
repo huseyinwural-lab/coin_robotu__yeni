@@ -3,6 +3,14 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 
@@ -23,6 +31,39 @@ export const AdminUniverseMonitorPage = () => {
   const [fallbackEvents, setFallbackEvents] = useState([]);
   const [runtimeSummary, setRuntimeSummary] = useState(null);
   const [statusContract, setStatusContract] = useState(null);
+  const [scannerEngineConfig, setScannerEngineConfig] = useState({
+    exchange: "binance",
+    include_spot: true,
+    include_futures: true,
+    signal_mode: "manual",
+    scan_limit: 80,
+    top_n: 20,
+    manual_symbols: [],
+    indicator_timeframe: "1h",
+    execution_timeframe: "15m",
+  });
+  const [manualSymbolsInput, setManualSymbolsInput] = useState("");
+  const [scannerEngineRun, setScannerEngineRun] = useState({
+    status: "empty",
+    summary: {
+      max_score: 161,
+      candidate_count: 0,
+      scored_count: 0,
+      strong_long_count: 0,
+      strong_short_count: 0,
+    },
+    top_results: [],
+    results: [],
+  });
+  const [scannerEngineJobs, setScannerEngineJobs] = useState([]);
+  const [scannerEngineBusy, setScannerEngineBusy] = useState(false);
+  const [startBotModalOpen, setStartBotModalOpen] = useState(false);
+  const [startBotForm, setStartBotForm] = useState({
+    selection_mode: "top_n",
+    top_n: 20,
+    side_filter: "all",
+    selected_symbols: [],
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +98,21 @@ export const AdminUniverseMonitorPage = () => {
         setStatusContract(statusContractRes?.data || null);
       } catch {
         setStatusContract(null);
+      }
+
+      try {
+        const [scannerConfigRes, scannerRunRes, scannerJobsRes] = await Promise.all([
+          apiClient.get("/admin/universe-monitor/scanner-engine/config"),
+          apiClient.get("/admin/universe-monitor/scanner-engine/last-run"),
+          apiClient.get("/admin/universe-monitor/scanner-engine/bot/jobs", { params: { limit: 20 } }),
+        ]);
+        const configData = scannerConfigRes?.data || {};
+        setScannerEngineConfig((prev) => ({ ...prev, ...configData }));
+        setManualSymbolsInput((prev) => (prev ? prev : (configData?.manual_symbols || []).join(",")));
+        setScannerEngineRun(scannerRunRes?.data || { status: "empty", summary: {}, top_results: [], results: [] });
+        setScannerEngineJobs(scannerJobsRes?.data?.items || []);
+      } catch {
+        // scanner engine panel'i, monitor ana akışını bozmadan sessizce fallback eder
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -119,6 +175,94 @@ export const AdminUniverseMonitorPage = () => {
     }
   };
 
+  const saveScannerEngineConfig = async () => {
+    setScannerEngineBusy(true);
+    try {
+      const manualSymbols = manualSymbolsInput
+        .split(/[\s,;]+/)
+        .map((item) => String(item || "").trim().toUpperCase())
+        .filter(Boolean);
+      const payload = {
+        exchange: "binance",
+        include_spot: Boolean(scannerEngineConfig.include_spot),
+        include_futures: Boolean(scannerEngineConfig.include_futures),
+        signal_mode: scannerEngineConfig.signal_mode || "manual",
+        scan_limit: Number(scannerEngineConfig.scan_limit || 80),
+        top_n: Number(scannerEngineConfig.top_n || 20),
+        manual_symbols: manualSymbols,
+        reason: "scanner_engine_config_save",
+      };
+      const { data } = await apiClient.post("/admin/universe-monitor/scanner-engine/config/save", payload);
+      setScannerEngineConfig((prev) => ({ ...prev, ...(data?.config || payload) }));
+      toast.success("Scanner Engine ayarları kaydedildi");
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Ayarlar kaydedilemedi");
+    } finally {
+      setScannerEngineBusy(false);
+    }
+  };
+
+  const runScannerEngine = async () => {
+    setScannerEngineBusy(true);
+    try {
+      const { data } = await apiClient.post("/admin/universe-monitor/scanner-engine/run", {
+        force_refresh: false,
+        reason: "manual_scanner_run",
+      });
+      setScannerEngineRun(data || { status: "empty", summary: {}, results: [] });
+      toast.success(`Scanner tamamlandı: ${data?.summary?.scored_count || 0} sembol skorlandı`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Scanner run başarısız");
+    } finally {
+      setScannerEngineBusy(false);
+    }
+  };
+
+  const openStartBotModal = () => {
+    const defaultTopN = Number(scannerEngineConfig?.top_n || 20);
+    const defaultSymbols = (scannerEngineRun?.top_results || []).slice(0, defaultTopN).map((item) => item.symbol);
+    setStartBotForm({
+      selection_mode: "top_n",
+      top_n: defaultTopN,
+      side_filter: "all",
+      selected_symbols: defaultSymbols,
+    });
+    setStartBotModalOpen(true);
+  };
+
+  const toggleStartBotSymbol = (symbol) => {
+    setStartBotForm((prev) => {
+      const set = new Set(prev.selected_symbols || []);
+      if (set.has(symbol)) {
+        set.delete(symbol);
+      } else {
+        set.add(symbol);
+      }
+      return { ...prev, selected_symbols: Array.from(set) };
+    });
+  };
+
+  const startScannerJob = async () => {
+    setScannerEngineBusy(true);
+    try {
+      const payload = {
+        selection_mode: startBotForm.selection_mode,
+        top_n: Number(startBotForm.top_n || 20),
+        side_filter: startBotForm.side_filter || "all",
+        selected_symbols: startBotForm.selected_symbols || [],
+        reason: "start_scanner_job",
+      };
+      const { data } = await apiClient.post("/admin/universe-monitor/scanner-engine/bot/start", payload);
+      setStartBotModalOpen(false);
+      setScannerEngineJobs((prev) => [data?.job, ...prev].filter(Boolean).slice(0, 20));
+      toast.success(`Scanner-job oluşturuldu: ${data?.job?.symbol_count || 0} sembol`);
+    } catch (error) {
+      toast.error(error?.response?.data?.detail || "Scanner-job oluşturulamadı");
+    } finally {
+      setScannerEngineBusy(false);
+    }
+  };
+
   return (
     <section className="space-y-4" data-testid="admin-universe-monitor-page">
       <header className="border border-blue-900 bg-slate-900 p-4" data-testid="admin-universe-monitor-header">
@@ -167,6 +311,287 @@ export const AdminUniverseMonitorPage = () => {
           <Button type="button" variant="outline" data-testid="admin-universe-monitor-open-heatmap-button">Freshness Heatmap Sayfası</Button>
         </Link>
       </div>
+
+      <article className="rounded-xl border border-cyan-700/40 bg-cyan-950/20 p-4" data-testid="admin-universe-monitor-scanner-engine-panel">
+        <div className="flex flex-wrap items-end justify-between gap-3" data-testid="admin-universe-monitor-scanner-engine-header">
+          <div data-testid="admin-universe-monitor-scanner-engine-title-wrap">
+            <p className="text-xs uppercase tracking-widest text-cyan-200" data-testid="admin-universe-monitor-scanner-engine-kicker">Scanner Engine</p>
+            <h3 className="text-xl font-bold text-cyan-50" data-testid="admin-universe-monitor-scanner-engine-title">Short/Long Decoupled Scanner</h3>
+            <p className="text-xs text-cyan-100/90" data-testid="admin-universe-monitor-scanner-engine-subtitle">Binance only · 1h indikatör · 15m execution</p>
+          </div>
+          <div className="grid gap-1 text-xs text-cyan-100" data-testid="admin-universe-monitor-scanner-engine-summary-strip">
+            <p data-testid="admin-universe-monitor-scanner-engine-max-score">Max Score: {scannerEngineRun?.summary?.max_score ?? 161}</p>
+            <p data-testid="admin-universe-monitor-scanner-engine-strong-long-count">Strong Long: {scannerEngineRun?.summary?.strong_long_count ?? 0}</p>
+            <p data-testid="admin-universe-monitor-scanner-engine-strong-short-count">Strong Short: {scannerEngineRun?.summary?.strong_short_count ?? 0}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="admin-universe-monitor-scanner-engine-config-grid">
+          <label className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-exchange-field">
+            <span className="text-xs text-cyan-100">Market</span>
+            <input
+              value="BINANCE"
+              disabled
+              className="h-10 w-full rounded border border-cyan-700/40 bg-slate-950 px-2 text-sm text-cyan-50"
+              data-testid="admin-universe-monitor-scanner-engine-exchange-input"
+            />
+          </label>
+
+          <div className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-market-types-field">
+            <span className="text-xs text-cyan-100">Market Types</span>
+            <div className="flex h-10 items-center gap-3 rounded border border-cyan-700/40 bg-slate-950 px-2" data-testid="admin-universe-monitor-scanner-engine-market-types-wrap">
+              <label className="flex items-center gap-1 text-xs" data-testid="admin-universe-monitor-scanner-engine-spot-label">
+                <input
+                  type="checkbox"
+                  checked={Boolean(scannerEngineConfig.include_spot)}
+                  onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, include_spot: event.target.checked }))}
+                  data-testid="admin-universe-monitor-scanner-engine-spot-checkbox"
+                />
+                Spot
+              </label>
+              <label className="flex items-center gap-1 text-xs" data-testid="admin-universe-monitor-scanner-engine-futures-label">
+                <input
+                  type="checkbox"
+                  checked={Boolean(scannerEngineConfig.include_futures)}
+                  onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, include_futures: event.target.checked }))}
+                  data-testid="admin-universe-monitor-scanner-engine-futures-checkbox"
+                />
+                Futures
+              </label>
+            </div>
+          </div>
+
+          <label className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-signal-mode-field">
+            <span className="text-xs text-cyan-100">Signal Mode</span>
+            <select
+              value={scannerEngineConfig.signal_mode || "manual"}
+              onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, signal_mode: event.target.value }))}
+              className="h-10 w-full rounded border border-cyan-700/40 bg-slate-950 px-2 text-sm"
+              data-testid="admin-universe-monitor-scanner-engine-signal-mode-select"
+            >
+              <option value="manual" data-testid="admin-universe-monitor-scanner-engine-signal-mode-manual">MANUAL</option>
+              <option value="auto" data-testid="admin-universe-monitor-scanner-engine-signal-mode-auto">AUTO</option>
+            </select>
+          </label>
+
+          <label className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-scan-limit-field">
+            <span className="text-xs text-cyan-100">Scan Limit</span>
+            <input
+              type="number"
+              min={10}
+              max={220}
+              value={scannerEngineConfig.scan_limit || 80}
+              onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, scan_limit: Number(event.target.value || 80) }))}
+              className="h-10 w-full rounded border border-cyan-700/40 bg-slate-950 px-2 text-sm"
+              data-testid="admin-universe-monitor-scanner-engine-scan-limit-input"
+            />
+          </label>
+
+          <label className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-topn-field">
+            <span className="text-xs text-cyan-100">Top N</span>
+            <input
+              type="number"
+              min={1}
+              max={150}
+              value={scannerEngineConfig.top_n || 20}
+              onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, top_n: Number(event.target.value || 20) }))}
+              className="h-10 w-full rounded border border-cyan-700/40 bg-slate-950 px-2 text-sm"
+              data-testid="admin-universe-monitor-scanner-engine-topn-input"
+            />
+          </label>
+
+          <label className="space-y-1 md:col-span-2 xl:col-span-3" data-testid="admin-universe-monitor-scanner-engine-manual-symbols-field">
+            <span className="text-xs text-cyan-100">Manual Symbols (opsiyonel)</span>
+            <input
+              value={manualSymbolsInput}
+              onChange={(event) => setManualSymbolsInput(event.target.value)}
+              placeholder="BTCUSDT,ETHUSDT"
+              className="h-10 w-full rounded border border-cyan-700/40 bg-slate-950 px-2 text-sm"
+              data-testid="admin-universe-monitor-scanner-engine-manual-symbols-input"
+            />
+          </label>
+
+          <div className="flex flex-wrap items-end gap-2" data-testid="admin-universe-monitor-scanner-engine-actions">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={saveScannerEngineConfig}
+              disabled={scannerEngineBusy}
+              data-testid="admin-universe-monitor-scanner-engine-save-button"
+            >
+              SAVE
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={runScannerEngine}
+              disabled={scannerEngineBusy}
+              data-testid="admin-universe-monitor-scanner-engine-run-button"
+            >
+              RUN SCANNER
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={openStartBotModal}
+              disabled={scannerEngineBusy || (scannerEngineRun?.results || []).length === 0}
+              data-testid="admin-universe-monitor-scanner-engine-start-bot-button"
+            >
+              START BOT
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 md:grid-cols-4" data-testid="admin-universe-monitor-scanner-engine-run-stats">
+          <article className="rounded border border-cyan-700/30 bg-black/30 p-2" data-testid="admin-universe-monitor-scanner-engine-candidate-count-card">
+            <p className="text-[11px] text-cyan-200">Candidate</p>
+            <p className="text-base font-semibold" data-testid="admin-universe-monitor-scanner-engine-candidate-count-value">{scannerEngineRun?.summary?.candidate_count ?? 0}</p>
+          </article>
+          <article className="rounded border border-cyan-700/30 bg-black/30 p-2" data-testid="admin-universe-monitor-scanner-engine-scored-count-card">
+            <p className="text-[11px] text-cyan-200">Scored</p>
+            <p className="text-base font-semibold" data-testid="admin-universe-monitor-scanner-engine-scored-count-value">{scannerEngineRun?.summary?.scored_count ?? 0}</p>
+          </article>
+          <article className="rounded border border-cyan-700/30 bg-black/30 p-2" data-testid="admin-universe-monitor-scanner-engine-long-count-card">
+            <p className="text-[11px] text-cyan-200">Long Signal</p>
+            <p className="text-base font-semibold" data-testid="admin-universe-monitor-scanner-engine-long-count-value">{scannerEngineRun?.summary?.long_signal_count ?? 0}</p>
+          </article>
+          <article className="rounded border border-cyan-700/30 bg-black/30 p-2" data-testid="admin-universe-monitor-scanner-engine-short-count-card">
+            <p className="text-[11px] text-cyan-200">Short Signal</p>
+            <p className="text-base font-semibold" data-testid="admin-universe-monitor-scanner-engine-short-count-value">{scannerEngineRun?.summary?.short_signal_count ?? 0}</p>
+          </article>
+        </div>
+
+        <div className="mt-4 overflow-auto rounded border border-cyan-700/30" data-testid="admin-universe-monitor-scanner-engine-results-wrapper">
+          <table className="min-w-full text-left text-xs" data-testid="admin-universe-monitor-scanner-engine-results-table">
+            <thead className="bg-black/40 text-cyan-100" data-testid="admin-universe-monitor-scanner-engine-results-head">
+              <tr>
+                <th className="px-2 py-2" data-testid="admin-universe-monitor-scanner-engine-results-head-symbol">Symbol</th>
+                <th className="px-2 py-2" data-testid="admin-universe-monitor-scanner-engine-results-head-market">Market</th>
+                <th className="px-2 py-2" data-testid="admin-universe-monitor-scanner-engine-results-head-classification">Class</th>
+                <th className="px-2 py-2" data-testid="admin-universe-monitor-scanner-engine-results-head-long">Long</th>
+                <th className="px-2 py-2" data-testid="admin-universe-monitor-scanner-engine-results-head-short">Short</th>
+                <th className="px-2 py-2" data-testid="admin-universe-monitor-scanner-engine-results-head-breakdown">Policy Breakdown</th>
+                <th className="px-2 py-2" data-testid="admin-universe-monitor-scanner-engine-results-head-execution">Execution(15m)</th>
+              </tr>
+            </thead>
+            <tbody data-testid="admin-universe-monitor-scanner-engine-results-body">
+              {(scannerEngineRun?.results || []).slice(0, 120).map((item, index) => (
+                <tr key={`${item.symbol}-${item.market_type}-${index}`} className="border-t border-cyan-800/20" data-testid={`admin-universe-monitor-scanner-engine-result-row-${index}`}>
+                  <td className="px-2 py-2 font-semibold" data-testid={`admin-universe-monitor-scanner-engine-result-symbol-${index}`}>{item.symbol}</td>
+                  <td className="px-2 py-2" data-testid={`admin-universe-monitor-scanner-engine-result-market-${index}`}>{item.market_type}</td>
+                  <td className="px-2 py-2" data-testid={`admin-universe-monitor-scanner-engine-result-class-${index}`}>
+                    <span className="rounded border border-cyan-600/60 px-2 py-0.5">{item.classification}</span>
+                  </td>
+                  <td className="px-2 py-2" data-testid={`admin-universe-monitor-scanner-engine-result-long-score-${index}`}>{item.long_score}</td>
+                  <td className="px-2 py-2" data-testid={`admin-universe-monitor-scanner-engine-result-short-score-${index}`}>{item.short_score}</td>
+                  <td className="px-2 py-2" data-testid={`admin-universe-monitor-scanner-engine-result-breakdown-${index}`}>{item?.breakdown?.long || "-"} · {item?.breakdown?.short || "-"}</td>
+                  <td className="px-2 py-2" data-testid={`admin-universe-monitor-scanner-engine-result-execution-${index}`}>{item?.execution_context?.change_pct?.toFixed?.(2) ?? item?.execution_context?.change_pct ?? "-"}%</td>
+                </tr>
+              ))}
+              {(scannerEngineRun?.results || []).length === 0 && (
+                <tr data-testid="admin-universe-monitor-scanner-engine-results-empty-row">
+                  <td className="px-2 py-3 text-cyan-200" colSpan={7} data-testid="admin-universe-monitor-scanner-engine-results-empty">Henüz scanner sonucu yok.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-3 space-y-2" data-testid="admin-universe-monitor-scanner-engine-jobs-panel">
+          <p className="text-xs uppercase tracking-widest text-cyan-200" data-testid="admin-universe-monitor-scanner-engine-jobs-title">Scanner Jobs</p>
+          {(scannerEngineJobs || []).slice(0, 8).map((job, index) => (
+            <div key={job.job_id || index} className="rounded border border-cyan-800/30 bg-black/30 p-2 text-xs" data-testid={`admin-universe-monitor-scanner-engine-job-${index}`}>
+              <p data-testid={`admin-universe-monitor-scanner-engine-job-id-${index}`}>job_id: {job.job_id}</p>
+              <p data-testid={`admin-universe-monitor-scanner-engine-job-symbol-count-${index}`}>symbol_count: {job.symbol_count}</p>
+              <p data-testid={`admin-universe-monitor-scanner-engine-job-selection-${index}`}>selection_mode: {job.selection_mode} · side_filter: {job.side_filter}</p>
+              <p data-testid={`admin-universe-monitor-scanner-engine-job-status-${index}`}>status: {job.status}</p>
+            </div>
+          ))}
+          {(scannerEngineJobs || []).length === 0 && <p className="text-xs text-cyan-200" data-testid="admin-universe-monitor-scanner-engine-jobs-empty">Henüz scanner-job kaydı yok.</p>}
+        </div>
+      </article>
+
+      <Dialog open={startBotModalOpen} onOpenChange={setStartBotModalOpen}>
+        <DialogContent className="max-w-2xl" data-testid="admin-universe-monitor-start-bot-modal">
+          <DialogHeader data-testid="admin-universe-monitor-start-bot-modal-header">
+            <DialogTitle data-testid="admin-universe-monitor-start-bot-modal-title">START BOT · Scanner Job</DialogTitle>
+            <DialogDescription data-testid="admin-universe-monitor-start-bot-modal-description">
+              Bu işlem sadece scanner-job kaydı oluşturur, trade akışını tetiklemez.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 md:grid-cols-3" data-testid="admin-universe-monitor-start-bot-modal-form-grid">
+            <label className="space-y-1" data-testid="admin-universe-monitor-start-bot-selection-mode-field">
+              <span className="text-xs text-slate-400">Selection Mode</span>
+              <select
+                value={startBotForm.selection_mode}
+                onChange={(event) => setStartBotForm((prev) => ({ ...prev, selection_mode: event.target.value }))}
+                className="h-10 rounded border border-slate-700 bg-black px-2 text-sm"
+                data-testid="admin-universe-monitor-start-bot-selection-mode-select"
+              >
+                <option value="top_n" data-testid="admin-universe-monitor-start-bot-selection-topn">Top N</option>
+                <option value="manual" data-testid="admin-universe-monitor-start-bot-selection-manual">Manual</option>
+              </select>
+            </label>
+
+            <label className="space-y-1" data-testid="admin-universe-monitor-start-bot-topn-field">
+              <span className="text-xs text-slate-400">Top N</span>
+              <input
+                type="number"
+                min={1}
+                max={150}
+                value={startBotForm.top_n}
+                onChange={(event) => setStartBotForm((prev) => ({ ...prev, top_n: Number(event.target.value || 20) }))}
+                className="h-10 rounded border border-slate-700 bg-black px-2 text-sm"
+                data-testid="admin-universe-monitor-start-bot-topn-input"
+              />
+            </label>
+
+            <label className="space-y-1" data-testid="admin-universe-monitor-start-bot-side-filter-field">
+              <span className="text-xs text-slate-400">Side Filter</span>
+              <select
+                value={startBotForm.side_filter}
+                onChange={(event) => setStartBotForm((prev) => ({ ...prev, side_filter: event.target.value }))}
+                className="h-10 rounded border border-slate-700 bg-black px-2 text-sm"
+                data-testid="admin-universe-monitor-start-bot-side-filter-select"
+              >
+                <option value="all" data-testid="admin-universe-monitor-start-bot-side-filter-all">All</option>
+                <option value="long" data-testid="admin-universe-monitor-start-bot-side-filter-long">Long</option>
+                <option value="short" data-testid="admin-universe-monitor-start-bot-side-filter-short">Short</option>
+                <option value="strong_long" data-testid="admin-universe-monitor-start-bot-side-filter-strong-long">Strong Long</option>
+                <option value="strong_short" data-testid="admin-universe-monitor-start-bot-side-filter-strong-short">Strong Short</option>
+              </select>
+            </label>
+          </div>
+
+          {startBotForm.selection_mode === "manual" && (
+            <div className="max-h-56 space-y-1 overflow-auto rounded border border-slate-700 p-2" data-testid="admin-universe-monitor-start-bot-manual-list">
+              {(scannerEngineRun?.results || []).slice(0, 120).map((item, index) => {
+                const checked = (startBotForm.selected_symbols || []).includes(item.symbol);
+                return (
+                  <label key={`${item.symbol}-${index}`} className="flex items-center gap-2 text-xs" data-testid={`admin-universe-monitor-start-bot-manual-item-${index}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleStartBotSymbol(item.symbol)}
+                      data-testid={`admin-universe-monitor-start-bot-manual-item-checkbox-${index}`}
+                    />
+                    <span data-testid={`admin-universe-monitor-start-bot-manual-item-symbol-${index}`}>{item.symbol}</span>
+                    <span className="text-slate-500" data-testid={`admin-universe-monitor-start-bot-manual-item-score-${index}`}>L:{item.long_score} / S:{item.short_score}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          <DialogFooter data-testid="admin-universe-monitor-start-bot-modal-footer">
+            <Button type="button" variant="outline" onClick={() => setStartBotModalOpen(false)} data-testid="admin-universe-monitor-start-bot-cancel-button">Vazgeç</Button>
+            <Button type="button" variant="outline" onClick={startScannerJob} disabled={scannerEngineBusy} data-testid="admin-universe-monitor-start-bot-confirm-button">
+              Scanner-Job Oluştur
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {statusContract && (
         <section className="rounded border border-emerald-700/40 bg-emerald-950/20 p-3" data-testid="admin-universe-monitor-status-contract-panel">

@@ -1,8 +1,10 @@
 import json
 import csv
 import io
+import math
 import re
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path as FilePath
 
@@ -18,6 +20,7 @@ from services.audit_service import create_audit_log
 from services.pipeline.cache_store import get_json
 from services.pipeline.universe_engine import debug_effective_universe
 from services.risk_engine_service import build_admin_risk_status, patch_risk_config
+from services.indicator_screener.market_data_provider import BinanceMarketDataProvider, MarketDataProviderError
 from services.scanner_observability_service import (
     approve_rollout_transition,
     export_perf_trend_csv,
@@ -59,6 +62,12 @@ SLOW_CONTROL_STATE_KEY = "universe:slow:control_state"
 SLA_CONFIG_KEY = "universe:freshness:sla_config"
 KPI_RECOMMENDATION_ACTIVE_KEY = "universe:kpi:recommendations:active"
 KPI_RECOMMENDATION_HISTORY_KEY = "universe:kpi:recommendations:history"
+SCANNER_ENGINE_CONFIG_KEY = "universe:scanner_engine:config"
+SCANNER_ENGINE_LAST_RUN_KEY = "universe:scanner_engine:last_run"
+SCANNER_ENGINE_BOT_JOB_QUEUE_KEY = "universe:scanner_engine:bot_jobs"
+SCANNER_ENGINE_BOT_JOB_KEY_PREFIX = "universe:scanner_engine:bot_job"
+SCANNER_ENGINE_DEFAULT_SCAN_LIMIT = 80
+SCANNER_ENGINE_MAX_SCAN_LIMIT = 220
 
 SLA_UPDATE_PHRASE = "UPDATE SLA CONFIG"
 RESCAN_STALE_PHRASE = "RESCAN STALE"
@@ -69,6 +78,8 @@ KPI_POSTPONE_PHRASE = "POSTPONE RECOMMENDATION"
 EXPORT_JOB_PHRASE = "CREATE EXPORT JOB"
 BULK_IMPORT_PREVIEW_PHRASE = "PREVIEW BULK IMPORT"
 BULK_IMPORT_APPLY_PHRASE = "APPLY BULK IMPORT"
+
+scanner_market_data_provider = BinanceMarketDataProvider()
 
 EXPORT_STORAGE_DIR = FilePath("/app/backend/exports")
 BULK_IMPORT_PREVIEW_KEY = "universe:bulk_import:preview"
@@ -160,6 +171,35 @@ class BulkImportPreviewRequest(RuntimeActionRequest):
 class BulkImportApplyRequest(RuntimeActionRequest):
     preview_id: str = Field(min_length=8, max_length=120)
     apply_mode: str = Field(default="apply_valid_only", pattern="^(apply_all|apply_valid_only)$")
+
+
+class ScannerEngineConfigSaveRequest(BaseModel):
+    exchange: str = Field(default="binance", pattern="^binance$")
+    include_spot: bool = True
+    include_futures: bool = True
+    signal_mode: str = Field(default="manual", pattern="^(manual|auto)$")
+    scan_limit: int = Field(default=SCANNER_ENGINE_DEFAULT_SCAN_LIMIT, ge=10, le=SCANNER_ENGINE_MAX_SCAN_LIMIT)
+    top_n: int = Field(default=20, ge=1, le=150)
+    manual_symbols: list[str] = Field(default_factory=list)
+    reason: str = Field(default="scanner_engine_config_save", min_length=3, max_length=240)
+
+
+class ScannerEngineRunRequest(BaseModel):
+    force_refresh: bool = False
+    reason: str = Field(default="manual_scanner_run", min_length=3, max_length=240)
+
+
+class ScannerEngineStartBotRequest(BaseModel):
+    selection_mode: str = Field(default="top_n", pattern="^(top_n|manual)$")
+    top_n: int = Field(default=20, ge=1, le=150)
+    selected_symbols: list[str] = Field(default_factory=list)
+    side_filter: str = Field(default="all", pattern="^(all|long|short|strong_long|strong_short)$")
+    reason: str = Field(default="start_scanner_job", min_length=3, max_length=240)
+
+
+class ScannerEngineJobListResponse(BaseModel):
+    count: int
+    items: list[dict]
 
 
 def _manager_required(current_admin: User) -> User:
@@ -589,6 +629,393 @@ def _build_bulk_preview(*, symbols: list[str], blacklist: set[str]) -> dict:
     }
 
 
+def _default_scanner_engine_config() -> dict:
+    return {
+        "exchange": "binance",
+        "include_spot": True,
+        "include_futures": True,
+        "signal_mode": "manual",
+        "scan_limit": SCANNER_ENGINE_DEFAULT_SCAN_LIMIT,
+        "top_n": 20,
+        "manual_symbols": [],
+        "indicator_timeframe": "1h",
+        "execution_timeframe": "15m",
+        "weights": {
+            "trend": 10,
+            "volume": 50,
+            "momentum": 100,
+            "bollinger": 1,
+            "max_score": 161,
+        },
+        "updated_at": None,
+        "updated_by": None,
+    }
+
+
+def _load_scanner_engine_config() -> dict:
+    saved = _read_json_value(SCANNER_ENGINE_CONFIG_KEY, _default_scanner_engine_config())
+    if not isinstance(saved, dict):
+        saved = {}
+    return {
+        **_default_scanner_engine_config(),
+        **saved,
+        "manual_symbols": _normalize_symbols(saved.get("manual_symbols") or []),
+    }
+
+
+def _save_scanner_engine_config(config: dict):
+    _write_json_value(SCANNER_ENGINE_CONFIG_KEY, config)
+
+
+def _to_float(value, default: float = 0.0) -> float:
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _sma(values: list[float], period: int) -> float:
+    if len(values) < period or period <= 0:
+        return 0.0
+    sample = values[-period:]
+    return sum(sample) / float(period)
+
+
+def _std(values: list[float], period: int) -> float:
+    if len(values) < period or period <= 1:
+        return 0.0
+    sample = values[-period:]
+    mean = sum(sample) / float(period)
+    variance = sum((item - mean) ** 2 for item in sample) / float(period)
+    return math.sqrt(max(variance, 0.0))
+
+
+def _compute_rsi(closes: list[float], period: int = 14) -> float:
+    if len(closes) < period + 1:
+        return 50.0
+    gains = 0.0
+    losses = 0.0
+    for idx in range(len(closes) - period, len(closes)):
+        delta = closes[idx] - closes[idx - 1]
+        if delta >= 0:
+            gains += delta
+        else:
+            losses += abs(delta)
+    avg_gain = gains / float(period)
+    avg_loss = losses / float(period)
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100.0 - (100.0 / (1.0 + rs))
+
+
+def _evaluate_scanner_layers(indicator_candles: list[dict], weights: dict) -> dict:
+    closes = [_to_float(item.get("close")) for item in indicator_candles if item.get("close") is not None]
+    volumes = [_to_float(item.get("volume")) for item in indicator_candles if item.get("volume") is not None]
+    if len(closes) < 55 or len(volumes) < 30:
+        raise MarketDataProviderError("Yetersiz indikatör verisi")
+
+    trend_w = int(weights.get("trend") or 10)
+    volume_w = int(weights.get("volume") or 50)
+    momentum_w = int(weights.get("momentum") or 100)
+    bollinger_w = int(weights.get("bollinger") or 1)
+
+    close_latest = closes[-1]
+    sma20 = _sma(closes, 20)
+    sma50 = _sma(closes, 50)
+    avg_volume20 = _sma(volumes, 20)
+    volume_latest = volumes[-1]
+    volume_ratio = (volume_latest / avg_volume20) if avg_volume20 > 0 else 0.0
+    rsi14 = _compute_rsi(closes, 14)
+    momentum_window = closes[-7] if len(closes) >= 7 else closes[0]
+    momentum_pct = ((close_latest - momentum_window) / momentum_window * 100.0) if momentum_window else 0.0
+    bollinger_std = _std(closes, 20)
+    lower_band = sma20 - (2.0 * bollinger_std)
+    upper_band = sma20 + (2.0 * bollinger_std)
+
+    long_layers: list[str] = []
+    short_layers: list[str] = []
+
+    if close_latest > sma20 > sma50:
+        long_layers.append("TREND")
+    if close_latest < sma20 < sma50:
+        short_layers.append("TREND")
+
+    if volume_ratio >= 1.35:
+        long_layers.append("VOLUME")
+        short_layers.append("VOLUME")
+
+    if momentum_pct >= 1.8 and rsi14 >= 55:
+        long_layers.append("MOMENTUM")
+    if momentum_pct <= -1.8 and rsi14 <= 45:
+        short_layers.append("MOMENTUM")
+
+    if close_latest <= lower_band:
+        long_layers.append("BOLLINGER")
+    if close_latest >= upper_band:
+        short_layers.append("BOLLINGER")
+
+    long_score = (
+        (trend_w if "TREND" in long_layers else 0)
+        + (volume_w if "VOLUME" in long_layers else 0)
+        + (momentum_w if "MOMENTUM" in long_layers else 0)
+        + (bollinger_w if "BOLLINGER" in long_layers else 0)
+    )
+    short_score = (
+        (trend_w if "TREND" in short_layers else 0)
+        + (volume_w if "VOLUME" in short_layers else 0)
+        + (momentum_w if "MOMENTUM" in short_layers else 0)
+        + (bollinger_w if "BOLLINGER" in short_layers else 0)
+    )
+
+    is_strong_long = "MOMENTUM" in long_layers and "VOLUME" in long_layers
+    is_strong_short = "MOMENTUM" in short_layers and "VOLUME" in short_layers
+    if is_strong_long and not is_strong_short:
+        classification = "strong_long"
+    elif is_strong_short and not is_strong_long:
+        classification = "strong_short"
+    elif long_score >= short_score:
+        classification = "long_bias"
+    else:
+        classification = "short_bias"
+
+    return {
+        "long_score": int(long_score),
+        "short_score": int(short_score),
+        "long_layers": long_layers,
+        "short_layers": short_layers,
+        "classification": classification,
+        "is_strong_long": is_strong_long,
+        "is_strong_short": is_strong_short,
+        "metrics": {
+            "close": close_latest,
+            "sma20": sma20,
+            "sma50": sma50,
+            "volume_ratio": volume_ratio,
+            "rsi14": rsi14,
+            "momentum_pct": momentum_pct,
+            "bollinger_lower": lower_band,
+            "bollinger_upper": upper_band,
+        },
+        "breakdown": {
+            "long": f"[{','.join(long_layers) if long_layers else 'NONE'}] L:{long_score}",
+            "short": f"[{','.join(short_layers) if short_layers else 'NONE'}] S:{short_score}",
+        },
+    }
+
+
+def _score_sort_key(item: dict) -> tuple:
+    classification = str(item.get("classification") or "")
+    strong_bucket = 0 if classification in {"strong_long", "strong_short"} else 1
+    max_score = max(int(item.get("long_score") or 0), int(item.get("short_score") or 0))
+    return (
+        strong_bucket,
+        -max_score,
+        -int(item.get("long_score") or 0),
+        -int(item.get("short_score") or 0),
+        str(item.get("symbol") or ""),
+        str(item.get("market_type") or ""),
+    )
+
+
+def _score_candidate_symbol(candidate: dict, config: dict, force_refresh: bool) -> dict | None:
+    symbol = str(candidate.get("symbol") or "").upper().strip()
+    market_type = str(candidate.get("market_type") or "spot").lower().strip()
+    if not symbol or market_type not in {"spot", "futures"}:
+        return None
+
+    candles = scanner_market_data_provider.fetch_indicator_and_execution_candles(
+        exchange="binance",
+        market_type=market_type,
+        symbol=symbol,
+        indicator_timeframe=str(config.get("indicator_timeframe") or "1h"),
+        execution_timeframe=str(config.get("execution_timeframe") or "15m"),
+        indicator_limit=180,
+        execution_limit=140,
+        force_refresh=force_refresh,
+    )
+    indicator_candles = list((candles.get("indicator") or {}).get("candles") or [])
+    execution_candles = list((candles.get("execution") or {}).get("candles") or [])
+    scoring = _evaluate_scanner_layers(indicator_candles, config.get("weights") or {})
+
+    execution_close = _to_float(execution_candles[-1].get("close")) if execution_candles else None
+    execution_prev = _to_float(execution_candles[-2].get("close")) if len(execution_candles) >= 2 else None
+    execution_change_pct = None
+    if execution_close is not None and execution_prev and execution_prev != 0:
+        execution_change_pct = ((execution_close - execution_prev) / execution_prev) * 100.0
+
+    return {
+        "symbol": symbol,
+        "market_type": market_type,
+        "long_score": scoring["long_score"],
+        "short_score": scoring["short_score"],
+        "long_layers": scoring["long_layers"],
+        "short_layers": scoring["short_layers"],
+        "classification": scoring["classification"],
+        "is_strong_long": scoring["is_strong_long"],
+        "is_strong_short": scoring["is_strong_short"],
+        "breakdown": scoring["breakdown"],
+        "indicator_metrics": scoring["metrics"],
+        "execution_context": {
+            "timeframe": str(config.get("execution_timeframe") or "15m"),
+            "last_close": execution_close,
+            "change_pct": execution_change_pct,
+            "last_candle_time": (candles.get("execution") or {}).get("last_candle_time"),
+        },
+        "volume_24h": _to_float(candidate.get("volume_24h")),
+        "spread_pct_24h": _to_float(candidate.get("spread_pct_24h"), default=0.0),
+    }
+
+
+def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
+    universe = scanner_market_data_provider.get_tradable_symbols_parallel(
+        exchange="binance",
+        include_spot=bool(config.get("include_spot", True)),
+        include_futures=bool(config.get("include_futures", True)),
+        force_refresh=force_refresh,
+    )
+
+    rows = [
+        item
+        for item in (universe.get("rows") or [])
+        if bool(item.get("is_tradable")) and str(item.get("symbol") or "").endswith("USDT")
+    ]
+
+    manual_symbols = set(_normalize_symbols(config.get("manual_symbols") or []))
+    if str(config.get("signal_mode") or "manual") == "manual" and manual_symbols:
+        rows = [item for item in rows if str(item.get("symbol") or "").upper() in manual_symbols]
+
+    rows.sort(key=lambda item: _to_float(item.get("volume_24h")), reverse=True)
+    scan_limit = max(10, min(int(config.get("scan_limit") or SCANNER_ENGINE_DEFAULT_SCAN_LIMIT), SCANNER_ENGINE_MAX_SCAN_LIMIT))
+    candidates = rows[:scan_limit]
+
+    scored: list[dict] = []
+    errors: list[dict] = []
+    if candidates:
+        with ThreadPoolExecutor(max_workers=min(10, max(2, len(candidates)))) as executor:
+            future_map = {
+                executor.submit(_score_candidate_symbol, candidate, config, force_refresh): candidate
+                for candidate in candidates
+            }
+            for future in as_completed(future_map):
+                candidate = future_map[future]
+                try:
+                    scored_item = future.result()
+                    if scored_item:
+                        scored.append(scored_item)
+                except Exception as exc:
+                    errors.append(
+                        {
+                            "symbol": candidate.get("symbol"),
+                            "market_type": candidate.get("market_type"),
+                            "error": str(exc)[:320],
+                        }
+                    )
+
+    scored.sort(key=_score_sort_key)
+    run_id = str(uuid.uuid4())
+    generated_at = datetime.now(timezone.utc).isoformat()
+    top_n = max(1, min(int(config.get("top_n") or 20), 150))
+
+    strong_long_count = len([item for item in scored if item.get("classification") == "strong_long"])
+    strong_short_count = len([item for item in scored if item.get("classification") == "strong_short"])
+    long_signal_count = len([item for item in scored if int(item.get("long_score") or 0) >= 100])
+    short_signal_count = len([item for item in scored if int(item.get("short_score") or 0) >= 100])
+
+    payload = {
+        "run_id": run_id,
+        "generated_at": generated_at,
+        "config": config,
+        "summary": {
+            "exchange": "binance",
+            "indicator_timeframe": str(config.get("indicator_timeframe") or "1h"),
+            "execution_timeframe": str(config.get("execution_timeframe") or "15m"),
+            "market_selection": {
+                "spot": bool(config.get("include_spot", True)),
+                "futures": bool(config.get("include_futures", True)),
+            },
+            "candidate_count": len(candidates),
+            "scored_count": len(scored),
+            "error_count": len(errors),
+            "strong_long_count": strong_long_count,
+            "strong_short_count": strong_short_count,
+            "long_signal_count": long_signal_count,
+            "short_signal_count": short_signal_count,
+            "top_n": top_n,
+            "max_score": int((config.get("weights") or {}).get("max_score") or 161),
+        },
+        "top_results": scored[:top_n],
+        "results": scored,
+        "errors": errors,
+    }
+    _write_json_value(SCANNER_ENGINE_LAST_RUN_KEY, payload)
+    _write_json_value(f"{SCANNER_ENGINE_LAST_RUN_KEY}:{run_id}", payload)
+    if hasattr(redis_client, "expire"):
+        redis_client.expire(f"{SCANNER_ENGINE_LAST_RUN_KEY}:{run_id}", 60 * 60 * 12)
+    return payload
+
+
+def _dedupe_best_by_symbol(items: list[dict]) -> list[dict]:
+    bucket: dict[str, dict] = {}
+    for item in items:
+        symbol = str(item.get("symbol") or "").upper().strip()
+        if not symbol:
+            continue
+        current = bucket.get(symbol)
+        if current is None or _score_sort_key(item) < _score_sort_key(current):
+            bucket[symbol] = item
+    rows = list(bucket.values())
+    rows.sort(key=_score_sort_key)
+    return rows
+
+
+def _build_scanner_job_entries(*, latest_run: dict, payload: ScannerEngineStartBotRequest) -> list[dict]:
+    results = list(latest_run.get("results") or [])
+    side_filter = str(payload.side_filter or "all")
+    if side_filter == "long":
+        results = [item for item in results if int(item.get("long_score") or 0) >= int(item.get("short_score") or 0)]
+    elif side_filter == "short":
+        results = [item for item in results if int(item.get("short_score") or 0) > int(item.get("long_score") or 0)]
+    elif side_filter == "strong_long":
+        results = [item for item in results if item.get("classification") == "strong_long"]
+    elif side_filter == "strong_short":
+        results = [item for item in results if item.get("classification") == "strong_short"]
+
+    if payload.selection_mode == "manual":
+        selected = set(_normalize_symbols(payload.selected_symbols or []))
+        results = [item for item in results if str(item.get("symbol") or "").upper() in selected]
+    else:
+        results = results[: max(1, payload.top_n)]
+
+    return _dedupe_best_by_symbol(results)
+
+
+def _save_scanner_job(job_payload: dict):
+    job_id = str(job_payload.get("job_id") or "")
+    if not job_id:
+        return
+    _write_json_value(f"{SCANNER_ENGINE_BOT_JOB_KEY_PREFIX}:{job_id}", job_payload)
+    queue_rows = _read_json_value(SCANNER_ENGINE_BOT_JOB_QUEUE_KEY, [])
+    if not isinstance(queue_rows, list):
+        queue_rows = []
+    queue_rows.append(job_id)
+    _write_json_value(SCANNER_ENGINE_BOT_JOB_QUEUE_KEY, queue_rows[-500:])
+
+
+def _list_scanner_jobs(limit: int = 30) -> list[dict]:
+    queue_rows = _read_json_value(SCANNER_ENGINE_BOT_JOB_QUEUE_KEY, [])
+    if not isinstance(queue_rows, list):
+        return []
+    items: list[dict] = []
+    for job_id in reversed(queue_rows[-max(1, limit):]):
+        payload = _read_json_value(f"{SCANNER_ENGINE_BOT_JOB_KEY_PREFIX}:{job_id}", None)
+        if isinstance(payload, dict):
+            items.append(payload)
+    return items
+
+
 @router.get("")
 def admin_universe_monitor_summary(
     market_type: str = Query(default="spot", pattern="^(spot|futures)$"),
@@ -696,6 +1123,193 @@ def scanner_state(current_admin: User = Depends(require_admin), db: Session = De
         "whitelist": _normalize_symbols(row.whitelist or []),
         "blacklist": _normalize_symbols(row.blacklist or []),
     }
+
+
+@router.get("/scanner-engine/config")
+def scanner_engine_get_config(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    return _load_scanner_engine_config()
+
+
+@router.post("/scanner-engine/config/save")
+def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    manager = _manager_required(current_admin)
+    if not payload.include_spot and not payload.include_futures:
+        raise HTTPException(status_code=400, detail="spot_or_futures_required")
+
+    trace_id = str(uuid.uuid4())
+    config = {
+        **_load_scanner_engine_config(),
+        "exchange": "binance",
+        "include_spot": bool(payload.include_spot),
+        "include_futures": bool(payload.include_futures),
+        "signal_mode": payload.signal_mode,
+        "scan_limit": int(payload.scan_limit),
+        "top_n": int(payload.top_n),
+        "manual_symbols": _normalize_symbols(payload.manual_symbols or []),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": manager.id,
+    }
+    _save_scanner_engine_config(config)
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_SCANNER_ENGINE_CONFIG_SAVED",
+        entity_type="scanner_engine",
+        entity_id="global",
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning",
+        details={"trace_id": trace_id, "reason": payload.reason, "config": config},
+    )
+    return _action_result(
+        trace_id=trace_id,
+        message="scanner engine config saved",
+        state_snapshot={"scanner_engine_config": config},
+        config=config,
+        audit_log_id=audit.id,
+    )
+
+
+@router.post("/scanner-engine/run")
+def scanner_engine_run(payload: ScannerEngineRunRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    manager = _manager_required(current_admin)
+    trace_id = str(uuid.uuid4())
+    config = _load_scanner_engine_config()
+    try:
+        run_payload = _run_scanner_engine(config, force_refresh=bool(payload.force_refresh))
+    except MarketDataProviderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"scanner_engine_run_failed: {str(exc)[:240]}") from exc
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_SCANNER_ENGINE_RUN",
+        entity_type="scanner_engine",
+        entity_id=str(run_payload.get("run_id") or "unknown"),
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="info",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "summary": run_payload.get("summary") or {},
+            "error_count": len(run_payload.get("errors") or []),
+        },
+    )
+    return {
+        "status": "success",
+        "trace_id": trace_id,
+        "run_id": run_payload.get("run_id"),
+        "generated_at": run_payload.get("generated_at"),
+        "config": run_payload.get("config") or {},
+        "summary": run_payload.get("summary") or {},
+        "top_results": run_payload.get("top_results") or [],
+        "results": run_payload.get("results") or [],
+        "errors": run_payload.get("errors") or [],
+        "audit_log_id": audit.id,
+    }
+
+
+@router.get("/scanner-engine/last-run")
+def scanner_engine_last_run(current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    payload = _read_json_value(SCANNER_ENGINE_LAST_RUN_KEY, {})
+    if not isinstance(payload, dict) or not payload.get("run_id"):
+        return {
+            "status": "empty",
+            "config": _load_scanner_engine_config(),
+            "summary": {
+                "exchange": "binance",
+                "indicator_timeframe": "1h",
+                "execution_timeframe": "15m",
+                "candidate_count": 0,
+                "scored_count": 0,
+                "error_count": 0,
+                "strong_long_count": 0,
+                "strong_short_count": 0,
+                "top_n": int(_load_scanner_engine_config().get("top_n") or 20),
+                "max_score": 161,
+            },
+            "results": [],
+            "top_results": [],
+            "errors": [],
+        }
+    return {
+        "status": "success",
+        "run_id": payload.get("run_id"),
+        "generated_at": payload.get("generated_at"),
+        "config": payload.get("config") or _load_scanner_engine_config(),
+        "summary": payload.get("summary") or {},
+        "top_results": payload.get("top_results") or [],
+        "results": payload.get("results") or [],
+        "errors": payload.get("errors") or [],
+    }
+
+
+@router.post("/scanner-engine/bot/start")
+def scanner_engine_bot_start(payload: ScannerEngineStartBotRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    manager = _manager_required(current_admin)
+    trace_id = str(uuid.uuid4())
+    latest_run = _read_json_value(SCANNER_ENGINE_LAST_RUN_KEY, {})
+    if not isinstance(latest_run, dict) or not latest_run.get("run_id"):
+        raise HTTPException(status_code=409, detail="scanner_engine_run_required")
+
+    selected_entries = _build_scanner_job_entries(latest_run=latest_run, payload=payload)
+    if not selected_entries:
+        raise HTTPException(status_code=400, detail="scanner_engine_no_symbols_selected")
+
+    job_id = str(uuid.uuid4())
+    job_payload = {
+        "job_id": job_id,
+        "trace_id": trace_id,
+        "status": "queued",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": manager.id,
+        "source": "scanner_engine",
+        "source_run_id": latest_run.get("run_id"),
+        "selection_mode": payload.selection_mode,
+        "side_filter": payload.side_filter,
+        "symbol_count": len(selected_entries),
+        "symbols": [item.get("symbol") for item in selected_entries],
+        "entries": selected_entries,
+        "execution_timeframe": str((latest_run.get("summary") or {}).get("execution_timeframe") or "15m"),
+        "reason": payload.reason,
+    }
+    _save_scanner_job(job_payload)
+
+    audit = create_audit_log(
+        db,
+        action="UNIVERSE_SCANNER_ENGINE_BOT_JOB_CREATED",
+        entity_type="scanner_engine_job",
+        entity_id=job_id,
+        actor_user_id=manager.id,
+        actor_role=manager.role.value,
+        severity="warning",
+        details={
+            "trace_id": trace_id,
+            "reason": payload.reason,
+            "selection_mode": payload.selection_mode,
+            "side_filter": payload.side_filter,
+            "symbol_count": len(selected_entries),
+            "source_run_id": latest_run.get("run_id"),
+        },
+    )
+    return _action_result(
+        trace_id=trace_id,
+        message="scanner bot job queued",
+        state_snapshot={"job_id": job_id, "symbol_count": len(selected_entries), "selection_mode": payload.selection_mode},
+        job=job_payload,
+        audit_log_id=audit.id,
+    )
+
+
+@router.get("/scanner-engine/bot/jobs", response_model=ScannerEngineJobListResponse)
+def scanner_engine_bot_jobs(limit: int = Query(default=30, ge=1, le=200), current_admin: User = Depends(require_admin)):
+    _ = current_admin
+    jobs = _list_scanner_jobs(limit=limit)
+    return {"count": len(jobs), "items": jobs}
 
 
 @router.post("/scanner/start")
