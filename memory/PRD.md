@@ -1,3 +1,23 @@
+## 2026-04-06 — Scanner→Signal Blokaj Fix (SIM Mode) ✅
+
+### Kök neden
+- Frontend scanner çalıştırma akışı bazı koşullarda senkron endpointe düşüp preview’de 502 üretiyordu.
+- SIM modda `ORDER_PRECHECK_FAILED` / `SYMBOL_NOT_ALLOWED` gibi exchange-kaynaklı bloklar status-contract ve signal akışında gereksiz hard-block etkisi oluşturuyordu.
+
+### Uygulanan düzeltme
+- `UserScannerPage.jsx`: scanner run akışı tamamen async endpointlere alındı (`/run-async`, `/run-async-both`), sync `/run` kaldırıldı.
+- `user_scanner_signals.py`: SIM modda `ORDER_PRECHECK_FAILED` ve `SYMBOL_NOT_ALLOWED` hard-block alarm görünürlüğü bastırıldı.
+- `user_scanner_signal_service.py`: SIM mod soft-bypass kapsamı genişletildi, fallback symbol seti eklendi.
+- `identity_control_service.py`: legacy approved user profilleri login anında `trading_enabled/live_trading_eligible` normalize edilir hale getirildi.
+
+### Doğrulama
+- Test raporu: `/app/test_reports/iteration_23.json`
+  - scanner async run endpoint: PASS (job_id dönüyor, 502 yok)
+  - async polling: PASS (queued->running->completed)
+  - status-contract blocking_reasons: PASS (sim modda boş)
+  - signals endpoint: PASS (HTTP 200)
+  - scanner flicker: PASS (60s stabil)
+
 ## 2026-04-06 — Linked Incidents Error Table 14 Kolon Genişletmesi ✅
 
 ### Eklenen 6 kritik kolon (8 -> 14)
