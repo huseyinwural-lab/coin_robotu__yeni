@@ -43,6 +43,47 @@ const DEFAULT_RULE = {
   ],
 };
 
+const EXEC_POLICY_BUILDER_DRAFT_KEY = "execution-policy-builder-draft-v1";
+
+const defaultBuilderPayload = {
+  policy_code: "",
+  version_label: "builder",
+  description: "",
+  scope: {
+    environment: "DEV",
+    strategy: "",
+    symbol: "",
+  },
+  rules: [DEFAULT_RULE],
+};
+
+const readBuilderDraft = () => {
+  if (typeof window === "undefined") {
+    return defaultBuilderPayload;
+  }
+  try {
+    const raw = window.localStorage.getItem(EXEC_POLICY_BUILDER_DRAFT_KEY);
+    if (!raw) {
+      return defaultBuilderPayload;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return defaultBuilderPayload;
+    }
+    return {
+      ...defaultBuilderPayload,
+      ...parsed,
+      scope: {
+        ...defaultBuilderPayload.scope,
+        ...(parsed.scope || {}),
+      },
+      rules: Array.isArray(parsed.rules) && parsed.rules.length > 0 ? parsed.rules : defaultBuilderPayload.rules,
+    };
+  } catch {
+    return defaultBuilderPayload;
+  }
+};
+
 const BUILDER_PRESETS = [
   {
     id: "exposure-cap",
@@ -96,17 +137,7 @@ export const ExecutionPoliciesPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("builder");
 
-  const [builderPayload, setBuilderPayload] = useState({
-    policy_code: "",
-    version_label: "builder",
-    description: "",
-    scope: {
-      environment: "DEV",
-      strategy: "",
-      symbol: "",
-    },
-    rules: [DEFAULT_RULE],
-  });
+  const [builderPayload, setBuilderPayload] = useState(() => readBuilderDraft());
   const [builderValidation, setBuilderValidation] = useState(null);
   const [isBuilderValidating, setIsBuilderValidating] = useState(false);
   const [isBuilderSaving, setIsBuilderSaving] = useState(false);
@@ -191,6 +222,17 @@ export const ExecutionPoliciesPage = () => {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(EXEC_POLICY_BUILDER_DRAFT_KEY, JSON.stringify(builderPayload));
+    } catch {
+      // noop
+    }
+  }, [builderPayload]);
 
   useEffect(() => {
     if (!selectedVersionId) {
