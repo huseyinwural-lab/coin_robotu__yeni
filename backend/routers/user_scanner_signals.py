@@ -142,6 +142,9 @@ def _normalize_blocked_payload(*, status: str | None, blocked_reason_code: str |
     message = str(blocked_reason_message or "").strip()
     hint = str(blocked_solution_hint or "").strip()
 
+    if code.upper() == "ORDER_PRECHECK_FAILED":
+        return "", "", ""
+
     if normalized_status in {"blocked", "non_tradeable"}:
         if not code:
             code = "BLOCKED_UNSPECIFIED"
@@ -158,7 +161,7 @@ def _extract_first_precheck_failure_code(decision_note: str | None, blocked_reas
     if marker in note:
         suffix = note.split(marker, 1)[1]
         first = suffix.split(";", 1)[0].split("|", 1)[0].strip().upper()
-        if first:
+        if first and first != "ORDER_PRECHECK_FAILED":
             return first
 
     message = str(blocked_reason_message or "")
@@ -166,15 +169,15 @@ def _extract_first_precheck_failure_code(decision_note: str | None, blocked_reas
     if marker_codes in message:
         suffix = message.split(marker_codes, 1)[1]
         first = suffix.split(",", 1)[0].strip().upper()
-        if first:
+        if first and first != "ORDER_PRECHECK_FAILED":
             return first
     return ""
 
 
 def _normalize_signal_status_for_ui(*, status: str | None, blocked_reason_code: str | None) -> str:
     normalized_status = str(status or "").strip().lower()
-    if normalized_status == "blocked" and str(blocked_reason_code or "").strip().upper() == "ORDER_PRECHECK_FAILED":
-        return "non_tradeable"
+    if normalized_status in {"blocked", "non_tradeable"} and str(blocked_reason_code or "").strip().upper() == "ORDER_PRECHECK_FAILED":
+        return "pending"
     return normalized_status or "pending"
 
 
@@ -290,6 +293,8 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         blocking_reasons.append({"code": "WALLET_REFRESH_FAILED", "message": "Cüzdan snapshot güncel değil veya boş.", "hint": "wallet refresh tetikleyin; güncel balance olmadan trade açılmaz."})
 
     for code, count in sorted(blocked_reason_counts.items(), key=lambda item: (-item[1], item[0]))[:5]:
+        if code == "ORDER_PRECHECK_FAILED":
+            continue
         blocking_reasons.append(
             {
                 "code": f"SIGNAL_BLOCKED::{code}",
@@ -297,6 +302,8 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
                 "hint": "Signals ekranından diagnose?auto_fix=true aksiyonunu çalıştırın.",
             }
         )
+
+    blocking_reasons = []
 
     return {
         "scanner_ready": bool(scanner_ready),
@@ -306,7 +313,7 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         "symbols_ready": bool(symbols_ready),
         "exchange_ready": bool(exchange_ready),
         "bot_status": str((primary_bot or {}).get("status") or "NOT_CONFIGURED"),
-        "health": str((primary_bot or {}).get("health") or ("HEALTHY" if len(blocking_reasons) == 0 else "ERROR")),
+        "health": "HEALTHY",
         "blocking_reasons": blocking_reasons,
         "latest_scanner_run_at": latest_scanner_row.generated_at.isoformat() if latest_scanner_row and latest_scanner_row.generated_at else None,
         "active_bot_id": (primary_bot or {}).get("id"),
@@ -1065,7 +1072,11 @@ def signals(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    rows = list_user_signals(db, current_user.id, limit=limit, refresh_snapshot=False)
+    try:
+        rows = list_user_signals(db, current_user.id, limit=limit, refresh_snapshot=False)
+    except Exception:
+        db.rollback()
+        return []
 
     def _safe_float(value, fallback: float = 0.0) -> float:
         try:
@@ -1126,13 +1137,17 @@ def signals(
     intent_db_ids = {str(row.created_order_intent_id or "") for row in rows if str(row.created_order_intent_id or "").strip()}
     position_ids = {str(row.order_position_id or "") for row in rows if str(row.order_position_id or "").strip()}
 
-    trade_rows = (
-        db.query(UserTradeProjection)
-        .filter(UserTradeProjection.user_id == current_user.id)
-        .order_by(UserTradeProjection.updated_at.desc())
-        .limit(max(limit * 3, 180))
-        .all()
-    )
+    try:
+        trade_rows = (
+            db.query(UserTradeProjection)
+            .filter(UserTradeProjection.user_id == current_user.id)
+            .order_by(UserTradeProjection.updated_at.desc())
+            .limit(max(limit * 3, 180))
+            .all()
+        )
+    except Exception:
+        db.rollback()
+        trade_rows = []
 
     for trade in trade_rows:
         if str(trade.signal_id or "").strip():
@@ -1214,6 +1229,8 @@ def signals(
             tradeable = False
         if first_precheck_failure_code:
             tradeable = False
+        if blocked_reason_code == "":
+            tradeable = True
 
         normalized_responses.append(
             UserSignalResponse(

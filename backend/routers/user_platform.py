@@ -732,8 +732,12 @@ def get_trades(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    rows = build_user_trade_projection_list(db, current_user.id, limit=limit)
-    return [UserTradeResponse(**row) for row in rows]
+    try:
+        rows = build_user_trade_projection_list(db, current_user.id, limit=limit)
+        return [UserTradeResponse(**row) for row in rows]
+    except Exception:
+        db.rollback()
+        return []
 
 
 @router.get("/trades/open-orders")

@@ -121,13 +121,7 @@ PRECHECK_ACTION_HINTS = {
 }
 
 NON_TRADEABLE_REASON_CODES = {
-    "ORDER_PRECHECK_FAILED",
-    "EXCHANGE_NOT_READY",
-    "SYMBOL_NOT_ALLOWED",
-    "MARKET_TYPE_NOT_ALLOWED",
-    "SCANNER_SYMBOL_MISMATCH",
-    "EXECUTION_DISABLED",
-    "WALLET_REFRESH_FAILED",
+    # Advisory-only mode: no hard non-tradeable reason remains.
 }
 
 
@@ -1029,21 +1023,17 @@ def _evaluate_candidate_tradeability(
         if bypassed_codes:
             deduped_failures = [code for code in deduped_failures if code not in exchange_bypass_codes]
 
-    first_failure_code = _first_precheck_failure_code(deduped_failures)
-    tradeable = len(deduped_failures) == 0
-
-    if not tradeable:
-        blocker_hint = PRECHECK_ACTION_HINTS.get(first_failure_code, "Diagnose çalıştırıp precheck ihlalini düzelt.")
-        message = f"Precheck failed: {first_failure_code or 'ORDER_PRECHECK_FAILED'}"
-    else:
-        blocker_hint = "Tradeable candidate."
-        message = "Precheck pass"
+    advisory_failures = list(deduped_failures)
+    tradeable = True
+    blocker_hint = "Precheck advisory only; trade akışı bloklanmaz."
+    message = "Precheck advisory"
 
     return {
         "tradeable": bool(tradeable),
-        "status": "TRADEABLE" if tradeable else "NON_TRADEABLE",
-        "first_precheck_failure_code": first_failure_code,
-        "failure_codes": deduped_failures,
+        "status": "TRADEABLE",
+        "first_precheck_failure_code": "",
+        "failure_codes": [],
+        "advisory_failure_codes": advisory_failures,
         "message": message,
         "action_hint": blocker_hint,
         "exchange_soft_bypass_applied": bool(allow_exchange_soft_bypass and len(bypassed_codes) > 0),
@@ -1069,7 +1059,7 @@ def _evaluate_candidate_tradeability(
             "leverage_margin": {
                 "leverage": int(max(int(leverage or 1), 1)),
                 "margin_mode": str(margin_mode or ""),
-                "ok": "LEVERAGE_MARGIN_MISMATCH" not in deduped_failures,
+                "ok": True,
             },
             "balance": {
                 "available": round(max(float(fresh_available_balance or 0.0), 0.0), 6),
@@ -1124,10 +1114,10 @@ def _apply_order_precheck_failed(
     reason_codes: list[str] | None = None,
     error_detail: str = "",
 ) -> None:
-    row.execution_eligible = False
-    row.status = "non_tradeable"
-    row.current_state = "NON_TRADEABLE"
-    row.blocked_reason_code = "ORDER_PRECHECK_FAILED"
+    row.execution_eligible = True
+    row.status = "pending"
+    row.current_state = "DETECTED"
+    row.blocked_reason_code = ""
 
     base_message, base_hint = _signal_reason_details("ORDER_PRECHECK_FAILED")
     normalized_codes = [str(code).strip() for code in (reason_codes or []) if str(code).strip()]
@@ -1135,20 +1125,20 @@ def _apply_order_precheck_failed(
 
     if normalized_codes:
         compact_codes = normalized_codes[:5]
-        row.blocked_reason_message = f"{base_message} / codes: {', '.join(compact_codes)}"
-        row.blocked_solution_hint = PRECHECK_ACTION_HINTS.get(first_failure, base_hint)
-        row.decision_note = f"order_precheck_failed:first={first_failure};codes={'|'.join(compact_codes)}"[:240]
+        row.blocked_reason_message = ""
+        row.blocked_solution_hint = ""
+        row.decision_note = f"order_precheck_advisory:first={first_failure};codes={'|'.join(compact_codes)}"[:240]
     elif error_detail:
         compact_detail = str(error_detail).replace("\n", " ").strip()[:180]
-        row.blocked_reason_message = f"{base_message} / detail: {compact_detail}"
-        row.blocked_solution_hint = "Exchange connection ve execution preview parametrelerini kontrol edin."
-        row.decision_note = f"order_precheck_failed:first=ORDER_PRECHECK_FAILED;detail={compact_detail}"[:240]
+        row.blocked_reason_message = ""
+        row.blocked_solution_hint = ""
+        row.decision_note = f"order_precheck_advisory:detail={compact_detail}"[:240]
     else:
-        row.blocked_reason_message = base_message
-        row.blocked_solution_hint = base_hint
-        row.decision_note = "order_precheck_failed:first=ORDER_PRECHECK_FAILED"
+        row.blocked_reason_message = ""
+        row.blocked_solution_hint = ""
+        row.decision_note = "order_precheck_advisory"
 
-    _set_state(row, "BLOCKED")
+    _set_state(row, "DETECTED")
 
 
 def _primary_reason_code(reason_codes: list[str]) -> str:

@@ -1,0 +1,78 @@
+{
+  "summary": "Iteration 29: ORDER_PRECHECK_FAILED Advisory Mode Testing - All tests passed. The precheck hard-block has been successfully converted to advisory mode. Blocked/non_tradeable records are now converted to pending status.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration29_advisory_mode.py",
+    "/app/test_reports/pytest/iteration29_advisory_mode.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Advisory mode implementation is correct - NON_TRADEABLE_REASON_CODES is now empty",
+    "_apply_order_precheck_failed correctly sets status=pending and execution_eligible=True",
+    "_normalize_blocked_payload correctly clears ORDER_PRECHECK_FAILED codes",
+    "Status contract correctly returns empty blocking_reasons"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration29_advisory_mode.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "user": "review.user@platform.local / ReviewUser123!",
+    "admin": "canary.admin@platform.local / CanaryAdmin123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "ORDER_PRECHECK_FAILED advisory mode is fully implemented and tested. Key changes: (1) NON_TRADEABLE_REASON_CODES is now empty set, (2) _apply_order_precheck_failed sets status=pending instead of blocked, (3) _normalize_blocked_payload clears ORDER_PRECHECK_FAILED codes, (4) Status contract returns empty blocking_reasons. All 15 pytest tests passed. UI shows Blocked: 0, Non-Tradeable: 0, Current Blocker: - (empty).",
+  "test_results": {
+    "backend_api_tests": {
+      "status_contract_endpoint": {
+        "status": "PASS",
+        "health": "HEALTHY",
+        "blocking_reasons": "[] (empty)",
+        "scanner_ready": true,
+        "strategy_ready": true,
+        "risk_ready": true,
+        "execution_ready": true
+      },
+      "signals_endpoint": {
+        "status": "PASS",
+        "total_signals": 30,
+        "blocked_count": 0,
+        "non_tradeable_count": 0,
+        "order_precheck_failed_blocked": 0
+      },
+      "trades_endpoint": {
+        "status": "PASS",
+        "response_code": 200,
+        "total_trades": 20
+      }
+    },
+    "unit_tests": {
+      "test_non_tradeable_reason_codes_is_empty": "PASS",
+      "test_evaluate_candidate_tradeability_returns_tradeable": "PASS",
+      "test_apply_order_precheck_failed_sets_pending_status": "PASS",
+      "test_normalize_blocked_payload_clears_order_precheck_failed": "PASS",
+      "test_normalize_signal_status_for_ui_returns_pending": "PASS"
+    },
+    "ui_tests": {
+      "login": "PASS",
+      "signals_page_load": "PASS",
+      "blocked_count_display": "0 (correct)",
+      "non_tradeable_count_display": "0 (correct)",
+      "current_blocker_display": "- (empty, correct)",
+      "blocked_playbook": "Aktif blocked pattern yok (no active blocked pattern)"
+    }
+  }
+}
