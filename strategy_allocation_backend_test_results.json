@@ -1,0 +1,28 @@
+{
+  "overall_result": "PASS",
+  "tests_passed": 4,
+  "tests_total": 4,
+  "detailed_results": [
+    {
+      "test": "Admin Login",
+      "status": "PASS",
+      "details": "Login successful, token received (length: 601)"
+    },
+    {
+      "test": "Strategy Allocation Backend",
+      "status": "PASS",
+      "details": "12 strategies returned, all states valid (ACTIVE/DISABLED only)"
+    },
+    {
+      "test": "Strategy Structure Validation",
+      "status": "PASS",
+      "details": "All strategies contain required fields: ['strategy_id', 'state', 'capital_weight', 'max_capital']"
+    },
+    {
+      "test": "Canonical Strategy IDs",
+      "status": "PASS",
+      "details": "12 unique strategy IDs found: ['bollinger_squeeze_breakout', 'divergence_reversal_suite', 'fibonacci_pullback_continuation', 'fisher_reversal', 'golden_cross_regime', 'ichimoku_trend_continuation', 'macd_impulse', 'moving_momentum', 'stochastic_exhaustion_reentry', 'structure_breakout', 'supertrend_flip', 'vortex_directional_cross']"
+    }
+  ],
+  "timestamp": "2026-04-07T15:57:01.108497"
+}

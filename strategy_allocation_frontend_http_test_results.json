@@ -1,0 +1,38 @@
+{
+  "overall_result": "PARTIAL_PASS",
+  "tests_passed": 3,
+  "tests_total": 6,
+  "detailed_results": [
+    {
+      "test": "Admin Login",
+      "status": "PASS",
+      "details": "Login successful, token received (length: 601)"
+    },
+    {
+      "test": "Access Strategy Allocation Page",
+      "status": "PASS",
+      "details": "Page accessible, content length: 10758 chars"
+    },
+    {
+      "test": "NO Strategy Ekle Panel",
+      "status": "PASS",
+      "details": "No 'Strategy Ekle' panel patterns found in page content"
+    },
+    {
+      "test": "State Options Validation",
+      "status": "WARNING",
+      "details": "No state options found in page content"
+    },
+    {
+      "test": "Action Buttons Validation",
+      "status": "WARNING",
+      "details": "No action buttons found in page content"
+    },
+    {
+      "test": "Input Elements Check",
+      "status": "WARNING",
+      "details": "No input elements found in page content"
+    }
+  ],
+  "timestamp": "2026-04-07T15:59:33.588108"
+}
