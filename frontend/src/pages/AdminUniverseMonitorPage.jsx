@@ -16,7 +16,7 @@ import { apiClient } from "@/lib/api";
 
 export const AdminUniverseMonitorPage = () => {
   const { user } = useAuth();
-  const isSuperAdmin = String(user?.role || "") === "super_admin";
+  const isSuperAdmin = String(user?.role || "").toLowerCase() === "super_admin";
   const isProductionEnv = String(process.env.REACT_APP_ENV || "").toLowerCase() === "production";
   const canShowDebug = isSuperAdmin && !isProductionEnv;
   const [mode, setMode] = useState("ALL_MARKET_SYMBOLS");
@@ -39,8 +39,27 @@ export const AdminUniverseMonitorPage = () => {
     scan_limit: 80,
     top_n: 20,
     manual_symbols: [],
+    weights: { trend: 10, volume: 50, momentum: 100, bollinger: 1, max_score: 161 },
     indicator_timeframe: "1h",
     execution_timeframe: "15m",
+    decision_boxes: {
+      bc01: { ema_period: 20, stddev_multiplier: 1.6 },
+      bc02: { y1_period: 120, y2_period: 210, y2y_period: 90, y3_period: 5 },
+      bc03: { z1_ma_period: 21, z1_ref_bars: 3, z2_ma_period: 3, hlf_period: 25, hhv_h_period: 20, z4_threshold: 0 },
+      bc04: {
+        stofk_k_period: 14,
+        stofk_d_period: 6,
+        rsi_period: 14,
+        mfi_period: 14,
+        cci_period: 14,
+        willr_period: 14,
+        mo_period: 14,
+        ult_fast: 7,
+        ult_mid: 14,
+        ult_slow: 28,
+        tke_threshold: 79,
+      },
+    },
   });
   const [manualSymbolsInput, setManualSymbolsInput] = useState("");
   const [scannerEngineRun, setScannerEngineRun] = useState({
@@ -190,6 +209,11 @@ export const AdminUniverseMonitorPage = () => {
         scan_limit: Number(scannerEngineConfig.scan_limit || 80),
         top_n: Number(scannerEngineConfig.top_n || 20),
         manual_symbols: manualSymbols,
+        trend_weight: Number(scannerEngineConfig?.weights?.trend ?? 10),
+        volume_weight: Number(scannerEngineConfig?.weights?.volume ?? 50),
+        momentum_weight: Number(scannerEngineConfig?.weights?.momentum ?? 100),
+        bollinger_weight: Number(scannerEngineConfig?.weights?.bollinger ?? 1),
+        decision_boxes: scannerEngineConfig?.decision_boxes || {},
         reason: "scanner_engine_config_save",
       };
       const { data } = await apiClient.post("/admin/universe-monitor/scanner-engine/config/save", payload);
@@ -312,7 +336,7 @@ export const AdminUniverseMonitorPage = () => {
         </Link>
       </div>
 
-      <article className="hidden rounded-xl border border-cyan-700/40 bg-cyan-950/20 p-4" data-testid="admin-universe-monitor-scanner-engine-panel">
+      <article className="rounded-xl border border-cyan-700/40 bg-cyan-950/20 p-4" data-testid="admin-universe-monitor-scanner-engine-panel">
         <div className="flex flex-wrap items-end justify-between gap-3" data-testid="admin-universe-monitor-scanner-engine-header">
           <div data-testid="admin-universe-monitor-scanner-engine-title-wrap">
             <p className="text-xs uppercase tracking-widest text-cyan-200" data-testid="admin-universe-monitor-scanner-engine-kicker">Scanner Engine</p>
@@ -411,12 +435,68 @@ export const AdminUniverseMonitorPage = () => {
             />
           </label>
 
+          <div className="md:col-span-2 xl:col-span-4 grid gap-3 xl:grid-cols-2" data-testid="admin-universe-monitor-scanner-engine-decision-boxes-grid">
+            <article className="rounded border border-cyan-700/30 bg-black/30 p-3 space-y-2" data-testid="admin-universe-monitor-decision-bc01-card">
+              <p className="text-sm font-semibold text-cyan-100" data-testid="admin-universe-monitor-decision-bc01-title">KARAR1 (BC01) · Bollinger Bandı</p>
+              <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc01-ema-period-field">
+                <span className="text-[11px] text-cyan-200">X1 EMA Periyot (E)</span>
+                <input type="number" min={5} max={200} value={scannerEngineConfig?.decision_boxes?.bc01?.ema_period ?? 20}
+                  onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc01: { ...(prev?.decision_boxes?.bc01 || {}), ema_period: Number(event.target.value || 20) } } }))}
+                  className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc01-ema-period-input" />
+              </label>
+              <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc01-stddev-field">
+                <span className="text-[11px] text-cyan-200">X1 StdDev Çarpanı</span>
+                <input type="number" step="0.1" min={0.2} max={5} value={scannerEngineConfig?.decision_boxes?.bc01?.stddev_multiplier ?? 1.6}
+                  onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc01: { ...(prev?.decision_boxes?.bc01 || {}), stddev_multiplier: Number(event.target.value || 1.6) } } }))}
+                  className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc01-stddev-input" />
+              </label>
+              <p className="text-[11px] text-cyan-300" data-testid="admin-universe-monitor-decision-bc01-formula">CROSS(C, X1), REF(C,-1), REF(X1,-1)</p>
+            </article>
+
+            <article className="rounded border border-cyan-700/30 bg-black/30 p-3 space-y-2" data-testid="admin-universe-monitor-decision-bc02-card">
+              <p className="text-sm font-semibold text-cyan-100" data-testid="admin-universe-monitor-decision-bc02-title">KARAR2 (BC02) · Zirve Kırılım</p>
+              <div className="grid grid-cols-2 gap-2" data-testid="admin-universe-monitor-decision-bc02-grid">
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc02-y1-field"><span className="text-[11px] text-cyan-200">Y1 HHV</span><input type="number" min={10} max={500} value={scannerEngineConfig?.decision_boxes?.bc02?.y1_period ?? 120} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc02: { ...(prev?.decision_boxes?.bc02 || {}), y1_period: Number(event.target.value || 120) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc02-y1-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc02-y2-field"><span className="text-[11px] text-cyan-200">Y2 HHV</span><input type="number" min={10} max={800} value={scannerEngineConfig?.decision_boxes?.bc02?.y2_period ?? 210} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc02: { ...(prev?.decision_boxes?.bc02 || {}), y2_period: Number(event.target.value || 210) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc02-y2-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc02-y2y-field"><span className="text-[11px] text-cyan-200">Y2Y HHV</span><input type="number" min={5} max={300} value={scannerEngineConfig?.decision_boxes?.bc02?.y2y_period ?? 90} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc02: { ...(prev?.decision_boxes?.bc02 || {}), y2y_period: Number(event.target.value || 90) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc02-y2y-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc02-y3-field"><span className="text-[11px] text-cyan-200">Y3 HHV</span><input type="number" min={2} max={100} value={scannerEngineConfig?.decision_boxes?.bc02?.y3_period ?? 5} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc02: { ...(prev?.decision_boxes?.bc02 || {}), y3_period: Number(event.target.value || 5) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc02-y3-input" /></label>
+              </div>
+              <p className="text-[11px] text-cyan-300" data-testid="admin-universe-monitor-decision-bc02-formula">Y1/Y2/Y2Y/Y3: HHV(...), REF(...,-1)</p>
+            </article>
+
+            <article className="rounded border border-cyan-700/30 bg-black/30 p-3 space-y-2" data-testid="admin-universe-monitor-decision-bc03-card">
+              <p className="text-sm font-semibold text-cyan-100" data-testid="admin-universe-monitor-decision-bc03-title">KARAR3 (BC03) · Hacimli Momentum</p>
+              <div className="grid grid-cols-2 gap-2" data-testid="admin-universe-monitor-decision-bc03-grid">
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc03-z1-field"><span className="text-[11px] text-cyan-200">Z1 MA Periyot</span><input type="number" min={5} max={120} value={scannerEngineConfig?.decision_boxes?.bc03?.z1_ma_period ?? 21} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc03: { ...(prev?.decision_boxes?.bc03 || {}), z1_ma_period: Number(event.target.value || 21) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc03-z1-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc03-z1ref-field"><span className="text-[11px] text-cyan-200">Z1 REF Bar</span><input type="number" min={1} max={20} value={scannerEngineConfig?.decision_boxes?.bc03?.z1_ref_bars ?? 3} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc03: { ...(prev?.decision_boxes?.bc03 || {}), z1_ref_bars: Number(event.target.value || 3) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc03-z1ref-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc03-z2-field"><span className="text-[11px] text-cyan-200">Z2 MA Periyot</span><input type="number" min={2} max={30} value={scannerEngineConfig?.decision_boxes?.bc03?.z2_ma_period ?? 3} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc03: { ...(prev?.decision_boxes?.bc03 || {}), z2_ma_period: Number(event.target.value || 3) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc03-z2-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc03-hlf-field"><span className="text-[11px] text-cyan-200">HLF Periyot</span><input type="number" min={5} max={120} value={scannerEngineConfig?.decision_boxes?.bc03?.hlf_period ?? 25} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc03: { ...(prev?.decision_boxes?.bc03 || {}), hlf_period: Number(event.target.value || 25) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc03-hlf-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc03-hhv-field"><span className="text-[11px] text-cyan-200">HHV(H) Periyot</span><input type="number" min={5} max={120} value={scannerEngineConfig?.decision_boxes?.bc03?.hhv_h_period ?? 20} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc03: { ...(prev?.decision_boxes?.bc03 || {}), hhv_h_period: Number(event.target.value || 20) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc03-hhv-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc03-z4th-field"><span className="text-[11px] text-cyan-200">Z4 Eşik</span><input type="number" step="0.1" min={-1000} max={1000} value={scannerEngineConfig?.decision_boxes?.bc03?.z4_threshold ?? 0} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc03: { ...(prev?.decision_boxes?.bc03 || {}), z4_threshold: Number(event.target.value || 0) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc03-z4th-input" /></label>
+              </div>
+            </article>
+
+            <article className="rounded border border-cyan-700/30 bg-black/30 p-3 space-y-2" data-testid="admin-universe-monitor-decision-bc04-card">
+              <p className="text-sm font-semibold text-cyan-100" data-testid="admin-universe-monitor-decision-bc04-title">KARAR4 (BC04) · Teknik Kompozit Endeks</p>
+              <div className="grid grid-cols-2 gap-2" data-testid="admin-universe-monitor-decision-bc04-grid">
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc04-stofk-field"><span className="text-[11px] text-cyan-200">STOFK(14,6)</span><div className="grid grid-cols-2 gap-1"><input type="number" min={5} max={120} value={scannerEngineConfig?.decision_boxes?.bc04?.stofk_k_period ?? 14} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), stofk_k_period: Number(event.target.value || 14) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-stofk-k-input" /><input type="number" min={2} max={60} value={scannerEngineConfig?.decision_boxes?.bc04?.stofk_d_period ?? 6} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), stofk_d_period: Number(event.target.value || 6) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-stofk-d-input" /></div></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc04-rsi-field"><span className="text-[11px] text-cyan-200">RSI Period</span><input type="number" min={5} max={120} value={scannerEngineConfig?.decision_boxes?.bc04?.rsi_period ?? 14} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), rsi_period: Number(event.target.value || 14) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-rsi-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc04-mfi-field"><span className="text-[11px] text-cyan-200">MFI Period</span><input type="number" min={5} max={120} value={scannerEngineConfig?.decision_boxes?.bc04?.mfi_period ?? 14} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), mfi_period: Number(event.target.value || 14) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-mfi-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc04-cci-field"><span className="text-[11px] text-cyan-200">CCI Period</span><input type="number" min={5} max={120} value={scannerEngineConfig?.decision_boxes?.bc04?.cci_period ?? 14} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), cci_period: Number(event.target.value || 14) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-cci-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc04-willr-field"><span className="text-[11px] text-cyan-200">WILLR Period</span><input type="number" min={5} max={120} value={scannerEngineConfig?.decision_boxes?.bc04?.willr_period ?? 14} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), willr_period: Number(event.target.value || 14) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-willr-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc04-mo-field"><span className="text-[11px] text-cyan-200">MO Period</span><input type="number" min={5} max={120} value={scannerEngineConfig?.decision_boxes?.bc04?.mo_period ?? 14} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), mo_period: Number(event.target.value || 14) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-mo-input" /></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc04-ult-field"><span className="text-[11px] text-cyan-200">ULT(7,14,28)</span><div className="grid grid-cols-3 gap-1"><input type="number" min={3} max={30} value={scannerEngineConfig?.decision_boxes?.bc04?.ult_fast ?? 7} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), ult_fast: Number(event.target.value || 7) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-ult-fast-input" /><input type="number" min={5} max={60} value={scannerEngineConfig?.decision_boxes?.bc04?.ult_mid ?? 14} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), ult_mid: Number(event.target.value || 14) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-ult-mid-input" /><input type="number" min={8} max={120} value={scannerEngineConfig?.decision_boxes?.bc04?.ult_slow ?? 28} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), ult_slow: Number(event.target.value || 28) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-ult-slow-input" /></div></label>
+                <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc04-tke-field"><span className="text-[11px] text-cyan-200">TKE CROSS Eşik</span><input type="number" step="0.1" min={1} max={99} value={scannerEngineConfig?.decision_boxes?.bc04?.tke_threshold ?? 79} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), tke_threshold: Number(event.target.value || 79) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-tke-input" /></label>
+              </div>
+            </article>
+          </div>
+
           <div className="flex flex-wrap items-end gap-2" data-testid="admin-universe-monitor-scanner-engine-actions">
             <Button
               type="button"
               variant="outline"
               onClick={saveScannerEngineConfig}
-              disabled={scannerEngineBusy}
+              disabled={!isSuperAdmin || scannerEngineBusy}
               data-testid="admin-universe-monitor-scanner-engine-save-button"
             >
               SAVE
@@ -425,7 +505,7 @@ export const AdminUniverseMonitorPage = () => {
               type="button"
               variant="outline"
               onClick={runScannerEngine}
-              disabled={scannerEngineBusy}
+              disabled={!isSuperAdmin || scannerEngineBusy}
               data-testid="admin-universe-monitor-scanner-engine-run-button"
             >
               RUN SCANNER
@@ -434,7 +514,7 @@ export const AdminUniverseMonitorPage = () => {
               type="button"
               variant="outline"
               onClick={openStartBotModal}
-              disabled={scannerEngineBusy || (scannerEngineRun?.results || []).length === 0}
+              disabled={!isSuperAdmin || scannerEngineBusy || (scannerEngineRun?.results || []).length === 0}
               data-testid="admin-universe-monitor-scanner-engine-start-bot-button"
             >
               START BOT
@@ -586,7 +666,7 @@ export const AdminUniverseMonitorPage = () => {
 
           <DialogFooter data-testid="admin-universe-monitor-start-bot-modal-footer">
             <Button type="button" variant="outline" onClick={() => setStartBotModalOpen(false)} data-testid="admin-universe-monitor-start-bot-cancel-button">Vazgeç</Button>
-            <Button type="button" variant="outline" onClick={startScannerJob} disabled={scannerEngineBusy} data-testid="admin-universe-monitor-start-bot-confirm-button">
+            <Button type="button" variant="outline" onClick={startScannerJob} disabled={!isSuperAdmin || scannerEngineBusy} data-testid="admin-universe-monitor-start-bot-confirm-button">
               Scanner-Job Oluştur
             </Button>
           </DialogFooter>

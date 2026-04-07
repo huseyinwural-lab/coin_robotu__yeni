@@ -185,6 +185,7 @@ class ScannerEngineConfigSaveRequest(BaseModel):
     volume_weight: int = Field(default=50, ge=0, le=200)
     momentum_weight: int = Field(default=100, ge=0, le=300)
     bollinger_weight: int = Field(default=1, ge=0, le=50)
+    decision_boxes: dict = Field(default_factory=dict)
     reason: str = Field(default="scanner_engine_config_save", min_length=3, max_length=240)
 
 
@@ -657,6 +658,39 @@ def _default_scanner_engine_config() -> dict:
             "bollinger": 1,
             "max_score": 161,
         },
+        "decision_boxes": {
+            "bc01": {
+                "ema_period": 20,
+                "stddev_multiplier": 1.6,
+            },
+            "bc02": {
+                "y1_period": 120,
+                "y2_period": 210,
+                "y2y_period": 90,
+                "y3_period": 5,
+            },
+            "bc03": {
+                "z1_ma_period": 21,
+                "z1_ref_bars": 3,
+                "z2_ma_period": 3,
+                "hlf_period": 25,
+                "hhv_h_period": 20,
+                "z4_threshold": 0.0,
+            },
+            "bc04": {
+                "stofk_k_period": 14,
+                "stofk_d_period": 6,
+                "rsi_period": 14,
+                "mfi_period": 14,
+                "cci_period": 14,
+                "willr_period": 14,
+                "mo_period": 14,
+                "ult_fast": 7,
+                "ult_mid": 14,
+                "ult_slow": 28,
+                "tke_threshold": 79.0,
+            },
+        },
         "updated_at": None,
         "updated_by": None,
     }
@@ -670,11 +704,78 @@ def _load_scanner_engine_config() -> dict:
         **_default_scanner_engine_config(),
         **saved,
         "manual_symbols": _normalize_symbols(saved.get("manual_symbols") or []),
+        "decision_boxes": _sanitize_decision_boxes(saved.get("decision_boxes") or {}),
     }
 
 
 def _save_scanner_engine_config(config: dict):
     _write_json_value(SCANNER_ENGINE_CONFIG_KEY, config)
+
+
+def _sanitize_decision_boxes(input_boxes: dict) -> dict:
+    defaults = _default_scanner_engine_config().get("decision_boxes") or {}
+    if not isinstance(input_boxes, dict):
+        input_boxes = {}
+
+    def _read(path: str, fallback):
+        group, key = path.split(".", 1)
+        try:
+            return input_boxes.get(group, {}).get(key, fallback)
+        except Exception:
+            return fallback
+
+    def _clamp_int(value, minimum: int, maximum: int, fallback: int) -> int:
+        try:
+            parsed = int(value)
+        except Exception:
+            parsed = fallback
+        return max(minimum, min(maximum, parsed))
+
+    def _clamp_float(value, minimum: float, maximum: float, fallback: float) -> float:
+        try:
+            parsed = float(value)
+        except Exception:
+            parsed = fallback
+        return max(minimum, min(maximum, parsed))
+
+    return {
+        "bc01": {
+            "ema_period": _clamp_int(_read("bc01.ema_period", defaults["bc01"]["ema_period"]), 5, 200, defaults["bc01"]["ema_period"]),
+            "stddev_multiplier": _clamp_float(
+                _read("bc01.stddev_multiplier", defaults["bc01"]["stddev_multiplier"]),
+                0.2,
+                5.0,
+                defaults["bc01"]["stddev_multiplier"],
+            ),
+        },
+        "bc02": {
+            "y1_period": _clamp_int(_read("bc02.y1_period", defaults["bc02"]["y1_period"]), 10, 500, defaults["bc02"]["y1_period"]),
+            "y2_period": _clamp_int(_read("bc02.y2_period", defaults["bc02"]["y2_period"]), 10, 800, defaults["bc02"]["y2_period"]),
+            "y2y_period": _clamp_int(_read("bc02.y2y_period", defaults["bc02"]["y2y_period"]), 5, 300, defaults["bc02"]["y2y_period"]),
+            "y3_period": _clamp_int(_read("bc02.y3_period", defaults["bc02"]["y3_period"]), 2, 100, defaults["bc02"]["y3_period"]),
+        },
+        "bc03": {
+            "z1_ma_period": _clamp_int(_read("bc03.z1_ma_period", defaults["bc03"]["z1_ma_period"]), 5, 120, defaults["bc03"]["z1_ma_period"]),
+            "z1_ref_bars": _clamp_int(_read("bc03.z1_ref_bars", defaults["bc03"]["z1_ref_bars"]), 1, 20, defaults["bc03"]["z1_ref_bars"]),
+            "z2_ma_period": _clamp_int(_read("bc03.z2_ma_period", defaults["bc03"]["z2_ma_period"]), 2, 30, defaults["bc03"]["z2_ma_period"]),
+            "hlf_period": _clamp_int(_read("bc03.hlf_period", defaults["bc03"]["hlf_period"]), 5, 120, defaults["bc03"]["hlf_period"]),
+            "hhv_h_period": _clamp_int(_read("bc03.hhv_h_period", defaults["bc03"]["hhv_h_period"]), 5, 120, defaults["bc03"]["hhv_h_period"]),
+            "z4_threshold": _clamp_float(_read("bc03.z4_threshold", defaults["bc03"]["z4_threshold"]), -1000.0, 1000.0, defaults["bc03"]["z4_threshold"]),
+        },
+        "bc04": {
+            "stofk_k_period": _clamp_int(_read("bc04.stofk_k_period", defaults["bc04"]["stofk_k_period"]), 5, 120, defaults["bc04"]["stofk_k_period"]),
+            "stofk_d_period": _clamp_int(_read("bc04.stofk_d_period", defaults["bc04"]["stofk_d_period"]), 2, 60, defaults["bc04"]["stofk_d_period"]),
+            "rsi_period": _clamp_int(_read("bc04.rsi_period", defaults["bc04"]["rsi_period"]), 5, 120, defaults["bc04"]["rsi_period"]),
+            "mfi_period": _clamp_int(_read("bc04.mfi_period", defaults["bc04"]["mfi_period"]), 5, 120, defaults["bc04"]["mfi_period"]),
+            "cci_period": _clamp_int(_read("bc04.cci_period", defaults["bc04"]["cci_period"]), 5, 120, defaults["bc04"]["cci_period"]),
+            "willr_period": _clamp_int(_read("bc04.willr_period", defaults["bc04"]["willr_period"]), 5, 120, defaults["bc04"]["willr_period"]),
+            "mo_period": _clamp_int(_read("bc04.mo_period", defaults["bc04"]["mo_period"]), 5, 120, defaults["bc04"]["mo_period"]),
+            "ult_fast": _clamp_int(_read("bc04.ult_fast", defaults["bc04"]["ult_fast"]), 3, 30, defaults["bc04"]["ult_fast"]),
+            "ult_mid": _clamp_int(_read("bc04.ult_mid", defaults["bc04"]["ult_mid"]), 5, 60, defaults["bc04"]["ult_mid"]),
+            "ult_slow": _clamp_int(_read("bc04.ult_slow", defaults["bc04"]["ult_slow"]), 8, 120, defaults["bc04"]["ult_slow"]),
+            "tke_threshold": _clamp_float(_read("bc04.tke_threshold", defaults["bc04"]["tke_threshold"]), 1.0, 99.0, defaults["bc04"]["tke_threshold"]),
+        },
+    }
 
 
 def _to_float(value, default: float = 0.0) -> float:
@@ -721,10 +822,129 @@ def _compute_rsi(closes: list[float], period: int = 14) -> float:
     return 100.0 - (100.0 / (1.0 + rs))
 
 
-def _evaluate_scanner_layers(indicator_candles: list[dict], weights: dict) -> dict:
+def _ema(values: list[float], period: int) -> float:
+    if period <= 1 or len(values) < period:
+        return _sma(values, min(len(values), max(period, 1))) if values else 0.0
+    k = 2.0 / float(period + 1)
+    ema = _sma(values[:period], period)
+    for value in values[period:]:
+        ema = (value * k) + (ema * (1.0 - k))
+    return ema
+
+
+def _hhv(values: list[float], period: int) -> float:
+    if period <= 0 or len(values) < period:
+        return max(values) if values else 0.0
+    return max(values[-period:])
+
+
+def _llv(values: list[float], period: int) -> float:
+    if period <= 0 or len(values) < period:
+        return min(values) if values else 0.0
+    return min(values[-period:])
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def _sma_with_offset(values: list[float], period: int, offset: int = 0) -> float:
+    end_idx = len(values) - max(0, offset)
+    if end_idx <= 0:
+        return 0.0
+    start_idx = end_idx - period
+    if start_idx < 0:
+        return 0.0
+    sample = values[start_idx:end_idx]
+    return sum(sample) / float(period)
+
+
+def _compute_mfi(highs: list[float], lows: list[float], closes: list[float], volumes: list[float], period: int = 14) -> float:
+    if len(closes) < period + 1:
+        return 50.0
+    typical_prices = [((highs[i] + lows[i] + closes[i]) / 3.0) for i in range(len(closes))]
+    positive_flow = 0.0
+    negative_flow = 0.0
+    for idx in range(len(closes) - period, len(closes)):
+        flow = typical_prices[idx] * volumes[idx]
+        if typical_prices[idx] >= typical_prices[idx - 1]:
+            positive_flow += flow
+        else:
+            negative_flow += flow
+    if negative_flow == 0:
+        return 100.0
+    mfr = positive_flow / negative_flow
+    return 100.0 - (100.0 / (1.0 + mfr))
+
+
+def _compute_cci(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> float:
+    if len(closes) < period:
+        return 0.0
+    typical_prices = [((highs[i] + lows[i] + closes[i]) / 3.0) for i in range(len(closes))]
+    sample = typical_prices[-period:]
+    sma_tp = sum(sample) / float(period)
+    mean_dev = sum(abs(item - sma_tp) for item in sample) / float(period)
+    if mean_dev == 0:
+        return 0.0
+    return (sample[-1] - sma_tp) / (0.015 * mean_dev)
+
+
+def _compute_willr(highs: list[float], lows: list[float], closes: list[float], period: int = 14) -> float:
+    if len(closes) < period:
+        return -50.0
+    highest = _hhv(highs, period)
+    lowest = _llv(lows, period)
+    if highest == lowest:
+        return -50.0
+    return ((highest - closes[-1]) / (highest - lowest)) * -100.0
+
+
+def _compute_stofk(highs: list[float], lows: list[float], closes: list[float], k_period: int = 14) -> float:
+    if len(closes) < k_period:
+        return 50.0
+    highest = _hhv(highs, k_period)
+    lowest = _llv(lows, k_period)
+    if highest == lowest:
+        return 50.0
+    return ((closes[-1] - lowest) / (highest - lowest)) * 100.0
+
+
+def _compute_ultimate_oscillator(highs: list[float], lows: list[float], closes: list[float], fast: int, mid: int, slow: int) -> float:
+    if len(closes) < slow + 1:
+        return 50.0
+    buying_pressure: list[float] = []
+    true_range: list[float] = []
+    for idx in range(1, len(closes)):
+        prev_close = closes[idx - 1]
+        bp = closes[idx] - min(lows[idx], prev_close)
+        tr = max(highs[idx], prev_close) - min(lows[idx], prev_close)
+        buying_pressure.append(bp)
+        true_range.append(tr)
+
+    def _avg(period: int) -> float:
+        bp_sum = sum(buying_pressure[-period:])
+        tr_sum = sum(true_range[-period:])
+        if tr_sum == 0:
+            return 0.0
+        return bp_sum / tr_sum
+
+    uo = 100.0 * ((4 * _avg(fast)) + (2 * _avg(mid)) + _avg(slow)) / 7.0
+    return _clamp(uo, 0.0, 100.0)
+
+
+def _evaluate_scanner_layers(indicator_candles: list[dict], weights: dict, decision_boxes: dict | None = None) -> dict:
     closes = [_to_float(item.get("close")) for item in indicator_candles if item.get("close") is not None]
+    highs = [_to_float(item.get("high")) for item in indicator_candles if item.get("high") is not None]
+    lows = [_to_float(item.get("low")) for item in indicator_candles if item.get("low") is not None]
     volumes = [_to_float(item.get("volume")) for item in indicator_candles if item.get("volume") is not None]
-    if len(closes) < 55 or len(volumes) < 30:
+    decision_boxes = _sanitize_decision_boxes(decision_boxes or {})
+    min_required = max(
+        int((decision_boxes.get("bc02") or {}).get("y2_period") or 210) + 3,
+        int((decision_boxes.get("bc03") or {}).get("z1_ma_period") or 21) + int((decision_boxes.get("bc03") or {}).get("z1_ref_bars") or 3) + 4,
+        int((decision_boxes.get("bc04") or {}).get("ult_slow") or 28) + 3,
+        60,
+    )
+    if len(closes) < min_required or len(volumes) < 30 or len(highs) < min_required or len(lows) < min_required:
         raise MarketDataProviderError("Yetersiz indikatör verisi")
 
     trend_w = int(weights.get("trend") or 10)
@@ -733,38 +953,135 @@ def _evaluate_scanner_layers(indicator_candles: list[dict], weights: dict) -> di
     bollinger_w = int(weights.get("bollinger") or 1)
 
     close_latest = closes[-1]
-    sma20 = _sma(closes, 20)
-    sma50 = _sma(closes, 50)
+    close_prev = closes[-2]
+
+    bc01_cfg = decision_boxes.get("bc01") or {}
+    bc02_cfg = decision_boxes.get("bc02") or {}
+    bc03_cfg = decision_boxes.get("bc03") or {}
+    bc04_cfg = decision_boxes.get("bc04") or {}
+
+    bc01_period = int(bc01_cfg.get("ema_period") or 20)
+    bc01_std_mult = float(bc01_cfg.get("stddev_multiplier") or 1.6)
+    ema_now = _ema(closes, bc01_period)
+    ema_prev = _ema(closes[:-1], bc01_period)
+    std_now = _std(closes, bc01_period)
+    std_prev = _std(closes[:-1], bc01_period)
+    upper_now = ema_now + (bc01_std_mult * std_now)
+    upper_prev = ema_prev + (bc01_std_mult * std_prev)
+    lower_now = ema_now - (bc01_std_mult * std_now)
+    lower_prev = ema_prev - (bc01_std_mult * std_prev)
+    bc01_long = bool(close_prev <= upper_prev and close_latest > upper_now)
+    bc01_short = bool(close_prev >= lower_prev and close_latest < lower_now)
+
+    y1 = _hhv(highs[:-1], int(bc02_cfg.get("y1_period") or 120))
+    y2 = _hhv(highs[:-1], int(bc02_cfg.get("y2_period") or 210))
+    y2y = _hhv(highs[:-1], int(bc02_cfg.get("y2y_period") or 90))
+    y3 = _hhv(highs[:-1], int(bc02_cfg.get("y3_period") or 5))
+    l1 = _llv(lows[:-1], int(bc02_cfg.get("y1_period") or 120))
+    l2 = _llv(lows[:-1], int(bc02_cfg.get("y2_period") or 210))
+    l2y = _llv(lows[:-1], int(bc02_cfg.get("y2y_period") or 90))
+    l3 = _llv(lows[:-1], int(bc02_cfg.get("y3_period") or 5))
+    bc02_long = bool(close_latest > max(y1, y2, y2y, y3))
+    bc02_short = bool(close_latest < min(l1, l2, l2y, l3))
+
+    z1_period = int(bc03_cfg.get("z1_ma_period") or 21)
+    z1_ref = int(bc03_cfg.get("z1_ref_bars") or 3)
+    z2_period = int(bc03_cfg.get("z2_ma_period") or 3)
+    z4_threshold = float(bc03_cfg.get("z4_threshold") or 0.0)
+    hlf_period = int(bc03_cfg.get("hlf_period") or 25)
+    hhv_h_period = int(bc03_cfg.get("hhv_h_period") or 20)
+
+    z1 = _sma_with_offset(closes, z1_period, z1_ref)
+    z1v = _sma_with_offset(volumes, z1_period, z1_ref)
+    z2 = _sma(closes, z2_period)
+    z2v = _sma(volumes, z2_period)
+    z3 = ((z2 - z1) / abs(z1) * 100.0) if z1 else 0.0
+    z3v = ((z2v - z1v) / abs(z1v) * 100.0) if z1v else 0.0
+    z4 = z3 * z3v
+    hlf = _hhv([highs[i] - lows[i] for i in range(len(highs) - hlf_period - 1, len(highs) - 1) if i >= 0], hlf_period)
+    hhv_h = _hhv(highs, hhv_h_period)
+    llv_l = _llv(lows, hhv_h_period)
+    abs_z4_threshold = abs(z4_threshold)
+    bc03_long = bool(z4 >= abs_z4_threshold and z3 > 0 and z3v > 0 and (close_latest >= hhv_h or (highs[-1] - lows[-1]) >= hlf * 0.8))
+    bc03_short = bool(z4 <= -abs_z4_threshold and z3 < 0 and z3v > 0 and (close_latest <= llv_l or (highs[-1] - lows[-1]) >= hlf * 0.8))
+
+    stofk = _compute_stofk(highs, lows, closes, int(bc04_cfg.get("stofk_k_period") or 14))
+    rsi = _compute_rsi(closes, int(bc04_cfg.get("rsi_period") or 14))
+    mfi = _compute_mfi(highs, lows, closes, volumes, int(bc04_cfg.get("mfi_period") or 14))
+    cci = _compute_cci(highs, lows, closes, int(bc04_cfg.get("cci_period") or 14))
+    cci_norm = _clamp((cci + 200.0) / 4.0, 0.0, 100.0)
+    willr = _compute_willr(highs, lows, closes, int(bc04_cfg.get("willr_period") or 14))
+    willr_norm = _clamp(willr + 100.0, 0.0, 100.0)
+    mo_period = int(bc04_cfg.get("mo_period") or 14)
+    momentum_abs = closes[-1] - closes[-mo_period - 1] if len(closes) > mo_period + 1 else 0.0
+    momentum_base = abs(closes[-mo_period - 1]) if len(closes) > mo_period + 1 else max(abs(closes[-1]), 1.0)
+    mo_norm = _clamp(50.0 + (((momentum_abs / momentum_base) * 100.0) * 5.0), 0.0, 100.0)
+    ult = _compute_ultimate_oscillator(
+        highs,
+        lows,
+        closes,
+        int(bc04_cfg.get("ult_fast") or 7),
+        int(bc04_cfg.get("ult_mid") or 14),
+        int(bc04_cfg.get("ult_slow") or 28),
+    )
+    tke = (stofk + rsi + mfi + cci_norm + willr_norm + mo_norm + ult) / 7.0
+
+    tke_prev = tke
+    if len(closes) >= min_required + 1:
+        prev_stofk = _compute_stofk(highs[:-1], lows[:-1], closes[:-1], int(bc04_cfg.get("stofk_k_period") or 14))
+        prev_rsi = _compute_rsi(closes[:-1], int(bc04_cfg.get("rsi_period") or 14))
+        prev_mfi = _compute_mfi(highs[:-1], lows[:-1], closes[:-1], volumes[:-1], int(bc04_cfg.get("mfi_period") or 14))
+        prev_cci = _compute_cci(highs[:-1], lows[:-1], closes[:-1], int(bc04_cfg.get("cci_period") or 14))
+        prev_cci_norm = _clamp((prev_cci + 200.0) / 4.0, 0.0, 100.0)
+        prev_willr = _compute_willr(highs[:-1], lows[:-1], closes[:-1], int(bc04_cfg.get("willr_period") or 14))
+        prev_willr_norm = _clamp(prev_willr + 100.0, 0.0, 100.0)
+        prev_mo_abs = closes[-2] - closes[-mo_period - 2] if len(closes) > mo_period + 2 else 0.0
+        prev_mo_base = abs(closes[-mo_period - 2]) if len(closes) > mo_period + 2 else max(abs(closes[-2]), 1.0)
+        prev_mo_norm = _clamp(50.0 + (((prev_mo_abs / prev_mo_base) * 100.0) * 5.0), 0.0, 100.0)
+        prev_ult = _compute_ultimate_oscillator(
+            highs[:-1],
+            lows[:-1],
+            closes[:-1],
+            int(bc04_cfg.get("ult_fast") or 7),
+            int(bc04_cfg.get("ult_mid") or 14),
+            int(bc04_cfg.get("ult_slow") or 28),
+        )
+        tke_prev = (prev_stofk + prev_rsi + prev_mfi + prev_cci_norm + prev_willr_norm + prev_mo_norm + prev_ult) / 7.0
+
+    tke_threshold = float(bc04_cfg.get("tke_threshold") or 79.0)
+    tke_short_threshold = 100.0 - tke_threshold
+    bc04_long = bool(tke_prev <= tke_threshold and tke > tke_threshold)
+    bc04_short = bool(tke_prev >= tke_short_threshold and tke < tke_short_threshold)
+
     avg_volume20 = _sma(volumes, 20)
     volume_latest = volumes[-1]
     volume_ratio = (volume_latest / avg_volume20) if avg_volume20 > 0 else 0.0
-    rsi14 = _compute_rsi(closes, 14)
     momentum_window = closes[-7] if len(closes) >= 7 else closes[0]
     momentum_pct = ((close_latest - momentum_window) / momentum_window * 100.0) if momentum_window else 0.0
-    bollinger_std = _std(closes, 20)
-    lower_band = sma20 - (2.0 * bollinger_std)
-    upper_band = sma20 + (2.0 * bollinger_std)
+    sma20 = _sma(closes, 20)
+    sma50 = _sma(closes, 50)
 
     long_layers: list[str] = []
     short_layers: list[str] = []
 
-    if close_latest > sma20 > sma50:
+    if bc02_long:
         long_layers.append("TREND")
-    if close_latest < sma20 < sma50:
+    if bc02_short:
         short_layers.append("TREND")
 
-    if volume_ratio >= 1.35:
+    if bc03_long:
         long_layers.append("VOLUME")
+    if bc03_short:
         short_layers.append("VOLUME")
 
-    if momentum_pct >= 1.8 and rsi14 >= 55:
+    if bc03_long or bc04_long:
         long_layers.append("MOMENTUM")
-    if momentum_pct <= -1.8 and rsi14 <= 45:
+    if bc03_short or bc04_short:
         short_layers.append("MOMENTUM")
 
-    if close_latest <= lower_band:
+    if bc01_long:
         long_layers.append("BOLLINGER")
-    if close_latest >= upper_band:
+    if bc01_short:
         short_layers.append("BOLLINGER")
 
     long_score = (
@@ -804,10 +1121,70 @@ def _evaluate_scanner_layers(indicator_candles: list[dict], weights: dict) -> di
             "sma20": sma20,
             "sma50": sma50,
             "volume_ratio": volume_ratio,
-            "rsi14": rsi14,
+            "rsi14": rsi,
             "momentum_pct": momentum_pct,
-            "bollinger_lower": lower_band,
-            "bollinger_upper": upper_band,
+            "bollinger_lower": lower_now,
+            "bollinger_upper": upper_now,
+            "tke": tke,
+        },
+        "decisions": {
+            "bc01": {
+                "label": "KARAR1 (BC01)",
+                "long": bc01_long,
+                "short": bc01_short,
+                "values": {
+                    "X1": upper_now,
+                    "C": close_latest,
+                    "REF_C": close_prev,
+                    "REF_X1": upper_prev,
+                    "ema_period": bc01_period,
+                    "stddev_multiplier": bc01_std_mult,
+                },
+            },
+            "bc02": {
+                "label": "KARAR2 (BC02)",
+                "long": bc02_long,
+                "short": bc02_short,
+                "values": {
+                    "Y1": y1,
+                    "Y2": y2,
+                    "Y2Y": y2y,
+                    "Y3": y3,
+                },
+            },
+            "bc03": {
+                "label": "KARAR3 (BC03)",
+                "long": bc03_long,
+                "short": bc03_short,
+                "values": {
+                    "Z1": z1,
+                    "Z1v": z1v,
+                    "Z2": z2,
+                    "Z2v": z2v,
+                    "Z3": z3,
+                    "Z3v": z3v,
+                    "Z4": z4,
+                    "HLF": hlf,
+                    "HHV_H": hhv_h,
+                },
+            },
+            "bc04": {
+                "label": "KARAR4 (BC04)",
+                "long": bc04_long,
+                "short": bc04_short,
+                "values": {
+                    "STOFK": stofk,
+                    "RSI": rsi,
+                    "MFI": mfi,
+                    "CCI": cci,
+                    "WILLR": willr,
+                    "MO": momentum_abs,
+                    "ULT": ult,
+                    "TKE": tke,
+                    "TKE_PREV": tke_prev,
+                    "threshold": tke_threshold,
+                },
+            },
         },
         "breakdown": {
             "long": f"[{','.join(long_layers) if long_layers else 'NONE'}] L:{long_score}",
@@ -848,7 +1225,11 @@ def _score_candidate_symbol(candidate: dict, config: dict, force_refresh: bool) 
     )
     indicator_candles = list((candles.get("indicator") or {}).get("candles") or [])
     execution_candles = list((candles.get("execution") or {}).get("candles") or [])
-    scoring = _evaluate_scanner_layers(indicator_candles, config.get("weights") or {})
+    scoring = _evaluate_scanner_layers(
+        indicator_candles,
+        config.get("weights") or {},
+        config.get("decision_boxes") or {},
+    )
 
     execution_close = _to_float(execution_candles[-1].get("close")) if execution_candles else None
     execution_prev = _to_float(execution_candles[-2].get("close")) if len(execution_candles) >= 2 else None
@@ -867,6 +1248,7 @@ def _score_candidate_symbol(candidate: dict, config: dict, force_refresh: bool) 
         "is_strong_long": scoring["is_strong_long"],
         "is_strong_short": scoring["is_strong_short"],
         "breakdown": scoring["breakdown"],
+        "decisions": scoring.get("decisions") or {},
         "indicator_metrics": scoring["metrics"],
         "execution_context": {
             "timeframe": str(config.get("execution_timeframe") or "15m"),
@@ -1148,8 +1530,10 @@ def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_
         raise HTTPException(status_code=400, detail="spot_or_futures_required")
 
     trace_id = str(uuid.uuid4())
+    previous_config = _load_scanner_engine_config()
+    merged_decision_boxes = payload.decision_boxes if payload.decision_boxes else (previous_config.get("decision_boxes") or {})
     config = {
-        **_load_scanner_engine_config(),
+        **previous_config,
         "exchange": "binance",
         "include_spot": bool(payload.include_spot),
         "include_futures": bool(payload.include_futures),
@@ -1164,6 +1548,7 @@ def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_
             "bollinger": int(payload.bollinger_weight),
             "max_score": int(payload.trend_weight + payload.volume_weight + payload.momentum_weight + payload.bollinger_weight),
         },
+        "decision_boxes": _sanitize_decision_boxes(merged_decision_boxes),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "updated_by": manager.id,
     }
