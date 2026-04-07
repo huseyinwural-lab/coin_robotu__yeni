@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_0_FINAL_BLOCKER_CLEANUP",
   "status": "PASS",
-  "generated_at": "2026-04-07T00:39:49.118747+00:00",
+  "generated_at": "2026-04-07T12:28:40.034684+00:00",
   "checks": [
     {
       "name": "DATABASE_URL not empty",
@@ -91,9 +91,9 @@
   ],
   "resolved_values_preview": {
     "DATABASE_URL": "postgresql+psycopg2://postgres.wpaejjyirhblphihxnli:iY9yPPYAe4dLU3+@aws-1-eu-wes...",
-    "REDIS_URL": "redis://10.79.135.95:6379/0",
+    "REDIS_URL": "rediss://default:gQAAAAAAASfMAAIncDI0NTA0ZDA5NmZiOTU0NjE2YjBjNmIxNDNlOGM0Y2UyMHA...",
     "REACT_APP_BACKEND_URL": "https://trade-trace-engine.preview.emergentagent.com",
-    "JWT_SECRET_length": 96
+    "JWT_SECRET_length": 64
   },
   "redis_runtime": {
     "skipped": true,
@@ -110,7 +110,7 @@
       "checks": {
         "process": {
           "status": "up",
-          "uptime_seconds": 406
+          "uptime_seconds": 1424
         }
       }
     },

@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_1",
   "status": "PASS",
-  "generated_at": "2026-04-07T00:39:47.938760+00:00",
+  "generated_at": "2026-04-07T12:28:38.807507+00:00",
   "source_policy": {
     "runtime_env": "unknown",
     "is_production_runtime": false,
@@ -28,7 +28,7 @@
       "resolved_source": "process_env",
       "source_policy": "process_env_or_repo",
       "source_policy_violation": false,
-      "value_preview": "redis://10.79.135.95:6379/0",
+      "value_preview": "rediss://default:gQAAAAAAASfMAAIncDI0NTA0ZDA5NmZiOTU0NjE2YjBjNmI...",
       "status": "PASS"
     },
     {
@@ -48,7 +48,7 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "redis://10.79.135.95:6379",
+      "value_preview": "rediss://model-gar-75724.upstash.io:6379",
       "status": "PASS",
       "detail": "Redis ping başarılı olmalı"
     },

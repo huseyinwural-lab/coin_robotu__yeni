@@ -57,7 +57,7 @@
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-07T12:28:37.381062Z",
+      "last_run_at": "2026-04-07T00:39:58.764179Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -78,7 +78,7 @@
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-07T12:28:37.381062Z",
+      "last_run_at": "2026-04-07T00:39:58.764179Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -99,7 +99,7 @@
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-07T12:28:37.381062Z",
+      "last_run_at": "2026-04-07T00:39:58.764179Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -122,7 +122,7 @@
         "policy_bypass_applied": true,
         "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-07T12:28:37.381062Z",
+      "last_run_at": "2026-04-07T00:39:58.764179Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -148,7 +148,7 @@
         "policy_bypass_applied": true,
         "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-07T12:28:37.381062Z",
+      "last_run_at": "2026-04-07T00:39:58.764179Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -162,19 +162,19 @@
   "risk_score": 0,
   "risk_level": "LOW",
   "risk_factors": {
-    "fail_rate": 0.2,
+    "fail_rate": 0.0,
     "flapping": 0.0,
     "override_usage": 0.0,
-    "stale_checks": 0.0
+    "stale_checks": 1.0
   },
   "risk_explanation": [
-    "Risk remains low based on current telemetry"
+    "Stale checks impacting decision confidence"
   ],
   "risk_model_version": "v2-explainable",
   "flapping_checks": [],
   "policy_bypass_applied": true,
   "policy_blocking_mode": "FORCED_GO",
-  "updated_at": "2026-04-07T12:28:37.381099Z",
+  "updated_at": "2026-04-07T12:28:20.728010Z",
   "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
   "audit_history": [
     {
