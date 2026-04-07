@@ -1163,11 +1163,6 @@ export const UserScannerPage = () => {
 
   const executeScannerRunWithChunks = async ({ runMode, maxResults, effectiveMode, selectedForRun, targetMarketType = marketType }) => {
     const runScannerAsync = async (requestPayload) => {
-      if (!SIMPLE_SCANNER_V2) {
-        const { data } = await apiClient.post("/user/scanner/run", requestPayload);
-        return data;
-      }
-
       const normalizedMarketType = String(requestPayload?.market_type || "spot").toLowerCase();
       const endpoint = normalizedMarketType === "both" ? "/user/scanner/run-async-both" : "/user/scanner/run-async";
       const { data: queued } = await apiClient.post(endpoint, requestPayload, { timeout: 12000 });

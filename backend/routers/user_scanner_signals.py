@@ -266,10 +266,8 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
             blocked_reason_message=row.blocked_reason_message,
             blocked_solution_hint=row.blocked_solution_hint,
         )
-        row_message = str(getattr(row, "blocked_reason_message", "") or "").upper()
         if (not live_mode_enabled) and code == "ORDER_PRECHECK_FAILED":
-            if any(token in row_message for token in ["EXCHANGE_NOT_READY", "INVALID_KEY", "MIN_NOTIONAL_NOT_MET"]):
-                continue
+            continue
         if (not live_mode_enabled) and code == "SYMBOL_NOT_ALLOWED":
             continue
         if code:

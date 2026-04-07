@@ -1,0 +1,52 @@
+{
+  "summary": "Scanner async flow fix verification - All tests PASSED. Scanner run-async endpoint returns job_id (no 502), status-contract blocking_reasons empty (ORDER_PRECHECK_FAILED not showing as hard-block in sim mode), signals endpoint loads without 500, scanner page has no flicker/blank after run.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_scanner_async_flow.py",
+    "/app/test_reports/pytest/iteration23_scanner_async.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_scanner_async_flow.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "review.user@platform.local / ReviewUser123!",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Scanner async flow is working correctly. All 5 test scenarios passed: (1) run-async returns job_id not 502, (2) job polling works and completes, (3) status-contract blocking_reasons empty in sim mode, (4) signals loads without 500, (5) scanner page no flicker after run.",
+  "test_results": {
+    "scanner_run_async_endpoint": {
+      "status": "PASS",
+      "details": "Returns job_id with status 'queued', HTTP 200 (not 502)"
+    },
+    "scanner_run_async_job_polling": {
+      "status": "PASS",
+      "details": "Job transitions from 'queued' -> 'running' -> 'completed' successfully"
+    },
+    "status_contract_blocking_reasons": {
+      "status": "PASS",
+      "details": "blocking_reasons is empty array - ORDER_PRECHECK_FAILED not appearing as hard-block in sim mode"
+    },
+    "signals_endpoint": {
+      "status": "PASS",
+      "details": "Returns HTTP 200 with 50 signals (39 non_tradeable, 7 queued, 4 rejected)"
+    },
+    "scanner_page_no_flicker": {
+      "status": "PASS",
+      "details": "Page content stable (11360+ chars) during 60 second monitoring, no loading skeleton reappearing"
+    }
+  }
+}
