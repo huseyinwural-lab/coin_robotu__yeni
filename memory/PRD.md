@@ -1,3 +1,57 @@
+## 2026-04-07 — Admin Universe Monitor: Decoupled Short/Long Scanner Engine ✅
+
+### Uygulanan kapsam (sadece scanner alanı)
+- `/admin/universe-monitor` içine yeni **Scanner Engine** paneli eklendi.
+- Binance-only akış uygulandı.
+- Spot + Futures birlikte tarama (varsayılan ikisi seçili) desteklendi.
+- `SAVE / RUN SCANNER / START BOT` uçtan uca akışları eklendi.
+- `START BOT` artık trade tetiklemez; sadece **scanner-job kaydı** üretir.
+
+### Matematik ve zaman dilimi sözleşmesi
+- İndikatör katmanı: **1h candle**
+- Execution bağlamı: **15m candle**
+- Eşzamanlı Long/Short skor hesaplama:
+  - Trend: 10
+  - Volume: 50
+  - Momentum: 100
+  - Bollinger: 1
+  - Max: 161
+- `strong_long` / `strong_short` sınıfları aktif; sıralamada üste taşınır.
+
+### Backend değişiklikleri
+- `backend/services/indicator_screener/market_data_provider.py`
+  - Spot+Futures paralel sembol çekimi eklendi.
+  - 1h + 15m candle’ların paralel çekimi için yardımcı akış eklendi.
+- `backend/routers/admin_universe_monitor.py`
+  - Yeni endpointler:
+    - `GET /api/admin/universe-monitor/scanner-engine/config`
+    - `POST /api/admin/universe-monitor/scanner-engine/config/save`
+    - `POST /api/admin/universe-monitor/scanner-engine/run`
+    - `GET /api/admin/universe-monitor/scanner-engine/last-run`
+    - `POST /api/admin/universe-monitor/scanner-engine/bot/start`
+    - `GET /api/admin/universe-monitor/scanner-engine/bot/jobs`
+  - Scanner scoring, policy breakdown ve job kayıt akışı eklendi.
+
+### Frontend değişiklikleri
+- `frontend/src/pages/AdminUniverseMonitorPage.jsx`
+  - Yeni Scanner Engine konfigürasyon paneli
+  - Sonuç tablosu (symbol/market/class/long-short score/policy breakdown/execution)
+  - START BOT modalı (Top N / Manual seçimi)
+  - Scanner job listesi
+  - Yeni eklenen kritik etkileşim ve bilgi alanlarında `data-testid` atamaları
+
+### Test / doğrulama
+- Backend smoke (curl/python requests): PASS
+  - config save/run/last-run/bot-start/jobs uçları doğrulandı.
+- Frontend smoke screenshot: PASS
+  - Universe Monitor içinde Scanner Engine paneli render ve temel aksiyonlar doğrulandı.
+- Backend+Frontend deep test agent: PASS
+
+### Öncelik durumu
+- P0: Decoupled Scanner Engine ✅
+- P1 (beklemede): Policy breakdown görselleştirme rafinesi, Auto Mode scheduler (1m/3m/5m)
+- P2: İleri optimizasyonlar
+
 ## 2026-04-07 — Strategy Allocation UX Sadeleştirme (12 Hazır Strateji) ✅
 
 ### Kullanıcı talebi (uygulandı)
