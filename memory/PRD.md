@@ -1,3 +1,41 @@
+## 2026-04-07 — SIM Modu Tamamen Kaldırıldı (LIVE-ONLY) ✅
+
+### Kapsam (Backend + Frontend)
+- Platform execution mode LIVE-only olacak şekilde zorlandı; SIM/PAPER/MOCK geçişleri kaldırıldı.
+- Backend’de mode-switch doğrulaması yalnız `LIVE` kabul edecek şekilde güncellendi.
+- Frontend’de mode toggle alanlarından SIM seçenekleri kaldırıldı; ilgili ekranlar LIVE-only metinleriyle güncellendi.
+
+### Backend değişiklikleri
+- `core/exchanges/__init__.py`: `SimExecutionAdapter` yönlendirmesi kaldırıldı, yalnız `BinanceExecutionAdapter(mode="live")` akışı bırakıldı.
+- `core/exchanges/binance_adapter.py`: guard mantığı LIVE-only olacak şekilde düzeltildi (`EXECUTION_MODE != live` reddi, live guard + credential kontrolü).
+- `services/execution_mode_control_service.py`:
+  - `CANONICAL_MODES = {"LIVE"}`
+  - `switch_execution_mode` yalnız LIVE kabul edecek şekilde sınırlandı.
+  - snapshot/audit payloadları LIVE-only semantiğine çekildi.
+- `routers/admin_live_trading_dashboard.py`:
+  - `ExecutionModeSwitchRequest.mode` pattern: `^(LIVE)$`
+  - fallback summary `execution_mode` değeri `LIVE`
+- `routers/runtime_execution.py`: `/api/runtime/execution/mode` endpointi LIVE dönecek şekilde sabitlendi.
+- `services/live_trading_dashboard_service.py`: summary system health `execution_mode` defaultu `LIVE`.
+- `services/credential_resolution_service.py`: `EXECUTION_MODE` defaultu `live`.
+- `core/readiness/go_live_validator.py`: validator default mode `LIVE`.
+- `routers/user_execution.py` ve `services/execution_readiness_service.py`: response mode alanları LIVE-only akışa çekildi.
+- `services/live_mode_service.py` + `services/bootstrap.py`: ilk config seed/değerleri LIVE-only politikaya göre güncellendi.
+
+### Frontend değişiklikleri
+- `LandingPage.jsx`: metin ve chip `Execution Mode: LIVE`.
+- `AdminLiveTradingDashboardPage.jsx`: mode paneli `LIVE-ONLY`; SIM switch kaldırıldı.
+- `AdminExecutionReadinessPage.jsx`: mode modalı sadece LIVE hedefi olacak şekilde sabitlendi.
+- `PipelineOperationsPage.jsx`: runtime mode fallback/default `LIVE`.
+- `AdminDashboardPage.jsx`: runtime mode fallback `live`.
+
+### Doğrulama
+- Smoke screenshot: landing ekranı açılıyor ve `Execution Mode: LIVE` görünüyor.
+- Testing agent raporu: `/app/test_reports/iteration_24.json`
+  - Backend: PASS (%100)
+  - Frontend: PASS (%100)
+  - Sonuç: SIM mode seçenekleri kaldırıldı, LIVE-only enforcement aktif.
+
 ## 2026-04-06 — Scanner→Signal Blokaj Fix (SIM Mode) ✅
 
 ### Kök neden
