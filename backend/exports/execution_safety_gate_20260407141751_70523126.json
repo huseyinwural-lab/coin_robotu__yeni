@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "proof_type": "execution_safety_gate_snapshot",
+  "created_at": "2026-04-07T14:17:51.585604+00:00",
+  "gate": {
+    "gate_state": "READY",
+    "execution_allowed": true,
+    "hard_blockers": [],
+    "soft_warnings": [],
+    "hard_blockers_detail": [],
+    "readiness_state": "READY",
+    "readiness_score": 90,
+    "go_live_allowed": true,
+    "validator_reason_codes": [],
+    "bybit_order_smoke": {
+      "status": "FAIL",
+      "reason_code": "LIVE_TRADING_DISABLED",
+      "detail": "LIVE_TRADING_ENABLED=false",
+      "checked_at": "2026-04-07T14:17:51.487186+00:00"
+    },
+    "checked_at": "2026-04-07T14:17:51.585604+00:00"
+  },
+  "validator": {
+    "execution_mode": null,
+    "execution_allowed": true,
+    "readiness_state": "READY",
+    "score": 90
+  },
+  "metadata": {
+    "schema_version": "1.0",
+    "artifact_type": "execution_safety_gate",
+    "created_at": "2026-04-07T14:17:51.585707+00:00",
+    "artifact_id": "70523126-69d2-46c2-9961-3a3e4163c517",
+    "sha256": "1e97f6cc5cc96f64ac1830ed24940b47e0080e0bf65c6e8bdb8275c33825b7a6"
+  },
+  "artifact_type": "execution_safety_gate",
+  "sha256": "1e97f6cc5cc96f64ac1830ed24940b47e0080e0bf65c6e8bdb8275c33825b7a6"
+}

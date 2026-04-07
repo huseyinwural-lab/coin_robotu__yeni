@@ -224,6 +224,48 @@
       "chain_position": 15,
       "prev_chain_hash": "76d14817db3b6b480ad5f53c0a271c69f1097597ca2b5bf41be312dd01f79136",
       "chain_hash": "e44c861da7e96fdc5b216644fd68c49534159dc3eb56b7ec121dac9e1b453878"
+    },
+    {
+      "artifact_id": "07fb805c-8a7b-4022-bf5e-22a0016c11ef",
+      "filename": "execution_safety_gate_20260407141351_07fb805c.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "70fd672cb0cab62908946561233904569ad2d37ec6fdf2868634ea9bdd1323c7",
+      "size": 1258,
+      "created_at": "2026-04-07T14:13:51.961929+00:00",
+      "proof_id": "07fb805c-8a7b-4022-bf5e-22a0016c11ef",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 16,
+      "prev_chain_hash": "e44c861da7e96fdc5b216644fd68c49534159dc3eb56b7ec121dac9e1b453878",
+      "chain_hash": "77d058dd2dbd5c6b4f68f3f858a2e3f1fbede1fbcfdc0de840e9b23920b3774a"
+    },
+    {
+      "artifact_id": "96d7c900-a60c-47c5-8bf9-05056b506e4c",
+      "filename": "execution_safety_gate_20260407141522_96d7c900.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "c464e9759dd80d1839a57c4c4edd540bd98fe5c71f40a30ef7d750633aed9186",
+      "size": 1258,
+      "created_at": "2026-04-07T14:15:22.206312+00:00",
+      "proof_id": "96d7c900-a60c-47c5-8bf9-05056b506e4c",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 17,
+      "prev_chain_hash": "77d058dd2dbd5c6b4f68f3f858a2e3f1fbede1fbcfdc0de840e9b23920b3774a",
+      "chain_hash": "e7cc2792c6b40d47d963c66e3572336e9f5b0351ae9529e2255419d7287bf3ec"
+    },
+    {
+      "artifact_id": "70523126-69d2-46c2-9961-3a3e4163c517",
+      "filename": "execution_safety_gate_20260407141751_70523126.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "1e97f6cc5cc96f64ac1830ed24940b47e0080e0bf65c6e8bdb8275c33825b7a6",
+      "size": 1211,
+      "created_at": "2026-04-07T14:17:51.585707+00:00",
+      "proof_id": "70523126-69d2-46c2-9961-3a3e4163c517",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 18,
+      "prev_chain_hash": "e7cc2792c6b40d47d963c66e3572336e9f5b0351ae9529e2255419d7287bf3ec",
+      "chain_hash": "63b462e952e73e477a8dc8fa47d91e2a9c33d26c9171c392b7b065cce3e6de07"
     }
   ]
 }

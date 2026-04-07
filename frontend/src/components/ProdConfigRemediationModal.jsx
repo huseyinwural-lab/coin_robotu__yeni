@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { apiClient } from "@/lib/api";
 
 const defaultForm = {
   database_url: "",
@@ -105,30 +104,19 @@ export const ProdConfigRemediationModal = ({
       return;
     }
 
-    try {
-      const { data } = await apiClient.post("/admin/system/remediate-config", payload);
-      toast.success("Konfigürasyon kaydedildi, preflight yeniden çalıştı");
-      onSaved?.(data);
-      onOpenChange(false);
-    } catch (error) {
-      const details = error?.response?.data?.detail;
-      const fieldErrorMap = details?.validation_errors;
-      if (fieldErrorMap && typeof fieldErrorMap === "object") {
-        setValidationErrors(fieldErrorMap);
-      }
-      toast.error(error?.response?.data?.detail?.message || "Konfigürasyon doğrulama başarısız");
-    } finally {
-      setIsSubmitting(false);
-    }
+    toast.info("Bu panel devre dışı bırakıldı");
+    onSaved?.({});
+    onOpenChange(false);
+    setIsSubmitting(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl border border-red-800 bg-slate-950 text-slate-100" data-testid={`${testIdPrefix}-prod-remediation-modal`}>
         <DialogHeader>
-          <DialogTitle className="text-xl text-red-300" data-testid={`${testIdPrefix}-prod-remediation-title`}>Blokajı Çöz</DialogTitle>
+          <DialogTitle className="text-xl text-red-300" data-testid={`${testIdPrefix}-prod-remediation-title`}>Konfigürasyon Bilgisi</DialogTitle>
           <DialogDescription className="text-slate-300" data-testid={`${testIdPrefix}-prod-remediation-description`}>
-            Production endpoint ve bootstrap bilgilerini gir, ardından “Kaydet ve Yeniden Doğrula”.
+            Bu panel artık aktif kullanılmıyor.
           </DialogDescription>
         </DialogHeader>
 

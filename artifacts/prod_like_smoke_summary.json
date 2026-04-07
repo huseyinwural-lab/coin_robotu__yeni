@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_5",
   "status": "PASS",
-  "generated_at": "2026-04-07T14:09:53.798035+00:00",
+  "generated_at": "2026-04-07T14:17:49.678128+00:00",
   "checks": [
     {
       "name": "advisory_mode",
