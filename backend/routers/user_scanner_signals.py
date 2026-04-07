@@ -1073,7 +1073,7 @@ def signals(
     db: Session = Depends(get_db),
 ):
     try:
-        rows = list_user_signals(db, current_user.id, limit=limit, refresh_snapshot=False)
+        rows = list_user_signals(db, current_user.id, limit=limit, refresh_snapshot=True)
     except Exception:
         db.rollback()
         return []
@@ -1223,6 +1223,8 @@ def signals(
             blocked_solution_hint=row.blocked_solution_hint,
         )
         first_precheck_failure_code = _extract_first_precheck_failure_code(row.decision_note, blocked_reason_message)
+        if blocked_reason_code == "":
+            first_precheck_failure_code = ""
         normalized_status = _normalize_signal_status_for_ui(status=row.status, blocked_reason_code=blocked_reason_code)
         tradeable = bool(row.execution_eligible)
         if normalized_status in {"blocked", "non_tradeable"}:

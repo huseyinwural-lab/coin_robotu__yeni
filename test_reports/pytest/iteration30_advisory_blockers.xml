@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="12" skipped="0" tests="15" time="818.041" timestamp="2026-04-07T20:18:38.458931+00:00" hostname="agent-env-43e32607-6770-4a6b-a330-ea2d7dab053c"><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_01_login_success" time="39.971" /><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_02_signals_endpoint_returns_200" time="60.069"><failure message="AssertionError: Signals endpoint failed: The preview environment is not responding. It may be starting up.&#10;  &#10;assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:56: in test_02_signals_endpoint_returns_200
+    assert response.status_code == 200, f"Signals endpoint failed: {response.text}"
+E   AssertionError: Signals endpoint failed: The preview environment is not responding. It may be starting up.
+E     
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_03_no_blocked_signals" time="60.159"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:64: in test_03_no_blocked_signals
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_04_no_non_tradeable_signals" time="60.167"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:74: in test_04_no_non_tradeable_signals
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_05_signals_have_empty_blocked_reason_code" time="60.181"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:84: in test_05_signals_have_empty_blocked_reason_code
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_06_signals_have_empty_first_precheck_failure_code" time="60.187"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:107: in test_06_signals_have_empty_first_precheck_failure_code
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_07_signals_tradeable_true" time="60.174"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:124: in test_07_signals_tradeable_true
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_08_signals_status_ready_or_pending" time="60.077"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:153: in test_08_signals_status_ready_or_pending
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_09_status_contract_no_blocking_reasons" time="55.275" /><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_10_no_order_precheck_failed_blockers" time="60.083"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:188: in test_10_no_order_precheck_failed_blockers
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_11_no_execution_disabled_blockers" time="60.152"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:204: in test_11_no_execution_disabled_blockers
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_12_scanner_results_tradeable" time="0.968" /><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_13_verify_non_tradeable_reason_codes_empty" time="60.059"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:244: in test_13_verify_non_tradeable_reason_codes_empty
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_14_signal_detail_fields_correct" time="60.161"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:268: in test_14_signal_detail_fields_correct
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_iteration30_advisory_blockers_removed.TestAdvisoryModeBlockersRemoved" name="test_15_summary_statistics" time="60.182"><failure message="assert 502 == 200&#10; +  where 502 = &lt;Response [502]&gt;.status_code">backend/tests/test_iteration30_advisory_blockers_removed.py:302: in test_15_summary_statistics
+    assert response.status_code == 200
+E   assert 502 == 200
+E    +  where 502 = &lt;Response [502]&gt;.status_code</failure></testcase></testsuite></testsuites>

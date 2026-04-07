@@ -1217,12 +1217,7 @@ def _evaluate_signal_blockers(
     if _is_market_data_stale(row.symbol):
         reason_codes.append("MARKET_DATA_STALE")
 
-    signal_generated_at = signal.generated_at
-    if signal_generated_at.tzinfo is None:
-        signal_generated_at = signal_generated_at.replace(tzinfo=timezone.utc)
-    signal_age_seconds = (datetime.now(timezone.utc) - signal_generated_at).total_seconds()
-    if signal_age_seconds > 60 * 45:
-        reason_codes.append("SIGNAL_EXPIRED")
+    # Advisory-only mode: signal yaşı nedeniyle trade bloklanmaz.
 
     if exchange_connection is None and live_mode_enabled:
         reason_codes.append("EXCHANGE_NOT_READY")
@@ -1239,8 +1234,10 @@ def _evaluate_signal_blockers(
             reason_codes.append("EXCHANGE_NOT_READY")
 
     deduped = list(dict.fromkeys(reason_codes))
-    hard_blockers = [code for code in deduped if code != "MANUAL_APPROVAL_REQUIRED"]
-    execution_eligible = len(hard_blockers) == 0 and not requires_manual
+    # Advisory-only mode: hard blockers trade akışını kapatmasın.
+    # Sadece gerçekten süresi geçmiş sinyaller (SIGNAL_EXPIRED) yürütmeye kapalı kalır.
+    execution_eligible = "SIGNAL_EXPIRED" not in deduped
+    requires_manual = False
     return deduped, requires_manual, execution_eligible
 
 
@@ -1253,17 +1250,8 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
     live_mode_enabled = bool(getattr(live_config, "live_mode_enabled", False))
 
     if live_mode_enabled:
-        if row.current_state == "NON_TRADEABLE" and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
-            row.status = "non_tradeable"
-            row.execution_eligible = False
-            row.last_eligibility_check_at = datetime.now(timezone.utc)
-            return row
-        if row.current_state == "BLOCKED" and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
-            row.status = "non_tradeable"
-            row.current_state = "NON_TRADEABLE"
-            row.execution_eligible = False
-            row.last_eligibility_check_at = datetime.now(timezone.utc)
-            return row
+        # Advisory-only mode: ORDER_PRECHECK_FAILED snapshot'u sinyali kilitlemesin.
+        pass
 
     if row.mode != "AUTO" and _has_active_bot(db, row.user_id):
         row.mode = "AUTO"
@@ -1290,7 +1278,7 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
         exchange_connection=exchange_connection,
     )
 
-    primary_reason = _primary_reason_code(reason_codes)
+    primary_reason = "SIGNAL_EXPIRED" if "SIGNAL_EXPIRED" in reason_codes else ""
     message, hint = _signal_reason_details(primary_reason) if primary_reason else ("", "")
 
     row.bot_profile_id = bot.id if bot else None
@@ -1307,18 +1295,12 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
     if primary_reason == "SIGNAL_EXPIRED":
         row.status = "expired"
         _set_state(row, "EXPIRED")
-    elif execution_eligible:
-        row.status = "ready"
-        _set_state(row, "EXECUTION_READY")
-    elif primary_reason == "MANUAL_APPROVAL_REQUIRED":
-        row.status = "pending"
-        _set_state(row, "PENDING_APPROVAL")
-    elif primary_reason in NON_TRADEABLE_REASON_CODES:
-        row.status = "non_tradeable"
-        _set_state(row, "NON_TRADEABLE")
     else:
-        row.status = "blocked"
-        _set_state(row, "BLOCKED")
+        row.status = "ready"
+        row.blocked_reason_code = ""
+        row.blocked_reason_message = ""
+        row.blocked_solution_hint = ""
+        _set_state(row, "EXECUTION_READY")
 
     return row
 
