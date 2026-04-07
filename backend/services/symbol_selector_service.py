@@ -105,10 +105,37 @@ def provider_config_summary(db: Session) -> dict:
 
 
 def _crypto_universe_rows(exchange: str, market_type: str, quote_asset_filter: str = "ALL") -> list[dict]:
+    normalized_market_type = str(market_type or "spot").strip().lower()
+    if normalized_market_type == "both":
+        try:
+            spot_rows = _crypto_universe_rows(exchange=exchange, market_type="spot", quote_asset_filter=quote_asset_filter)
+        except Exception:
+            spot_rows = []
+        try:
+            futures_rows = _crypto_universe_rows(exchange=exchange, market_type="futures", quote_asset_filter=quote_asset_filter)
+        except Exception:
+            futures_rows = []
+        merged: dict[str, dict] = {}
+        for row in [*spot_rows, *futures_rows]:
+            symbol = str(row.get("symbol") or "").upper()
+            if not symbol:
+                continue
+            existing = merged.get(symbol)
+            if existing is None:
+                merged[symbol] = {**row, "market_type": "both"}
+                continue
+            existing_volume = _safe_float(existing.get("volume_24h"))
+            candidate_volume = _safe_float(row.get("volume_24h"))
+            if candidate_volume > existing_volume:
+                merged[symbol] = {**row, "market_type": "both"}
+        rows = list(merged.values())
+        rows.sort(key=lambda item: (-(item.get("volume_24h") or 0), item.get("symbol")))
+        return rows
+
     provider = BinanceMarketDataProvider()
-    payload = provider.get_tradable_symbols(exchange=exchange, market_type=market_type)
+    payload = provider.get_tradable_symbols(exchange=exchange, market_type=normalized_market_type)
     if not payload.get("rows"):
-        payload = provider.get_tradable_symbols(exchange=exchange, market_type=market_type, force_refresh=True)
+        payload = provider.get_tradable_symbols(exchange=exchange, market_type=normalized_market_type, force_refresh=True)
     rows: list[dict] = []
     for row in payload.get("rows", []):
         if not bool(row.get("is_tradable", False)):
@@ -123,7 +150,7 @@ def _crypto_universe_rows(exchange: str, market_type: str, quote_asset_filter: s
                 "symbol": str(row.get("symbol") or "").upper(),
                 "source": "crypto",
                 "exchange": exchange,
-                "market_type": market_type,
+                "market_type": normalized_market_type,
                 "quote_asset": quote_asset,
                 "volume_24h": _safe_float(row.get("volume_24h")),
                 "is_tradable": bool(row.get("is_tradable", False)),

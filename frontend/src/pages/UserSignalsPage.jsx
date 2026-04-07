@@ -72,10 +72,35 @@ export const UserSignalsPage = () => {
       setIsLoading(true);
     }
     try {
+      const requestWithRetry = async (factory, { retries = 1, retryDelayMs = 800 } = {}) => {
+        try {
+          return await factory();
+        } catch (error) {
+          const errorClass = classifyApiError(error);
+          const status = Number(error?.response?.status || 0);
+          const shouldRetry = retries > 0 && (errorClass === "infra_error" || status >= 500 || status === 429);
+          if (!shouldRetry) {
+            throw error;
+          }
+          await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+          return requestWithRetry(factory, { retries: retries - 1, retryDelayMs });
+        }
+      };
+
       const requestDescriptors = [
-        { key: "signals", label: "signals", critical: true, request: () => apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 20000 }) },
+        {
+          key: "signals",
+          label: "signals",
+          critical: true,
+          request: () => requestWithRetry(() => apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 30000 }), { retries: 1, retryDelayMs: 900 }),
+        },
         { key: "portfolio", label: "portfolio", critical: true, request: () => apiClient.get("/user/portfolio", { timeout: 15000 }) },
-        { key: "trades", label: "trades", critical: false, request: () => apiClient.get("/user/trades", { params: { limit: 50 }, timeout: 25000 }) },
+        {
+          key: "trades",
+          label: "trades",
+          critical: false,
+          request: () => requestWithRetry(() => apiClient.get("/user/trades", { params: { limit: 50 }, timeout: 30000 }), { retries: 1, retryDelayMs: 900 }),
+        },
         { key: "signal_mode", label: "signal_mode", critical: true, request: () => apiClient.get("/user/signal-mode", { timeout: 15000 }) },
         { key: "bot_profiles", label: "bot_profiles", critical: true, request: () => apiClient.get("/bot-profiles", { timeout: 15000 }) },
         { key: "status_contract", label: "status_contract", critical: false, request: () => apiClient.get("/user/scanner/status-contract", { timeout: 15000 }) },

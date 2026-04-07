@@ -3,6 +3,20 @@ import { Fragment, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const ALLOWED_QUOTE_ASSETS = new Set(["USDT", "USDC"]);
+const CANONICAL_STRATEGY_OPTIONS = [
+  "ichimoku_trend_continuation",
+  "golden_cross_regime",
+  "supertrend_flip",
+  "vortex_directional_cross",
+  "bollinger_squeeze_breakout",
+  "moving_momentum",
+  "fibonacci_pullback_continuation",
+  "macd_impulse",
+  "fisher_reversal",
+  "divergence_reversal_suite",
+  "structure_breakout",
+  "stochastic_exhaustion_reentry",
+];
 
 const detectQuoteAsset = (symbol) => {
   const normalized = String(symbol || "").trim().toUpperCase();
@@ -36,7 +50,8 @@ export const ScannerResultsTable = ({
   const [expandedRowId, setExpandedRowId] = useState("");
 
   const strategyOptions = useMemo(() => {
-    const unique = Array.from(new Set((results || []).map((item) => String(item.strategy_code || "unknown"))));
+    const dynamic = (results || []).map((item) => String(item.strategy_code || "unknown"));
+    const unique = Array.from(new Set([...CANONICAL_STRATEGY_OPTIONS, ...dynamic]));
     return unique.filter(Boolean).sort();
   }, [results]);
 

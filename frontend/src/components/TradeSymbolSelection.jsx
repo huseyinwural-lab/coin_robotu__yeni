@@ -5,6 +5,7 @@ export const TradeSymbolSelection = ({
   onSourceChange,
   mode,
   onModeChange,
+  marketType,
   selectedSymbols,
   onSelectedSymbolsChange,
   watchlistOnly,
@@ -39,7 +40,7 @@ export const TradeSymbolSelection = ({
       <SymbolSelectorPanel
         testIdPrefix="user-scanner-symbol-selector"
         exchange="binance"
-        marketType="spot"
+        marketType={marketType || "spot"}
         source={source}
         onSourceChange={onSourceChange}
         mode={mode}

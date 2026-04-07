@@ -687,9 +687,6 @@ def list_strategy_allocations(db: Session, limit: int = 200) -> list[StrategyAll
     )
     for row in rows:
         recalculate_strategy_drift(db, row.strategy_id)
-    total_weight = sum(_safe_float(item.capital_weight, 0) for item in rows)
-    if rows and abs(total_weight - 1.0) > WEIGHT_SUM_TOLERANCE:
-        _apply_normalize(rows)
     db.commit()
     return (
         db.query(StrategyAllocation)

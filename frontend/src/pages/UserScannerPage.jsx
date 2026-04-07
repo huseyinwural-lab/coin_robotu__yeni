@@ -111,6 +111,7 @@ const REQUEST_TREND_BUCKETS = 5;
 const REQUEST_TREND_OPTIONS = [5, 15];
 const SCANNER_ANOMALY_TOAST_PREF_KEY = "scanner-anomaly-toast-enabled-v1";
 const SCANNER_ANOMALY_SOUND_PREF_KEY = "scanner-anomaly-sound-enabled-v1";
+const SCANNER_RUN_SETTINGS_KEY = "user-scanner-run-settings-v1";
 const SCANNER_TOAST_DEDUPE_WINDOW_MS = 8000;
 
 const isAnomalyEligibleEvent = (item) => {
@@ -138,6 +139,25 @@ const readScannerAlertPreference = (key, fallbackValue = true) => {
     return fallbackValue;
   } catch {
     return fallbackValue;
+  }
+};
+
+const readScannerRunSettings = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(SCANNER_RUN_SETTINGS_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
   }
 };
 
@@ -1004,6 +1024,7 @@ export const UserScannerPage = () => {
       syncAutoRunNotifications(profiles, { notify: notifyAutoRuns });
 
       if (hydrateSelection) {
+        const localRunSettings = readScannerRunSettings();
         const selectedProfile = profiles.find((item) => item.is_active) || profiles[0] || null;
         if (selectedProfile) {
           setActiveProfileId(selectedProfile.id);
@@ -1024,6 +1045,17 @@ export const UserScannerPage = () => {
           setSymbolMode(persistedSelection.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"));
           setSelectedSymbols(Array.isArray(persistedSelection.selected_symbols) ? persistedSelection.selected_symbols : []);
           setSelectionSavedAt(persistedSelection.saved_at || null);
+        }
+        if (localRunSettings) {
+          if (localRunSettings.mode) {
+            setMode(String(localRunSettings.mode).toUpperCase());
+          }
+          if (localRunSettings.marketType) {
+            setMarketType(String(localRunSettings.marketType).toLowerCase());
+          }
+          if (typeof localRunSettings.watchlistOnly === "boolean") {
+            setWatchlistOnly(Boolean(localRunSettings.watchlistOnly));
+          }
         }
           const normalizedMode = String((persistedSelection?.symbol_selection_mode || selectedProfile?.symbol_selection_mode || automation?.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"))).toLowerCase();
           setWatchlistOnly(normalizedMode === "manual_selection" && Array.isArray(persistedSelection?.selected_symbols || selectedProfile?.selected_symbols || automation?.selected_symbols) && (persistedSelection?.selected_symbols || selectedProfile?.selected_symbols || automation?.selected_symbols || []).length > 0);
@@ -1062,6 +1094,24 @@ export const UserScannerPage = () => {
     initialFullLoadDoneRef.current = true;
     load({ hydrateSelection: true });
   }, [load]);
+
+  useEffect(() => {
+    if (!selectionHydrated || typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        SCANNER_RUN_SETTINGS_KEY,
+        JSON.stringify({
+          mode: String(mode || "ASSISTED").toUpperCase(),
+          marketType: String(marketType || "spot").toLowerCase(),
+          watchlistOnly: Boolean(watchlistOnly),
+        }),
+      );
+    } catch {
+      // noop
+    }
+  }, [selectionHydrated, mode, marketType, watchlistOnly]);
 
   useEffect(() => {
     if (!selectionHydrated) {
@@ -2145,6 +2195,7 @@ export const UserScannerPage = () => {
             }
             setSymbolMode(value);
           }}
+          marketType={marketType}
           selectedSymbols={selectedSymbols}
           onSelectedSymbolsChange={setSelectedSymbols}
           watchlistOnly={watchlistOnly}

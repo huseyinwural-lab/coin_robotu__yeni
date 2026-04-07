@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 28 feature testing completed. All 13 backend tests passed. Frontend UI verification passed for scanner page with 12 canonical strategies in filter dropdown, trade symbol selection, and watchlist mode toggle.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration28_features.py",
+    "/app/test_reports/pytest/iteration28_features.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Strategy filter dropdown shows 14 options (12 canonical + 'all' + 'spot_pullback') - spot_pullback is an extra strategy not in the canonical 12 list but this is acceptable as it's merged from dynamic results"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration28_features.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin": "canary.admin@platform.local / CanaryAdmin123!",
+    "user": "review.user@platform.local / ReviewUser123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All iteration 28 features verified: (1) Strategy allocation weights preserved on load - no auto-normalize, (2) market_type=both returns merged spot+futures symbols, (3) ScannerResultsTable strategy filter shows 12 canonical strategies always, (4) TradeSymbolSelection uses marketType prop, (5) UserScannerPage persists scanner settings via localStorage, (6) UserSignalsPage has requestWithRetry for transient 500 errors",
+  "features_verified": {
+    "strategy_allocation_no_auto_normalize": "PASS - weights preserved across loads",
+    "symbol_selector_both_merged": "PASS - both returns >= spot count, all spot symbols present in both",
+    "scanner_filter_12_canonical_strategies": "PASS - all 12 canonical strategies present in dropdown",
+    "trade_symbol_selection_market_type": "PASS - section found with watchlist toggle",
+    "scanner_settings_persistence": "PASS - localStorage key SCANNER_RUN_SETTINGS_KEY used",
+    "signals_trades_retry_mechanism": "PASS - requestWithRetry implemented with retries=1, retryDelayMs=900"
+  }
+}
