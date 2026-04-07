@@ -1084,11 +1084,11 @@ export const AdminStrategyAllocationPage = () => {
                       revision={item.revision_id}
                     </p>
                   </td>
-                  <td className="px-3 py-2"><Input value={draft.capital_weight ?? ""} type="number" min="0" max="1" step="0.0001" disabled={!isEditing(item.strategy_id)} onChange={(event) => updateDraft(item.strategy_id, "capital_weight", event.target.value)} data-testid={`admin-strategy-allocation-weight-input-${item.strategy_id}`} /></td>
-                  <td className="px-3 py-2"><Input value={draft.max_capital ?? ""} type="number" min="0" step="0.01" disabled={!isEditing(item.strategy_id)} onChange={(event) => updateDraft(item.strategy_id, "max_capital", event.target.value)} data-testid={`admin-strategy-allocation-max-capital-input-${item.strategy_id}`} /></td>
-                  <td className="px-3 py-2"><Input value={draft.current_capital ?? ""} type="number" min="0" step="0.01" disabled={!isEditing(item.strategy_id)} onChange={(event) => updateDraft(item.strategy_id, "current_capital", event.target.value)} data-testid={`admin-strategy-allocation-current-capital-input-${item.strategy_id}`} /></td>
+                  <td className="px-3 py-2"><Input value={draft.capital_weight ?? ""} type="number" min="0" max="1" step="0.0001" onChange={(event) => updateDraft(item.strategy_id, "capital_weight", event.target.value)} data-testid={`admin-strategy-allocation-weight-input-${item.strategy_id}`} /></td>
+                  <td className="px-3 py-2"><Input value={draft.max_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "max_capital", event.target.value)} data-testid={`admin-strategy-allocation-max-capital-input-${item.strategy_id}`} /></td>
+                  <td className="px-3 py-2"><Input value={draft.current_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "current_capital", event.target.value)} data-testid={`admin-strategy-allocation-current-capital-input-${item.strategy_id}`} /></td>
                   <td className="px-3 py-2">
-                    <select className="w-full border border-slate-700 bg-slate-950 px-2 py-1" value={draft.state || "ACTIVE"} disabled={!isEditing(item.strategy_id)} onChange={(event) => updateDraft(item.strategy_id, "state", event.target.value)} data-testid={`admin-strategy-allocation-state-select-${item.strategy_id}`}>
+                    <select className="w-full border border-slate-700 bg-slate-950 px-2 py-1" value={draft.state || "ACTIVE"} onChange={(event) => updateDraft(item.strategy_id, "state", event.target.value)} data-testid={`admin-strategy-allocation-state-select-${item.strategy_id}`}>
                       <option value="ACTIVE">AKTİF</option>
                       <option value="DISABLED">PASİF</option>
                     </select>
@@ -1143,7 +1143,7 @@ export const AdminStrategyAllocationPage = () => {
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-2" data-testid={`admin-strategy-allocation-actions-${item.strategy_id}`}>
                       <Button variant="outline" onClick={() => startEdit(item.strategy_id)} disabled={isOpsReadOnly} data-testid={`admin-strategy-allocation-edit-button-${item.strategy_id}`}>Düzenle</Button>
-                      <Button variant="outline" onClick={() => saveStrategy(item.strategy_id)} disabled={!isEditing(item.strategy_id) || rowErrors.length > 0 || isOpsReadOnly} data-testid={`admin-strategy-allocation-save-button-${item.strategy_id}`}>Kaydet</Button>
+                      <Button variant="outline" onClick={() => saveStrategy(item.strategy_id)} disabled={rowErrors.length > 0 || isOpsReadOnly} data-testid={`admin-strategy-allocation-save-button-${item.strategy_id}`}>Kaydet</Button>
                     </div>
                     {rowErrors.length > 0 && (
                       <p className="mt-1 text-xs text-rose-300" data-testid={`admin-strategy-allocation-row-error-${item.strategy_id}`}>{rowErrors[0]}</p>
