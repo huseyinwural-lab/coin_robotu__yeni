@@ -57,7 +57,7 @@
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-07T13:24:25.450629Z",
+      "last_run_at": "2026-04-07T12:28:37.381062Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -78,7 +78,7 @@
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-07T13:24:25.450629Z",
+      "last_run_at": "2026-04-07T12:28:37.381062Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -99,7 +99,7 @@
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
         "runbook_ref": "RBK-GENERIC-001"
       },
-      "last_run_at": "2026-04-07T13:24:25.450629Z",
+      "last_run_at": "2026-04-07T12:28:37.381062Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -122,7 +122,7 @@
         "policy_bypass_applied": true,
         "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-07T13:24:25.450629Z",
+      "last_run_at": "2026-04-07T12:28:37.381062Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -141,10 +141,14 @@
       "remediation_payload": {
         "severity": "info",
         "suggested_action": "Advisory mode: check sonucu bilgilendirme amaçlıdır.",
-        "reason_codes": [],
-        "runbook_ref": "RBK-GENERIC-001"
+        "reason_codes": [
+          "final_release_gate_no_go"
+        ],
+        "runbook_ref": "RBK-GATE-002",
+        "policy_bypass_applied": true,
+        "policy_mode": "KILL_SWITCH_ONLY"
       },
-      "last_run_at": "2026-04-07T13:24:25.450629Z",
+      "last_run_at": "2026-04-07T12:28:37.381062Z",
       "stale": false,
       "flapping_detail": {
         "is_flapping": false,
@@ -158,7 +162,7 @@
   "risk_score": 0,
   "risk_level": "LOW",
   "risk_factors": {
-    "fail_rate": 0.0,
+    "fail_rate": 0.2,
     "flapping": 0.0,
     "override_usage": 0.0,
     "stale_checks": 0.0
@@ -170,7 +174,7 @@
   "flapping_checks": [],
   "policy_bypass_applied": true,
   "policy_blocking_mode": "FORCED_GO",
-  "updated_at": "2026-04-07T13:26:49.237444Z",
+  "updated_at": "2026-04-07T13:19:19.788719Z",
   "updated_by_user_id": "9592c043-4d94-46bd-9d58-38e571c52ea1",
   "audit_history": [
     {

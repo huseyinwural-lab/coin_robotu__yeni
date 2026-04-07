@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_0_FINAL_BLOCKER_CLEANUP",
   "status": "PASS",
-  "generated_at": "2026-04-07T13:14:41.547201+00:00",
+  "generated_at": "2026-04-07T13:26:51.568458+00:00",
   "checks": [
     {
       "name": "DATABASE_URL not empty",
@@ -103,31 +103,35 @@
     "source": "split_probe",
     "live": {
       "source": "http_probe",
-      "error": "<urlopen error [Errno 111] Connection refused>",
-      "attempted": [
-        "https://trade-trace-engine.preview.emergentagent.com/api/health/live",
-        "https://trade-trace-engine.preview.emergentagent.com/health/live",
-        "https://trade-trace-engine.preview.emergentagent.com/api/health",
-        "https://trade-trace-engine.preview.emergentagent.com/health",
-        "http://127.0.0.1:8001/api/health/live",
-        "http://127.0.0.1:8001/health/live",
-        "http://127.0.0.1:8001/api/health",
-        "http://127.0.0.1:8001/health"
-      ]
+      "base_url": "http://127.0.0.1:8001",
+      "path": "/api/health/live",
+      "status_code": 200,
+      "status": "ok",
+      "checks": {
+        "process": {
+          "status": "up",
+          "uptime_seconds": 735
+        }
+      }
     },
     "ready": {
       "source": "http_probe",
-      "error": "<urlopen error [Errno 111] Connection refused>",
-      "attempted": [
-        "https://trade-trace-engine.preview.emergentagent.com/api/health/ready",
-        "https://trade-trace-engine.preview.emergentagent.com/health/ready",
-        "https://trade-trace-engine.preview.emergentagent.com/api/ready",
-        "https://trade-trace-engine.preview.emergentagent.com/ready",
-        "http://127.0.0.1:8001/api/health/ready",
-        "http://127.0.0.1:8001/health/ready",
-        "http://127.0.0.1:8001/api/ready",
-        "http://127.0.0.1:8001/ready"
-      ]
+      "base_url": "http://127.0.0.1:8001",
+      "path": "/api/health/ready",
+      "status_code": 200,
+      "status": "ready",
+      "checks": {
+        "database": {
+          "status": "ready"
+        },
+        "redis": {
+          "status": "ready"
+        },
+        "preview_smoke_gate": {
+          "status": "skipped",
+          "reason": "disabled_by_flag"
+        }
+      }
     }
   },
   "failfast_probe": {

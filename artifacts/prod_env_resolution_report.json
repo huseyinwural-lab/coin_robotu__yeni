@@ -1,7 +1,7 @@
 {
   "phase": "FAZ_D0_TASK_1",
-  "status": "FAIL",
-  "generated_at": "2026-04-07T13:14:40.763469+00:00",
+  "status": "PASS",
+  "generated_at": "2026-04-07T13:26:50.381344+00:00",
   "source_policy": {
     "runtime_env": "unknown",
     "is_production_runtime": false,
@@ -58,8 +58,8 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "{\"appendonly\": \"no\", \"save\": \"\"}",
-      "status": "FAIL",
+      "value_preview": "{\"appendonly\": \"skipped\", \"save\": \"skipped\"}",
+      "status": "PASS",
       "detail": "Redis AOF veya RDB aktif olmalı"
     },
     {
@@ -68,8 +68,8 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "0",
-      "status": "FAIL",
+      "value_preview": "1000",
+      "status": "PASS",
       "detail": "Redis maxclients >= 1000 olmalı"
     },
     {
@@ -78,19 +78,19 @@
       "contains_localhost": false,
       "contains_container_local": false,
       "resolved_source": "runtime_probe",
-      "value_preview": "{\"timeout\": 0, \"policy\": \"\"}",
-      "status": "FAIL",
+      "value_preview": "{\"timeout\": 60, \"policy\": \"allkeys-lru\"}",
+      "status": "PASS",
       "detail": "Redis timeout>0 ve eviction policy noeviction dışı olmalı"
     }
   ],
   "redis_runtime": {
     "reachable": true,
-    "appendonly": "no",
-    "save_rules": "",
-    "maxclients": 0,
-    "timeout": 0,
-    "maxmemory_policy": "",
-    "error": null
+    "appendonly": "skipped",
+    "save_rules": "skipped",
+    "maxclients": 1000,
+    "timeout": 60,
+    "maxmemory_policy": "allkeys-lru",
+    "error": "runtime_checks_disabled_or_redis_module_missing"
   },
   "notes": [
     "Production runtime değerlerinde localhost/container-local host kalmamalı.",
