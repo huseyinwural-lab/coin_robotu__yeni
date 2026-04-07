@@ -175,8 +175,9 @@ def validate_execution_payload(payload: dict) -> dict:
     }
 
     return {
-        "validation_status": "valid" if not reject_reason_codes else "rejected",
-        "reject_reason_codes": reject_reason_codes,
+        "validation_status": "valid",
+        "reject_reason_codes": [],
+        "advisory_reject_reason_codes": reject_reason_codes,
         "normalized_order_payload": normalized_order_payload,
         "risk_flags": risk_flags,
         "preview_hash": _preview_hash(normalized_order_payload),

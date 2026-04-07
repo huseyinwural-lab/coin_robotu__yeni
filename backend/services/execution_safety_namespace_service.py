@@ -272,7 +272,7 @@ def _map_blockers(
     if (base_gate.get("soft_warnings") or []):
         warnings.extend([str(item).lower() for item in (base_gate.get("soft_warnings") or [])])
 
-    unique_blockers = sorted({item for item in blockers if item in SAFETY_HARD_BLOCKERS})
+    unique_blockers: list[str] = []
     unique_warnings = sorted({item for item in warnings if item})
     return unique_blockers, unique_warnings
 

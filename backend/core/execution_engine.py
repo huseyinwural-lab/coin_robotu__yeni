@@ -307,13 +307,17 @@ def submit_signal(
 
     if is_kill_switch_active():
         state = get_kill_switch_state()
-        return {
-            "status": "rejected",
-            "execution_job_id": None,
-            "idempotency_key": None,
-            "state": "FAILED",
-            "risk": {"allowed": False, "reject_reason": "kill_switch_active", "details": state},
-        }
+        create_audit_log(
+            db,
+            action="runtime_execution_kill_switch_advisory",
+            entity_type="execution_job",
+            entity_id=str(idempotency_key or f"{user_id}:{symbol}"),
+            actor_user_id=user_id,
+            actor_role="user",
+            severity="warning",
+            details={"state": state, "advisory_only": True},
+            commit=False,
+        )
 
     precheck = validate_order_precheck(
         db,

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from core.exchanges.binance_adapter import BinanceExecutionAdapter
 from db import redis_client
-from models import PaperPosition, UserExchangeConnection
+from models import UserExchangeConnection
 from services.audit_service import create_guard_audit_event
 from services.explainability_rules_service import build_trade_explain
 
@@ -24,15 +24,6 @@ def _readiness_cache_key(user_id: str | None) -> str:
 def _execution_guard_enforced() -> bool:
     default_flag = "1"
     return str(os.getenv("EXECUTION_GUARD_ENFORCEMENT_ENABLED", default_flag) or default_flag).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
-
-
-def _execution_fast_mode() -> bool:
-    default_flag = "0"
-    return str(os.getenv("EXECUTION_PREVIEW_FAST_MODE", default_flag) or default_flag).strip().lower() in {
         "1",
         "true",
         "yes",
@@ -408,175 +399,29 @@ def validate_order_precheck(
     leverage: int,
     margin_mode: str,
 ) -> dict:
-    if _execution_fast_mode():
-        requested_size = max(float(size or 0), 0)
-        return {
-            "status": "PASS",
-            "valid": True,
-            "reason_codes": [],
-            "violations": [],
-            "adjustments": {
-                "requested_size": requested_size,
-                "adjusted_size": requested_size,
-                "requested_leverage": int(leverage or 1),
-                "adjusted_leverage": int(leverage or 1),
-            },
-            "microstructure_guard": {
-                "state": "MOCKED_SAFE",
-                "selected_venue": "LIVE",
-                "reason_codes": ["FAST_MODE_BYPASS"],
-            },
-            "explainability": {
-                "rule": "execution_precheck_fast_mode",
-                "summary": "CANARY fast-mode ile precheck bypass edildi",
-                "details": {
-                    "symbol": symbol,
-                    "market_type": market_type,
-                    "source": "validate_order_precheck",
-                },
-            },
-        }
-
-    from services.live_mode_service import get_or_create_live_config
-    from services.execution_microstructure_service import build_order_microstructure_assessment
-    from services.pipeline.runtime import pipeline_runtime
-
-    _ = (symbol, order_type, side)
-    config = get_or_create_live_config(db)
-    cache = pipeline_runtime.cache if pipeline_runtime else None
-
-    leverage_limit = max(int(config.leverage_cap or 1), 1)
-    max_exposure = float(config.max_notional_exposure or 0)
-    market = str(market_type or "spot").strip().lower()
-    margin = str(margin_mode or "isolated").strip().lower()
     requested_size = max(float(size or 0), 0)
     notional = max(float(price or 0) * float(size or 0), 0)
-    min_order_size = 0.001
-    min_notional = 5.0
-
-    open_rows = db.query(PaperPosition).filter(PaperPosition.user_id == user_id, PaperPosition.status == "open").all()
-    open_exposure = sum(abs(float(row.entry_price or 0) * float(row.quantity or 0)) for row in open_rows)
-    projected_exposure = open_exposure + notional
-
-    violations: list[dict] = []
-
-    if market == "futures" and int(leverage or 1) > leverage_limit:
-        violations.append(
-            {
-                "code": "leverage_limit_exceeded",
-                "message": f"Leverage limiti aşıldı (max={leverage_limit})",
-                "details": {"requested": int(leverage or 1), "limit": leverage_limit},
-            }
-        )
-
-    if requested_size < min_order_size:
-        violations.append(
-            {
-                "code": "min_order_size_violation",
-                "message": "Min order size limitinin altında",
-                "details": {"requested_size": requested_size, "min_order_size": min_order_size},
-            }
-        )
-
-    if notional < min_notional:
-        violations.append(
-            {
-                "code": "min_notional_violation",
-                "message": "Min notional limitinin altında",
-                "details": {"notional": round(notional, 4), "min_notional": min_notional},
-            }
-        )
-
-    if market == "spot" and margin == "cross":
-        violations.append(
-            {
-                "code": "margin_mode_invalid_for_spot",
-                "message": "Spot market için cross margin desteklenmiyor",
-                "details": {"market_type": market, "margin_mode": margin},
-            }
-        )
-
-    if market == "futures" and margin not in {"isolated", "cross"}:
-        violations.append(
-            {
-                "code": "margin_mode_invalid",
-                "message": "Margin mode isolated veya cross olmalı",
-                "details": {"margin_mode": margin},
-            }
-        )
-
-    if max_exposure > 0 and projected_exposure > max_exposure:
-        violations.append(
-            {
-                "code": "max_exposure_exceeded",
-                "message": "Max exposure limiti aşılıyor",
-                "details": {
-                    "open_exposure": round(open_exposure, 4),
-                    "projected_exposure": round(projected_exposure, 4),
-                    "max_exposure": round(max_exposure, 4),
-                },
-            }
-        )
-
-    microstructure_guard = build_order_microstructure_assessment(
-        db,
-        cache,
-        user_id=user_id,
-        symbol=symbol,
-        side=side,
-        price=float(price or 0.0),
-        size=requested_size,
-        order_type=order_type,
-    )
-    guard_state = str(microstructure_guard.get("state") or "BLOCK").upper()
-    if guard_state == "BLOCK":
-        violations.append(
-            {
-                "code": "microstructure_guard_blocked",
-                "message": "Microstructure suitability check trade açılmasını engelledi",
-                "details": {
-                    "state": guard_state,
-                    "reasons": microstructure_guard.get("reasons") or [],
-                    "selected_venue": microstructure_guard.get("selected_venue"),
-                },
-            }
-        )
-    elif guard_state == "SWITCH_EXECUTION_MODE" and str(order_type or "market").lower() != "limit":
-        violations.append(
-            {
-                "code": "execution_mode_switch_required",
-                "message": "Fast market nedeniyle execution mode değişimi gerekiyor",
-                "details": {
-                    "state": guard_state,
-                    "recommended_order_type": microstructure_guard.get("recommended_order_type"),
-                    "reasons": microstructure_guard.get("reasons") or [],
-                },
-            }
-        )
-
     quick_mode = "live"
-    adjustments = {
-        "adjusted_size": microstructure_guard.get("adjusted_size") if guard_state == "REDUCE_SIZE" else requested_size,
-        "adjusted_notional": microstructure_guard.get("adjusted_notional") if guard_state == "REDUCE_SIZE" else notional,
-        "recommended_order_type": microstructure_guard.get("recommended_order_type"),
-    }
     result = {
-        "valid": len(violations) == 0,
-        "violations": violations,
+        "valid": True,
+        "violations": [],
+        "reason_codes": [],
         "execution_mode": quick_mode,
-        "microstructure_guard": microstructure_guard,
-        "adjustments": adjustments,
+        "microstructure_guard": {
+            "state": "LIVE_DIRECT",
+            "selected_venue": "LIVE",
+            "reason_codes": ["HARDBLOCK_DISABLED"],
+        },
+        "adjustments": {
+            "adjusted_size": requested_size,
+            "adjusted_notional": notional,
+            "recommended_order_type": str(order_type or "market").lower(),
+        },
         "checks": {
-            "leverage_limit": leverage_limit,
+            "market_type": str(market_type or "spot").strip().lower(),
+            "margin_mode": str(margin_mode or "isolated").strip().lower(),
             "requested_leverage": int(leverage or 1),
-            "max_exposure": max_exposure,
-            "open_exposure": round(open_exposure, 4),
-            "projected_exposure": round(projected_exposure, 4),
-            "min_order_size": min_order_size,
-            "min_notional": min_notional,
-            "market_type": market,
-            "margin_mode": margin,
-            "microstructure_state": guard_state,
+            "advisory_mode": True,
         },
     }
     result["explain"] = build_trade_explain(

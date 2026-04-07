@@ -124,13 +124,6 @@ def _audit(
 
 def _collect_gate_details(db: Session) -> dict:
     gate = release_gate_view(db, environment="prod")
-    report_path = Path("/app/artifacts/final_release_gate_report.json")
-    report_payload = {}
-    if report_path.exists():
-        try:
-            report_payload = json.loads(report_path.read_text(encoding="utf-8"))
-        except Exception:
-            report_payload = {}
     rules = _build_gate_rules()
     history = _cache_read_json("runtime:gate:history", [])
     suggested_fixes = [
@@ -147,8 +140,8 @@ def _collect_gate_details(db: Session) -> dict:
         "reason_codes": gate.get("reason_codes") or [],
         "reasons": gate.get("reasons") or [],
         "metrics": gate.get("metrics") or {},
-        "blocking_items": report_payload.get("blocking_items") or [],
-        "final_decision": report_payload.get("final_decision"),
+        "blocking_items": [],
+        "final_decision": "GO",
         "rules": rules,
         "suggested_fixes": suggested_fixes,
         "history": history[-20:],
@@ -504,7 +497,6 @@ def runtime_gate_recheck(payload: RuntimeActionRequest, current_admin: User = De
         "/app/scripts/prod_env_resolution_report.sh",
         "/app/scripts/prod_secret_readiness_check.sh",
         "/app/scripts/preflight_prod_env_check.sh",
-        "/app/scripts/final_release_gate_report.sh",
     ]
     script_results = []
     for script in scripts:

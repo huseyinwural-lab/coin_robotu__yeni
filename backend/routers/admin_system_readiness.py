@@ -1,19 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
 from models import User
-from schemas import ProdConfigRemediationStateResponse, ProdConfigSaveRequest
 from services.audit_service import create_audit_log
 from services.futures_live_readiness_service import get_futures_live_readiness, get_futures_readiness_score
-from services.prod_config_remediation_service import (
-    build_masked_update_preview,
-    build_prod_config_remediation_state,
-    remediation_summary_for_audit,
-    save_prod_config_updates,
-    validate_prod_config_updates,
-)
 from services.pipeline.runtime import pipeline_runtime
 from services.readiness_history_service import build_readiness_audit_details
 
@@ -52,52 +44,3 @@ def system_readiness_score(refresh: bool = False, current_admin: User = Depends(
     return payload
 
 
-@router.get("/remediate-config", response_model=ProdConfigRemediationStateResponse)
-def prod_config_remediation_state(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    _ = current_admin
-    payload = build_prod_config_remediation_state(db)
-    return ProdConfigRemediationStateResponse(**payload)
-
-
-@router.post("/remediate-config", response_model=ProdConfigRemediationStateResponse)
-def prod_config_remediate(
-    request: ProdConfigSaveRequest,
-    current_admin: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    updates, validation_errors = validate_prod_config_updates(request.model_dump())
-    if validation_errors:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"validation_errors": validation_errors},
-        )
-
-    changed_keys, _ = save_prod_config_updates(updates)
-    if updates:
-        create_audit_log(
-            db,
-            action="PROD_CONFIG_SAVED",
-            entity_type="system_config",
-            entity_id="prod_runtime",
-            actor_user_id=current_admin.id,
-            actor_role=current_admin.role.value,
-            severity="warning",
-            details={
-                "changed_keys": changed_keys,
-                "masked_updates": build_masked_update_preview(updates),
-            },
-        )
-
-    state = build_prod_config_remediation_state(db)
-    create_audit_log(
-        db,
-        action="PROD_PREFLIGHT_RUN",
-        entity_type="system_config",
-        entity_id="prod_runtime",
-        actor_user_id=current_admin.id,
-        actor_role=current_admin.role.value,
-        severity="info" if state.get("release_gate_status") == "PASS" else "warning",
-        details=remediation_summary_for_audit(state),
-    )
-
-    return ProdConfigRemediationStateResponse(**state)

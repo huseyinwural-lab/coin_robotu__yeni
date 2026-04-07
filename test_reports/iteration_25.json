@@ -1,0 +1,66 @@
+{
+  "summary": "Advisory Mode Hard Block Removal (B+C Scope) Testing - Verified that remediate-config endpoint returns 404, Blokajı Çöz button not visible in UI, and scripts produce advisory-pass output. Core service functions validate_execution_payload and validate_order_precheck operate in advisory-only mode.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_advisory_mode_hardblock_removal.py",
+    "/app/test_reports/pytest/advisory_mode_test.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ProdConfigRemediationModal.jsx component exists but is NOT imported or used anywhere - can be safely deleted as dead code",
+    "The remediate-config endpoint correctly returns 404 as expected"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_advisory_mode_hardblock_removal.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin_email": "canary.admin@platform.local",
+    "admin_password": "CanaryAdmin123!",
+    "user_email": "review.user@platform.local",
+    "user_password": "ReviewUser123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Advisory mode (B+C scope) testing completed. Key findings: (1) GET/POST /api/admin/system/remediate-config returns 404 as expected, (2) Blokajı Çöz button/modal not visible in ExecutionPoliciesPage, (3) validate_execution_payload returns validation_status=valid with advisory_reject_reason_codes, (4) validate_order_precheck returns valid=true with HARDBLOCK_DISABLED reason code, (5) All 4 scripts (final_release_gate_report, prod_like_smoke, prod_kill_switch_dry_run, prod_rollback_drill) produce advisory-pass output with exit code 0.",
+  "test_results": {
+    "remediate_config_endpoint_removed": {
+      "status": "PASS",
+      "details": "GET and POST /api/admin/system/remediate-config both return 404 Not Found"
+    },
+    "blokaji_coz_button_hidden": {
+      "status": "PASS",
+      "details": "ProdConfigRemediationModal component exists but is not imported/used anywhere in frontend. Blokajı Çöz text not found in ExecutionPoliciesPage"
+    },
+    "validate_execution_payload_advisory_mode": {
+      "status": "PASS",
+      "details": "Returns validation_status=valid with advisory_reject_reason_codes for invalid input"
+    },
+    "validate_order_precheck_advisory_mode": {
+      "status": "PASS",
+      "details": "Returns valid=true with HARDBLOCK_DISABLED in reason_codes"
+    },
+    "execution_readiness_endpoint": {
+      "status": "PASS",
+      "details": "Returns execution_allowed=true, final_status=READY"
+    },
+    "scripts_advisory_pass": {
+      "final_release_gate_report": "PASS - exit 0, GO decision",
+      "prod_like_smoke": "PASS - exit 0, advisory mode",
+      "prod_kill_switch_dry_run": "PASS - exit 0, advisory mode",
+      "prod_rollback_drill": "PASS - exit 0, advisory mode"
+    }
+  }
+}

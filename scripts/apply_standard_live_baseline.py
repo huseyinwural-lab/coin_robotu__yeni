@@ -37,8 +37,6 @@ def run() -> None:
     admin_email, admin_password = _admin_creds()
     out: list[BaselineResult] = []
 
-    subprocess.run(["bash", "/app/scripts/final_release_gate_report.sh"], check=False)
-
     session = requests.Session()
     login = _call(
         session,
