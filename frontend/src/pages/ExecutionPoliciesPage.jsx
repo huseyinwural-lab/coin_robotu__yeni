@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
-import { ProdConfigRemediationModal } from "@/components/ProdConfigRemediationModal";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 
@@ -94,8 +93,6 @@ const BUILDER_PRESETS = [
 
 export const ExecutionPoliciesPage = () => {
   const [payload, setPayload] = useState(null);
-  const [remediationState, setRemediationState] = useState(null);
-  const [isRemediationOpen, setIsRemediationOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("builder");
 
@@ -176,21 +173,12 @@ export const ExecutionPoliciesPage = () => {
       setIsLoading(false);
     }, 20000);
     try {
-      const [policyResult, remediationResult] = await Promise.allSettled([
-        apiClient.get("/admin/execution-policies"),
-        apiClient.get("/admin/system/remediate-config"),
-      ]);
+      const [policyResult] = await Promise.allSettled([apiClient.get("/admin/execution-policies")]);
 
       if (policyResult.status === "fulfilled") {
         setPayload(policyResult.value.data);
       } else {
         toast.error("Execution policy verisi alınamadı");
-      }
-
-      if (remediationResult.status === "fulfilled") {
-        setRemediationState(remediationResult.value.data);
-      } else {
-        toast.error("Remediation durumu alınamadı");
       }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Execution policy verisi alınamadı");
@@ -242,8 +230,6 @@ export const ExecutionPoliciesPage = () => {
   const effectiveGateState = String(releaseGate?.effective_state || "").toUpperCase();
   const deployAllowed = Boolean(releaseGate?.deploy_allowed);
   const policyBypassApplied = Boolean(releaseGate?.policy_bypass_applied) || String(releaseGate?.policy_blocking_mode || "").toUpperCase() === "FORCED_GO";
-  const remediationFinalDecision = String(remediationState?.final_release_gate_decision || "-").toUpperCase();
-  const remediationNoGoAdvisory = remediationFinalDecision === "NO_GO" && deployAllowed && ["GO", "GO_WITH_OVERRIDE"].includes(effectiveGateState);
 
   const versionMap = policyVersions.reduce((acc, item) => {
     acc[item.version_id] = item;
@@ -1507,47 +1493,6 @@ version_id_2"
 
       {activeTab === "overview" && (
         <div className="space-y-4" data-testid="execution-policies-overview-panel">
-          <div className="rounded border border-red-700/70 bg-slate-900 p-4" data-testid="execution-policies-remediation-panel">
-            <div className="flex flex-wrap items-center justify-between gap-2" data-testid="execution-policies-remediation-header">
-              <p className="text-xs uppercase tracking-widest text-red-300" data-testid="execution-policies-remediation-title">System Config · Release Gate Remediation</p>
-              <Button
-                className="bg-red-600 text-white hover:bg-red-700"
-                onClick={() => setIsRemediationOpen(true)}
-                data-testid="execution-policies-open-remediation-button"
-              >
-                Blokajı Çöz
-              </Button>
-            </div>
-
-            <div className="mt-3 grid gap-2 text-xs text-slate-200 md:grid-cols-2" data-testid="execution-policies-remediation-status-grid">
-              <p data-testid="execution-policies-remediation-release-gate-status">release_gate_status: {remediationState?.release_gate_status || "-"}</p>
-              <p data-testid="execution-policies-remediation-preflight-status">preflight_status: {remediationState?.preflight_status || "-"}</p>
-              <p data-testid="execution-policies-remediation-secret-status">secret_readiness_status: {remediationState?.secret_readiness_status || "-"}</p>
-              <p data-testid="execution-policies-remediation-effective-gate">effective_gate_state: {effectiveGateState || "-"} · deploy_allowed: {String(deployAllowed)}</p>
-              <p data-testid="execution-policies-remediation-final-decision">final_release_gate_decision(raw): {remediationState?.final_release_gate_decision || "-"}</p>
-            </div>
-
-            {remediationNoGoAdvisory && (
-              <p className="mt-2 text-xs text-emerald-300" data-testid="execution-policies-remediation-advisory-note">
-                Not: final_release_gate_decision(raw)=NO_GO yalnız telemetry/debug bilgisidir. Effective gate GO ve deployment izinli.
-              </p>
-            )}
-            {policyBypassApplied && (
-              <p className="mt-1 text-xs text-amber-300" data-testid="execution-policies-remediation-bypass-note">
-                Policy override aktif: FORCED_GO modunda release gate bypass uygulanmış durumda.
-              </p>
-            )}
-
-            <div className="mt-2 space-y-1" data-testid="execution-policies-remediation-reasons-list">
-              {(remediationState?.release_gate_reason_codes || []).map((item, index) => (
-                <p key={`${item}-${index}`} className="font-mono text-xs text-red-200" data-testid={`execution-policies-remediation-reason-${index}`}>{item}</p>
-              ))}
-              {(remediationState?.release_gate_reason_codes || []).length === 0 && (
-                <p className="text-xs text-slate-400" data-testid="execution-policies-remediation-reasons-empty">Aktif reason_code yok.</p>
-              )}
-            </div>
-          </div>
-
           <div className="grid gap-4 lg:grid-cols-2" data-testid="execution-policies-grid">
             <div className="rounded border border-emerald-900/70 bg-slate-900 p-4" data-testid="execution-policies-observability-card">
               <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="execution-policies-observability-title">Policy Engine Observability</p>
@@ -1675,6 +1620,11 @@ version_id_2"
               <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-release-gate-title">Release Gate</p>
               <p className="mt-2 text-sm text-slate-200" data-testid="execution-policies-release-gate-status">status: {releaseGate?.status || "UNKNOWN"} · effective: {effectiveGateState || "-"} · deploy_allowed: {String(deployAllowed)}</p>
               <p className="text-[11px] text-slate-400" data-testid="execution-policies-release-gate-summary">critical: {releaseGate?.summary?.critical_violation_count ?? 0} · failsafe: {releaseGate?.summary?.failsafe_hard_block_count ?? 0}</p>
+              {policyBypassApplied && (
+                <p className="mt-1 text-[11px] text-amber-300" data-testid="execution-policies-release-gate-bypass-note">
+                  Policy override aktif (FORCED_GO)
+                </p>
+              )}
               <div className="mt-2" data-testid="execution-policies-release-gate-recommendations">
                 <p className="text-[11px] uppercase tracking-wider text-slate-400" data-testid="execution-policies-release-gate-recommendations-title">Recommended Actions</p>
                 {(releaseGate?.recommended_actions || []).slice(0, 5).map((item, idx) => (
@@ -1729,13 +1679,6 @@ version_id_2"
         </div>
       )}
 
-      <ProdConfigRemediationModal
-        open={isRemediationOpen}
-        onOpenChange={setIsRemediationOpen}
-        remediationState={remediationState}
-        onSaved={(nextState) => setRemediationState(nextState)}
-        testIdPrefix="execution-policies"
-      />
     </section>
   );
 };
