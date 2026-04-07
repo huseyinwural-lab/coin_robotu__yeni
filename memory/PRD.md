@@ -1,3 +1,37 @@
+## 2026-04-07 — Strategy Allocation UX Sadeleştirme (12 Hazır Strateji) ✅
+
+### Kullanıcı talebi (uygulandı)
+- `Strategy Ekle` alanı kaldırıldı.
+- `Strateji Dağılımı` tablosu açıldığında 12 canonical strateji hazır listeleniyor.
+- Sütun yapısı korundu.
+- `State` yalnız `AKTİF / PASİF` (backend: `ACTIVE / DISABLED`).
+- `Action` yalnız `Düzenle` ve `Kaydet`.
+- Drift auto-state zorlaması kaldırıldı (advisory moda alındı).
+
+### Backend güncellemeleri
+- `meta_strategy_engine_service.py`
+  - state seti `ACTIVE/DISABLED` olarak sadeleştirildi.
+  - `THROTTLED/PASSIVE/PASIF` girişleri `DISABLED` normalize ediliyor.
+  - drift state zorlaması kaldırıldı (`AUTO_DISABLED_BY_DRIFT` / `AUTO_THROTTLED_BY_DRIFT` artık state değiştirmiyor).
+  - `list_strategy_allocations` çağrısında 12 canonical strateji satırı otomatik seed ediliyor.
+  - listeleme canonical 12 ile sınırlandı ve deterministik sıralandı.
+  - state değişiminde double-confirm zorlaması kaldırıldı.
+
+### Frontend güncellemeleri
+- `AdminStrategyAllocationPage.jsx`
+  - `Strategy Ekle` paneli kaldırıldı.
+  - summary kartları `AKTİF/PASİF` olarak güncellendi.
+  - satır inputları sadece `Düzenle` sonrası aktif.
+  - action kolonunda yalnız `Düzenle` + `Kaydet` bırakıldı.
+  - state select yalnız `AKTİF/PASİF` seçenekleri içeriyor.
+
+### Test & doğrulama
+- Lint: ilgili backend/frontend dosyaları PASS.
+- Test raporu: `/app/test_reports/iteration_27.json`
+  - Backend: %100 PASS
+  - Frontend: %100 PASS
+  - Doğrulananlar: 12 canonical liste, state sadeleşmesi, `Strategy Ekle` kaldırılması, action sadeleşmesi, drift advisory.
+
 ## 2026-04-07 — SIM Modu Tamamen Kaldırıldı (LIVE-ONLY) ✅
 
 ### Kapsam (Backend + Frontend)
