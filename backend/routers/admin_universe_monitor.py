@@ -181,6 +181,10 @@ class ScannerEngineConfigSaveRequest(BaseModel):
     scan_limit: int = Field(default=SCANNER_ENGINE_DEFAULT_SCAN_LIMIT, ge=10, le=SCANNER_ENGINE_MAX_SCAN_LIMIT)
     top_n: int = Field(default=20, ge=1, le=150)
     manual_symbols: list[str] = Field(default_factory=list)
+    trend_weight: int = Field(default=10, ge=0, le=200)
+    volume_weight: int = Field(default=50, ge=0, le=200)
+    momentum_weight: int = Field(default=100, ge=0, le=300)
+    bollinger_weight: int = Field(default=1, ge=0, le=50)
     reason: str = Field(default="scanner_engine_config_save", min_length=3, max_length=240)
 
 
@@ -205,6 +209,12 @@ class ScannerEngineJobListResponse(BaseModel):
 def _manager_required(current_admin: User) -> User:
     if current_admin.role not in {UserRole.SUPER_ADMIN, UserRole.ADMIN}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="manager_role_required")
+    return current_admin
+
+
+def _super_admin_required(current_admin: User) -> User:
+    if current_admin.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="super_admin_required")
     return current_admin
 
 
@@ -1127,13 +1137,13 @@ def scanner_state(current_admin: User = Depends(require_admin), db: Session = De
 
 @router.get("/scanner-engine/config")
 def scanner_engine_get_config(current_admin: User = Depends(require_admin)):
-    _ = current_admin
+    _super_admin_required(current_admin)
     return _load_scanner_engine_config()
 
 
 @router.post("/scanner-engine/config/save")
 def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    manager = _manager_required(current_admin)
+    manager = _super_admin_required(current_admin)
     if not payload.include_spot and not payload.include_futures:
         raise HTTPException(status_code=400, detail="spot_or_futures_required")
 
@@ -1147,6 +1157,13 @@ def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_
         "scan_limit": int(payload.scan_limit),
         "top_n": int(payload.top_n),
         "manual_symbols": _normalize_symbols(payload.manual_symbols or []),
+        "weights": {
+            "trend": int(payload.trend_weight),
+            "volume": int(payload.volume_weight),
+            "momentum": int(payload.momentum_weight),
+            "bollinger": int(payload.bollinger_weight),
+            "max_score": int(payload.trend_weight + payload.volume_weight + payload.momentum_weight + payload.bollinger_weight),
+        },
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "updated_by": manager.id,
     }
@@ -1173,7 +1190,7 @@ def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_
 
 @router.post("/scanner-engine/run")
 def scanner_engine_run(payload: ScannerEngineRunRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    manager = _manager_required(current_admin)
+    manager = _super_admin_required(current_admin)
     trace_id = str(uuid.uuid4())
     config = _load_scanner_engine_config()
     try:
@@ -1214,7 +1231,7 @@ def scanner_engine_run(payload: ScannerEngineRunRequest, current_admin: User = D
 
 @router.get("/scanner-engine/last-run")
 def scanner_engine_last_run(current_admin: User = Depends(require_admin)):
-    _ = current_admin
+    _super_admin_required(current_admin)
     payload = _read_json_value(SCANNER_ENGINE_LAST_RUN_KEY, {})
     if not isinstance(payload, dict) or not payload.get("run_id"):
         return {
@@ -1250,7 +1267,7 @@ def scanner_engine_last_run(current_admin: User = Depends(require_admin)):
 
 @router.post("/scanner-engine/bot/start")
 def scanner_engine_bot_start(payload: ScannerEngineStartBotRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    manager = _manager_required(current_admin)
+    manager = _super_admin_required(current_admin)
     trace_id = str(uuid.uuid4())
     latest_run = _read_json_value(SCANNER_ENGINE_LAST_RUN_KEY, {})
     if not isinstance(latest_run, dict) or not latest_run.get("run_id"):
@@ -1307,7 +1324,7 @@ def scanner_engine_bot_start(payload: ScannerEngineStartBotRequest, current_admi
 
 @router.get("/scanner-engine/bot/jobs", response_model=ScannerEngineJobListResponse)
 def scanner_engine_bot_jobs(limit: int = Query(default=30, ge=1, le=200), current_admin: User = Depends(require_admin)):
-    _ = current_admin
+    _super_admin_required(current_admin)
     jobs = _list_scanner_jobs(limit=limit)
     return {"count": len(jobs), "items": jobs}
 

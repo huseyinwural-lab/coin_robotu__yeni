@@ -6,6 +6,15 @@ import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { ScannerResultsTable } from "@/components/ScannerResultsTable";
 import { TradeSymbolSelection } from "@/components/TradeSymbolSelection";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useAuth } from "@/context/AuthContext";
 import { apiClient, classifyApiError } from "@/lib/api";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { saveExecutionContext } from "@/lib/userFlowContext";
@@ -324,6 +333,8 @@ const deriveRequestHealth = (events) => {
 
 export const UserScannerPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSuperAdmin = String(user?.role || "").toLowerCase() === "super_admin";
   const [searchParams, setSearchParams] = useSearchParams();
   const [mode, setMode] = useState("ASSISTED");
   const [marketType, setMarketType] = useState("spot");
@@ -384,6 +395,45 @@ export const UserScannerPage = () => {
     auth_error: 0,
     infra_error: 0,
     trade_blocker: 0,
+  });
+  const [scannerEngineConfig, setScannerEngineConfig] = useState({
+    exchange: "binance",
+    include_spot: true,
+    include_futures: true,
+    signal_mode: "manual",
+    scan_limit: 80,
+    top_n: 20,
+    manual_symbols: [],
+    weights: {
+      trend: 10,
+      volume: 50,
+      momentum: 100,
+      bollinger: 1,
+      max_score: 161,
+    },
+  });
+  const [scannerEngineManualSymbols, setScannerEngineManualSymbols] = useState("");
+  const [scannerEngineRun, setScannerEngineRun] = useState({
+    status: "empty",
+    summary: {
+      max_score: 161,
+      candidate_count: 0,
+      scored_count: 0,
+      strong_long_count: 0,
+      strong_short_count: 0,
+    },
+    results: [],
+    top_results: [],
+    errors: [],
+  });
+  const [scannerEngineJobs, setScannerEngineJobs] = useState([]);
+  const [scannerEngineBusy, setScannerEngineBusy] = useState(false);
+  const [scannerEngineStartModalOpen, setScannerEngineStartModalOpen] = useState(false);
+  const [scannerEngineStartForm, setScannerEngineStartForm] = useState({
+    selection_mode: "top_n",
+    top_n: 20,
+    side_filter: "all",
+    selected_symbols: [],
   });
   const [scannerFailureSummary, setScannerFailureSummary] = useState({
     auth_error: 0,
@@ -875,6 +925,14 @@ export const UserScannerPage = () => {
             { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, timeout: 12000 }) },
             { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
           ];
+
+      if (isSuperAdmin) {
+        requestDescriptors.push(
+          { key: "scanner_engine_config", request: apiClient.get("/admin/universe-monitor/scanner-engine/config", { timeout: 12000 }) },
+          { key: "scanner_engine_last_run", request: apiClient.get("/admin/universe-monitor/scanner-engine/last-run", { timeout: 15000 }) },
+          { key: "scanner_engine_jobs", request: apiClient.get("/admin/universe-monitor/scanner-engine/bot/jobs", { params: { limit: 20 }, timeout: 12000 }) },
+        );
+      }
       const responses = await Promise.allSettled(requestDescriptors.map((entry) => entry.request));
       const responsesWithEndpointMeta = responses.map((entry, index) => ({
         ...entry,
@@ -969,6 +1027,9 @@ export const UserScannerPage = () => {
       const readinessRes = byKey.live_readiness;
       const dailyRes = byKey.daily_report;
       const schedulerRes = byKey.scheduler_next_run;
+      const scannerEngineConfigRes = byKey.scanner_engine_config;
+      const scannerEngineRunRes = byKey.scanner_engine_last_run;
+      const scannerEngineJobsRes = byKey.scanner_engine_jobs;
 
       setMode((prev) => modeRes?.data?.mode || prev || "ASSISTED");
       setOverview((prev) => overviewRes?.data || prev || null);
@@ -987,6 +1048,19 @@ export const UserScannerPage = () => {
       setLiveReadiness((prev) => readinessRes?.data || prev || null);
       setScannerDailyReport((prev) => dailyRes?.data || prev || null);
       setSchedulerState((prev) => schedulerRes?.data || prev || null);
+      if (isSuperAdmin) {
+        const nextConfig = scannerEngineConfigRes?.data || {};
+        setScannerEngineConfig((prev) => ({ ...prev, ...nextConfig }));
+        setScannerEngineManualSymbols((prev) => (prev ? prev : (nextConfig?.manual_symbols || []).join(",")));
+        setScannerEngineRun(scannerEngineRunRes?.data || {
+          status: "empty",
+          summary: { max_score: 161, candidate_count: 0, scored_count: 0, strong_long_count: 0, strong_short_count: 0 },
+          results: [],
+          top_results: [],
+          errors: [],
+        });
+        setScannerEngineJobs(scannerEngineJobsRes?.data?.items || []);
+      }
       setDecisionCards(cards);
 
       if (!silent && nextScannerResults.length === 0 && !scannerSeedTriggered) {
@@ -1071,6 +1145,7 @@ export const UserScannerPage = () => {
     }
   }, [
     emitScannerToast,
+    isSuperAdmin,
     marketType,
     mode,
     scannerSeedTriggered,
@@ -1352,6 +1427,115 @@ export const UserScannerPage = () => {
       toast.success(`Scanner günlük rapor ${format.toUpperCase()} hazır`);
     } catch (error) {
       toast.error(toApiErrorMessage(error, "Scanner rapor export başarısız"));
+    }
+  };
+
+  const saveScannerEngineConfig = async () => {
+    if (!isSuperAdmin) {
+      toast.error("Bu ayarı sadece süper admin değiştirebilir");
+      return;
+    }
+    setScannerEngineBusy(true);
+    try {
+      const manualSymbols = scannerEngineManualSymbols
+        .split(/[\s,;]+/)
+        .map((item) => String(item || "").trim().toUpperCase())
+        .filter(Boolean);
+      const payload = {
+        exchange: "binance",
+        include_spot: Boolean(scannerEngineConfig.include_spot),
+        include_futures: Boolean(scannerEngineConfig.include_futures),
+        signal_mode: scannerEngineConfig.signal_mode || "manual",
+        scan_limit: Number(scannerEngineConfig.scan_limit || 80),
+        top_n: Number(scannerEngineConfig.top_n || 20),
+        manual_symbols: manualSymbols,
+        trend_weight: Number(scannerEngineConfig?.weights?.trend ?? 10),
+        volume_weight: Number(scannerEngineConfig?.weights?.volume ?? 50),
+        momentum_weight: Number(scannerEngineConfig?.weights?.momentum ?? 100),
+        bollinger_weight: Number(scannerEngineConfig?.weights?.bollinger ?? 1),
+        reason: "user_scanner_engine_config_save",
+      };
+      const { data } = await apiClient.post("/admin/universe-monitor/scanner-engine/config/save", payload);
+      setScannerEngineConfig((prev) => ({ ...prev, ...(data?.config || payload) }));
+      toast.success("Scanner Engine ayarları kaydedildi");
+      await load({ silent: true });
+    } catch (error) {
+      toast.error(toApiErrorMessage(error, "Scanner Engine ayarı kaydedilemedi"));
+    } finally {
+      setScannerEngineBusy(false);
+    }
+  };
+
+  const runScannerEngine = async () => {
+    if (!isSuperAdmin) {
+      toast.error("Bu işlemi sadece süper admin çalıştırabilir");
+      return;
+    }
+    setScannerEngineBusy(true);
+    try {
+      const { data } = await apiClient.post("/admin/universe-monitor/scanner-engine/run", {
+        force_refresh: false,
+        reason: "user_scanner_engine_run",
+      });
+      setScannerEngineRun(data || { status: "empty", summary: {}, results: [], top_results: [], errors: [] });
+      toast.success(`Scanner tamamlandı: ${data?.summary?.scored_count || 0} sembol skorlandı`);
+    } catch (error) {
+      toast.error(toApiErrorMessage(error, "Scanner Engine run başarısız"));
+    } finally {
+      setScannerEngineBusy(false);
+    }
+  };
+
+  const openScannerEngineStartModal = () => {
+    if (!isSuperAdmin) {
+      toast.error("Bu işlemi sadece süper admin yapabilir");
+      return;
+    }
+    const topN = Number(scannerEngineConfig?.top_n || 20);
+    const defaultSymbols = (scannerEngineRun?.top_results || []).slice(0, topN).map((item) => item.symbol);
+    setScannerEngineStartForm({
+      selection_mode: "top_n",
+      top_n: topN,
+      side_filter: "all",
+      selected_symbols: defaultSymbols,
+    });
+    setScannerEngineStartModalOpen(true);
+  };
+
+  const toggleScannerEngineStartSymbol = (symbol) => {
+    setScannerEngineStartForm((prev) => {
+      const set = new Set(prev.selected_symbols || []);
+      if (set.has(symbol)) {
+        set.delete(symbol);
+      } else {
+        set.add(symbol);
+      }
+      return { ...prev, selected_symbols: Array.from(set) };
+    });
+  };
+
+  const createScannerEngineJob = async () => {
+    if (!isSuperAdmin) {
+      toast.error("Bu işlemi sadece süper admin yapabilir");
+      return;
+    }
+    setScannerEngineBusy(true);
+    try {
+      const payload = {
+        selection_mode: scannerEngineStartForm.selection_mode,
+        top_n: Number(scannerEngineStartForm.top_n || 20),
+        selected_symbols: scannerEngineStartForm.selected_symbols || [],
+        side_filter: scannerEngineStartForm.side_filter || "all",
+        reason: "user_scanner_create_job",
+      };
+      const { data } = await apiClient.post("/admin/universe-monitor/scanner-engine/bot/start", payload);
+      setScannerEngineStartModalOpen(false);
+      setScannerEngineJobs((prev) => [data?.job, ...prev].filter(Boolean).slice(0, 20));
+      toast.success(`Scanner-job oluşturuldu: ${data?.job?.symbol_count || 0} sembol`);
+    } catch (error) {
+      toast.error(toApiErrorMessage(error, "Scanner-job oluşturulamadı"));
+    } finally {
+      setScannerEngineBusy(false);
     }
   };
 
@@ -2027,88 +2211,362 @@ export const UserScannerPage = () => {
 
       <section className="order-5 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-control-section">
         <div data-testid="user-scanner-control-header">
-          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-control-kicker">Scanner Control</p>
-          <h3 className="text-base font-semibold" data-testid="user-scanner-control-title">Run & Automation</h3>
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-control-kicker">Scanner Engine</p>
+          <h3 className="text-base font-semibold" data-testid="user-scanner-control-title">Short/Long Decoupled Scanner</h3>
+          <p className="text-xs text-slate-400" data-testid="user-scanner-control-role-note">
+            Ayar güncelleme yetkisi: <span className="font-semibold">Süper Admin</span>
+          </p>
         </div>
-        <div className="rounded border border-slate-700 bg-slate-950 px-3 py-2" data-testid="user-scanner-scan-type-indicator-card">
-          <p className="text-xs text-slate-400" data-testid="user-scanner-scan-type-indicator-label">Tarama Durumu</p>
-          <p className="text-sm font-semibold text-emerald-300" data-testid="user-scanner-scan-type-indicator-value">{scannerRunType}</p>
-          <p className="text-xs text-slate-400" data-testid="user-scanner-scan-type-indicator-detail">{scannerRunTypeDetail}</p>
-        </div>
-        <div className="flex flex-wrap items-end gap-3" data-testid="user-scanner-controls">
-          <label className="space-y-1" htmlFor="user-scanner-mode-select" data-testid="user-scanner-mode-field">
-            <span className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-mode-label">Signal Mode</span>
-            <select
-              id="user-scanner-mode-select"
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="user-scanner-engine-config-grid">
+          <label className="space-y-1" data-testid="user-scanner-engine-market-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Market</span>
+            <input
+              value="BINANCE"
+              disabled
               className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              value={mode}
-              onChange={(event) => setMode(event.target.value)}
-              data-testid="user-scanner-mode-select"
-              aria-label="Signal modu"
+              data-testid="user-scanner-engine-market-input"
+            />
+          </label>
+
+          <div className="space-y-1" data-testid="user-scanner-engine-market-types-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Piyasa Tipi</span>
+            <div className="flex h-10 items-center gap-3 border border-slate-700 bg-slate-950 px-3 py-2" data-testid="user-scanner-engine-market-types-wrap">
+              <label className="flex items-center gap-1 text-xs" data-testid="user-scanner-engine-spot-label">
+                <input
+                  type="checkbox"
+                  checked={Boolean(scannerEngineConfig.include_spot)}
+                  onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, include_spot: event.target.checked }))}
+                  disabled={!isSuperAdmin || scannerEngineBusy}
+                  data-testid="user-scanner-engine-spot-checkbox"
+                />
+                Spot
+              </label>
+              <label className="flex items-center gap-1 text-xs" data-testid="user-scanner-engine-futures-label">
+                <input
+                  type="checkbox"
+                  checked={Boolean(scannerEngineConfig.include_futures)}
+                  onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, include_futures: event.target.checked }))}
+                  disabled={!isSuperAdmin || scannerEngineBusy}
+                  data-testid="user-scanner-engine-futures-checkbox"
+                />
+                Futures
+              </label>
+            </div>
+          </div>
+
+          <label className="space-y-1" data-testid="user-scanner-engine-signal-mode-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Sinyal Modu</span>
+            <select
+              value={scannerEngineConfig.signal_mode || "manual"}
+              onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, signal_mode: event.target.value }))}
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-engine-signal-mode-select"
             >
-              <option value="ASSISTED">ASSISTED</option>
-              <option value="AUTO">AUTO</option>
-              <option value="MANUAL">MANUAL</option>
+              <option value="manual" data-testid="user-scanner-engine-signal-mode-manual">MANUAL</option>
+              <option value="auto" data-testid="user-scanner-engine-signal-mode-auto">AUTO</option>
             </select>
           </label>
 
-          <label className="space-y-1" htmlFor="user-scanner-market-type-select" data-testid="user-scanner-market-type-field">
-            <span className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-market-type-label">Market Type</span>
-            <select
-              id="user-scanner-market-type-select"
+          <label className="space-y-1" data-testid="user-scanner-engine-scan-limit-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Scan Limit</span>
+            <input
+              type="number"
+              min={10}
+              max={220}
+              value={scannerEngineConfig.scan_limit || 80}
+              onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, scan_limit: Number(event.target.value || 80) }))}
+              disabled={!isSuperAdmin || scannerEngineBusy}
               className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              value={marketType}
-              onChange={(event) => setMarketType(event.target.value)}
-              data-testid="user-scanner-market-type-select"
-              aria-label="Market tipi"
-            >
-              <option value="spot">SPOT</option>
-              <option value="futures">FUTURES</option>
-              <option value="both">BOTH</option>
-            </select>
+              data-testid="user-scanner-engine-scan-limit-input"
+            />
           </label>
 
-          <label className="space-y-1" data-testid="user-scanner-auto-scan-interval-field">
-            <span className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-auto-scan-interval-label">Auto Scan Interval</span>
-            <select
-              value={autoScanInterval}
-              onChange={(event) => setAutoScanInterval(Number(event.target.value))}
+          <label className="space-y-1" data-testid="user-scanner-engine-topn-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Top N</span>
+            <input
+              type="number"
+              min={1}
+              max={150}
+              value={scannerEngineConfig.top_n || 20}
+              onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, top_n: Number(event.target.value || 20) }))}
+              disabled={!isSuperAdmin || scannerEngineBusy}
               className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              data-testid="user-scanner-auto-scan-interval-select"
+              data-testid="user-scanner-engine-topn-input"
+            />
+          </label>
+
+          <label className="space-y-1 md:col-span-2 xl:col-span-3" data-testid="user-scanner-engine-manual-symbols-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Manual Symbols (opsiyonel)</span>
+            <input
+              value={scannerEngineManualSymbols}
+              onChange={(event) => setScannerEngineManualSymbols(event.target.value)}
+              placeholder="BTCUSDT,ETHUSDT"
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-engine-manual-symbols-input"
+            />
+          </label>
+
+          <label className="space-y-1" data-testid="user-scanner-engine-weight-trend-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Trend</span>
+            <input
+              type="number"
+              min={0}
+              max={200}
+              value={scannerEngineConfig?.weights?.trend ?? 10}
+              onChange={(event) => {
+                const value = Number(event.target.value || 0);
+                setScannerEngineConfig((prev) => ({
+                  ...prev,
+                  weights: {
+                    ...(prev?.weights || {}),
+                    trend: value,
+                    max_score: value + Number(prev?.weights?.volume ?? 50) + Number(prev?.weights?.momentum ?? 100) + Number(prev?.weights?.bollinger ?? 1),
+                  },
+                }));
+              }}
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-engine-weight-trend-input"
+            />
+          </label>
+
+          <label className="space-y-1" data-testid="user-scanner-engine-weight-volume-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Volume</span>
+            <input
+              type="number"
+              min={0}
+              max={200}
+              value={scannerEngineConfig?.weights?.volume ?? 50}
+              onChange={(event) => {
+                const value = Number(event.target.value || 0);
+                setScannerEngineConfig((prev) => ({
+                  ...prev,
+                  weights: {
+                    ...(prev?.weights || {}),
+                    volume: value,
+                    max_score: Number(prev?.weights?.trend ?? 10) + value + Number(prev?.weights?.momentum ?? 100) + Number(prev?.weights?.bollinger ?? 1),
+                  },
+                }));
+              }}
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-engine-weight-volume-input"
+            />
+          </label>
+
+          <label className="space-y-1" data-testid="user-scanner-engine-weight-momentum-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Momentum</span>
+            <input
+              type="number"
+              min={0}
+              max={300}
+              value={scannerEngineConfig?.weights?.momentum ?? 100}
+              onChange={(event) => {
+                const value = Number(event.target.value || 0);
+                setScannerEngineConfig((prev) => ({
+                  ...prev,
+                  weights: {
+                    ...(prev?.weights || {}),
+                    momentum: value,
+                    max_score: Number(prev?.weights?.trend ?? 10) + Number(prev?.weights?.volume ?? 50) + value + Number(prev?.weights?.bollinger ?? 1),
+                  },
+                }));
+              }}
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-engine-weight-momentum-input"
+            />
+          </label>
+
+          <label className="space-y-1" data-testid="user-scanner-engine-weight-bollinger-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Bollinger</span>
+            <input
+              type="number"
+              min={0}
+              max={50}
+              value={scannerEngineConfig?.weights?.bollinger ?? 1}
+              onChange={(event) => {
+                const value = Number(event.target.value || 0);
+                setScannerEngineConfig((prev) => ({
+                  ...prev,
+                  weights: {
+                    ...(prev?.weights || {}),
+                    bollinger: value,
+                    max_score: Number(prev?.weights?.trend ?? 10) + Number(prev?.weights?.volume ?? 50) + Number(prev?.weights?.momentum ?? 100) + value,
+                  },
+                }));
+              }}
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-engine-weight-bollinger-input"
+            />
+          </label>
+
+          <div className="flex flex-wrap items-end gap-2" data-testid="user-scanner-engine-actions">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={saveScannerEngineConfig}
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              data-testid="user-scanner-engine-save-button"
             >
-              {PROFILE_INTERVAL_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value} data-testid={`user-scanner-auto-scan-interval-option-${option.value}`}>
-                  {option.label}
-                </option>
+              Kaydet
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={runScannerEngine}
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              data-testid="user-scanner-engine-run-button"
+            >
+              Run Scanner
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={openScannerEngineStartModal}
+              disabled={!isSuperAdmin || scannerEngineBusy || (scannerEngineRun?.results || []).length === 0}
+              data-testid="user-scanner-engine-start-bot-button"
+            >
+              Start Bot
+            </Button>
+            <Button variant="outline" onClick={load} data-testid="user-scanner-refresh-button" aria-label="Scanner verisini yenile">Yenile</Button>
+          </div>
+        </div>
+
+        <div className="grid gap-2 md:grid-cols-4" data-testid="user-scanner-engine-summary-grid">
+          <article className="rounded border border-slate-700 bg-slate-950 px-3 py-2" data-testid="user-scanner-engine-candidate-card"><p className="text-xs text-slate-400">Candidate</p><p className="text-lg font-semibold" data-testid="user-scanner-engine-candidate-value">{scannerEngineRun?.summary?.candidate_count ?? 0}</p></article>
+          <article className="rounded border border-slate-700 bg-slate-950 px-3 py-2" data-testid="user-scanner-engine-scored-card"><p className="text-xs text-slate-400">Scored</p><p className="text-lg font-semibold" data-testid="user-scanner-engine-scored-value">{scannerEngineRun?.summary?.scored_count ?? 0}</p></article>
+          <article className="rounded border border-slate-700 bg-slate-950 px-3 py-2" data-testid="user-scanner-engine-strong-long-card"><p className="text-xs text-slate-400">Strong Long</p><p className="text-lg font-semibold" data-testid="user-scanner-engine-strong-long-value">{scannerEngineRun?.summary?.strong_long_count ?? 0}</p></article>
+          <article className="rounded border border-slate-700 bg-slate-950 px-3 py-2" data-testid="user-scanner-engine-strong-short-card"><p className="text-xs text-slate-400">Strong Short</p><p className="text-lg font-semibold" data-testid="user-scanner-engine-strong-short-value">{scannerEngineRun?.summary?.strong_short_count ?? 0}</p></article>
+        </div>
+
+        <div className="overflow-auto rounded border border-slate-700" data-testid="user-scanner-engine-results-wrapper">
+          <table className="min-w-full text-left text-xs" data-testid="user-scanner-engine-results-table">
+            <thead className="bg-slate-950 text-slate-300" data-testid="user-scanner-engine-results-head">
+              <tr>
+                <th className="px-2 py-2" data-testid="user-scanner-engine-head-symbol">Symbol</th>
+                <th className="px-2 py-2" data-testid="user-scanner-engine-head-market">Market</th>
+                <th className="px-2 py-2" data-testid="user-scanner-engine-head-class">Class</th>
+                <th className="px-2 py-2" data-testid="user-scanner-engine-head-long">Long</th>
+                <th className="px-2 py-2" data-testid="user-scanner-engine-head-short">Short</th>
+                <th className="px-2 py-2" data-testid="user-scanner-engine-head-breakdown">Policy Breakdown</th>
+              </tr>
+            </thead>
+            <tbody data-testid="user-scanner-engine-results-body">
+              {(scannerEngineRun?.results || []).slice(0, 120).map((item, index) => (
+                <tr key={`${item.symbol}-${item.market_type}-${index}`} className="border-t border-slate-800" data-testid={`user-scanner-engine-row-${index}`}>
+                  <td className="px-2 py-2 font-semibold" data-testid={`user-scanner-engine-row-symbol-${index}`}>{item.symbol}</td>
+                  <td className="px-2 py-2" data-testid={`user-scanner-engine-row-market-${index}`}>{item.market_type}</td>
+                  <td className="px-2 py-2" data-testid={`user-scanner-engine-row-class-${index}`}>{item.classification}</td>
+                  <td className="px-2 py-2" data-testid={`user-scanner-engine-row-long-${index}`}>{item.long_score}</td>
+                  <td className="px-2 py-2" data-testid={`user-scanner-engine-row-short-${index}`}>{item.short_score}</td>
+                  <td className="px-2 py-2" data-testid={`user-scanner-engine-row-breakdown-${index}`}>{item?.breakdown?.long || "-"} · {item?.breakdown?.short || "-"}</td>
+                </tr>
               ))}
-            </select>
-          </label>
-
-          <Button onClick={runScannerAndStartBot} disabled={isRunning} data-testid="user-scanner-run-start-bot-button" aria-label="Run scanner ve bot start">
-            {isRunning ? "Çalışıyor..." : "Run Scanner + Start Bot"}
-          </Button>
-          <Button variant="outline" onClick={runScanner} disabled={isRunning} data-testid="user-scanner-run-button" aria-label="Scanner çalıştır">
-            {isRunning ? "Çalışıyor..." : "Sadece Scanner Run"}
-          </Button>
-          <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)} className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-scanner-template-select">
-            <option value="">No template</option>
-            {(scannerTemplates || []).map((item) => (
-              <option key={item.id} value={item.id}>{item.name} · v{item.version_num}</option>
-            ))}
-          </select>
-          <Button variant="outline" onClick={load} data-testid="user-scanner-refresh-button" aria-label="Scanner verisini yenile">Yenile</Button>
-          <Button
-            variant="outline"
-            onClick={() => saveActiveProfile({ autoEnabled: !(activeAutomation?.auto_enabled ?? false) })}
-            disabled={isSavingAutomation}
-            data-testid="user-scanner-auto-scan-toggle-button"
-          >
-            Auto Scan {activeAutomation?.auto_enabled ? "ON" : "OFF"}
-          </Button>
-          <Button variant="outline" onClick={() => setCompactMode((previous) => !previous)} data-testid="user-scanner-compact-mode-toggle" aria-label="Compact mode aç/kapat">
-            {compactMode ? "Compact: ON" : "Compact: OFF"}
-          </Button>
+              {(scannerEngineRun?.results || []).length === 0 && (
+                <tr data-testid="user-scanner-engine-results-empty-row">
+                  <td className="px-2 py-3 text-slate-400" colSpan={6} data-testid="user-scanner-engine-results-empty">Henüz scanner sonucu yok.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
+
+        <div className="space-y-1" data-testid="user-scanner-engine-jobs-panel">
+          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-engine-jobs-title">Scanner Jobs</p>
+          {(scannerEngineJobs || []).slice(0, 8).map((job, index) => (
+            <div key={job.job_id || index} className="rounded border border-slate-700 bg-slate-950 p-2 text-xs" data-testid={`user-scanner-engine-job-${index}`}>
+              <p data-testid={`user-scanner-engine-job-id-${index}`}>job_id: {job.job_id}</p>
+              <p data-testid={`user-scanner-engine-job-count-${index}`}>symbol_count: {job.symbol_count}</p>
+              <p data-testid={`user-scanner-engine-job-selection-${index}`}>selection_mode: {job.selection_mode} · side_filter: {job.side_filter}</p>
+            </div>
+          ))}
+          {(scannerEngineJobs || []).length === 0 && <p className="text-xs text-slate-400" data-testid="user-scanner-engine-jobs-empty">Henüz scanner-job kaydı yok.</p>}
+        </div>
+
+        <Dialog open={scannerEngineStartModalOpen} onOpenChange={setScannerEngineStartModalOpen}>
+          <DialogContent className="max-w-2xl" data-testid="user-scanner-engine-start-modal">
+            <DialogHeader data-testid="user-scanner-engine-start-modal-header">
+              <DialogTitle data-testid="user-scanner-engine-start-modal-title">Start Bot · Scanner Job</DialogTitle>
+              <DialogDescription data-testid="user-scanner-engine-start-modal-description">
+                Bu işlem sadece scanner-job kaydı üretir, trade açmaz.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-3 md:grid-cols-3" data-testid="user-scanner-engine-start-modal-grid">
+              <label className="space-y-1" data-testid="user-scanner-engine-start-selection-mode-field">
+                <span className="text-xs text-slate-400">Selection Mode</span>
+                <select
+                  value={scannerEngineStartForm.selection_mode}
+                  onChange={(event) => setScannerEngineStartForm((prev) => ({ ...prev, selection_mode: event.target.value }))}
+                  className="h-10 border border-slate-700 bg-slate-950 px-2 text-sm"
+                  data-testid="user-scanner-engine-start-selection-mode-select"
+                >
+                  <option value="top_n" data-testid="user-scanner-engine-start-selection-topn">Top N</option>
+                  <option value="manual" data-testid="user-scanner-engine-start-selection-manual">Manual</option>
+                </select>
+              </label>
+
+              <label className="space-y-1" data-testid="user-scanner-engine-start-topn-field">
+                <span className="text-xs text-slate-400">Top N</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={150}
+                  value={scannerEngineStartForm.top_n}
+                  onChange={(event) => setScannerEngineStartForm((prev) => ({ ...prev, top_n: Number(event.target.value || 20) }))}
+                  className="h-10 border border-slate-700 bg-slate-950 px-2 text-sm"
+                  data-testid="user-scanner-engine-start-topn-input"
+                />
+              </label>
+
+              <label className="space-y-1" data-testid="user-scanner-engine-start-side-filter-field">
+                <span className="text-xs text-slate-400">Side Filter</span>
+                <select
+                  value={scannerEngineStartForm.side_filter}
+                  onChange={(event) => setScannerEngineStartForm((prev) => ({ ...prev, side_filter: event.target.value }))}
+                  className="h-10 border border-slate-700 bg-slate-950 px-2 text-sm"
+                  data-testid="user-scanner-engine-start-side-filter-select"
+                >
+                  <option value="all" data-testid="user-scanner-engine-start-side-all">All</option>
+                  <option value="long" data-testid="user-scanner-engine-start-side-long">Long</option>
+                  <option value="short" data-testid="user-scanner-engine-start-side-short">Short</option>
+                  <option value="strong_long" data-testid="user-scanner-engine-start-side-strong-long">Strong Long</option>
+                  <option value="strong_short" data-testid="user-scanner-engine-start-side-strong-short">Strong Short</option>
+                </select>
+              </label>
+            </div>
+
+            {scannerEngineStartForm.selection_mode === "manual" && (
+              <div className="max-h-56 space-y-1 overflow-auto rounded border border-slate-700 p-2" data-testid="user-scanner-engine-start-manual-list">
+                {(scannerEngineRun?.results || []).slice(0, 120).map((item, index) => {
+                  const checked = (scannerEngineStartForm.selected_symbols || []).includes(item.symbol);
+                  return (
+                    <label key={`${item.symbol}-${index}`} className="flex items-center gap-2 text-xs" data-testid={`user-scanner-engine-start-manual-item-${index}`}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleScannerEngineStartSymbol(item.symbol)}
+                        data-testid={`user-scanner-engine-start-manual-checkbox-${index}`}
+                      />
+                      <span data-testid={`user-scanner-engine-start-manual-symbol-${index}`}>{item.symbol}</span>
+                      <span className="text-slate-500" data-testid={`user-scanner-engine-start-manual-score-${index}`}>L:{item.long_score} / S:{item.short_score}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+
+            <DialogFooter data-testid="user-scanner-engine-start-modal-footer">
+              <Button type="button" variant="outline" onClick={() => setScannerEngineStartModalOpen(false)} data-testid="user-scanner-engine-start-cancel-button">Vazgeç</Button>
+              <Button type="button" variant="outline" onClick={createScannerEngineJob} disabled={scannerEngineBusy || !isSuperAdmin} data-testid="user-scanner-engine-start-confirm-button">Scanner-job oluştur</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="grid gap-2 rounded border border-slate-800 bg-slate-950 p-3 md:grid-cols-2" data-testid="user-scanner-live-scan-timer-section">
           <p className="text-sm" data-testid="user-scanner-last-scan-value">Last Scan: {formatDateLabel(activeAutomation?.last_run_at || overview?.latest_generated_at)}</p>

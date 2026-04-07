@@ -312,7 +312,7 @@ export const AdminUniverseMonitorPage = () => {
         </Link>
       </div>
 
-      <article className="rounded-xl border border-cyan-700/40 bg-cyan-950/20 p-4" data-testid="admin-universe-monitor-scanner-engine-panel">
+      <article className="hidden rounded-xl border border-cyan-700/40 bg-cyan-950/20 p-4" data-testid="admin-universe-monitor-scanner-engine-panel">
         <div className="flex flex-wrap items-end justify-between gap-3" data-testid="admin-universe-monitor-scanner-engine-header">
           <div data-testid="admin-universe-monitor-scanner-engine-title-wrap">
             <p className="text-xs uppercase tracking-widest text-cyan-200" data-testid="admin-universe-monitor-scanner-engine-kicker">Scanner Engine</p>
