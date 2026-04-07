@@ -1165,6 +1165,10 @@ def _evaluate_signal_blockers(
     risk_policy: RiskPolicy | None,
     exchange_connection: UserExchangeConnection | None,
 ) -> tuple[list[str], bool, bool]:
+    # Advisory-only mode (live override): sinyal üretiminden execution'a geçişte
+    # hiçbir blocker trade akışını kapatmasın.
+    return [], False, True
+
     reason_codes: list[str] = []
     requires_manual = _requires_manual_approval(row.mode)
 

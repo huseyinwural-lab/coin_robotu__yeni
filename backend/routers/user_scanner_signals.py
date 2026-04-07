@@ -1073,7 +1073,7 @@ def signals(
     db: Session = Depends(get_db),
 ):
     try:
-        rows = list_user_signals(db, current_user.id, limit=limit, refresh_snapshot=True)
+        rows = list_user_signals(db, current_user.id, limit=limit, refresh_snapshot=False)
     except Exception:
         db.rollback()
         return []
