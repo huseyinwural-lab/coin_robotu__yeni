@@ -28,9 +28,6 @@ const MetricCard = ({ title, value, testId }) => (
 
 const MODE_PHRASES = {
   LIVE: "SWITCH TO LIVE",
-  SIM: "SWITCH TO SIM",
-  PAPER: "SWITCH TO PAPER",
-  MOCK: "SWITCH TO MOCK",
 };
 
 const ACTION_PHRASES = {
@@ -495,11 +492,11 @@ export const AdminLiveTradingDashboardPage = () => {
 
       <div className="rounded border border-cyan-700/60 bg-slate-900 p-4" data-testid="live-control-execution-mode-panel">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="live-control-execution-mode-header">
-          <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="live-control-execution-mode-title">Execution Mode (P0)</p>
+          <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="live-control-execution-mode-title">Execution Mode (LIVE-ONLY)</p>
           <p className="text-xs text-slate-300" data-testid="live-control-execution-mode-current">current_mode: {controlState?.execution_mode || "-"}</p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="live-control-execution-mode-actions">
-          {(["LIVE", "SIM"]).map((mode) => (
+          {(["LIVE"]).map((mode) => (
             <Button
               key={mode}
               onClick={() =>
@@ -513,7 +510,7 @@ export const AdminLiveTradingDashboardPage = () => {
               disabled={!isManager}
               data-testid={`live-control-execution-mode-switch-${mode.toLowerCase()}-button`}
             >
-              {mode}
+              {mode} ENFORCE
             </Button>
           ))}
         </div>

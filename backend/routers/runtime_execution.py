@@ -620,24 +620,13 @@ def verify_kill_switch_rollback_endpoint(
 
 @router.get("/execution/mode")
 def get_execution_mode(current_user: User = Depends(require_admin)):
-    alias_to_mode = {
-        "mock": "sim",
-        "paper": "live",
-        "live": "live",
-        "sim": "sim",
-    }
-    compatibility_alias = {
-        "sim": "MOCK",
-        "live": "LIVE",
-    }
-    raw_mode = str(os.environ.get("EXECUTION_MODE") or "sim").strip().lower()
-    mode = alias_to_mode.get(raw_mode, raw_mode)
+    mode = "live"
     return {
         "status": "ok",
         "requested_by": current_user.id,
         "mode": mode,
-        "compatibility_alias": compatibility_alias.get(mode, "MOCK"),
-        "compatibility_notice": "legacy PAPER/MOCK aliases will be removed after one sprint",
+        "compatibility_alias": "LIVE",
+        "compatibility_notice": None,
         "flags": {
             "LIVE_TRADING_ENABLED": str(os.environ.get("LIVE_TRADING_ENABLED") or "false"),
             "LIVE_ROUTE_APPROVED": str(os.environ.get("LIVE_ROUTE_APPROVED") or "false"),

@@ -16,13 +16,12 @@ DEFAULT_LATENCY_THRESHOLDS = {
     "execution_latency_ms": 1600,
 }
 
-CANONICAL_MODES = {"LIVE", "SIM"}
+CANONICAL_MODES = {"LIVE"}
 LEGACY_MODE_ALIASES = {"PAPER", "MOCK"}
 MODE_ALIAS_MAP = {
     "LIVE": "LIVE",
-    "SIM": "SIM",
     "PAPER": "LIVE",
-    "MOCK": "SIM",
+    "MOCK": "LIVE",
 }
 
 
@@ -48,12 +47,8 @@ def get_execution_mode(db: Session, cache) -> str:
         if normalized in CANONICAL_MODES:
             return normalized
 
-    config = db.query(LiveActivationConfig).filter(LiveActivationConfig.id == "global").first()
-    if config and bool(config.live_mode_enabled) and not bool(config.safe_mode_enabled):
-        return "LIVE"
-    if config and bool(config.safe_mode_enabled):
-        return "SIM"
-    return "SIM"
+    cache.set(EXECUTION_MODE_KEY, "LIVE")
+    return "LIVE"
 
 
 def get_latency_thresholds(cache) -> dict:
@@ -89,13 +84,6 @@ def infer_requested_execution_mode(intent: UserExecutionIntent) -> str:
         normalized = normalize_execution_mode(explicit_mode)
         if normalized in CANONICAL_MODES:
             return normalized
-
-    if bool(payload.get("mocked")) or str(payload.get("simulate") or "").lower() in {"true", "1", "yes"}:
-        return "SIM"
-
-    market_type = str(intent.market_type or "").lower()
-    if "paper" in market_type or "sim" in market_type or "live" in market_type:
-        return "LIVE"
 
     return "LIVE"
 
@@ -165,6 +153,9 @@ def switch_execution_mode(
     actor_role: str,
 ) -> dict:
     requested_mode = str(mode or "").strip().upper()
+    if requested_mode != "LIVE":
+        raise ValueError("live_only_mode_enforced")
+
     normalized_mode = normalize_execution_mode(requested_mode)
     if normalized_mode not in CANONICAL_MODES:
         raise ValueError("invalid_mode")
@@ -174,10 +165,9 @@ def switch_execution_mode(
 
     config = db.query(LiveActivationConfig).filter(LiveActivationConfig.id == "global").first()
     if config is not None:
-        config.live_mode_enabled = normalized_mode == "LIVE"
-        config.safe_mode_enabled = normalized_mode != "LIVE"
-        if normalized_mode != "LIVE":
-            config.trading_enabled = False
+        config.live_mode_enabled = True
+        config.safe_mode_enabled = False
+        config.trading_enabled = True
         db.commit()
 
     kill_switch = cache.get("pipeline:kill_switch")
@@ -201,7 +191,7 @@ def switch_execution_mode(
     snapshot_payload = {
         "mode": normalized_mode,
         "requested_mode": requested_mode,
-        "compatibility_alias_used": requested_mode in LEGACY_MODE_ALIASES,
+        "compatibility_alias_used": False,
         "previous_mode": previous_mode,
         "reason": reason,
         "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -209,7 +199,7 @@ def switch_execution_mode(
             "kill_switch_active": bool(kill_switch_payload.get("active", False)),
             "fallback_active": bool(fallback_payload.get("active", False)),
             "live_mode_enabled": bool(config.live_mode_enabled) if config else normalized_mode == "LIVE",
-            "safe_mode_enabled": bool(config.safe_mode_enabled) if config else normalized_mode != "LIVE",
+            "safe_mode_enabled": bool(config.safe_mode_enabled) if config else False,
             "trading_enabled": bool(config.trading_enabled) if config else normalized_mode == "LIVE",
         },
         "critical_alerts": {"status": "snapshot_only", "items": []},
@@ -228,7 +218,7 @@ def switch_execution_mode(
             "previous_mode": previous_mode,
             "new_mode": normalized_mode,
             "requested_mode": requested_mode,
-            "compatibility_alias_used": requested_mode in LEGACY_MODE_ALIASES,
+            "compatibility_alias_used": False,
             "reason": reason,
             "snapshot_captured": True,
         },
@@ -237,8 +227,8 @@ def switch_execution_mode(
     return {
         "mode": normalized_mode,
         "requested_mode": requested_mode,
-        "compatibility_alias_used": requested_mode in LEGACY_MODE_ALIASES,
-        "compatibility_notice": "legacy alias accepted for one sprint" if requested_mode in LEGACY_MODE_ALIASES else None,
+        "compatibility_alias_used": False,
+        "compatibility_notice": None,
         "previous_mode": previous_mode,
         "snapshot": snapshot_payload,
         "audit_log_id": audit_row.id,

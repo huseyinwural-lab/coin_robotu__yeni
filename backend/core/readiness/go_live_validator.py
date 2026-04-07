@@ -1120,7 +1120,7 @@ def run_go_live_validator(context: dict) -> dict:
         steps.append(step)
         by_layer[layer].append(step)
 
-    execution_mode = str(context.get("execution_mode") or "SIM").upper()
+    execution_mode = str(context.get("execution_mode") or "LIVE").upper()
     env_mode = context.get("env_mode")
     config: LiveActivationConfig | None = context.get("config")
     release_gate = context.get("release_gate") or {}
@@ -1257,10 +1257,6 @@ def run_go_live_validator(context: dict) -> dict:
     if connection_exists:
         if execution_mode == "LIVE":
             env_ok = connection_env in {"live", "prod", "production"}
-        elif execution_mode == "LIVE":
-            env_ok = connection_env in {"live", "paper"}
-        elif execution_mode == "SIM":
-            env_ok = connection_env in {"live", "paper", "sim", "mock"}
     env_status = "PASS" if env_ok else "UNKNOWN" if not connection_exists else "FAIL"
     add_step(
         "core",
@@ -2768,7 +2764,7 @@ def evaluate_go_live_readiness(
             "data_freshness": {},
             "generated_at": now,
             "legacy_score": {},
-            "execution_mode": str(context.get("execution_mode") or "SIM"),
+            "execution_mode": str(context.get("execution_mode") or "LIVE"),
             "required_venues": _resolve_required_venues(),
             "venue_policy": str(os.environ.get("GO_LIVE_VENUE_POLICY") or "binance_only").strip().lower(),
             "exchange_readiness": {},

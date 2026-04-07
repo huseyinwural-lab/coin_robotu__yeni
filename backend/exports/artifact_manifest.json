@@ -168,6 +168,34 @@
       "chain_position": 11,
       "prev_chain_hash": "95fd634b656067a64df8a68c69fd9440d2f0b24f60daddb730488bbae46a82e1",
       "chain_hash": "6a23d7d8b4ad9b7a399eea8b6d4b9afb8c35b57e19173347b9161aee2faf0298"
+    },
+    {
+      "artifact_id": "b8181055-2b8e-49ef-a45a-0daf97903c88",
+      "filename": "execution_safety_gate_20260407004105_b8181055.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "df0eafbe0476171fe86d1bd1bc084c406adea4560623724510afceaf2371c174",
+      "size": 2009,
+      "created_at": "2026-04-07T00:41:05.068724+00:00",
+      "proof_id": "b8181055-2b8e-49ef-a45a-0daf97903c88",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 12,
+      "prev_chain_hash": "6a23d7d8b4ad9b7a399eea8b6d4b9afb8c35b57e19173347b9161aee2faf0298",
+      "chain_hash": "d61ea143a8bc4694605831146f16252c4e6f29d06bd1dce40fb8d3189bb28400"
+    },
+    {
+      "artifact_id": "ccc12ca7-bd52-4716-b2fe-7496c760a281",
+      "filename": "execution_safety_gate_20260407004105_ccc12ca7.json",
+      "artifact_type": "execution_safety_gate",
+      "sha256": "c20c1723bf47e89744dc0a74e655cbb92ff138a60b2e3e0419392339ed525fb0",
+      "size": 2009,
+      "created_at": "2026-04-07T00:41:05.124117+00:00",
+      "proof_id": "ccc12ca7-bd52-4716-b2fe-7496c760a281",
+      "evidence_type": "execution_safety_gate",
+      "status": "generated",
+      "chain_position": 13,
+      "prev_chain_hash": "d61ea143a8bc4694605831146f16252c4e6f29d06bd1dce40fb8d3189bb28400",
+      "chain_hash": "06c09fb616cfb4be7bbf9648a7187cca799ce37b4d100da0f311e33e961cdfbe"
     }
   ]
 }

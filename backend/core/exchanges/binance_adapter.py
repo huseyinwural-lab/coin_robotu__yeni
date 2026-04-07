@@ -260,22 +260,14 @@ class BinanceExecutionAdapter(BaseExecutionAdapter):
         raise RuntimeError("exchange_reject:unknown:request_failed")
 
     def _guard(self) -> None:
-        execution_mode = str(os.environ.get("EXECUTION_MODE") or "sim").strip().lower()
-        live_enabled = _is_true(os.environ.get("LIVE_TRADING_ENABLED"))
+        execution_mode = str(os.environ.get("EXECUTION_MODE") or "live").strip().lower()
         live_enabled = _is_true(os.environ.get("LIVE_TRADING_ENABLED"))
         live_route_approved = _is_true(os.environ.get("LIVE_ROUTE_APPROVED"))
 
-        if execution_mode == "live":
-            if not (live_enabled and live_route_approved):
-                raise RuntimeError("live_guard_blocked")
-            raise RuntimeError("live_route_not_implemented")
-
         if execution_mode != "live":
-            raise RuntimeError("invalid_binance_mode")
-        if not live_enabled:
+            raise RuntimeError("live_only_mode_enforced")
+        if not (live_enabled and live_route_approved):
             raise RuntimeError("live_guard_blocked")
-        if live_enabled:
-            raise RuntimeError("live_mode_invalid_live_enabled")
         if not self.api_key or not self.api_secret:
             raise RuntimeError("missing_live_credentials")
 

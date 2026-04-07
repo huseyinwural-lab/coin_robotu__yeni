@@ -76,12 +76,7 @@ export const AdminExecutionReadinessPage = () => {
   const loadRequestRef = useRef(0);
   const hasLoadedRef = useRef(false);
 
-  const expectedPhrase = useMemo(() => {
-    if (targetMode === "SIM") return "SWITCH TO SIM";
-    if (targetMode === "PAPER") return "SWITCH TO PAPER";
-    if (targetMode === "MOCK") return "SWITCH TO MOCK";
-    return "SWITCH TO LIVE";
-  }, [targetMode]);
+  const expectedPhrase = useMemo(() => "SWITCH TO LIVE", []);
 
   const deployBlocked = !gate?.deploy_allowed;
   const isAdvisoryCheck = useCallback((check) => {
@@ -335,13 +330,13 @@ export const AdminExecutionReadinessPage = () => {
   const handleModeTransition = useCallback(async () => {
     await runAction(async () => {
       await apiClient.post("/phase4/admin/production-gate/mode-transition", {
-        target_mode: targetMode,
+        target_mode: "LIVE",
         reason_text: modeReason,
         confirmation_phrase: confirmationPhrase,
       });
       setModeModalOpen(false);
-    }, `${targetMode} geçiş isteği gönderildi`);
-  }, [targetMode, modeReason, confirmationPhrase, runAction]);
+    }, "LIVE geçiş isteği gönderildi");
+  }, [modeReason, confirmationPhrase, runAction]);
 
   const handleApiKeyTestRun = useCallback(
     async (connectionId = null, exchange = null) => {
@@ -1778,15 +1773,12 @@ export const AdminExecutionReadinessPage = () => {
         <DialogContent data-testid="admin-production-gate-mode-modal">
           <DialogHeader>
             <DialogTitle data-testid="admin-production-gate-mode-modal-title">Mode Change Confirmation</DialogTitle>
-            <DialogDescription data-testid="admin-production-gate-mode-modal-description">SIM/PAPER/MOCK → LIVE geçişinde Gate hard-block aktifse işlem reddedilir.</DialogDescription>
+            <DialogDescription data-testid="admin-production-gate-mode-modal-description">Platform LIVE-only çalışır. Geçiş doğrulaması yalnız LIVE için uygulanır.</DialogDescription>
           </DialogHeader>
           <div className="space-y-2" data-testid="admin-production-gate-mode-modal-form">
             <label className="text-xs text-slate-300" data-testid="admin-production-gate-mode-target-label">target_mode</label>
-            <select className="w-full rounded border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-white" value={targetMode} onChange={(event) => { setTargetMode(event.target.value); setConfirmationPhrase(event.target.value === "LIVE" ? "SWITCH TO LIVE" : event.target.value === "SIM" ? "SWITCH TO SIM" : event.target.value === "PAPER" ? "SWITCH TO PAPER" : "SWITCH TO MOCK"); }} data-testid="admin-production-gate-mode-target-select">
+            <select className="w-full rounded border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-white" value={targetMode} onChange={(event) => { setTargetMode(event.target.value); setConfirmationPhrase("SWITCH TO LIVE"); }} disabled data-testid="admin-production-gate-mode-target-select">
               <option value="LIVE">LIVE</option>
-              <option value="SIM">SIM</option>
-              <option value="PAPER">PAPER (legacy)</option>
-              <option value="MOCK">MOCK (legacy)</option>
             </select>
             <label className="text-xs text-slate-300" data-testid="admin-production-gate-mode-reason-label">reason_text</label>
             <textarea className="w-full rounded border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-white" rows={3} value={modeReason} onChange={(event) => setModeReason(event.target.value)} data-testid="admin-production-gate-mode-reason-input" />

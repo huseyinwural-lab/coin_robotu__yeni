@@ -39,9 +39,6 @@ OPS_ALLOWED_ALERT_ACTIONS = {"resolve", "mute", "fix_action"}
 
 MODE_SWITCH_PHRASE = {
     "LIVE": "SWITCH TO LIVE",
-    "SIM": "SWITCH TO SIM",
-    "PAPER": "SWITCH TO PAPER",
-    "MOCK": "SWITCH TO MOCK",
 }
 
 SYSTEM_HEALTH_PHRASES = {
@@ -64,7 +61,7 @@ SCANNER_UNIVERSE_PHRASE = "UPDATE SYMBOL UNIVERSE"
 
 
 class ExecutionModeSwitchRequest(BaseModel):
-    mode: str = Field(pattern="^(LIVE|SIM|PAPER|MOCK)$")
+    mode: str = Field(pattern="^(LIVE)$")
     reason: str = Field(min_length=5, max_length=300)
     confirmation_phrase: str = Field(min_length=5, max_length=80)
 
@@ -1075,7 +1072,7 @@ def admin_live_trading_summary(
         return {
             "window": window,
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "system_health": {"status": "degraded", "execution_mode": "MOCK", "kill_switch_active": False, "fallback_active": True},
+            "system_health": {"status": "degraded", "execution_mode": "LIVE", "kill_switch_active": False, "fallback_active": True},
             "critical_alerts": {
                 "status": "critical",
                 "items": [{"code": "summary_generation_failed", "message": "summary_generation_failed"}],

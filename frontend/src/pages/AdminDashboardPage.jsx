@@ -1010,7 +1010,7 @@ export const AdminDashboardPage = () => {
             <p data-testid="admin-dashboard-runtime-smoke-status">status: {runtimeSmoke?.run_status || "no_data"}</p>
             <p data-testid="admin-dashboard-runtime-smoke-summary">summary: {runtimeSmoke?.summary || "-"}</p>
             <p data-testid="admin-dashboard-runtime-smoke-completed-at">completed_at: {runtimeSmoke?.completed_at || "-"}</p>
-            <p data-testid="admin-dashboard-runtime-execution-mode">mode: {runtimeExecutionMode?.mode || "sim"}</p>
+            <p data-testid="admin-dashboard-runtime-execution-mode">mode: {runtimeExecutionMode?.mode || "live"}</p>
             <p data-testid="admin-dashboard-runtime-canary-mode">canary: {runtimeExecutionMode?.flags?.CANARY_MODE || "false"}</p>
             <p data-testid="admin-dashboard-runtime-kill-switch-status">kill_switch: {runtimeKillSwitch?.active ? "ACTIVE" : "INACTIVE"}</p>
             <p data-testid="admin-dashboard-runtime-kill-switch-reason">reason: {runtimeKillSwitch?.reason || "-"}</p>

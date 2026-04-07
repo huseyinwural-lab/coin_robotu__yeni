@@ -423,7 +423,7 @@ def validate_order_precheck(
             },
             "microstructure_guard": {
                 "state": "MOCKED_SAFE",
-                "selected_venue": "SIM",
+                "selected_venue": "LIVE",
                 "reason_codes": ["FAST_MODE_BYPASS"],
             },
             "explainability": {
@@ -554,9 +554,7 @@ def validate_order_precheck(
             }
         )
 
-    row = _latest_connection(db, user_id)
-    snapshot = dict(row.readiness_snapshot or {}) if row else {}
-    quick_mode = "live" if str(getattr(row, "environment", "")).lower() == "live" and bool(snapshot.get("can_trade", False)) else "mocked"
+    quick_mode = "live"
     adjustments = {
         "adjusted_size": microstructure_guard.get("adjusted_size") if guard_state == "REDUCE_SIZE" else requested_size,
         "adjusted_notional": microstructure_guard.get("adjusted_notional") if guard_state == "REDUCE_SIZE" else notional,
@@ -583,7 +581,7 @@ def validate_order_precheck(
     }
     result["explain"] = build_trade_explain(
         validation=result,
-        execution_mode=result.get("execution_mode") or "mocked",
+        execution_mode=result.get("execution_mode") or "live",
         signal_score=None,
     )
     return result

@@ -3028,7 +3028,7 @@ def enforce_release_gate(db: Session, environment: str = "prod") -> dict:
     gate = release_gate_view(db, environment=environment)
     config = get_or_create_live_config(db)
     if gate["status"] == "BLOCKED":
-        config.live_mode_enabled = False
+        config.trading_enabled = False
     config.updated_at = datetime.now(timezone.utc)
     db.commit()
 
@@ -3463,7 +3463,7 @@ def compute_live_readiness_score(db: Session) -> dict:
 
     live_activation = "disabled" if release_gate_status == "BLOCKED" else "guarded"
     if release_gate_status == "BLOCKED":
-        config.live_mode_enabled = False
+        config.trading_enabled = False
         db.commit()
 
     return {
@@ -3511,15 +3511,15 @@ def get_or_create_live_config(db: Session) -> LiveActivationConfig:
         id="global",
         exchange="binance",
         market_type="futures_live",
-        safe_mode_enabled=True,
-        live_mode_enabled=False,
+        safe_mode_enabled=False,
+        live_mode_enabled=True,
         symbol_whitelist=[],
         max_position_pct=MAX_SAFE_POSITION_PCT,
         leverage_cap=MAX_SAFE_LEVERAGE,
         max_trades_per_hour=6,
         max_notional_exposure=MAX_SAFE_NOTIONAL_EXPOSURE,
         kill_switch_enabled=False,
-        trading_enabled=False,
+        trading_enabled=True,
         max_total_exposure=MAX_SAFE_NOTIONAL_EXPOSURE,
         max_active_positions=3,
         canary_enabled=False,
@@ -3543,11 +3543,11 @@ def apply_config_update(db: Session, config: LiveActivationConfig, payload: dict
     _enforce_controlled_limits(config)
 
     if config.kill_switch_enabled or config.disable_futures:
-        config.live_mode_enabled = False
+        config.trading_enabled = False
 
     critical_ready = config.ip_whitelist_ready and config.trading_permission_ready
     if config.live_mode_enabled and not critical_ready:
-        config.live_mode_enabled = False
+        config.trading_enabled = False
 
     config.updated_at = datetime.now(timezone.utc)
     db.commit()

@@ -1,41 +1,18 @@
 import os
 
 from core.exchanges.binance_adapter import BinanceExecutionAdapter
-from core.exchanges.sim_adapter import SimExecutionAdapter
 
 
 def get_execution_adapter():
-    execution_mode = str(os.environ.get("EXECUTION_MODE") or "sim").strip().lower()
-    live_enabled = str(os.environ.get("LIVE_TRADING_ENABLED") or "false").strip().lower() == "true"
-    live_enabled = str(os.environ.get("LIVE_TRADING_ENABLED") or "false").strip().lower() == "true"
-    live_route_approved = str(os.environ.get("LIVE_ROUTE_APPROVED") or "false").strip().lower() == "true"
+    execution_mode = str(os.environ.get("EXECUTION_MODE") or "live").strip().lower()
     prod_freeze = str(os.environ.get("VENUE_PROD_FREEZE") or "false").strip().lower() == "true"
     env_lock = str(os.environ.get("VENUE_ENV_LOCK") or "").strip().lower()
 
-    if execution_mode == "live":
-        if env_lock in {"live", "live"} and env_lock != "live":
-            raise RuntimeError("environment_lock_blocked")
-        if prod_freeze:
-            raise RuntimeError("prod_freeze_active")
+    if execution_mode != "live":
+        raise RuntimeError("live_only_mode_enforced")
+    if env_lock and env_lock != "live":
+        raise RuntimeError("environment_lock_blocked")
+    if prod_freeze:
+        raise RuntimeError("prod_freeze_active")
 
-        from services.venue_control_plane_service import get_cached_venue_control_plane_sanity
-
-        sanity = get_cached_venue_control_plane_sanity()
-        if not sanity or str(sanity.get("net_status") or "").upper() != "PASS":
-            raise RuntimeError("sanity_gate_blocked")
-
-        if live_enabled and live_route_approved:
-            return BinanceExecutionAdapter(mode="live")
-        raise RuntimeError("live_guard_blocked")
-
-    if execution_mode == "live":
-        if env_lock in {"live", "live"} and env_lock != "live":
-            raise RuntimeError("environment_lock_blocked")
-        if live_enabled and not live_enabled:
-            return BinanceExecutionAdapter(mode="live")
-        raise RuntimeError("live_guard_blocked")
-
-    if execution_mode != "sim":
-        raise RuntimeError("invalid_execution_mode")
-
-    return SimExecutionAdapter()
+    return BinanceExecutionAdapter(mode="live")

@@ -1105,7 +1105,7 @@ def resolve_exchange_credentials(
                 raise ValueError("prod_freeze_active")
             if _norm(os.environ.get("LIVE_ROUTE_APPROVED"), default="false") != "true":
                 raise ValueError("live_route_not_approved")
-            mode = _norm(os.environ.get("EXECUTION_MODE"), default="sim")
+            mode = _norm(os.environ.get("EXECUTION_MODE"), default="live")
             if mode != "live":
                 raise ValueError("mode_mismatch_live_blocked")
 
