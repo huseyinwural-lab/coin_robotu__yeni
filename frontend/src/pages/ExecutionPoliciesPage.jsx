@@ -239,6 +239,11 @@ export const ExecutionPoliciesPage = () => {
   const safeModeStates = payload?.safe_mode_states || [];
   const severityDistribution = observability?.violation_aggregations?.["24h"]?.severity_distribution || {};
   const violations = payload?.recent_policy_violations || [];
+  const effectiveGateState = String(releaseGate?.effective_state || "").toUpperCase();
+  const deployAllowed = Boolean(releaseGate?.deploy_allowed);
+  const policyBypassApplied = Boolean(releaseGate?.policy_bypass_applied) || String(releaseGate?.policy_blocking_mode || "").toUpperCase() === "FORCED_GO";
+  const remediationFinalDecision = String(remediationState?.final_release_gate_decision || "-").toUpperCase();
+  const remediationNoGoAdvisory = remediationFinalDecision === "NO_GO" && deployAllowed && ["GO", "GO_WITH_OVERRIDE"].includes(effectiveGateState);
 
   const versionMap = policyVersions.reduce((acc, item) => {
     acc[item.version_id] = item;
@@ -1518,8 +1523,20 @@ version_id_2"
               <p data-testid="execution-policies-remediation-release-gate-status">release_gate_status: {remediationState?.release_gate_status || "-"}</p>
               <p data-testid="execution-policies-remediation-preflight-status">preflight_status: {remediationState?.preflight_status || "-"}</p>
               <p data-testid="execution-policies-remediation-secret-status">secret_readiness_status: {remediationState?.secret_readiness_status || "-"}</p>
-              <p data-testid="execution-policies-remediation-final-decision">final_release_gate_decision: {remediationState?.final_release_gate_decision || "-"}</p>
+              <p data-testid="execution-policies-remediation-effective-gate">effective_gate_state: {effectiveGateState || "-"} · deploy_allowed: {String(deployAllowed)}</p>
+              <p data-testid="execution-policies-remediation-final-decision">final_release_gate_decision(raw): {remediationState?.final_release_gate_decision || "-"}</p>
             </div>
+
+            {remediationNoGoAdvisory && (
+              <p className="mt-2 text-xs text-emerald-300" data-testid="execution-policies-remediation-advisory-note">
+                Not: final_release_gate_decision(raw)=NO_GO yalnız telemetry/debug bilgisidir. Effective gate GO ve deployment izinli.
+              </p>
+            )}
+            {policyBypassApplied && (
+              <p className="mt-1 text-xs text-amber-300" data-testid="execution-policies-remediation-bypass-note">
+                Policy override aktif: FORCED_GO modunda release gate bypass uygulanmış durumda.
+              </p>
+            )}
 
             <div className="mt-2 space-y-1" data-testid="execution-policies-remediation-reasons-list">
               {(remediationState?.release_gate_reason_codes || []).map((item, index) => (
@@ -1656,7 +1673,7 @@ version_id_2"
 
             <div className="rounded border border-slate-800 bg-slate-900 p-4" data-testid="execution-policies-release-gate-card">
               <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="execution-policies-release-gate-title">Release Gate</p>
-              <p className="mt-2 text-sm text-slate-200" data-testid="execution-policies-release-gate-status">status: {releaseGate?.status || "UNKNOWN"}</p>
+              <p className="mt-2 text-sm text-slate-200" data-testid="execution-policies-release-gate-status">status: {releaseGate?.status || "UNKNOWN"} · effective: {effectiveGateState || "-"} · deploy_allowed: {String(deployAllowed)}</p>
               <p className="text-[11px] text-slate-400" data-testid="execution-policies-release-gate-summary">critical: {releaseGate?.summary?.critical_violation_count ?? 0} · failsafe: {releaseGate?.summary?.failsafe_hard_block_count ?? 0}</p>
               <div className="mt-2" data-testid="execution-policies-release-gate-recommendations">
                 <p className="text-[11px] uppercase tracking-wider text-slate-400" data-testid="execution-policies-release-gate-recommendations-title">Recommended Actions</p>
