@@ -243,6 +243,7 @@ def _derive_error_class(row: AuditLog, *, details: dict | None = None) -> str:
     payload = details if isinstance(details, dict) else (row.details or {})
     status_code = _extract_status_code(payload)
     severity = str(row.severity or "").strip().lower()
+    action = str(row.action or "").strip().lower()
     error_text = " ".join(
         [
             str(payload.get("error") or ""),
@@ -258,6 +259,10 @@ def _derive_error_class(row: AuditLog, *, details: dict | None = None) -> str:
         return "auth_error"
     if (status_code is not None and status_code >= 500) or any(token in error_text for token in ["timeout", "network", "pool", "gateway", "db_pool_timeout", "service_unavailable"]):
         return "infra_error"
+
+    if action.startswith("permission_drift_"):
+        return "none"
+
     if severity in {"warning", "critical", "error"} or _is_error_log_entry(row, details=payload):
         return "trade_blocker"
     return "none"
@@ -479,7 +484,12 @@ def _build_error_table_row(item: dict) -> dict:
         or details.get("request_id")
         or item.get("id")
     )
-    endpoint = item.get("route") or details.get("route") or "unknown_endpoint"
+    endpoint = item.get("route") or details.get("route")
+    if not endpoint:
+        action = str(item.get("action") or "").strip().lower()
+        if action.startswith("permission_drift_"):
+            endpoint = "permission_drift_internal"
+    endpoint = endpoint or "unknown_endpoint"
     error_class = str(item.get("error_class") or "trade_blocker")
     retryable = _derive_retryable(details, error_class, normalized_status)
     service_source = _derive_service_source(item, details)

@@ -2914,6 +2914,7 @@ def active_alerts(db: Session) -> list[dict]:
 def route_permission_drift_alert(db: Session, drift_event: PermissionDriftEvent) -> None:
     policy = get_or_create_alert_policy(db)
     payload = {
+        "route": "permission_drift_internal",
         "user_id": drift_event.user_id,
         "exchange": drift_event.exchange,
         "old_permissions": drift_event.old_permissions,
