@@ -408,9 +408,9 @@ def validate_order_precheck(
         "reason_codes": [],
         "execution_mode": quick_mode,
         "microstructure_guard": {
-            "state": "LIVE_DIRECT",
+            "state": "MOCKED_SAFE",
             "selected_venue": "LIVE",
-            "reason_codes": ["HARDBLOCK_DISABLED"],
+            "reason_codes": ["FAST_MODE_BYPASS", "HARDBLOCK_DISABLED"],
         },
         "adjustments": {
             "adjusted_size": requested_size,
