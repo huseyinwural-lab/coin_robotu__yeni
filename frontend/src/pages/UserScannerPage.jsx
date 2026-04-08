@@ -4,7 +4,6 @@ import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { ScannerResultsTable } from "@/components/ScannerResultsTable";
-import { TradeSymbolSelection } from "@/components/TradeSymbolSelection";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient, classifyApiError } from "@/lib/api";
@@ -2347,26 +2346,6 @@ export const UserScannerPage = () => {
           </p>
           <p className="text-sm md:col-span-3" data-testid="user-scanner-parameters-strategy-mapping">Strategy Mapping: <span className="font-semibold">signal.execution_strategy_type = bot.strategy_type</span></p>
         </div>
-      </section>
-
-      <section className="order-7 col-span-12" data-testid="user-scanner-symbol-selection-section">
-        <TradeSymbolSelection
-          source={symbolSource}
-          onSourceChange={setSymbolSource}
-          mode={SIMPLE_SCANNER_V2 ? "manual_selection" : symbolMode}
-          onModeChange={(value) => {
-            if (SIMPLE_SCANNER_V2) {
-              setSymbolMode("manual_selection");
-              return;
-            }
-            setSymbolMode(value);
-          }}
-          marketType={marketType}
-          selectedSymbols={selectedSymbols}
-          onSelectedSymbolsChange={setSelectedSymbols}
-          watchlistOnly={watchlistOnly}
-          onWatchlistOnlyChange={setWatchlistOnly}
-        />
       </section>
 
       {!SIMPLE_SCANNER_V2 && <section className="order-7 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-minimal-filter-section">
