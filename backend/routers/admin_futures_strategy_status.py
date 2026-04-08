@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -42,7 +42,9 @@ def futures_strategy_status(
 
 @router.post("/run-paper-cycle")
 def run_futures_strategy_cycle(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
-    status = run_futures_strategy_paper_cycle(db, pipeline_runtime.cache, current_admin.id)
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "paper cycle kaldırıldı"})
+
+    status_payload = run_futures_strategy_paper_cycle(db, pipeline_runtime.cache, current_admin.id)
     create_audit_log(
         db,
         action="FUTURES_STRATEGY_PAPER_CYCLE_RUN",
@@ -52,12 +54,12 @@ def run_futures_strategy_cycle(current_admin: User = Depends(require_admin), db:
         actor_role=current_admin.role.value,
         severity="info",
         details={
-            "strategy": status.get("strategy"),
-            "signals": (status.get("metrics") or {}).get("futures_strategy_signal_total", 0),
-            "allowed": (status.get("metrics") or {}).get("futures_strategy_allowed_total", 0),
+            "strategy": status_payload.get("strategy"),
+            "signals": (status_payload.get("metrics") or {}).get("futures_strategy_signal_total", 0),
+            "allowed": (status_payload.get("metrics") or {}).get("futures_strategy_allowed_total", 0),
         },
     )
-    return status
+    return status_payload
 
 
 @router.get("/performance")

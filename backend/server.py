@@ -67,7 +67,6 @@ from routers import (
     dashboard,
     exchange,
     market,
-    paper_positions,
     phase4_live,
     pipeline,
     spot_strategy,
@@ -668,7 +667,6 @@ api_router.include_router(user_live_ws.router)
 api_router.include_router(admin_closure.router)
 api_router.include_router(pipeline.router)
 api_router.include_router(spot_strategy.router)
-api_router.include_router(paper_positions.router)
 api_router.include_router(backtest.router)
 api_router.include_router(phase4_live.router)
 api_router.include_router(runtime_control.router)
@@ -689,21 +687,20 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 async def security_headers_middleware(request: Request, call_next):
     path = str(request.url.path or "")
     method = str(request.method or "GET").upper()
-    if method in {"POST", "PUT", "PATCH", "DELETE"}:
-        if _is_pure_live_blocked_path(path) or _pure_live_keyword_block(path):
-            trace_id = _resolve_trace_id(request)
-            return JSONResponse(
-                status_code=410,
-                content={
-                    "detail": "FEATURE_REMOVED_PURE_LIVE",
-                    "code": "PURE_LIVE_410",
-                    "message": "Bu endpoint Pure Live geçişi kapsamında sistemden kaldırıldı.",
-                    "path": path,
-                    "method": method,
-                    "trace_id": trace_id,
-                },
-                headers={"X-Request-ID": trace_id},
-            )
+    if _is_pure_live_blocked_path(path) or _pure_live_keyword_block(path):
+        trace_id = _resolve_trace_id(request)
+        return JSONResponse(
+            status_code=410,
+            content={
+                "detail": "FEATURE_REMOVED_PURE_LIVE",
+                "code": "PURE_LIVE_410",
+                "message": "Bu endpoint Pure Live geçişi kapsamında sistemden kaldırıldı.",
+                "path": path,
+                "method": method,
+                "trace_id": trace_id,
+            },
+            headers={"X-Request-ID": trace_id},
+        )
 
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")

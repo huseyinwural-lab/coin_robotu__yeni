@@ -243,7 +243,7 @@ def execution_safety_dry_run(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    return run_execution_simulation(db, mode="dry-run", symbol=symbol, qty=qty, side=side, requested_by=current_user.id)
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "dry-run kaldırıldı"})
 
 
 @router.post("/execution/shadow")
@@ -254,7 +254,7 @@ def execution_safety_shadow(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    return run_execution_simulation(db, mode="shadow", symbol=symbol, qty=qty, side=side, requested_by=current_user.id)
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "shadow simulation kaldırıldı"})
 
 
 @router.get("/intents")

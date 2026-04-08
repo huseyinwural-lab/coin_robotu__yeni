@@ -259,6 +259,8 @@ def admin_live_trading_switch_execution_mode(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "execution mode switching kaldırıldı"})
+
     manager = _require_manager(current_admin)
     previous_mode = get_execution_mode(db, redis_client)
 

@@ -504,15 +504,7 @@ def run_go_live_dry_run_endpoint(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    try:
-        result = run_single_flow_dry_run(db, current_user=current_user, symbol=payload.symbol, size=payload.size)
-        if str(result.get("status") or "").upper() != "PASS":
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=result)
-        return {"status": "ok", "requested_by": current_user.id, "result": result}
-    except HTTPException:
-        raise
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "go-live dry-run kaldırıldı"})
 
 
 @router.get("/canary/readiness-score")
