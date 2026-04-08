@@ -216,11 +216,14 @@ PURE_LIVE_BLOCKED_PATH_PREFIXES = (
     "/api/execution-safety/execution/dry-run",
     "/api/execution-safety/execution/shadow",
     "/api/runtime-execution/go-live/dry-run",
+    "/api/runtime/go-live/dry-run",
     "/api/admin/futures-strategy-status/run-paper-cycle",
+    "/api/admin/futures/strategy/run-paper-cycle",
     "/api/admin/live-trading-dashboard/control-layer/execution-mode",
     "/api/admin/strategy-allocation/what-if-simulation",
     "/api/user/signal-mode",
     "/api/user/scanner/automation",
+    "/api/user/scanner/automation-profiles",
 )
 
 PURE_LIVE_BLOCKED_REGEX = (

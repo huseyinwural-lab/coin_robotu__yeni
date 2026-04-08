@@ -141,7 +141,7 @@ export const UserDashboardPage = () => {
       const portfolioData = readData(1, {
         current_capital: 0,
         available_balance: 0,
-        execution_mode: "mocked",
+        live_status: "pure_live",
         closed_pnl: 0,
       });
       const performanceData = readData(2, {
@@ -245,22 +245,13 @@ export const UserDashboardPage = () => {
   }, [activeBotCount, recentSignals, signalMode?.mode]);
 
   const executionModeBadge = useMemo(() => {
-    const raw = String(portfolio?.execution_mode || "mocked").toUpperCase();
-    const tone = raw === "LIVE" ? "border-emerald-500/60 bg-emerald-500/20 text-emerald-200" : "border-amber-500/60 bg-amber-500/20 text-amber-200";
+    const raw = String(portfolio?.live_status || "pure_live").toUpperCase();
+    const tone = "border-emerald-500/60 bg-emerald-500/20 text-emerald-200";
     return { label: raw, tone };
-  }, [portfolio?.execution_mode]);
+  }, [portfolio?.live_status]);
 
   const setSignalModeAuto = async () => {
-    setIsControlBusy(true);
-    try {
-      await apiClient.put("/user/signal-mode", { mode: "AUTO" });
-      toast.success("Signal mode AUTO olarak ayarlandı");
-      await load({ silent: true });
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Signal mode AUTO ayarlanamadı");
-    } finally {
-      setIsControlBusy(false);
-    }
+    toast.info("Pure Live modunda Signal Mode değiştirme kaldırıldı.");
   };
 
   const runFixAllBlockers = async () => {
@@ -431,7 +422,7 @@ export const UserDashboardPage = () => {
         <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-dashboard-summary-title">Quick Summary</p>
         <div className="mt-2" data-testid="user-dashboard-execution-mode-badge-wrapper">
           <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${executionModeBadge.tone}`} data-testid="user-dashboard-execution-mode-badge">
-            execution_mode: {executionModeBadge.label}
+            live_status: {executionModeBadge.label}
           </span>
         </div>
         <p className="mt-2 text-sm" data-testid="user-dashboard-current-capital">Current Capital: {dashboard?.current_capital ?? "-"}</p>
@@ -465,7 +456,7 @@ export const UserDashboardPage = () => {
           <p className="text-sm" data-testid="user-dashboard-live-control-note">Not: ORDER_PRECHECK_FAILED bypass edilmez, güvenlik için blocked kalır.</p>
         </div>
         <div className="mt-3 flex flex-wrap gap-2" data-testid="user-dashboard-live-control-actions">
-          <Button variant="outline" disabled={isControlBusy} onClick={setSignalModeAuto} data-testid="user-dashboard-live-control-set-auto-button">AUTO'ya Al</Button>
+          <Button variant="outline" disabled={isControlBusy} onClick={setSignalModeAuto} data-testid="user-dashboard-live-control-set-auto-button">Mode Switch Kaldırıldı</Button>
           <Button className="bg-cyan-500 text-black hover:bg-cyan-400" disabled={isControlBusy} onClick={runFixAllBlockers} data-testid="user-dashboard-live-control-fix-all-blockers-button">Fix All Blockers</Button>
           <Button variant="outline" disabled={isControlBusy} onClick={() => load({ silent: true })} data-testid="user-dashboard-live-control-refresh-button">Yenile</Button>
         </div>

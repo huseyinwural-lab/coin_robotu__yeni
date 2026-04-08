@@ -44,6 +44,7 @@ const PROFILE_INTERVAL_OPTIONS = [
 ];
 
 const SIMPLE_SCANNER_V2 = true;
+const PURE_LIVE_DISABLE_AUTOMATION = true;
 
 const RUN_CHUNK_SIZE = 20;
 
@@ -1232,7 +1233,7 @@ export const UserScannerPage = () => {
   }, [load]);
 
   useEffect(() => {
-    if (!SIMPLE_SCANNER_V2 || !selectionHydrated || !activeAutomation?.id) {
+    if (PURE_LIVE_DISABLE_AUTOMATION || !SIMPLE_SCANNER_V2 || !selectionHydrated || !activeAutomation?.id) {
       return;
     }
     if (String(activeAutomation.symbol_selection_mode || "").toLowerCase() === "manual_selection") {
@@ -1565,7 +1566,6 @@ export const UserScannerPage = () => {
     const effectiveMode = SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode);
     setIsRunning(true);
     try {
-      await apiClient.put("/user/signal-mode", { mode: preset.mode });
       setMode(preset.mode);
       const data = await executeScannerRunWithChunks({
         runMode: preset.mode,
@@ -1581,9 +1581,6 @@ export const UserScannerPage = () => {
         toast.warning((data.warnings || []).join(","));
       }
       toast.success(`Preset çalıştı: ${preset.label}`);
-      if (activeAutomation?.auto_enabled) {
-        await saveActiveProfile({ autoEnabled: true, withToast: false });
-      }
     } catch (error) {
       toast.error(toApiErrorMessage(error, "Preset çalıştırılamadı"));
     } finally {
@@ -1896,7 +1893,7 @@ export const UserScannerPage = () => {
         <p className="mt-2 text-xs text-cyan-100" data-testid="user-scanner-active-mode-indicator-run-type-detail">{scannerRunTypeDetail}</p>
       </section>}
 
-      {!SIMPLE_SCANNER_V2 && <section className="order-3 col-span-12 rounded border border-emerald-800/50 bg-emerald-950/20 p-4" data-testid="user-scanner-automation-card">
+      {false && !SIMPLE_SCANNER_V2 && <section className="order-3 col-span-12 rounded border border-emerald-800/50 bg-emerald-950/20 p-4" data-testid="user-scanner-automation-card">
         <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="user-scanner-automation-title">
           {activeProfile ? `Scanner Otomasyon Profili: ${activeProfile.name}` : "Scanner Otomasyon (Legacy)"}
         </p>
@@ -1933,7 +1930,7 @@ export const UserScannerPage = () => {
         </p>
       </section>}
 
-      {!SIMPLE_SCANNER_V2 && <section className="order-4 col-span-12 rounded border border-violet-800/50 bg-violet-950/20 p-4" data-testid="user-scanner-automation-profiles-card">
+      {false && !SIMPLE_SCANNER_V2 && <section className="order-4 col-span-12 rounded border border-violet-800/50 bg-violet-950/20 p-4" data-testid="user-scanner-automation-profiles-card">
         <p className="text-xs uppercase tracking-widest text-violet-300" data-testid="user-scanner-automation-profiles-title">Çoklu Otomasyon Profilleri</p>
         <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="user-scanner-automation-profiles-create-grid">
           <input

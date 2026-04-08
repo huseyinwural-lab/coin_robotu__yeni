@@ -20,12 +20,6 @@ export const AdminFuturesRiskMonitorPage = () => {
     setLoading(true);
     setErrorMessage("");
     try {
-      try {
-        await apiClient.post("/admin/futures/strategy/run-paper-cycle");
-      } catch {
-        // no-op, cached status can still be rendered
-      }
-
       const [riskResponse, liquidationResponse, adlResponse, strategyResponse, diagnosticsResponse, leverageResponse] = await Promise.all([
         apiClient.get("/admin/futures/risk/status"),
         apiClient.get("/admin/futures/liquidation-protection/status"),

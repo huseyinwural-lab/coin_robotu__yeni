@@ -492,35 +492,12 @@ export const AdminLiveTradingDashboardPage = () => {
 
       <div className="rounded border border-cyan-700/60 bg-slate-900 p-4" data-testid="live-control-execution-mode-panel">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="live-control-execution-mode-header">
-          <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="live-control-execution-mode-title">Execution Mode (LIVE-ONLY)</p>
-          <p className="text-xs text-slate-300" data-testid="live-control-execution-mode-current">current_mode: {controlState?.execution_mode || "-"}</p>
+          <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="live-control-execution-mode-title">Pure Live Policy</p>
+          <p className="text-xs text-slate-300" data-testid="live-control-execution-mode-current">execution-mode switching kaldırıldı</p>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2" data-testid="live-control-execution-mode-actions">
-          {(["LIVE"]).map((mode) => (
-            <Button
-              key={mode}
-              onClick={() =>
-                openActionDialog({
-                  actionKey: `mode_${mode.toLowerCase()}`,
-                  title: `Switch Mode -> ${mode}`,
-                  expectedPhrase: MODE_PHRASES[mode],
-                  reason: `switch_to_${mode.toLowerCase()}`,
-                })
-              }
-              disabled={!isManager}
-              data-testid={`live-control-execution-mode-switch-${mode.toLowerCase()}-button`}
-            >
-              {mode} ENFORCE
-            </Button>
-          ))}
-        </div>
-        <div className="mt-2 space-y-1" data-testid="live-control-execution-mode-snapshots-list">
-          {(controlState?.execution_mode_snapshots || []).slice(-3).map((item, idx) => (
-            <p key={`${item.captured_at}-${idx}`} className="text-xs text-slate-400" data-testid={`live-control-execution-mode-snapshot-${idx}`}>
-              {item.captured_at} · {item.previous_mode} → {item.mode}
-            </p>
-          ))}
-        </div>
+        <p className="mt-2 text-xs text-cyan-200" data-testid="live-control-execution-mode-removed-note">
+          Pure Live geçişi kapsamında execution mode değiştirme uçları sistemden kaldırıldı (410).
+        </p>
       </div>
 
       <div className="rounded border border-red-700/60 bg-red-950/20 p-4" data-testid="live-control-system-health-panel">
@@ -528,8 +505,6 @@ export const AdminLiveTradingDashboardPage = () => {
         <div className="mt-3 flex flex-wrap gap-2" data-testid="live-control-system-health-actions">
           <Button disabled={!isManager} onClick={() => openActionDialog({ actionKey: "kill_on", title: "Kill Switch ON", expectedPhrase: ACTION_PHRASES.kill_on, reason: "kill_switch_on" })} data-testid="live-control-kill-switch-on-button">Kill ON</Button>
           <Button variant="outline" disabled={!isManager} onClick={() => openActionDialog({ actionKey: "kill_off", title: "Kill Switch OFF", expectedPhrase: ACTION_PHRASES.kill_off, reason: "kill_switch_off" })} data-testid="live-control-kill-switch-off-button">Kill OFF</Button>
-          <Button variant="outline" disabled={!isManager} onClick={() => openActionDialog({ actionKey: "fallback_on", title: "Fallback ON", expectedPhrase: ACTION_PHRASES.fallback_on, reason: "fallback_on" })} data-testid="live-control-fallback-on-button">Fallback ON</Button>
-          <Button variant="outline" disabled={!isManager} onClick={() => openActionDialog({ actionKey: "fallback_off", title: "Fallback OFF", expectedPhrase: ACTION_PHRASES.fallback_off, reason: "fallback_off" })} data-testid="live-control-fallback-off-button">Fallback OFF</Button>
         </div>
 
         <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="live-control-latency-threshold-grid">

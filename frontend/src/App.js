@@ -48,7 +48,6 @@ import { HardeningChecklistPage } from "@/pages/HardeningChecklistPage";
 import { LandingPage } from "@/pages/LandingPage";
 import { MarketUniversePage } from "@/pages/MarketUniversePage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
-import { PaperPositionsPage } from "@/pages/PaperPositionsPage";
 import { Phase4LiveControlPage } from "@/pages/Phase4LiveControlPage";
 import { RiskPoliciesPage } from "@/pages/RiskPoliciesPage";
 import { StateRebuildLogsPage } from "@/pages/StateRebuildLogsPage";
@@ -299,7 +298,7 @@ function App() {
             <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="positions" element={<UserPositionsPage />} />
             <Route path="live-trading-dashboard" element={<UserLiveTradingDashboardPage />} />
-            <Route path="paper-positions" element={<PaperPositionsPage />} />
+            <Route path="paper-positions" element={<Navigate to="/user/dashboard" replace />} />
             <Route path="exchange-mock" element={<Navigate to="/user/dashboard" replace />} />
           </Route>
 

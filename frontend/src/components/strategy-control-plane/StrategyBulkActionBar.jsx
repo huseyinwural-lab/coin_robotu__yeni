@@ -49,13 +49,13 @@ export const StrategyBulkActionBar = ({
         </Button>
         <Button
           variant="outline"
-          className="border-slate-500 text-slate-100"
+          className="border-slate-600 text-slate-400"
           onClick={onBulkDryRun}
-          disabled={isEmpty}
-          title={isEmpty ? "Önce strategy seçin" : "Seçili strategylerde dry-run çalıştır"}
+          disabled
+          title="Pure Live modunda simulation kaldırıldı"
           data-testid="admin-strategies-bulk-dry-run-button"
         >
-          Bulk Dry-Run
+          Simulation Removed
         </Button>
         <Button
           variant="outline"

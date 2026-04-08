@@ -30,7 +30,7 @@ const resolveLoadErrorMessage = (error, fallback) => {
 export const UserSignalsPage = () => {
   const navigate = useNavigate();
   const [signals, setSignals] = useState([]);
-  const [signalMode, setSignalMode] = useState(null);
+  const [signalMode, setSignalMode] = useState({ mode: "AUTO" });
   const [botProfiles, setBotProfiles] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
   const [trades, setTrades] = useState([]);
@@ -50,7 +50,7 @@ export const UserSignalsPage = () => {
   const [animatedSignalIds, setAnimatedSignalIds] = useState([]);
   const [loadIssue, setLoadIssue] = useState(null);
   const [decisionMap, setDecisionMap] = useState({});
-  const [scannerAutomation, setScannerAutomation] = useState(null);
+  const [scannerAutomation, setScannerAutomation] = useState({ auto_enabled: false });
   const [showSlowLoadingHint, setShowSlowLoadingHint] = useState(false);
   const alertedSignalIdsRef = useRef(new Set());
   const toastTrackerRef = useRef(new Map());
@@ -103,11 +103,9 @@ export const UserSignalsPage = () => {
           critical: false,
           request: () => requestWithRetry(() => apiClient.get("/user/trades", { params: { limit: 50 }, timeout: 15000 }), { retries: 1, retryDelayMs: 900 }),
         },
-        { key: "signal_mode", label: "signal_mode", critical: true, request: () => apiClient.get("/user/signal-mode", { timeout: 15000 }) },
         { key: "bot_profiles", label: "bot_profiles", critical: true, request: () => apiClient.get("/bot-profiles", { timeout: 15000 }) },
         { key: "status_contract", label: "status_contract", critical: false, request: () => apiClient.get("/user/scanner/status-contract", { timeout: 15000 }) },
         { key: "decision_map", label: "decision_map", critical: false, request: () => apiClient.get("/user/scanner-engine/decision-map", { timeout: 15000 }) },
-        { key: "scanner_automation", label: "scanner_automation", critical: false, request: () => apiClient.get("/user/scanner/automation", { timeout: 15000 }) },
       ];
       const settled = await Promise.allSettled(requestDescriptors.map((item) => item.request()));
       const byKey = requestDescriptors.reduce((acc, descriptor, index) => {
@@ -118,12 +116,11 @@ export const UserSignalsPage = () => {
       const signalsRes = byKey.signals;
       const portfolioRes = byKey.portfolio;
       const tradesRes = byKey.trades;
-      const modeRes = byKey.signal_mode;
       const botsRes = byKey.bot_profiles;
       const statusContractRes = byKey.status_contract;
       const decisionMapRes = byKey.decision_map;
-      const scannerAutomationRes = byKey.scanner_automation;
 
+      let resolvedSignals = [];
       if (signalsRes?.status === "fulfilled") {
         const payload = signalsRes.value?.data;
         const nextSignals = Array.isArray(payload)
@@ -131,6 +128,7 @@ export const UserSignalsPage = () => {
           : Array.isArray(payload?.items)
             ? payload.items
             : [];
+        resolvedSignals = nextSignals;
         setSignals(nextSignals);
       }
 
@@ -141,10 +139,6 @@ export const UserSignalsPage = () => {
       if (tradesRes?.status === "fulfilled") {
         const nextTrades = Array.isArray(tradesRes.value?.data) ? tradesRes.value.data : [];
         setTrades(nextTrades);
-      }
-
-      if (modeRes?.status === "fulfilled") {
-        setSignalMode(modeRes.value?.data ?? null);
       }
 
       if (botsRes?.status === "fulfilled") {
@@ -161,9 +155,8 @@ export const UserSignalsPage = () => {
         setDecisionMap(items && typeof items === "object" ? items : {});
       }
 
-      if (scannerAutomationRes?.status === "fulfilled") {
-        setScannerAutomation(scannerAutomationRes.value?.data || null);
-      }
+      const inferredMode = String((resolvedSignals[0]?.mode || "AUTO")).toUpperCase();
+      setSignalMode({ mode: inferredMode });
 
       const rejectedEntries = requestDescriptors
         .map((descriptor, index) => {
@@ -578,16 +571,6 @@ export const UserSignalsPage = () => {
     }
   };
 
-  const setSignalModeAuto = async () => {
-    try {
-      await apiClient.put("/user/signal-mode", { mode: "AUTO" });
-      await load();
-      toast.success("Signal mode AUTO olarak ayarlandı");
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Signal mode AUTO ayarlanamadı");
-    }
-  };
-
   const activeBotCount = useMemo(
     () => (botProfiles || []).filter((item) => item.is_running && item.is_enabled).length,
     [botProfiles],
@@ -755,7 +738,6 @@ export const UserSignalsPage = () => {
               fix-job: {bulkFixJob.status} · processed={bulkFixJob.processed || 0} · fixed={bulkFixJob.fixed || 0}
             </span>
           )}
-          <Button variant="outline" onClick={setSignalModeAuto} data-testid="user-signals-set-auto-mode-button">AUTO'ya Al</Button>
           <span className="text-xs text-slate-400" data-testid="user-signals-auto-refresh-indicator">Auto Refresh: 10s</span>
         </div>
       </header>

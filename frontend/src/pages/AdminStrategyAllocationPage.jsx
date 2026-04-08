@@ -592,20 +592,7 @@ export const AdminStrategyAllocationPage = () => {
   };
 
   const runWhatIfSimulation = async () => {
-    setIsRunningWhatIf(true);
-    try {
-      const { data } = await apiClient.post("/admin/strategy-allocation/what-if-simulation", {
-        strategy_ids: selectedStrategyIds,
-      });
-      setWhatIfResult(data || null);
-      toast.success(data?.message || "What-if simulation hazır");
-    } catch (error) {
-      const message = error?.response?.data?.detail || "What-if simulation başarısız";
-      toast.error(message);
-      setGlobalActionError(message);
-    } finally {
-      setIsRunningWhatIf(false);
-    }
+    toast.info("Pure Live modunda what-if simulation kaldırıldı.");
   };
 
   const submitBulkUpdate = async () => {
@@ -954,7 +941,7 @@ export const AdminStrategyAllocationPage = () => {
       </div>
 
       <div className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-allocation-phase6-panel">
-        <h3 className="text-base font-semibold" data-testid="admin-strategy-allocation-phase6-title">Phase 6 · Snapshot + Export + What-if</h3>
+        <h3 className="text-base font-semibold" data-testid="admin-strategy-allocation-phase6-title">Phase 6 · Snapshot + Export</h3>
         <div className="mt-2 flex flex-wrap gap-2" data-testid="admin-strategy-allocation-phase6-actions">
           <Button onClick={createSnapshot} disabled={isCreatingSnapshot || isOpsReadOnly} data-testid="admin-strategy-allocation-create-snapshot-button">
             {isCreatingSnapshot ? "Snapshot alınıyor..." : "Snapshot Al"}
@@ -965,8 +952,8 @@ export const AdminStrategyAllocationPage = () => {
           <Button variant="outline" onClick={() => exportAllocation("csv")} data-testid="admin-strategy-allocation-export-csv-button">
             CSV Export
           </Button>
-          <Button variant="outline" onClick={runWhatIfSimulation} disabled={isRunningWhatIf} data-testid="admin-strategy-allocation-run-whatif-button">
-            {isRunningWhatIf ? "What-if çalışıyor..." : "What-if Simulation"}
+          <Button variant="outline" onClick={runWhatIfSimulation} data-testid="admin-strategy-allocation-run-whatif-button">
+            Simulation Kaldırıldı
           </Button>
         </div>
 
@@ -1024,22 +1011,8 @@ export const AdminStrategyAllocationPage = () => {
           </div>
 
           <div className="rounded border border-slate-800 bg-slate-950 p-2" data-testid="admin-strategy-allocation-phase6-whatif-preview-panel">
-            <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-phase6-whatif-preview-title">What-if Preview (read-only)</p>
-            {!whatIfResult && <p className="mt-1 text-xs text-slate-500" data-testid="admin-strategy-allocation-phase6-whatif-empty">No data yet</p>}
-            {whatIfResult && (
-              <div className="mt-1 space-y-1" data-testid="admin-strategy-allocation-phase6-whatif-meta">
-                <p className="text-xs" data-testid="admin-strategy-allocation-phase6-whatif-readonly">read_only={String(whatIfResult.read_only)}</p>
-                <p className="text-xs" data-testid="admin-strategy-allocation-phase6-whatif-return-delta">
-                  portfolio return Δ={whatIfResult.projected_portfolio_return_delta_pct}
-                </p>
-                <p className="text-xs" data-testid="admin-strategy-allocation-phase6-whatif-risk-delta">
-                  portfolio risk Δ={whatIfResult.projected_portfolio_risk_delta_pct}
-                </p>
-                <p className="text-xs" data-testid="admin-strategy-allocation-phase6-whatif-selection">
-                  selection_count={whatIfResult.selection_count}
-                </p>
-              </div>
-            )}
+            <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-phase6-whatif-preview-title">Simulation Paneli Kaldırıldı</p>
+            <p className="mt-1 text-xs text-slate-500" data-testid="admin-strategy-allocation-phase6-whatif-empty">Pure Live politikasında simulation endpointleri 410 döner.</p>
           </div>
         </div>
       </div>
@@ -1059,12 +1032,6 @@ export const AdminStrategyAllocationPage = () => {
         </article>
       </div>
 
-      {whatIfResult && (
-        <div className="col-span-12 border border-cyan-500/40 bg-cyan-950/20 p-3 text-sm text-cyan-100" data-testid="admin-strategy-allocation-whatif-preview-warning-banner">
-          Simulation preview only: Bu değerler tabloya yansıtılan önizlemedir, otomatik commit yapılmaz.
-        </div>
-      )}
-
       <div className="col-span-12 overflow-x-auto border border-slate-800 bg-slate-900" data-testid="admin-strategy-allocation-table-wrapper">
         <table className="min-w-full text-sm" data-testid="admin-strategy-allocation-table">
           <thead className="bg-slate-800 text-left" data-testid="admin-strategy-allocation-table-head">
@@ -1081,7 +1048,7 @@ export const AdminStrategyAllocationPage = () => {
               <th className="px-3 py-2">Performance</th>
               <th className="px-3 py-2">Signal Decay</th>
               <th className="px-3 py-2">Execution Quality</th>
-              <th className="px-3 py-2">What-if Compare (Preview)</th>
+              <th className="px-3 py-2">Compare</th>
               <th className="px-3 py-2">Action</th>
             </tr>
           </thead>
@@ -1089,11 +1056,10 @@ export const AdminStrategyAllocationPage = () => {
             {rows.map((item) => {
               const draft = drafts[item.strategy_id] || {};
               const rowErrors = getRowErrors(item.strategy_id);
-              const simulationRow = whatIfByStrategy[item.strategy_id];
               return (
                 <tr
                   key={item.strategy_id}
-                  className={`border-t border-slate-800 ${simulationRow ? "bg-cyan-950/10" : ""}`}
+                  className="border-t border-slate-800"
                   data-testid={`admin-strategy-allocation-row-${item.strategy_id}`}
                 >
                   <td className="px-3 py-2">
@@ -1145,26 +1111,7 @@ export const AdminStrategyAllocationPage = () => {
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-signal-decay-${item.strategy_id}`}>{item.signal_decay}</td>
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-execution-quality-${item.strategy_id}`}>{item.execution_quality_score}</td>
                   <td className="px-3 py-2" data-testid={`admin-strategy-allocation-whatif-cell-${item.strategy_id}`}>
-                    {!simulationRow && <span className="text-xs text-slate-500">No data yet</span>}
-                    {simulationRow && (
-                      <div className="text-xs" data-testid={`admin-strategy-allocation-whatif-cell-content-${item.strategy_id}`}>
-                        <p data-testid={`admin-strategy-allocation-whatif-weight-${item.strategy_id}`}>
-                          w: {simulationRow.current_weight} → {simulationRow.suggested_weight}
-                        </p>
-                        <p data-testid={`admin-strategy-allocation-whatif-weight-delta-${item.strategy_id}`}>
-                          weight Δ {simulationRow.weight_delta}
-                        </p>
-                        <p data-testid={`admin-strategy-allocation-whatif-return-${item.strategy_id}`}>
-                          return Δ {simulationRow.projected_return_delta_pct}
-                        </p>
-                        <p data-testid={`admin-strategy-allocation-whatif-risk-${item.strategy_id}`}>
-                          risk Δ {simulationRow.projected_risk_delta_pct}
-                        </p>
-                        <p className="text-[10px] text-cyan-200" data-testid={`admin-strategy-allocation-whatif-preview-note-${item.strategy_id}`}>
-                          preview_only=true
-                        </p>
-                      </div>
-                    )}
+                    <span className="text-xs text-slate-500">Removed in Pure Live</span>
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-2" data-testid={`admin-strategy-allocation-actions-${item.strategy_id}`}>

@@ -58,7 +58,7 @@ export const StrategyVersionsPanel = ({
                 validation: {lifecycleMap[item.version_id]?.validation_status || "pending"}
               </span>
               <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-dry-run-status-${item.version_id}`}>
-                dry_run: {lifecycleMap[item.version_id]?.dry_run_status || "pending"}
+                simulation: removed
               </span>
               <span className="border border-slate-700 px-2 py-1" data-testid={`admin-strategy-version-production-status-${item.version_id}`}>
                 production: {String(Boolean(lifecycleMap[item.version_id]?.is_production))}
@@ -74,7 +74,6 @@ export const StrategyVersionsPanel = ({
                 ))}
                 <div className="mt-2 flex flex-wrap gap-2" data-testid={`admin-strategy-version-quick-actions-${item.version_id}`}>
                   <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => onValidate(item.version_id)} data-testid={`admin-strategy-version-quick-validate-${item.version_id}`}>validate çalıştır</Button>
-                  <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => onDryRun(item.version_id)} data-testid={`admin-strategy-version-quick-dry-run-${item.version_id}`}>dry-run çalıştır</Button>
                   <Button
                     variant="outline"
                     className="border-blue-500 text-blue-200"
@@ -93,7 +92,6 @@ export const StrategyVersionsPanel = ({
 
             <div className="flex flex-wrap gap-2" data-testid={`admin-strategy-version-actions-${item.version_id}`}>
               <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => onValidate(item.version_id)} data-testid={`admin-strategy-version-validate-button-${item.version_id}`}>Validate</Button>
-              <Button variant="outline" className="border-slate-500 text-slate-100" onClick={() => onDryRun(item.version_id)} data-testid={`admin-strategy-version-dry-run-button-${item.version_id}`}>Dry-Run</Button>
               <Button className="bg-orange-500 text-black hover:bg-orange-600" onClick={() => onActivate(item.version_id)} data-testid={`admin-strategy-version-activate-button-${item.version_id}`}>Activate</Button>
               <Button variant="outline" className="border-amber-500 text-amber-200" onClick={() => onRollback(item.version_id)} data-testid={`admin-strategy-version-rollback-button-${item.version_id}`}>Rollback</Button>
               <Button variant="outline" className="border-emerald-500 text-emerald-200" onClick={() => onExecutionPreview(item.version_id)} data-testid={`admin-strategy-version-execution-preview-button-${item.version_id}`}>Execution Preview</Button>

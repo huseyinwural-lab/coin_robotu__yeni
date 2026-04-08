@@ -593,16 +593,7 @@ export const AdminStrategiesPage = () => {
   };
 
   const runDryRun = async (versionId) => {
-    try {
-      const payload = JSON.parse(kernelContextText);
-      await apiClient.post(`/strategy-domain/admin/strategies/${selectedStrategyId}/versions/${versionId}/dry-run`, {
-        context_snapshot: payload,
-      });
-      toast.success("Dry-run tamamlandı");
-      await loadDetail(selectedStrategyId);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Dry-run başarısız");
-    }
+    toast.info("Pure Live modunda dry-run kaldırıldı.");
   };
 
   const rollbackVersion = async (versionId) => {
@@ -894,22 +885,7 @@ export const AdminStrategiesPage = () => {
   };
 
   const bulkDryRun = async () => {
-    if (selectedStrategyIds.length === 0) {
-      toast.error("Bulk işlem için strategy seçin");
-      return;
-    }
-    try {
-      const payload = JSON.parse(kernelContextText);
-      const { data } = await apiClient.post("/strategy-domain/admin/strategies/bulk/dry-run", {
-        strategy_ids: selectedStrategyIds,
-        context_snapshot: payload,
-      });
-      setBulkActionSummary({ action: "dry-run", payload: data });
-      toast.success("Bulk dry-run tamamlandı");
-      await Promise.all([loadStrategies(), loadDetail(selectedStrategyId)]);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Bulk dry-run başarısız");
-    }
+    toast.info("Pure Live modunda bulk dry-run kaldırıldı.");
   };
 
   const bulkTag = async () => {

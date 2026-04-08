@@ -511,20 +511,8 @@ export const AdminDashboardPage = () => {
   }, [loadDashboard]);
 
   const runSingleFlowDryRun = useCallback(async () => {
-    setRuntimeValidationLoading(true);
-    try {
-      const { data } = await apiClient.post("/runtime/go-live/dry-run/run", { symbol: "BTCUSDT", size: 0.0001 });
-      setRuntimeDryRunResult(data?.result || null);
-      toast.success("Dry-run tek akış PASS");
-      await loadDashboard();
-    } catch (error) {
-      const detail = error?.response?.data?.detail;
-      const message = typeof detail === "string" ? detail : (detail?.status ? JSON.stringify(detail) : "Dry-run tek akış başarısız");
-      toast.error(message);
-    } finally {
-      setRuntimeValidationLoading(false);
-    }
-  }, [loadDashboard]);
+    toast.info("Pure Live modunda simulation/dry-run kaldırıldı.");
+  }, []);
 
   const runWizardReadinessCheck = useCallback(async () => {
     setRuntimeValidationLoading(true);
@@ -1066,7 +1054,7 @@ export const AdminDashboardPage = () => {
               Final Regression
             </Button>
             <Button size="sm" variant="outline" onClick={runSingleFlowDryRun} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-run-single-flow-dry-run-button">
-              Single-Flow Dry-Run
+              Simulation Removed
             </Button>
             <Button size="sm" variant="outline" onClick={loadDashboard} disabled={runtimeValidationLoading} data-testid="admin-dashboard-runtime-readiness-refresh-go-live-button">
               Refresh Go/No-Go

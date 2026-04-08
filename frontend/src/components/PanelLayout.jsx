@@ -55,7 +55,6 @@ const userMenuGroups = [
       { to: "/user/execution", label: "Execution View", icon: Activity, testId: "nav-user-execution-link" },
       { to: "/user/trades", label: "Trades", icon: Activity, testId: "nav-user-trades-link" },
       { to: "/user/positions", label: "Positions", icon: Activity, testId: "nav-user-positions-link" },
-      { to: "/user/paper-positions", label: "Paper Positions", icon: Activity, testId: "nav-paper-positions-link" },
     ],
   },
   {

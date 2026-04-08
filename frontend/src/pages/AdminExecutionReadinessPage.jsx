@@ -606,32 +606,9 @@ export const AdminExecutionReadinessPage = () => {
 
   const handleExecutionSimulation = useCallback(
     async (mode) => {
-      const normalizedQty = Number(dryRunQty);
-      if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
-        toast.error("Qty değeri 0'dan büyük sayı olmalı");
-        return;
-      }
-
-      const symbol = String(dryRunSymbol || "").trim().toUpperCase() || "BTCUSDT";
-      const side = String(dryRunSide || "BUY").toUpperCase();
-      const endpoint = mode === "shadow" ? "/execution-safety/execution/shadow" : "/execution-safety/execution/dry-run";
-      const params = new URLSearchParams({
-        symbol,
-        qty: String(normalizedQty),
-        side,
-      });
-
-      await runAction(async () => {
-        const { data } = await apiClient.post(`${endpoint}?${params.toString()}`);
-        if (mode === "shadow") {
-          setShadowResult(data || null);
-        } else {
-          setDryRunResult(data || null);
-        }
-        return data;
-      }, mode === "shadow" ? "Shadow execution tamamlandı" : "Dry-run execution tamamlandı");
+      toast.info("Pure Live modunda simulation uçları kaldırıldı.");
     },
-    [dryRunQty, dryRunSide, dryRunSymbol, runAction]
+    []
   );
 
   const failCodesText = useMemo(() => (ops?.active_fail_codes || []).join(", "), [ops?.active_fail_codes]);
@@ -1274,7 +1251,7 @@ export const AdminExecutionReadinessPage = () => {
           </article>
 
           <article className="rounded-lg border border-cyan-700/40 bg-slate-950 p-3" data-testid="execution-safety-p1-simulation-card">
-            <h3 className="text-sm font-semibold text-cyan-200" data-testid="execution-safety-p1-simulation-title">Hybrid Dry-run / Shadow Execution</h3>
+            <h3 className="text-sm font-semibold text-cyan-200" data-testid="execution-safety-p1-simulation-title">Simulation Uçları Kaldırıldı</h3>
             <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="execution-safety-p1-simulation-form-grid">
               <div data-testid="execution-safety-p1-simulation-symbol-wrapper">
                 <label className="text-xs text-slate-300" data-testid="execution-safety-p1-simulation-symbol-label">symbol</label>
@@ -1313,7 +1290,7 @@ export const AdminExecutionReadinessPage = () => {
                 disabled={actionLoading}
                 data-testid="execution-safety-p1-simulation-run-dry-button"
               >
-                Dry-run Execute
+                Removed
               </Button>
               <Button
                 variant="outline"
@@ -1321,7 +1298,7 @@ export const AdminExecutionReadinessPage = () => {
                 disabled={actionLoading}
                 data-testid="execution-safety-p1-simulation-run-shadow-button"
               >
-                Shadow Execute
+                Removed
               </Button>
             </div>
 
