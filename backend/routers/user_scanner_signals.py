@@ -119,6 +119,8 @@ def user_scanner_engine_save_config(payload: dict, current_user: User = Depends(
 
     merged_decision_boxes = payload.get("decision_boxes") if isinstance(payload.get("decision_boxes"), dict) else (previous.get("decision_boxes") or {})
 
+    incoming_manual_symbols = payload.get("manual_symbols") if "manual_symbols" in payload else (previous.get("manual_symbols") or [])
+
     config = {
         **previous,
         "exchange": "binance",
@@ -129,7 +131,7 @@ def user_scanner_engine_save_config(payload: dict, current_user: User = Depends(
         "auto_interval_minutes": auto_interval,
         "scan_limit": max(_safe_int(payload.get("scan_limit"), int(previous.get("scan_limit") or 2000)), 2000),
         "top_n": _safe_int(payload.get("top_n"), int(previous.get("top_n") or 20)),
-        "manual_symbols": _normalize_symbols(payload.get("manual_symbols") or previous.get("manual_symbols") or []),
+        "manual_symbols": _normalize_symbols(incoming_manual_symbols or []),
         "weights": {
             "trend": trend,
             "volume": volume,
