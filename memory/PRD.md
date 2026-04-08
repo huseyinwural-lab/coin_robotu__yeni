@@ -1,3 +1,41 @@
+## 2026-04-08 — P1/P2 Tamamlama Paketi (Health + Allocation + Realtime + Explainability)
+
+### Uygulananlar
+- **Health (Sistem Sağlığı) paneli** eklendi (`AdminStrategyAllocationPage`): API latency, queue depth, error rate(5m), DB pool konfigurasyonu/runtime durumu, exchange connectivity, scanner freshness.
+- Backend yeni endpoint: `GET /api/admin/strategy-allocation/health`
+  - Kaynaklar: `pipeline_runtime.monitoring_snapshot`, DB runtime state, exchange proxy health, scanner freshness, recent allocation debug eventleri.
+
+- **Realtime / Debug paneli + WebSocket** eklendi:
+  - Backend WS endpoint: `WS /api/admin/strategy-allocation/ws/stream`
+  - Frontend reconnect/backoff akışı (exponential, capped), WS health badge, manuel reconnect butonu.
+  - Realtime debug event listesi (recent allocation events) panelde gösteriliyor.
+
+- **Explainability + Trace Spine** admin görünümü eklendi:
+  - Backend endpoint: `GET /api/admin/strategy-allocation/explainability/{strategy_id}`
+  - Strategy bazında reason/risk reason özetleri + trace spine zinciri (`signal -> decision_card -> intent -> trade -> execution_trace`) döndürülüyor.
+  - Frontend’de strategy selector + explainability refresh + trace spine listesi eklendi.
+
+- **Allocation Save akışı (optimistic lock UX) güçlendirildi**:
+  - Revision conflict banner’ında yeni aksiyonlar:
+    - `Revision güncellemelerini uygula`
+    - `Uygula + son işlemi tekrar dene`
+  - Save/Bulk/Normalize/Restore işlemleri için pending retry action takibi eklendi.
+
+### Stabilite / Dayanıklılık
+- Allocation sayfası loading durumunda test-id’li fallback shell eklendi; kritik paneller DOM’da deterministik görünüyor.
+- WS token alma akışı güçlendirildi (`apiClient default Authorization` fallback + localStorage).
+- WS backend tarafında session kullanım modeli iyileştirildi: uzun ömürlü tek DB session yerine döngü başına kısa ömürlü session.
+
+### Test Durumu
+- Frontend doğrulama: **PASS** (kalan P1/P2 testlerinde gerekli test-id elemanları bulundu, panel render doğrulandı).
+- Backend fonksiyonel doğrulama: health/explainability/ws/revision-conflict akışları kod seviyesinde ve lokal smoke’da doğrulandı.
+- **INFRA Notu**: Preview ortamında aralıklı `DB_POOL_TIMEOUT` / `psycopg2 SSL connection has been closed unexpectedly` kaynaklı 503/timeout görülüyor; bu durum backend testlerini zaman zaman blokluyor.
+
+### Güncel Öncelikler
+- P0: Tamamlandı.
+- P1: Refresh token replay protection + access TTL hardening (kalan).
+- P2: Explainability zenginleştirme (strategy-level reason drilldown görselleştirme) ve realtime event coverage genişletme (kalan).
+
 ## 2026-04-08 — Pure Live GO/NO-GO P0 Düzeltmeleri (Tamamlandı)
 
 ### Tamamlanan Kritik Düzeltmeler

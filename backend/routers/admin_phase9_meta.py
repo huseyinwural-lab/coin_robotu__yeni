@@ -1491,9 +1491,9 @@ def strategy_allocation_explainability(
 @router.websocket("/strategy-allocation/ws/stream")
 async def strategy_allocation_ws_stream(websocket: WebSocket):
     await websocket.accept()
-    db = SessionLocal()
+    auth_db = SessionLocal()
     try:
-        user = _resolve_ws_admin_user(db, websocket.query_params.get("token"))
+        user = _resolve_ws_admin_user(auth_db, websocket.query_params.get("token"))
         if user is None:
             await websocket.send_json({"type": "error", "code": "UNAUTHORIZED", "message": "admin_token_required"})
             await websocket.close(code=4401)
@@ -1503,19 +1503,23 @@ async def strategy_allocation_ws_stream(websocket: WebSocket):
         interval_seconds = max(2, min(_safe_int(websocket.query_params.get("interval"), 5), 20))
 
         while True:
-            snapshot = _build_strategy_allocation_health_payload(db)
-            payload = {
-                "type": "snapshot",
-                "generated_at": _now().isoformat(),
-                "health": snapshot,
-            }
-            if strategy_id:
-                payload["explainability"] = _build_strategy_explainability_payload(
-                    db,
-                    strategy_id=strategy_id,
-                    lookback_hours=24,
-                    limit=6,
-                )
+            loop_db = SessionLocal()
+            try:
+                snapshot = _build_strategy_allocation_health_payload(loop_db)
+                payload = {
+                    "type": "snapshot",
+                    "generated_at": _now().isoformat(),
+                    "health": snapshot,
+                }
+                if strategy_id:
+                    payload["explainability"] = _build_strategy_explainability_payload(
+                        loop_db,
+                        strategy_id=strategy_id,
+                        lookback_hours=24,
+                        limit=6,
+                    )
+            finally:
+                loop_db.close()
             await websocket.send_json(payload)
             await asyncio.sleep(interval_seconds)
     except WebSocketDisconnect:
@@ -1526,7 +1530,7 @@ async def strategy_allocation_ws_stream(websocket: WebSocket):
         except Exception:
             pass
     finally:
-        db.close()
+        auth_db.close()
 
 
 @router.get("/strategy-allocation", response_model=list[StrategyAllocationResponse])
