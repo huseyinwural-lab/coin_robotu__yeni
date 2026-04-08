@@ -85,6 +85,22 @@ export const AdminUniverseMonitorPage = () => {
     selected_symbols: [],
   });
 
+  const renderMetricValue = (value) => {
+    if (value === null || typeof value === "undefined") {
+      return "-";
+    }
+    if (typeof value === "number" || typeof value === "string" || typeof value === "boolean") {
+      return String(value);
+    }
+    if (Array.isArray(value)) {
+      return value.length;
+    }
+    if (typeof value === "object") {
+      return Object.keys(value).length;
+    }
+    return String(value);
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -357,7 +373,7 @@ export const AdminUniverseMonitorPage = () => {
             <h3 className="text-xl font-bold text-cyan-50" data-testid="admin-universe-monitor-scanner-engine-title">Short/Long Decoupled Scanner</h3>
             <p className="text-xs text-cyan-100/90" data-testid="admin-universe-monitor-scanner-engine-subtitle">Binance only · 1h indikatör · 15m execution</p>
           </div>
-          <div className="hidden grid gap-1 text-xs text-cyan-100" data-testid="admin-universe-monitor-scanner-engine-summary-strip">
+          <div className="grid gap-1 text-xs text-cyan-100" data-testid="admin-universe-monitor-scanner-engine-summary-strip">
             <p data-testid="admin-universe-monitor-scanner-engine-max-score">Max Score: {scannerEngineRun?.summary?.max_score ?? 161}</p>
             <p data-testid="admin-universe-monitor-scanner-engine-strong-long-count">Strong Long: {scannerEngineRun?.summary?.strong_long_count ?? 0}</p>
             <p data-testid="admin-universe-monitor-scanner-engine-strong-short-count">Strong Short: {scannerEngineRun?.summary?.strong_short_count ?? 0}</p>
@@ -365,7 +381,7 @@ export const AdminUniverseMonitorPage = () => {
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="admin-universe-monitor-scanner-engine-config-grid">
-          <label className="hidden space-y-1" data-testid="admin-universe-monitor-scanner-engine-exchange-field">
+          <label className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-exchange-field">
             <span className="text-xs text-cyan-100">Market</span>
             <input
               value="BINANCE"
@@ -375,7 +391,7 @@ export const AdminUniverseMonitorPage = () => {
             />
           </label>
 
-          <div className="hidden space-y-1" data-testid="admin-universe-monitor-scanner-engine-market-types-field">
+          <div className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-market-types-field">
             <span className="text-xs text-cyan-100">Market Types</span>
             <div className="flex h-10 items-center gap-3 rounded border border-cyan-700/40 bg-slate-950 px-2" data-testid="admin-universe-monitor-scanner-engine-market-types-wrap">
               <label className="flex items-center gap-1 text-xs" data-testid="admin-universe-monitor-scanner-engine-spot-label">
@@ -399,7 +415,7 @@ export const AdminUniverseMonitorPage = () => {
             </div>
           </div>
 
-          <label className="hidden space-y-1" data-testid="admin-universe-monitor-scanner-engine-signal-mode-field">
+          <label className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-signal-mode-field">
             <span className="text-xs text-cyan-100">Signal Mode</span>
             <select
               value={scannerEngineConfig.signal_mode || "manual"}
@@ -412,7 +428,7 @@ export const AdminUniverseMonitorPage = () => {
             </select>
           </label>
 
-          <label className="hidden space-y-1" data-testid="admin-universe-monitor-scanner-engine-scan-limit-field">
+          <label className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-scan-limit-field">
             <span className="text-xs text-cyan-100">Scan Limit</span>
             <input
               type="number"
@@ -425,7 +441,7 @@ export const AdminUniverseMonitorPage = () => {
             />
           </label>
 
-          <label className="hidden space-y-1" data-testid="admin-universe-monitor-scanner-engine-topn-field">
+          <label className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-topn-field">
             <span className="text-xs text-cyan-100">Top N</span>
             <input
               type="number"
@@ -438,7 +454,7 @@ export const AdminUniverseMonitorPage = () => {
             />
           </label>
 
-          <label className="hidden space-y-1 md:col-span-2 xl:col-span-3" data-testid="admin-universe-monitor-scanner-engine-manual-symbols-field">
+          <label className="space-y-1 md:col-span-2 xl:col-span-3" data-testid="admin-universe-monitor-scanner-engine-manual-symbols-field">
             <span className="text-xs text-cyan-100">Manual Symbols (opsiyonel)</span>
             <input
               value={manualSymbolsInput}
@@ -529,10 +545,38 @@ export const AdminUniverseMonitorPage = () => {
             </article>
           </div>
 
-          <div className="hidden" data-testid="admin-universe-monitor-scanner-engine-actions" />
+          <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center gap-2" data-testid="admin-universe-monitor-scanner-engine-actions">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => saveScannerEngineConfig()}
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              data-testid="admin-universe-monitor-scanner-engine-save-button"
+            >
+              Ayarları Kaydet
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={runScannerEngine}
+              disabled={scannerEngineBusy}
+              data-testid="admin-universe-monitor-scanner-engine-run-button"
+            >
+              Scanner Çalıştır
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={openStartBotModal}
+              disabled={!isSuperAdmin || scannerEngineBusy}
+              data-testid="admin-universe-monitor-scanner-engine-open-start-bot-button"
+            >
+              START BOT
+            </Button>
+          </div>
         </div>
 
-        <div className="hidden mt-4 grid gap-2 md:grid-cols-4" data-testid="admin-universe-monitor-scanner-engine-run-stats">
+        <div className="mt-4 grid gap-2 md:grid-cols-4" data-testid="admin-universe-monitor-scanner-engine-run-stats">
           <article className="rounded border border-cyan-700/30 bg-black/30 p-2" data-testid="admin-universe-monitor-scanner-engine-candidate-count-card">
             <p className="text-[11px] text-cyan-200">Candidate</p>
             <p className="text-base font-semibold" data-testid="admin-universe-monitor-scanner-engine-candidate-count-value">{scannerEngineRun?.summary?.candidate_count ?? 0}</p>
@@ -551,7 +595,7 @@ export const AdminUniverseMonitorPage = () => {
           </article>
         </div>
 
-        <div className="hidden mt-4 overflow-auto rounded border border-cyan-700/30" data-testid="admin-universe-monitor-scanner-engine-results-wrapper">
+        <div className="mt-4 overflow-auto rounded border border-cyan-700/30" data-testid="admin-universe-monitor-scanner-engine-results-wrapper">
           <table className="min-w-full text-left text-xs" data-testid="admin-universe-monitor-scanner-engine-results-table">
             <thead className="bg-black/40 text-cyan-100" data-testid="admin-universe-monitor-scanner-engine-results-head">
               <tr>
@@ -587,7 +631,7 @@ export const AdminUniverseMonitorPage = () => {
           </table>
         </div>
 
-        <div className="hidden mt-3 space-y-2" data-testid="admin-universe-monitor-scanner-engine-jobs-panel">
+        <div className="mt-3 space-y-2" data-testid="admin-universe-monitor-scanner-engine-jobs-panel">
           <p className="text-xs uppercase tracking-widest text-cyan-200" data-testid="admin-universe-monitor-scanner-engine-jobs-title">Scanner Jobs</p>
           {(scannerEngineJobs || []).slice(0, 8).map((job, index) => (
             <div key={job.job_id || index} className="rounded border border-cyan-800/30 bg-black/30 p-2 text-xs" data-testid={`admin-universe-monitor-scanner-engine-job-${index}`}>
@@ -731,7 +775,7 @@ export const AdminUniverseMonitorPage = () => {
         ].map(([label, value, key]) => (
           <article key={key} className="rounded border border-slate-700 bg-slate-900 p-3" data-testid={`${key}-card`}>
             <p className="text-xs text-slate-400">{label}</p>
-            <p className="text-xl font-bold" data-testid={`${key}-value`}>{value ?? "-"}</p>
+            <p className="text-xl font-bold" data-testid={`${key}-value`}>{renderMetricValue(value)}</p>
           </article>
         ))}
       </div>
@@ -752,7 +796,7 @@ export const AdminUniverseMonitorPage = () => {
         ].map(([label, value, key]) => (
           <article key={key} className="rounded border border-emerald-800/40 bg-emerald-950/20 p-3" data-testid={`${key}-card`}>
             <p className="text-xs uppercase tracking-widest text-emerald-200">{label}</p>
-            <p className="mt-1 text-lg font-semibold" data-testid={`${key}-value`}>{value ?? "-"}</p>
+            <p className="mt-1 text-lg font-semibold" data-testid={`${key}-value`}>{renderMetricValue(value)}</p>
           </article>
         ))}
       </div>

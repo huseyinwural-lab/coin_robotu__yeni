@@ -93,14 +93,14 @@ export const UserSignalsPage = () => {
           key: "signals",
           label: "signals",
           critical: true,
-          request: () => requestWithRetry(() => apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 30000 }), { retries: 1, retryDelayMs: 900 }),
+          request: () => requestWithRetry(() => apiClient.get("/user/signals", { params: { limit: 80 }, timeout: 15000 }), { retries: 1, retryDelayMs: 900 }),
         },
         { key: "portfolio", label: "portfolio", critical: true, request: () => apiClient.get("/user/portfolio", { timeout: 15000 }) },
         {
           key: "trades",
           label: "trades",
           critical: false,
-          request: () => requestWithRetry(() => apiClient.get("/user/trades", { params: { limit: 50 }, timeout: 30000 }), { retries: 1, retryDelayMs: 900 }),
+          request: () => requestWithRetry(() => apiClient.get("/user/trades", { params: { limit: 50 }, timeout: 15000 }), { retries: 1, retryDelayMs: 900 }),
         },
         { key: "signal_mode", label: "signal_mode", critical: true, request: () => apiClient.get("/user/signal-mode", { timeout: 15000 }) },
         { key: "bot_profiles", label: "bot_profiles", critical: true, request: () => apiClient.get("/bot-profiles", { timeout: 15000 }) },
@@ -237,7 +237,7 @@ export const UserSignalsPage = () => {
         endpointsSummary: "timeout",
       });
       emitDedupedToast("warning", "user-signals-hard-timeout", "Yükleme beklenenden uzun sürdü. Yenile ile tekrar deneyin.");
-    }, 35000);
+    }, 12000);
 
     return () => {
       clearTimeout(slowTimer);
@@ -676,6 +676,12 @@ export const UserSignalsPage = () => {
             <div>
               <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-signals-title">Signals</h2>
               <p className="mt-2 text-sm text-slate-400" data-testid="user-signals-description">Sinyal ekranı yükleniyor...</p>
+            </div>
+            <div className="flex flex-wrap gap-2" data-testid="user-signals-loading-action-row">
+              <Button type="button" variant="outline" onClick={() => setCompactMode((previous) => !previous)} data-testid="user-signals-compact-mode-toggle" aria-label="Compact mode aç/kapat">
+                {compactMode ? "Compact: ON" : "Compact: OFF"}
+              </Button>
+              <Button variant="outline" onClick={load} data-testid="user-signals-refresh-button">Yenile</Button>
             </div>
           </div>
         </header>

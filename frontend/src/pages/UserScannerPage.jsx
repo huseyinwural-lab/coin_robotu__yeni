@@ -334,6 +334,7 @@ export const UserScannerPage = () => {
   const [symbolSource, setSymbolSource] = useState("crypto");
   const [symbolMode, setSymbolMode] = useState("manual_selection");
   const [selectedSymbols, setSelectedSymbols] = useState([]);
+  const [selectedSymbolsInput, setSelectedSymbolsInput] = useState("");
   const [watchlistOnly, setWatchlistOnly] = useState(false);
   const [automationConfig, setAutomationConfig] = useState(null);
   const [automationProfiles, setAutomationProfiles] = useState([]);
@@ -1213,6 +1214,10 @@ export const UserScannerPage = () => {
   }, [selectionHydrated, mode, marketType, watchlistOnly]);
 
   useEffect(() => {
+    setSelectedSymbolsInput((selectedSymbols || []).join(","));
+  }, [selectedSymbols]);
+
+  useEffect(() => {
     if (!selectionHydrated) {
       return;
     }
@@ -1721,6 +1726,20 @@ export const UserScannerPage = () => {
     }
   };
 
+  const applySelectedSymbolsFromInput = () => {
+    const parsed = normalizeSymbolsForRun(
+      String(selectedSymbolsInput || "")
+        .split(/[\s,;]+/)
+        .map((item) => String(item || "").trim().toUpperCase()),
+    );
+    setSelectedSymbols(parsed);
+    if (parsed.length === 0) {
+      toast.warning("Geçerli USDT/USDC sembol bulunamadı");
+      return;
+    }
+    toast.success(`${parsed.length} sembol seçildi`);
+  };
+
   if (isLoading) {
     return (
       <section className="space-y-4" data-testid="user-scanner-page">
@@ -1803,6 +1822,76 @@ export const UserScannerPage = () => {
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-scanner-title">Scanner</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
+
+      <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-primary-actions-panel">
+        <div className="grid gap-3 xl:grid-cols-6" data-testid="user-scanner-primary-actions-grid">
+          <label className="space-y-1" data-testid="user-scanner-primary-mode-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Signal Mode</span>
+            <select
+              value={mode}
+              onChange={(event) => setMode(String(event.target.value || "ASSISTED").toUpperCase())}
+              className="h-10 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-primary-mode-select"
+            >
+              <option value="MANUAL" data-testid="user-scanner-primary-mode-option-manual">MANUAL</option>
+              <option value="ASSISTED" data-testid="user-scanner-primary-mode-option-assisted">ASSISTED</option>
+              <option value="AUTO" data-testid="user-scanner-primary-mode-option-auto">AUTO</option>
+            </select>
+          </label>
+
+          <label className="space-y-1" data-testid="user-scanner-primary-market-type-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Market Type</span>
+            <select
+              value={marketType}
+              onChange={(event) => setMarketType(String(event.target.value || "spot").toLowerCase())}
+              className="h-10 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-primary-market-type-select"
+            >
+              <option value="spot" data-testid="user-scanner-primary-market-type-option-spot">SPOT</option>
+              <option value="futures" data-testid="user-scanner-primary-market-type-option-futures">FUTURES</option>
+              <option value="both" data-testid="user-scanner-primary-market-type-option-both">BOTH</option>
+            </select>
+          </label>
+
+          <label className="space-y-1 xl:col-span-2" data-testid="user-scanner-primary-symbols-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Sembol Listesi</span>
+            <input
+              value={selectedSymbolsInput}
+              onChange={(event) => setSelectedSymbolsInput(event.target.value)}
+              placeholder="BTCUSDT,ETHUSDT"
+              className="h-10 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-primary-symbols-input"
+            />
+          </label>
+
+          <div className="space-y-1" data-testid="user-scanner-primary-apply-symbols-wrap">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Sembol Uygula</span>
+            <Button type="button" variant="outline" onClick={applySelectedSymbolsFromInput} className="h-10 w-full" data-testid="user-scanner-primary-apply-symbols-button">
+              Uygula
+            </Button>
+          </div>
+
+          <div className="space-y-1" data-testid="user-scanner-primary-refresh-wrap">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Yenile</span>
+            <Button type="button" variant="outline" onClick={() => load({ silent: false })} className="h-10 w-full" data-testid="user-scanner-primary-refresh-button">
+              Yenile
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="user-scanner-primary-run-actions-row">
+          <Button type="button" onClick={runScanner} disabled={isRunning} data-testid="user-scanner-primary-run-button">
+            {isRunning ? "Çalışıyor..." : "Scanner Çalıştır"}
+          </Button>
+          <Button type="button" variant="outline" onClick={runScannerAndStartBot} disabled={isRunning} data-testid="user-scanner-primary-run-start-bot-button">
+            {isRunning ? "Çalışıyor..." : "Run + Start Bot"}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => setCompactMode((previous) => !previous)} data-testid="user-scanner-primary-compact-toggle-button">
+            {compactMode ? "Compact: ON" : "Compact: OFF"}
+          </Button>
+          <span className="text-xs text-slate-400" data-testid="user-scanner-primary-selected-symbol-count">Seçili: {selectedSymbols.length}</span>
+        </div>
+      </section>
 
       {!SIMPLE_SCANNER_V2 && <section className="order-2 col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-section-toggle-panel">
         <div className="flex flex-wrap items-center gap-2" data-testid="user-scanner-section-toggle-group">
@@ -2207,7 +2296,7 @@ export const UserScannerPage = () => {
                 </label>
                 {Boolean(scannerEngineConfig.include_spot) && (
                   <select
-                    value={scannerEngineConfig?.market_scope?.spot_mode || "top50"}
+                    value={"all"}
                     onChange={(event) => setScannerEngineConfig((prev) => ({
                       ...prev,
                       market_scope: { ...(prev.market_scope || {}), spot_mode: event.target.value },
@@ -2216,7 +2305,6 @@ export const UserScannerPage = () => {
                     className="mt-2 h-9 w-full border border-slate-700 bg-black px-2 text-xs"
                     data-testid="user-scanner-engine-spot-scope-select"
                   >
-                    <option value="top50" data-testid="user-scanner-engine-spot-scope-top50">En popüler 50 coin (Top50)</option>
                     <option value="all" data-testid="user-scanner-engine-spot-scope-all">Bütün coinler</option>
                   </select>
                 )}
@@ -2235,7 +2323,7 @@ export const UserScannerPage = () => {
                 </label>
                 {Boolean(scannerEngineConfig.include_futures) && (
                   <select
-                    value={scannerEngineConfig?.market_scope?.futures_mode || "top50"}
+                    value={"all"}
                     onChange={(event) => setScannerEngineConfig((prev) => ({
                       ...prev,
                       market_scope: { ...(prev.market_scope || {}), futures_mode: event.target.value },
@@ -2244,7 +2332,6 @@ export const UserScannerPage = () => {
                     className="mt-2 h-9 w-full border border-slate-700 bg-black px-2 text-xs"
                     data-testid="user-scanner-engine-futures-scope-select"
                   >
-                    <option value="top50" data-testid="user-scanner-engine-futures-scope-top50">En popüler 50 coin (Top50)</option>
                     <option value="all" data-testid="user-scanner-engine-futures-scope-all">Bütün coinler</option>
                   </select>
                 )}

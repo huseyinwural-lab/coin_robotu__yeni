@@ -1,0 +1,125 @@
+{
+  "summary": "Frontend UI visibility and data-testid testing completed for 4 pages: UserSignalsPage, UserScannerPage, AdminUniverseMonitorPage, AdminStrategyAllocationPage. All critical elements are visible and clickable. Infrastructure delays in preview environment cause slow loading but pages render correctly after waiting.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "All pages",
+        "issues": ["Infrastructure delay banner shows during loading - expected in preview environment"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_33.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (skipped)",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin": "canary.admin@platform.local / CanaryAdmin123!",
+    "user": "review.user@platform.local / ReviewUser123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 4 pages tested successfully. Session timeouts are short in preview environment - need to re-login frequently. Pages load slowly due to infrastructure delays but all elements render correctly.",
+  "detailed_test_results": {
+    "user_signals_page": {
+      "status": "PASS",
+      "elements_verified": [
+        "user-signals-page: visible=True",
+        "user-signals-header: visible=True",
+        "user-signals-title: visible=True (text='Signals')",
+        "user-signals-refresh-button: visible=True, enabled=True",
+        "user-signals-compact-mode-toggle: visible=True, enabled=True",
+        "user-signals-fix-all-blockers-button: visible=True",
+        "user-signals-stale-cleanup-button: visible=True",
+        "user-signals-set-auto-mode-button: visible=True",
+        "user-signals-table: visible=True",
+        "user-signals-metrics-grid: visible=True",
+        "user-signals-funnel-grid: visible=True",
+        "user-signals-live-control-status-card: visible=True",
+        "user-signals-blocked-alert-toggle: visible=True",
+        "user-signals-active-execution-mode-badge: visible=True"
+      ]
+    },
+    "user_scanner_page": {
+      "status": "PASS",
+      "elements_verified": [
+        "user-scanner-page: visible=True",
+        "user-scanner-header: visible=True",
+        "user-scanner-title: visible=True",
+        "user-scanner-engine-config-grid: visible=True",
+        "user-scanner-engine-save-button: visible=True",
+        "user-scanner-engine-run-button: visible=True",
+        "Scanner Çalıştır button: visible=True, enabled=True",
+        "Run + Start Bot button: visible=True, enabled=True",
+        "Yenile button: visible=True, enabled=True",
+        "Kaydet button: visible=True, enabled=True",
+        "Tara button: visible=True, enabled=True",
+        "Compact toggle: visible=True, enabled=True",
+        "Mode select: visible=True"
+      ],
+      "data_testid_count": "610 scanner-related data-testid attributes found"
+    },
+    "admin_universe_monitor_page": {
+      "status": "PASS",
+      "elements_verified": [
+        "admin-universe-monitor-page: visible=True",
+        "admin-universe-monitor-header: visible=True",
+        "admin-universe-monitor-title: visible=True",
+        "admin-universe-monitor-refresh-button: visible=True",
+        "admin-universe-monitor-export-csv-button: visible=True",
+        "admin-universe-monitor-scanner-engine-panel: visible=True",
+        "admin-universe-monitor-scanner-engine-save-button: visible=True",
+        "admin-universe-monitor-scanner-engine-run-button: visible=True",
+        "admin-universe-monitor-scanner-engine-open-start-bot-button: visible=True",
+        "admin-universe-monitor-mode-select: visible=True",
+        "admin-universe-monitor-window-select: visible=True",
+        "Yenile (Refresh): visible=True, enabled=True",
+        "Export CSV: visible=True, enabled=True",
+        "Ayarları Kaydet (Save Settings): visible=True, enabled=True",
+        "Scanner Çalıştır (Run Scanner): visible=True, enabled=True",
+        "START BOT: visible=True, enabled=True"
+      ]
+    },
+    "admin_strategy_allocation_page": {
+      "status": "PASS",
+      "elements_verified": [
+        "admin-strategy-allocation-page: visible=True",
+        "admin-strategy-allocation-header: visible=True",
+        "admin-strategy-allocation-title: visible=True",
+        "admin-strategy-allocation-refresh-button: visible=True",
+        "admin-strategy-allocation-normalize-button: visible=True",
+        "admin-strategy-allocation-bulk-save-button: visible=True",
+        "admin-strategy-allocation-generate-rebalance-button: visible=True",
+        "admin-strategy-allocation-table: visible=True",
+        "admin-strategy-allocation-table-wrapper: visible=True",
+        "admin-strategy-allocation-reason-note-input: visible=True",
+        "admin-strategy-allocation-summary-total: visible=True",
+        "admin-strategy-allocation-summary-active: visible=True",
+        "admin-strategy-allocation-summary-passive: visible=True",
+        "Yenile (Refresh): visible=True, enabled=True",
+        "Auto Normalize: visible=True, enabled=True",
+        "Seçilenleri Toplu Kaydet (Bulk Save): visible=True, enabled=False (correct - no selection)",
+        "Rebalance Önerisi Üret: visible=True, enabled=True",
+        "Snapshot Al: visible=True, enabled=True",
+        "JSON Export: visible=True, enabled=True",
+        "CSV Export: visible=True, enabled=True",
+        "What-if Simulation: visible=True, enabled=True"
+      ],
+      "table_rows": "24 table rows with data-testid found",
+      "weight_inputs": "12 weight inputs found",
+      "data_testid_count": "343 allocation-related data-testid attributes found"
+    }
+  }
+}

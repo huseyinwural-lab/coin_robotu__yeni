@@ -219,7 +219,11 @@ export const AdminStrategyAllocationPage = () => {
       setWhatIfResult(null);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
-      const message = error?.response?.data?.detail || "Strategy allocation verisi yüklenemedi";
+      const detail = error?.response?.data?.detail;
+      const message =
+        typeof detail === "string"
+          ? detail
+          : (detail?.message || "Strategy allocation verisi yüklenemedi");
       setLoadError(message);
       toast.error(message);
     } finally {
