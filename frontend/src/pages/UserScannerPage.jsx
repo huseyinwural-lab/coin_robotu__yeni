@@ -1893,25 +1893,6 @@ export const UserScannerPage = () => {
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-symbol-mode">Symbol Mode: {symbolMode}</p>
           <p className="text-sm" data-testid="user-scanner-active-mode-indicator-market-type">Market: {marketType.toUpperCase()}</p>
         </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="user-scanner-auto-badges-row">
-          <span
-            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${signalModeAutoEnabled ? "border-cyan-400 bg-cyan-300/20 text-cyan-100" : "border-slate-600 bg-slate-700/40 text-slate-200"}`}
-            title="Signal Mode AUTO: Sinyal karar/dispatch modunu belirler."
-            data-testid="user-scanner-signal-mode-auto-badge"
-          >
-            Signal Mode AUTO: {signalModeAutoEnabled ? "AKTİF" : "PASİF"}
-          </span>
-          <span
-            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${scannerAutomationAutoEnabled ? "border-violet-400 bg-violet-300/20 text-violet-100" : "border-slate-600 bg-slate-700/40 text-slate-200"}`}
-            title="Scanner Automation AUTO: Zamanlayıcı ile otomatik scanner çalıştırmayı kontrol eder."
-            data-testid="user-scanner-scanner-automation-auto-badge"
-          >
-            Scanner Automation AUTO: {scannerAutomationAutoEnabled ? "AKTİF" : "PASİF"}
-          </span>
-        </div>
-        <p className="mt-2 text-xs text-cyan-100" data-testid="user-scanner-auto-badges-tooltip">
-          Not: Signal Mode AUTO ile Scanner Automation AUTO farklıdır; biri karar modu, diğeri zamanlayıcı tetiklemesidir.
-        </p>
         <p className="mt-2 text-xs text-cyan-100" data-testid="user-scanner-active-mode-indicator-run-type-detail">{scannerRunTypeDetail}</p>
       </section>}
 
@@ -2210,6 +2191,25 @@ export const UserScannerPage = () => {
 
       <section className="order-6 col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-parameters-card">
         <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-parameters-title">Çalışma Parametreleri</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="user-scanner-auto-badges-row">
+          <span
+            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${signalModeAutoEnabled ? "border-cyan-400 bg-cyan-300/20 text-cyan-100" : "border-slate-600 bg-slate-700/40 text-slate-200"}`}
+            title="Signal Mode AUTO: Sinyal karar/dispatch modunu belirler."
+            data-testid="user-scanner-signal-mode-auto-badge"
+          >
+            Signal Mode AUTO: {signalModeAutoEnabled ? "AKTİF" : "PASİF"}
+          </span>
+          <span
+            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${scannerAutomationAutoEnabled ? "border-violet-400 bg-violet-300/20 text-violet-100" : "border-slate-600 bg-slate-700/40 text-slate-200"}`}
+            title="Scanner Automation AUTO: Zamanlayıcı ile otomatik scanner çalıştırmayı kontrol eder."
+            data-testid="user-scanner-scanner-automation-auto-badge"
+          >
+            Scanner Automation AUTO: {scannerAutomationAutoEnabled ? "AKTİF" : "PASİF"}
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-slate-300" data-testid="user-scanner-auto-badges-tooltip">
+          Not: Signal Mode AUTO ile Scanner Automation AUTO farklıdır; biri karar modu, diğeri zamanlayıcı tetiklemesidir.
+        </p>
         <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="user-scanner-parameters-grid">
           <p className="text-sm" data-testid="user-scanner-parameters-market">Market: <span className="font-semibold">{String(marketType || "spot").toUpperCase()}</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-mode">Signal Mode: <span className="font-semibold">{String(mode || "ASSISTED").toUpperCase()}</span></p>

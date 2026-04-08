@@ -1,3 +1,16 @@
+## 2026-04-08 — AUTO Mod Ayrıştırma UX (Signal vs Scanner Automation) ✅
+
+- `UserSignalsPage` üzerinde iki ayrı durum rozeti eklendi:
+  - `Signal Mode AUTO` (sinyal karar/dispatch modu)
+  - `Scanner Automation AUTO` (zamanlayıcı tetikleme modu)
+- `UserScannerPage` üzerinde `Çalışma Parametreleri` bölümüne aynı ayrıştırılmış rozetler + açıklama tooltip/notu eklendi.
+- Test-id’ler:
+  - `user-signals-signal-mode-auto-badge`
+  - `user-signals-scanner-automation-auto-badge`
+  - `user-scanner-signal-mode-auto-badge`
+  - `user-scanner-scanner-automation-auto-badge`
+  - `user-scanner-auto-badges-tooltip`
+
 ## 2026-04-08 — GO-LIVE P0 Hardening (4/4) ✅
 
 ### P0-1 — Scanner timeout/latency dayanıklılığı
