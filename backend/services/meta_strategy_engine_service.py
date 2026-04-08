@@ -392,13 +392,17 @@ def _build_rebalance_suggestions(rows: list[StrategyAllocation], selected_ids: l
 
 
 def _collect_summary(rows: list[StrategyAllocation]) -> dict:
-    total_weight = round(sum(_safe_float(row.capital_weight, 0) for row in rows), 6)
-    total_capital = round(sum(_safe_float(row.max_capital, 0) for row in rows), 4)
-    used_capital = round(sum(_safe_float(row.current_capital, 0) for row in rows), 4)
+    canonical_ids = set(CANONICAL_STRATEGIES.keys())
+    scoped_rows = [row for row in rows if str(getattr(row, "strategy_id", "")) in canonical_ids]
+    working_rows = scoped_rows if scoped_rows else rows
+
+    total_weight = round(sum(_safe_float(row.capital_weight, 0) for row in working_rows), 6)
+    total_capital = round(sum(_safe_float(row.max_capital, 0) for row in working_rows), 4)
+    used_capital = round(sum(_safe_float(row.current_capital, 0) for row in working_rows), 4)
     available_capital = round(max(total_capital - used_capital, 0.0), 4)
 
     over_allocated = []
-    for row in rows:
+    for row in working_rows:
         current = _safe_float(row.current_capital, 0)
         maximum = _safe_float(row.max_capital, 0)
         if current > maximum:
@@ -415,7 +419,7 @@ def _collect_summary(rows: list[StrategyAllocation]) -> dict:
     exposure_warning_state = "WARNING" if total_exposure_ratio_pct >= EXPOSURE_WARNING_THRESHOLD_PCT else "NORMAL"
 
     drawdown_candidates = []
-    for row in rows:
+    for row in working_rows:
         drawdown_pct = _compute_strategy_drawdown_pct(row)
         if drawdown_pct < DRAWDOWN_WARNING_THRESHOLD_PCT:
             continue
@@ -431,7 +435,7 @@ def _collect_summary(rows: list[StrategyAllocation]) -> dict:
         )
 
     return {
-        "total_strategies": len(rows),
+        "total_strategies": len(working_rows),
         "total_weight": total_weight,
         "weight_balance_delta": round(total_weight - 1.0, 6),
         "total_capital": total_capital,
@@ -470,24 +474,28 @@ def _ensure_capital_limit(rows: list[StrategyAllocation]) -> None:
 def _apply_normalize(rows: list[StrategyAllocation]) -> None:
     if not rows:
         return
-    total_weight = sum(max(_safe_float(row.capital_weight, 0), 0) for row in rows)
+    canonical_ids = set(CANONICAL_STRATEGIES.keys())
+    scoped_rows = [row for row in rows if str(getattr(row, "strategy_id", "")) in canonical_ids]
+    working_rows = scoped_rows if scoped_rows else rows
+
+    total_weight = sum(max(_safe_float(row.capital_weight, 0), 0) for row in working_rows)
     if total_weight <= 0:
-        equal_weight = round(1 / len(rows), 8)
-        for row in rows:
+        equal_weight = round(1 / len(working_rows), 8)
+        for row in working_rows:
             row.capital_weight = equal_weight
             row.updated_at = _now()
-        rows[-1].capital_weight = round(1 - sum(_safe_float(r.capital_weight, 0) for r in rows[:-1]), 8)
+        working_rows[-1].capital_weight = round(1 - sum(_safe_float(r.capital_weight, 0) for r in working_rows[:-1]), 8)
         return
 
     normalized_values = []
-    for row in rows:
+    for row in working_rows:
         normalized_values.append(max(_safe_float(row.capital_weight, 0), 0) / total_weight)
 
     rounded_values = [round(value, 8) for value in normalized_values]
     if rounded_values:
         rounded_values[-1] = round(1 - sum(rounded_values[:-1]), 8)
 
-    for idx, row in enumerate(rows):
+    for idx, row in enumerate(working_rows):
         row.capital_weight = max(rounded_values[idx], 0)
         row.updated_at = _now()
 

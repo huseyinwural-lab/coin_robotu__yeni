@@ -62,6 +62,7 @@ from services.meta_strategy_engine_service import (
     toggle_strategy_throttle,
     update_strategy_allocation,
 )
+from services.canonical_strategy_registry_service import CANONICAL_STRATEGIES
 from services.portfolio_risk_service import list_risk_clusters, load_portfolio_risk_limits, save_portfolio_risk_limits, upsert_risk_cluster
 
 router = APIRouter(prefix="/admin", tags=["admin_phase9_meta"])
@@ -489,11 +490,15 @@ def _validate_global_revision_scope(db: Session, expected_revisions: dict[str, i
     if not expected_revisions:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="expected_revisions zorunlu")
 
+    canonical_ids = {str(strategy_id) for strategy_id in CANONICAL_STRATEGIES.keys()}
+
     current_ids = {
         str(getattr(item, "strategy_id", item[0]))
         for item in db.query(StrategyAllocation.strategy_id).all()
+        if str(getattr(item, "strategy_id", item[0])) in canonical_ids
     }
-    expected_ids = set(expected_revisions.keys())
+    filtered_expected_revisions = {strategy_id: revision for strategy_id, revision in expected_revisions.items() if strategy_id in canonical_ids}
+    expected_ids = set(filtered_expected_revisions.keys())
     scope_conflicts: list[dict] = []
 
     for strategy_id in sorted(current_ids - expected_ids):
@@ -519,7 +524,7 @@ def _validate_global_revision_scope(db: Session, expected_revisions: dict[str, i
     if scope_conflicts:
         _raise_revision_conflict(action_type=action_type, conflicts=scope_conflicts)
 
-    conflicts = _validate_revision_expectations(db, expected_revisions, action_type=action_type)
+    conflicts = _validate_revision_expectations(db, filtered_expected_revisions, action_type=action_type)
     if conflicts:
         _raise_revision_conflict(action_type=action_type, conflicts=conflicts)
 
