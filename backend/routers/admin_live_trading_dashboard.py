@@ -166,8 +166,8 @@ def admin_live_trading_control_state(
 
     return {
         "server_clock": datetime.now(timezone.utc).isoformat(),
-        "execution_mode": mode,
-        "execution_mode_snapshots": snapshots,
+        "live_status": mode,
+        "live_status_snapshots": snapshots,
         "latency_thresholds": latency_thresholds,
         "kill_switch": kill_switch,
         "fallback": fallback,
@@ -993,7 +993,7 @@ def admin_live_trading_summary(
         return {
             "window": window,
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "system_health": {"status": "degraded", "execution_mode": "LIVE", "kill_switch_active": False, "fallback_active": True},
+            "system_health": {"status": "degraded", "live_status": "LIVE", "kill_switch_active": False, "fallback_active": True},
             "critical_alerts": {
                 "status": "critical",
                 "items": [{"code": "summary_generation_failed", "message": "summary_generation_failed"}],

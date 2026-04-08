@@ -809,7 +809,7 @@ export const AdminLiveTradingDashboardPage = () => {
       </div>
 
       <div className="grid gap-3 md:grid-cols-4" data-testid="admin-live-trading-dashboard-kpi-grid">
-        <MetricCard title="execution_mode" value={controlState?.execution_mode || summary?.system_health?.execution_mode || "-"} testId="live-dashboard-kpi-execution-mode" />
+        <MetricCard title="live_status" value={controlState?.live_status || summary?.system_health?.live_status || "LIVE"} testId="live-dashboard-kpi-live-status" />
         <MetricCard title="execution_quality_score" value={summary?.system_health?.execution_quality_score ?? "-"} testId="live-dashboard-kpi-execution-quality-score" />
         <MetricCard title="retry_queue_count" value={controlState?.retry_queue_count ?? "-"} testId="live-dashboard-kpi-retry-queue-count" />
         <MetricCard title="fallback_rate" value={scannerHealth?.fallback_rate ?? "-"} testId="live-dashboard-kpi-fallback-rate" />

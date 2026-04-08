@@ -599,7 +599,7 @@ export const UserSignalsPage = () => {
     take_profit_value: 2,
     stop_loss_mode: "percent",
     stop_loss_value: 1,
-    execution_mode: "signal_follow",
+    live_route: "signal_follow",
     strategy_binding: signal.strategy_code,
     signal_confidence: signal.confidence,
     exchange_connection_id: signal.exchange_connection_id || null,
@@ -877,7 +877,7 @@ export const UserSignalsPage = () => {
                 {normalizedStatusText(signal)}
               </span>
             </p>
-            <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-execution-mode-${signal.id}`}>mode: {signal.execution_mode_label || modeLabelFromRaw(signal.mode)}</p>
+            <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-live-status-${signal.id}`}>live_status: {modeLabelFromRaw(signal.mode)}</p>
             <p className="text-xs text-rose-300" data-testid={`user-signals-mobile-blocked-reason-${signal.id}`}>blocked: {signal.blocked_reason_code || "-"}</p>
             <p className="text-xs text-rose-200" data-testid={`user-signals-mobile-blocked-message-${signal.id}`}>message: {signal.blocked_reason_message || "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-solution-hint-${signal.id}`}>hint: {signal.blocked_solution_hint || "-"}</p>
@@ -937,7 +937,7 @@ export const UserSignalsPage = () => {
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Allocation</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Meta</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Status</th>
-              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Execution Mode</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Live Status</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Blokaj Nedeni</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>Tradeable</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"}>First Precheck</th>
@@ -961,7 +961,7 @@ export const UserSignalsPage = () => {
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-status-${signal.id}`}>
                   <span className={`rounded px-2 py-1 text-xs font-semibold ${statusBadgeClass(signal.status, animatedSignalIds.includes(signal.id))}`} data-testid={`user-signals-table-status-badge-${signal.id}`}>{normalizedStatusText(signal)}</span>
                 </td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-execution-mode-${signal.id}`}>{signal.execution_mode_label || modeLabelFromRaw(signal.mode)}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-live-status-${signal.id}`}>{modeLabelFromRaw(signal.mode)}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-blocked-reason-${signal.id}`}>
                   <div className="max-w-[260px]">
                     <p className="text-xs font-semibold">{signal.blocked_reason_code || "-"}</p>

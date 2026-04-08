@@ -130,7 +130,6 @@ from services.strategy_domain_service import (
     approve_strategy_promotion_request,
     archive_strategy,
     bulk_archive_strategies,
-    bulk_dry_run_strategies,
     bulk_export_audit_snapshot,
     bulk_tag_strategies,
     bulk_validate_strategies,
@@ -164,7 +163,6 @@ from services.strategy_domain_service import (
     replay_strategy_context,
     resolve_strategy_binding_preview,
     rollback_strategy_version,
-    run_strategy_version_dry_run,
     set_strategy_rollout_stage,
     validate_strategy_version_config,
 )

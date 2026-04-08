@@ -294,7 +294,6 @@ function App() {
             <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="positions" element={<UserPositionsPage />} />
             <Route path="live-trading-dashboard" element={<UserLiveTradingDashboardPage />} />
-            <Route path="paper-positions" element={<Navigate to="/user/dashboard" replace />} />
             <Route path="exchange-mock" element={<Navigate to="/user/dashboard" replace />} />
           </Route>
 

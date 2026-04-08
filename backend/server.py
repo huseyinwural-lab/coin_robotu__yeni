@@ -551,7 +551,7 @@ def api_root():
     return {
         "message": "Algorithmic trading platform phase-3 hardening core is running",
         "phase": "3-iter1",
-        "execution_mode": "pure_live",
+        "live_status": "pure_live",
     }
 
 

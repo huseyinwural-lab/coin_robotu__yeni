@@ -1442,7 +1442,7 @@ export const UserScannerPage = () => {
     take_profit_value: 2,
     stop_loss_mode: "percent",
     stop_loss_value: 1,
-    execution_mode: "signal_follow",
+    live_route: "signal_follow",
     signal: item.signal,
     score: item.signal_score,
     strategy: item.strategy_code,
