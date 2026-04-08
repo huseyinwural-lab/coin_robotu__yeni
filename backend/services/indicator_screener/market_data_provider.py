@@ -75,6 +75,8 @@ class BinanceMarketDataProvider:
                 path = "/api/v3/exchangeInfo"
             elif endpoint_type == "ticker24h":
                 path = "/api/v3/ticker/24hr"
+            elif endpoint_type == "tickerPrice":
+                path = "/api/v3/ticker/price"
             else:
                 path = "/api/v3/klines"
             return [f"{base}{path}" for base in self._spot_base_urls]
@@ -83,6 +85,8 @@ class BinanceMarketDataProvider:
             path = "/fapi/v1/exchangeInfo"
         elif endpoint_type == "ticker24h":
             path = "/fapi/v1/ticker/24hr"
+        elif endpoint_type == "tickerPrice":
+            path = "/fapi/v1/ticker/price"
         else:
             path = "/fapi/v1/klines"
         return [f"{base}{path}" for base in self._futures_base_urls]
@@ -133,6 +137,26 @@ class BinanceMarketDataProvider:
         except MarketDataProviderError:
             ticker_payload = []
 
+        price_payload: list[dict] = []
+        price_provider_url = None
+        try:
+            price_candidates = self._resolve_endpoint_candidates(normalized_market_type, "tickerPrice")
+            price_response, price_provider_url = self._request_with_fallback(price_candidates, timeout_seconds=8)
+            if isinstance(price_response, list):
+                price_payload = price_response
+        except MarketDataProviderError:
+            price_payload = []
+
+        price_map: dict[str, float] = {}
+        for row in price_payload:
+            symbol = str(row.get("symbol", "")).upper()
+            if not symbol:
+                continue
+            try:
+                price_map[symbol] = float(row.get("price"))
+            except (TypeError, ValueError):
+                continue
+
         ticker_map: dict[str, dict] = {}
         for row in ticker_payload:
             symbol = str(row.get("symbol", "")).upper()
@@ -157,7 +181,8 @@ class BinanceMarketDataProvider:
             quote_volume_24h = float(ticker.get("quoteVolume")) if ticker.get("quoteVolume") not in [None, ""] else None
             bid_price = float(ticker.get("bidPrice")) if ticker.get("bidPrice") not in [None, ""] else 0.0
             ask_price = float(ticker.get("askPrice")) if ticker.get("askPrice") not in [None, ""] else 0.0
-            last_price = float(ticker.get("lastPrice")) if ticker.get("lastPrice") not in [None, ""] else 0.0
+            ticker_last_price = float(ticker.get("lastPrice")) if ticker.get("lastPrice") not in [None, ""] else 0.0
+            last_price = ticker_last_price if ticker_last_price > 0 else float(price_map.get(symbol) or 0.0)
             spread_pct_24h = abs(ask_price - bid_price) / last_price * 100 if last_price > 0 and bid_price > 0 and ask_price > 0 else None
 
             leveraged_token = any(base_asset.endswith(suffix) for suffix in LEVERAGED_SUFFIXES)
@@ -194,6 +219,7 @@ class BinanceMarketDataProvider:
             "source": f"{normalized_exchange}_{normalized_market_type}_exchange_info",
             "provider_url": used_url,
             "ticker_provider_url": ticker_provider_url,
+            "price_provider_url": price_provider_url,
         }
         _set_cache_json(cache_key, result, ttl_seconds=300)
         return result

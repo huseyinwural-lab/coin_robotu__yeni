@@ -224,7 +224,7 @@ def _select_symbols_for_market(
     payload: dict,
     warnings: list[str],
 ) -> list[dict]:
-    universe_payload = provider.get_tradable_symbols(exchange=exchange, market_type=market_mode)
+    universe_payload = provider.get_tradable_symbols(exchange=exchange, market_type=market_mode, force_refresh=True)
     rows = universe_payload.get("rows", [])
 
     if payload.get("only_tradable_pairs"):
@@ -417,7 +417,7 @@ def _build_result_row(
         "matched_rules": matched_rules,
         "matched_fields": sorted(set(matched_fields)),
         "condition_metric_values": condition_metric_values,
-        "updated_at": market_payload.get("last_candle_time"),
+        "updated_at": market_payload.get("evaluated_at") or _utc_now_iso(),
         "evaluated_at": market_payload.get("evaluated_at"),
         "data_source": market_payload.get("data_source"),
         "cache_hit": bool(market_payload.get("cache_hit", False)),
@@ -636,7 +636,12 @@ def run_indicator_query_engine(
             timeframe=normalized_timeframe,
             candle_limit=90,
         )
-        indicator_values = calculate_query_indicator_values(market_payload.get("candles", []), query_fields)
+        live_price = _safe_float(metadata.get("last_price"), 0.0)
+        indicator_values = calculate_query_indicator_values(
+            market_payload.get("candles", []),
+            query_fields,
+            live_price=live_price if live_price > 0 else None,
+        )
         query_values = dict(indicator_values)
         query_values["last_price"] = _safe_float(metadata.get("last_price"), _safe_float(indicator_values.get("close"), 0.0))
         if query_ast is None:

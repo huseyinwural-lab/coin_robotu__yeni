@@ -78,13 +78,37 @@ def _bollinger(series: list[float], period: int, std_factor: float = 2.0) -> dic
     }
 
 
-def calculate_indicator_values(candles: list[dict]) -> dict[str, float]:
+def _apply_live_price_overlay(candles: list[dict], live_price: float | None) -> list[dict]:
+    if not candles:
+        return candles
+    if live_price is None:
+        return candles
+    try:
+        live = float(live_price)
+    except (TypeError, ValueError):
+        return candles
+    if live <= 0:
+        return candles
+
+    patched = [dict(item) for item in candles]
+    last = dict(patched[-1])
+    last_high = _safe_float(last.get("high"), live)
+    last_low = _safe_float(last.get("low"), live)
+    last["close"] = live
+    last["high"] = max(last_high, live)
+    last["low"] = min(last_low, live)
+    patched[-1] = last
+    return patched
+
+
+def calculate_indicator_values(candles: list[dict], live_price: float | None = None) -> dict[str, float]:
     if len(candles) < 60:
         raise IndicatorCalculationError("İndikatör hesaplaması için en az 60 kapalı candle gerekli")
 
-    closes = [_safe_float(candle.get("close")) for candle in candles]
-    last_candle = candles[-1]
-    fib = _fibonacci_levels(candles)
+    effective_candles = _apply_live_price_overlay(candles, live_price)
+    closes = [_safe_float(candle.get("close")) for candle in effective_candles]
+    last_candle = effective_candles[-1]
+    fib = _fibonacci_levels(effective_candles)
     boll20 = _bollinger(closes, 20)
 
     return {
@@ -110,12 +134,13 @@ def calculate_indicator_values(candles: list[dict]) -> dict[str, float]:
     }
 
 
-def calculate_query_indicator_values(candles: list[dict], required_fields: set[str] | None = None) -> dict[str, float]:
-    values = calculate_indicator_values(candles)
+def calculate_query_indicator_values(candles: list[dict], required_fields: set[str] | None = None, live_price: float | None = None) -> dict[str, float]:
+    effective_candles = _apply_live_price_overlay(candles, live_price)
+    values = calculate_indicator_values(effective_candles)
     if not required_fields:
         return values
 
-    closes = [_safe_float(candle.get("close")) for candle in candles]
+    closes = [_safe_float(candle.get("close")) for candle in effective_candles]
     for field in {str(item or "").strip().lower() for item in required_fields}:
         if not field or field in values:
             continue
