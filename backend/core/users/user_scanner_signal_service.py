@@ -15,6 +15,7 @@ from models import (
     RiskPolicy,
     RiskOrchestratorPolicy,
     SignalEvent,
+    StrategyAllocation,
     UserExchangeConnection,
     UserExecutionIntent,
     UserScannerAutomationConfig,
@@ -34,7 +35,6 @@ from services.explainability_service import record_decision_trace
 from services.meta_strategy_engine_service import run_meta_strategy_engine
 from services.canonical_strategy_registry_service import GLOBAL_RISK_POLICY
 from services.pipeline.cache_store import get_json, incr_counter, set_json
-from services.pipeline.canonical_signal_engine import scan_canonical_universe_for_signals
 from services.pipeline.universe_engine import apply_scanner_mode, build_effective_universe, normalize_scanner_mode
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
 from services.scanner_observability_service import (
@@ -55,6 +55,10 @@ FRESHNESS_SLA_SECONDS = {
     "5m": 150,
     "15m": 360,
 }
+
+SCANNER_ENGINE_LAST_RUN_CACHE_KEY = "universe:scanner_engine:last_run"
+USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX = "user:scanner_engine:last_run"
+BC_MAX_SCORE = 161.0
 
 SIGNAL_PENDING_REASON_HINTS = {
     "MANUAL_APPROVAL_REQUIRED": (
@@ -694,6 +698,156 @@ def _base_strategy_code(strategy_code: str | None) -> str:
     return raw
 
 
+def _user_scanner_engine_last_run_key(user_id: str) -> str:
+    return f"{USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX}:{user_id}"
+
+
+def _load_scanner_engine_last_run_payload(user_id: str) -> dict:
+    payload = get_json(redis_client, _user_scanner_engine_last_run_key(user_id))
+    if not isinstance(payload, dict) or not payload.get("run_id"):
+        payload = get_json(redis_client, SCANNER_ENGINE_LAST_RUN_CACHE_KEY)
+    return payload if isinstance(payload, dict) else {}
+
+
+def _pick_signal_side_from_scanner_result(item: dict) -> str:
+    classification = str(item.get("classification") or "").strip().lower()
+    if classification in {"strong_long", "long"}:
+        return "long"
+    if classification in {"strong_short", "short"}:
+        return "short"
+
+    try:
+        long_score = float(item.get("long_score") or 0)
+    except (TypeError, ValueError):
+        long_score = 0.0
+    try:
+        short_score = float(item.get("short_score") or 0)
+    except (TypeError, ValueError):
+        short_score = 0.0
+
+    if long_score > short_score and long_score > 0:
+        return "long"
+    if short_score > long_score and short_score > 0:
+        return "short"
+    return "none"
+
+
+def _resolve_decision_box_code(decisions: dict, signal_side: str) -> str:
+    if signal_side not in {"long", "short"}:
+        return ""
+    if not isinstance(decisions, dict):
+        return ""
+
+    ordered_boxes = ["bc01", "bc02", "bc03", "bc04"]
+    for box_key in ordered_boxes:
+        payload = decisions.get(box_key)
+        if not isinstance(payload, dict):
+            continue
+        if bool(payload.get(signal_side)):
+            return box_key.upper()
+    return ""
+
+
+def _build_ranked_from_scanner_engine_results(
+    *,
+    scanner_rows: list[dict],
+    decision_scope: list[str],
+    market_type: str,
+) -> list[dict]:
+    normalized_market_type = _normalize_scanner_market_type(market_type)
+    ranked: list[dict] = []
+
+    for item in scanner_rows:
+        if not isinstance(item, dict):
+            continue
+        symbol = str(item.get("symbol") or "").upper().strip()
+        if not symbol:
+            continue
+
+        row_market_type = _normalize_scanner_market_type(item.get("market_type"))
+        if normalized_market_type != "all" and row_market_type != normalized_market_type:
+            continue
+
+        signal_side = _pick_signal_side_from_scanner_result(item)
+        if signal_side == "none":
+            continue
+
+        decisions = item.get("decisions") if isinstance(item.get("decisions"), dict) else {}
+        decision_box_code = _resolve_decision_box_code(decisions, signal_side)
+        if not decision_box_code:
+            continue
+
+        try:
+            long_score = float(item.get("long_score") or 0)
+        except (TypeError, ValueError):
+            long_score = 0.0
+        try:
+            short_score = float(item.get("short_score") or 0)
+        except (TypeError, ValueError):
+            short_score = 0.0
+        score_value = max(long_score, short_score, 0.0)
+        signal_strength = max(min(round(score_value / BC_MAX_SCORE, 4), 1.0), 0.0)
+        classification = str(item.get("classification") or "").strip().lower()
+
+        ranked.append(
+            {
+                "symbol": symbol,
+                "market_type": row_market_type,
+                "strategy_code": decision_box_code,
+                "signal": signal_side,
+                "final_decision": "LONG" if signal_side == "long" else "SHORT",
+                "signal_strength": signal_strength,
+                "signal_score": round(score_value, 4),
+                "reason_codes": [f"decision_box_{decision_box_code.lower()}"],
+                "source_strategies": [
+                    {
+                        "strategy_code": decision_box_code,
+                        "signal": signal_side,
+                        "score": round(score_value, 4),
+                        "status": "accepted",
+                    }
+                ],
+                "classification": classification,
+                "decisions": decisions,
+                "breakdown": item.get("breakdown") if isinstance(item.get("breakdown"), dict) else {},
+                "indicator_metrics": item.get("indicator_metrics") if isinstance(item.get("indicator_metrics"), dict) else {},
+                "execution_context": item.get("execution_context") if isinstance(item.get("execution_context"), dict) else {},
+                "volume_24h": item.get("volume_24h"),
+            }
+        )
+
+    ranked.sort(
+        key=lambda row: (
+            0 if str(row.get("classification") or "") in {"strong_long", "strong_short"} else 1,
+            -float(row.get("signal_score") or 0.0),
+            str(row.get("symbol") or ""),
+        )
+    )
+    return ranked
+
+
+def _list_active_allocation_strategy_ids(db: Session) -> list[str]:
+    rows = (
+        db.query(StrategyAllocation.strategy_id)
+        .filter(StrategyAllocation.state == "ACTIVE")
+        .order_by(StrategyAllocation.strategy_id.asc())
+        .all()
+    )
+    return [str(strategy_id).strip() for (strategy_id,) in rows if str(strategy_id).strip()]
+
+
+def _resolve_allocated_strategy_id(runtime_strategy_code: str | None, active_strategy_ids: list[str]) -> str:
+    if not active_strategy_ids:
+        return ""
+
+    runtime_base = _base_strategy_code(runtime_strategy_code)
+    if runtime_base:
+        for strategy_id in active_strategy_ids:
+            if _base_strategy_code(strategy_id) == runtime_base:
+                return strategy_id
+    return active_strategy_ids[0]
+
+
 def _resolve_default_risk_policy(db: Session, user_id: str) -> RiskPolicy | None:
     return (
         db.query(RiskPolicy)
@@ -1289,7 +1443,7 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
     row.risk_policy_id = risk_policy.id if risk_policy else None
     row.exchange_connection_id = exchange_connection.id if exchange_connection else None
     row.runtime_owner = bot.name if bot else ""
-    row.requires_manual_approval = requires_manual
+    row.requires_manual_approval = True
     row.execution_eligible = execution_eligible
     row.blocked_reason_code = primary_reason
     row.blocked_reason_message = message
@@ -1298,13 +1452,15 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
 
     if primary_reason == "SIGNAL_EXPIRED":
         row.status = "expired"
+        row.requires_manual_approval = False
         _set_state(row, "EXPIRED")
     else:
-        row.status = "ready"
-        row.blocked_reason_code = ""
-        row.blocked_reason_message = ""
-        row.blocked_solution_hint = ""
-        _set_state(row, "EXECUTION_READY")
+        manual_message, manual_hint = _signal_reason_details("MANUAL_APPROVAL_REQUIRED")
+        row.status = "pending"
+        row.blocked_reason_code = "MANUAL_APPROVAL_REQUIRED"
+        row.blocked_reason_message = manual_message
+        row.blocked_solution_hint = manual_hint
+        _set_state(row, "PENDING_APPROVAL")
 
     return row
 
@@ -1395,6 +1551,10 @@ def _dispatch_signal_to_execution(
 ) -> PendingSignal:
     _set_state(row, "APPROVED")
     row.status = "approved"
+    row.requires_manual_approval = False
+    row.blocked_reason_code = ""
+    row.blocked_reason_message = ""
+    row.blocked_solution_hint = ""
     row.decided_at = datetime.now(timezone.utc)
     row.decision_note = row.decision_note or "approved"
 
@@ -1702,15 +1862,12 @@ def run_user_scanner(
             manual_scope = sorted(scoped_symbols)
 
         scanner_scope = apply_scanner_mode(
-            execution_allowed_scope,
+            market_scope,
             mode=effective_selection_mode,
             selected_symbols=manual_scope,
             top_n=max(max_results, 120),
             volume_map=volume_lookup,
         )
-        if execution_allowed_scope:
-            scope_set = set(execution_allowed_scope)
-            scanner_scope = [symbol for symbol in scanner_scope if symbol in scope_set]
 
     candidate_tiers = {
         "candidate_high": [],
@@ -1760,58 +1917,57 @@ def run_user_scanner(
             warning_set.add("same_symbol_duplicate_suppressed")
 
         try:
-            payload = scan_canonical_universe_for_signals(
-                db,
-                redis_client,
-                max_symbols=max(len(decision_scope), max_results, 30),
-                symbols_override=decision_scope,
+            scanner_engine_payload = _load_scanner_engine_last_run_payload(user_id)
+            scanner_engine_results = scanner_engine_payload.get("results")
+            if not isinstance(scanner_engine_results, list):
+                scanner_engine_results = []
+
+            ranked = _build_ranked_from_scanner_engine_results(
+                scanner_rows=scanner_engine_results,
+                decision_scope=decision_scope,
+                market_type=normalized_market_type,
             )
-            ranked = payload.get("top_ranked", [])
-            engine_version = str(payload.get("engine_version") or "canonical-engine.v3")
-            schema_version = str(payload.get("schema_version") or "decision-card.v1")
-            scan_performance = payload.get("performance") or {}
+
+            engine_version = "scanner-engine.bc01-bc04.v1"
+            schema_version = "decision-box-map.v1"
+            scan_performance = {
+                "source": "scanner_engine_decision_map",
+                "scanner_run_id": scanner_engine_payload.get("run_id"),
+                "scanner_generated_at": scanner_engine_payload.get("generated_at"),
+                "scored_rows": len(scanner_engine_results),
+                "ranked_rows": len(ranked),
+            }
+            if not ranked:
+                warning_set.add("scanner_engine_decision_map_empty")
         finally:
             for key in acquired_symbol_locks:
                 _release_symbol_lock(key)
     else:
-        ranked = []
-        scan_performance = {}
+        scanner_engine_payload = _load_scanner_engine_last_run_payload(user_id)
+        scanner_engine_results = scanner_engine_payload.get("results")
+        if not isinstance(scanner_engine_results, list):
+            scanner_engine_results = []
+
+        ranked = _build_ranked_from_scanner_engine_results(
+            scanner_rows=scanner_engine_results,
+            decision_scope=[],
+            market_type=normalized_market_type,
+        )
+        engine_version = "scanner-engine.bc01-bc04.v1"
+        schema_version = "decision-box-map.v1"
+        scan_performance = {
+            "source": "scanner_engine_decision_map_fallback",
+            "scanner_run_id": scanner_engine_payload.get("run_id"),
+            "scanner_generated_at": scanner_engine_payload.get("generated_at"),
+            "scored_rows": len(scanner_engine_results),
+            "ranked_rows": len(ranked),
+        }
+        warning_set.add("scanner_scope_unavailable_using_last_bc_run")
 
     selected = ranked[:max_results]
     selected_symbols = [str(item.get("symbol") or "").upper() for item in selected if str(item.get("symbol") or "").strip()]
-
-    fallback_seed_symbols = normalized_selected_symbols[:max_results]
-    if len(fallback_seed_symbols) == 0:
-        fallback_seed_symbols = [str(symbol).upper() for symbol in (execution_allowed_scope or []) if str(symbol).strip()][:max_results]
-    if len(fallback_seed_symbols) == 0:
-        fallback_seed_symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "SOLUSDT"][:max_results]
-
-    if len(selected) == 0 and len(fallback_seed_symbols) > 0:
-        fallback_symbols = fallback_seed_symbols
-        selected = []
-        for index, symbol in enumerate(fallback_symbols):
-            fallback_signal = "long" if index % 2 == 0 else "short"
-            selected.append(
-                {
-                    "symbol": symbol,
-                    "strategy_code": "manual_selection_fallback",
-                    "signal": fallback_signal,
-                    "final_decision": "LONG" if fallback_signal == "long" else "SHORT",
-                    "signal_strength": 0.62,
-                    "signal_score": 62.0,
-                    "reason_codes": ["manual_selection_fallback"],
-                    "source_strategies": [
-                        {
-                            "strategy_code": "manual_selection_fallback",
-                            "signal": fallback_signal,
-                            "score": 62.0,
-                            "status": "accepted",
-                        }
-                    ],
-                }
-            )
-        selected_symbols = fallback_symbols
-        warning_set.add("manual_selection_fallback_used")
+    if len(selected) == 0:
+        warning_set.add("scanner_no_bc_match")
 
     db.query(UserScannerResult).filter(UserScannerResult.user_id == user_id).delete()
 
@@ -1905,6 +2061,11 @@ def run_user_scanner(
     }
 
     runtime_strategy_code = str(getattr(bot, "strategy_type", "") or "").strip().lower()
+    active_allocation_strategy_ids = _list_active_allocation_strategy_ids(db)
+    allocated_strategy_id = _resolve_allocated_strategy_id(runtime_strategy_code, active_allocation_strategy_ids)
+    if not allocated_strategy_id:
+        warning_set.add("signal_allocation_active_strategy_required")
+
     default_exchange_connection = _resolve_exchange_connection_for_market(db, user_id, bot_market_type)
     symbol_filters_cache: dict[str, dict] = {}
     exchange_readiness_cache: dict[str, dict] = {}
@@ -1928,22 +2089,9 @@ def run_user_scanner(
         if quote_asset is None:
             warning_set.add("invalid_quote_asset")
             continue
-        strategy_code = str(item.get("strategy_code") or "canonical_unknown")
-        normalized_strategy_code = strategy_code.strip().lower()
-        if runtime_strategy_code and normalized_strategy_code in {"", "manual_selection_fallback", "canonical_unknown"}:
-            strategy_code = runtime_strategy_code
-            item = {
-                **item,
-                "strategy_code": runtime_strategy_code,
-                "source_strategies": [
-                    {
-                        "strategy_code": runtime_strategy_code,
-                        "signal": signal_value,
-                        "score": float(item.get("signal_score") or 0),
-                        "status": "accepted",
-                    }
-                ],
-            }
+        scanner_strategy_code = str(item.get("strategy_code") or "").strip().upper()
+        if scanner_strategy_code not in {"BC01", "BC02", "BC03", "BC04"}:
+            scanner_strategy_code = "BC01"
         snapshot_age_sec = item.get("indicator_snapshot_age_sec")
         if snapshot_age_sec is None:
             snapshot_age_sec = _snapshot_age_seconds(symbol, "15m")
@@ -2004,7 +2152,7 @@ def run_user_scanner(
             run_id=run_id,
             user_id=user_id,
             symbol=symbol,
-            strategy_code=strategy_code,
+            strategy_code=scanner_strategy_code,
             signal=signal_value,
             confidence=confidence,
             signal_score=score,
@@ -2020,7 +2168,7 @@ def run_user_scanner(
             trace_scope="signal",
             trace_type="symbol_decision_evaluated",
             entity_id=scanner_row.id,
-            strategy_code=strategy_code,
+            strategy_code=scanner_strategy_code,
             decision_status=final_decision,
             reason_codes=reason_codes or ["decision_evaluated"],
             feature_snapshot={
@@ -2064,7 +2212,7 @@ def run_user_scanner(
                 trace_scope="signal",
                 trace_type="family_gate_evaluated",
                 entity_id=scanner_row.id,
-                strategy_code=strategy_code,
+                strategy_code=scanner_strategy_code,
                 decision_status="BLOCKED" if final_decision == "BLOCKED" else final_decision,
                 reason_codes=[gating_reason],
                 feature_snapshot={"layer": "gating", "previous_state": "SCORED", "new_state": final_decision},
@@ -2095,7 +2243,7 @@ def run_user_scanner(
                 trace_scope="signal",
                 trace_type="risk_block",
                 entity_id=scanner_row.id,
-                strategy_code=strategy_code,
+                strategy_code=scanner_strategy_code,
                 decision_status="BLOCKED",
                 reason_codes=["symbol_direction_conflict"],
                 feature_snapshot={"layer": "risk", "previous_state": final_decision, "new_state": "BLOCKED"},
@@ -2123,7 +2271,7 @@ def run_user_scanner(
                 trace_scope="signal",
                 trace_type="risk_block",
                 entity_id=scanner_row.id,
-                strategy_code=strategy_code,
+                strategy_code=scanner_strategy_code,
                 decision_status="BLOCKED",
                 reason_codes=["symbol_cooldown"],
                 feature_snapshot={"layer": "risk", "previous_state": final_decision, "new_state": "BLOCKED"},
@@ -2151,11 +2299,40 @@ def run_user_scanner(
                 trace_scope="signal",
                 trace_type="risk_block",
                 entity_id=scanner_row.id,
-                strategy_code=strategy_code,
+                strategy_code=scanner_strategy_code,
                 decision_status="BLOCKED",
                 reason_codes=["max_positions_reached"],
                 feature_snapshot={"layer": "risk", "previous_state": final_decision, "new_state": "BLOCKED"},
                 context_payload={"symbol": symbol, "run_id": run_id},
+            )
+            continue
+
+        if not allocated_strategy_id:
+            scanner_row.payload = {
+                **(scanner_row.payload or {}),
+                "final_decision": "BLOCKED",
+                "blocked_reason_current": "ALLOCATION_STRATEGY_MISSING",
+                "allocation_gate": {
+                    "state": "blocked",
+                    "reason": "active_strategy_allocation_required",
+                },
+            }
+            scanner_row.reason_codes = list(dict.fromkeys([*(scanner_row.reason_codes or []), "allocation_strategy_missing"]))
+            record_decision_trace(
+                db,
+                user_id=user_id,
+                trace_scope="signal",
+                trace_type="allocation_gate_block",
+                entity_id=scanner_row.id,
+                strategy_code=scanner_strategy_code,
+                decision_status="BLOCKED",
+                reason_codes=["allocation_strategy_missing"],
+                feature_snapshot={"layer": "allocation", "new_state": "BLOCKED"},
+                context_payload={
+                    "symbol": symbol,
+                    "run_id": run_id,
+                    "active_strategy_allocations": active_allocation_strategy_ids,
+                },
             )
             continue
 
@@ -2169,7 +2346,7 @@ def run_user_scanner(
             symbol=symbol,
             market_type=bot_market_type,
             timeframe=bot.timeframe,
-            strategy_id=strategy_code,
+            strategy_id=allocated_strategy_id,
             signal=signal_value,
             direction="long" if signal_value == "long" else "short",
             confidence=max(confidence, round(score / 100, 4)),
@@ -2213,7 +2390,7 @@ def run_user_scanner(
                 signal_id=signal_event.id,
                 user_id=user_id,
                 symbol=symbol,
-                strategy_code=strategy_code,
+                strategy_code=allocated_strategy_id,
                 confidence=signal_event.confidence,
                 mode=mode,
                 status="non_tradeable",
@@ -2241,7 +2418,7 @@ def run_user_scanner(
                 trace_scope="signal",
                 trace_type="scanner_signal_non_tradeable",
                 entity_id=pending_row.id,
-                strategy_code=strategy_code,
+                strategy_code=allocated_strategy_id,
                 decision_status="NON_TRADEABLE",
                 reason_codes=["ORDER_PRECHECK_FAILED", first_failure_code],
                 feature_snapshot={
@@ -2266,7 +2443,7 @@ def run_user_scanner(
         meta_summary = run_meta_strategy_engine(
             db,
             user_id=user_id,
-            strategy_id=strategy_code,
+            strategy_id=allocated_strategy_id,
             symbol=symbol,
             signal_confidence=max(confidence, round(score / 100, 4)),
             requested_notional=requested_notional,
@@ -2283,7 +2460,7 @@ def run_user_scanner(
             signal_id=signal_event.id,
             user_id=user_id,
             symbol=symbol,
-            strategy_code=strategy_code,
+            strategy_code=allocated_strategy_id,
             confidence=signal_event.confidence,
             mode=mode,
             status="pending",
@@ -2306,26 +2483,13 @@ def run_user_scanner(
         if pending_row.status == "pending":
             queued_count += 1
 
-        if mode == "AUTO" and pending_row.execution_eligible:
-            try:
-                connection = _resolve_default_exchange_connection(db, user_id)
-                _dispatch_signal_to_execution(
-                    db,
-                    row=pending_row,
-                    signal=signal_event,
-                    exchange_connection=connection,
-                    actor_user_id=user_id,
-                )
-            except Exception as exc:
-                _apply_order_precheck_failed(pending_row, error_detail=str(exc))
-
         record_decision_trace(
             db,
             user_id=user_id,
             trace_scope="signal",
             trace_type="scanner_signal_generated",
             entity_id=pending_row.id,
-            strategy_code=strategy_code,
+            strategy_code=allocated_strategy_id,
             decision_status=pending_row.current_state,
             reason_codes=[pending_row.blocked_reason_code] if pending_row.blocked_reason_code else (reason_codes or ["signal_generated_without_reason_code"]),
             strategy_allocation_reason=allocation_reason,
@@ -2637,26 +2801,8 @@ def diagnose_pending_signal(
     if not (auto_fix and row.blocked_reason_code in fast_autofix_codes):
         _refresh_pending_signal_snapshot(db, row)
 
-    if auto_fix and row.mode == "AUTO" and row.execution_eligible and row.status in {"pending", "ready"}:
-        signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
-        if signal is not None:
-            try:
-                exchange_connection = _resolve_exchange_connection_for_market(
-                    db,
-                    user_id,
-                    str(getattr(signal, "market_type", "spot") or "spot"),
-                )
-                _dispatch_signal_to_execution(
-                    db,
-                    row=row,
-                    signal=signal,
-                    exchange_connection=exchange_connection,
-                    actor_user_id=user_id,
-                )
-                actions_applied.append("auto_dispatch_triggered")
-            except Exception as exc:
-                _apply_order_precheck_failed(row, error_detail=str(exc))
-                actions_applied.append("auto_dispatch_precheck_failed")
+    if auto_fix and row.execution_eligible and row.status in {"pending", "ready"}:
+        actions_applied.append("manual_approval_gate_enforced")
     record_decision_trace(
         db,
         user_id=user_id,

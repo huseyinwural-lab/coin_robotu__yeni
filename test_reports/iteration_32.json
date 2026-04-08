@@ -1,0 +1,109 @@
+{
+  "summary": "Iteration 32: Approval Gate Verification - All 5 requirements verified. Scanner does NOT auto-dispatch, diagnose does NOT auto-dispatch, only approve triggers dispatch, scanner results use BC01-BC04 strategy codes, signals use ACTIVE allocation strategies.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration32_approval_gate_verification.py",
+    "/app/test_reports/pytest/iteration32_approval_gate.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ run_user_scanner does NOT call _dispatch_signal_to_execution - signals remain in pending state",
+    "✓ diagnose_pending_signal does NOT call _dispatch_signal_to_execution - adds 'manual_approval_gate_enforced' action",
+    "✓ approve_pending_signal DOES call _dispatch_signal_to_execution - only path to execution",
+    "✓ _resolve_decision_box_code checks BC01-BC04 decision boxes in order",
+    "✓ _build_ranked_from_scanner_engine_results only includes results with valid BC01-BC04 codes",
+    "✓ _list_active_allocation_strategy_ids filters by state == 'ACTIVE'",
+    "✓ Signal strategy_code is set from allocated_strategy_id resolved from ACTIVE allocations"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration32_approval_gate_verification.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "N/A (backend only testing)"
+  },
+  "test_credentials": {
+    "user": "review.user@platform.local / ReviewUser123!"
+  },
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Approval gate verification completed in iteration 32. All 5 requirements verified: (1) Scanner run creates pending signals but does NOT auto-dispatch, (2) Diagnose with auto_fix=true does NOT dispatch - adds 'manual_approval_gate_enforced' action, (3) Only approve endpoint triggers dispatch via _dispatch_signal_to_execution, (4) Scanner results have BC01-BC04 strategy codes from decision box map, (5) Signal strategy_code comes from ACTIVE allocation strategies.",
+  "test_results": {
+    "requirement_1_scanner_no_auto_dispatch": {
+      "status": "VERIFIED",
+      "evidence": "Scanner run returns actionable_count=0, queued_count=0. Signals remain in status=pending, state=DETECTED/PENDING_APPROVAL with position_id=null. Code verification: run_user_scanner does NOT call _dispatch_signal_to_execution."
+    },
+    "requirement_2_diagnose_no_auto_dispatch": {
+      "status": "VERIFIED",
+      "evidence": "Diagnose with auto_fix=true returns actions_applied=['status_contract_refresh_requested', 'manual_approval_gate_enforced']. Signal remains in status=pending, state=PENDING_APPROVAL with position_id=null. Code verification: diagnose_pending_signal does NOT call _dispatch_signal_to_execution."
+    },
+    "requirement_3_only_approve_triggers_dispatch": {
+      "status": "VERIFIED",
+      "evidence": "Approve endpoint creates order intent (created_order_intent_id present). Code verification: approve_pending_signal DOES call _dispatch_signal_to_execution."
+    },
+    "requirement_4_scanner_bc01_bc04_strategy_code": {
+      "status": "VERIFIED",
+      "evidence": "Scanner results show strategy_code in {BC01, BC02, BC03, BC04}. Example: HBARUSDT=BC02, GRTUSDT=BC04, BONKUSDT=BC04, XLMUSDT=BC03, DUSKUSDT=BC01. Code verification: _resolve_decision_box_code checks bc01-bc04 in order."
+    },
+    "requirement_5_signal_active_allocation_strategy": {
+      "status": "VERIFIED",
+      "evidence": "Code verification: _list_active_allocation_strategy_ids filters by state=='ACTIVE'. _resolve_allocated_strategy_id resolves from active allocations. Signal strategy_code is set from allocated_strategy_id."
+    },
+    "code_verification_tests": {
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "tests": [
+        "test_run_user_scanner_does_not_call_dispatch - PASSED",
+        "test_diagnose_pending_signal_does_not_call_dispatch - PASSED",
+        "test_approve_pending_signal_calls_dispatch - PASSED",
+        "test_resolve_decision_box_code_uses_bc01_bc04 - PASSED",
+        "test_resolve_allocated_strategy_id_uses_active_allocations - PASSED"
+      ]
+    },
+    "api_verification": {
+      "login": "PASS - 200 OK",
+      "scanner_run": "PASS - Returns run_id, mode=AUTO, actionable_count, queued_count",
+      "signals_get": "PASS - Returns signals with status, current_state, position_id",
+      "diagnose": "PASS - Returns signal and actions_applied including 'manual_approval_gate_enforced'",
+      "approve": "PASS - Creates order intent (created_order_intent_id)",
+      "scanner_results": "PASS - Returns results with BC01-BC04 strategy_code"
+    }
+  },
+  "verification_summary": {
+    "requirement_1": {
+      "description": "POST /api/user/scanner/run sonrası auto mode'da signal'ların onaysız trade intent/order oluşturmaması",
+      "status": "VERIFIED",
+      "evidence": "Scanner creates pending signals but does NOT auto-dispatch. Signals have position_id=null."
+    },
+    "requirement_2": {
+      "description": "POST /api/user/signal/{id}/diagnose?auto_fix=true çağrısının auto-dispatch tetiklememesi",
+      "status": "VERIFIED",
+      "evidence": "Diagnose adds 'manual_approval_gate_enforced' action but does NOT dispatch. Signal remains pending."
+    },
+    "requirement_3": {
+      "description": "POST /api/user/signal/{id}/approve sonrası dispatch akışının yalnız bu endpoint ile tetiklenmesi",
+      "status": "VERIFIED",
+      "evidence": "Only approve_pending_signal calls _dispatch_signal_to_execution. Creates order intent."
+    },
+    "requirement_4": {
+      "description": "Scanner sonuçlarında strategy_code alanının BC01-BC04 karar eşleşmesi ile gelmesi",
+      "status": "VERIFIED",
+      "evidence": "Scanner results have strategy_code in {BC01, BC02, BC03, BC04}."
+    },
+    "requirement_5": {
+      "description": "Signal kayıtlarında strategy_code alanının ACTIVE allocation stratejisiyle hizalı olması",
+      "status": "VERIFIED",
+      "evidence": "_list_active_allocation_strategy_ids filters by state=='ACTIVE'. Signal uses allocated_strategy_id."
+    }
+  }
+}
