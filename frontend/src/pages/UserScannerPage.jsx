@@ -2167,13 +2167,13 @@ export const UserScannerPage = () => {
           <h3 className="text-base font-semibold" data-testid="user-scanner-control-title">Short/Long Decoupled Scanner</h3>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="user-scanner-engine-config-grid">
+        <div className="grid gap-3 xl:grid-cols-7 xl:items-start" data-testid="user-scanner-engine-config-grid">
           <label className="space-y-1" data-testid="user-scanner-engine-market-field">
             <span className="text-xs uppercase tracking-widest text-slate-500">Market</span>
             <input value="BINANCE" disabled className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-scanner-engine-market-input" />
           </label>
 
-          <div className="space-y-2 md:col-span-2" data-testid="user-scanner-engine-market-types-field">
+          <div className="space-y-2 xl:col-span-2" data-testid="user-scanner-engine-market-types-field">
             <span className="text-xs uppercase tracking-widest text-slate-500">Piyasa Tipi</span>
             <div className="grid gap-2 md:grid-cols-2" data-testid="user-scanner-engine-market-type-rows">
               <div className="rounded border border-slate-700 bg-slate-950 p-2" data-testid="user-scanner-engine-spot-row">
@@ -2182,7 +2182,7 @@ export const UserScannerPage = () => {
                     type="checkbox"
                     checked={Boolean(scannerEngineConfig.include_spot)}
                     onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, include_spot: event.target.checked }))}
-                    disabled={!isSuperAdmin || scannerEngineBusy}
+                    disabled={scannerEngineBusy}
                     data-testid="user-scanner-engine-spot-checkbox"
                   />
                   Spot
@@ -2194,7 +2194,7 @@ export const UserScannerPage = () => {
                       ...prev,
                       market_scope: { ...(prev.market_scope || {}), spot_mode: event.target.value },
                     }))}
-                    disabled={!isSuperAdmin || scannerEngineBusy}
+                    disabled={scannerEngineBusy}
                     className="mt-2 h-9 w-full border border-slate-700 bg-black px-2 text-xs"
                     data-testid="user-scanner-engine-spot-scope-select"
                   >
@@ -2210,7 +2210,7 @@ export const UserScannerPage = () => {
                     type="checkbox"
                     checked={Boolean(scannerEngineConfig.include_futures)}
                     onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, include_futures: event.target.checked }))}
-                    disabled={!isSuperAdmin || scannerEngineBusy}
+                    disabled={scannerEngineBusy}
                     data-testid="user-scanner-engine-futures-checkbox"
                   />
                   Futures
@@ -2222,7 +2222,7 @@ export const UserScannerPage = () => {
                       ...prev,
                       market_scope: { ...(prev.market_scope || {}), futures_mode: event.target.value },
                     }))}
-                    disabled={!isSuperAdmin || scannerEngineBusy}
+                    disabled={scannerEngineBusy}
                     className="mt-2 h-9 w-full border border-slate-700 bg-black px-2 text-xs"
                     data-testid="user-scanner-engine-futures-scope-select"
                   >
@@ -2240,7 +2240,7 @@ export const UserScannerPage = () => {
               value={scannerEngineManualSymbols}
               onChange={(event) => setScannerEngineManualSymbols(event.target.value)}
               placeholder="BTCUSDT,ETHUSDT"
-              disabled={!isSuperAdmin || scannerEngineBusy}
+              disabled={scannerEngineBusy}
               className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
               data-testid="user-scanner-engine-manual-symbols-input"
             />
@@ -2254,7 +2254,7 @@ export const UserScannerPage = () => {
                   type="checkbox"
                   checked={String(scannerEngineConfig.signal_mode || "manual") === "manual"}
                   onChange={() => setScannerEngineConfig((prev) => ({ ...prev, signal_mode: "manual" }))}
-                  disabled={!isSuperAdmin || scannerEngineBusy}
+                  disabled={scannerEngineBusy}
                   data-testid="user-scanner-engine-signal-mode-manual-checkbox"
                 />
                 Manuel
@@ -2264,18 +2264,23 @@ export const UserScannerPage = () => {
                   type="checkbox"
                   checked={String(scannerEngineConfig.signal_mode || "manual") === "auto"}
                   onChange={() => setScannerEngineConfig((prev) => ({ ...prev, signal_mode: "auto" }))}
-                  disabled={!isSuperAdmin || scannerEngineBusy}
+                  disabled={scannerEngineBusy}
                   data-testid="user-scanner-engine-signal-mode-auto-checkbox"
                 />
                 Auto
               </label>
             </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2" data-testid="user-scanner-engine-actions">
-          <Button type="button" variant="outline" onClick={saveScannerEngineConfig} disabled={!isSuperAdmin || scannerEngineBusy} data-testid="user-scanner-engine-save-button">Kaydet</Button>
-          <Button type="button" variant="outline" onClick={runScannerEngine} disabled={!isSuperAdmin || scannerEngineBusy} data-testid="user-scanner-engine-run-button">Tara</Button>
+          <div className="space-y-1" data-testid="user-scanner-engine-save-action-wrap">
+            <span className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-engine-save-label">Kaydet</span>
+            <Button type="button" variant="outline" onClick={saveScannerEngineConfig} disabled={scannerEngineBusy} className="h-10 w-full" data-testid="user-scanner-engine-save-button">Kaydet</Button>
+          </div>
+
+          <div className="space-y-1" data-testid="user-scanner-engine-run-action-wrap">
+            <span className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-engine-run-label">Tara</span>
+            <Button type="button" variant="outline" onClick={runScannerEngine} disabled={scannerEngineBusy} className="h-10 w-full" data-testid="user-scanner-engine-run-button">Tara</Button>
+          </div>
         </div>
 
         <div className="grid gap-2 rounded border border-slate-800 bg-slate-950 p-3 md:grid-cols-2" data-testid="user-scanner-live-scan-timer-section">
