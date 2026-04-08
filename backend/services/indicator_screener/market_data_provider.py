@@ -1,4 +1,5 @@
 import json
+import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
@@ -23,6 +24,10 @@ LEVERAGED_SUFFIXES = {"UP", "DOWN", "BULL", "BEAR", "3L", "3S", "5L", "5S"}
 
 
 class MarketDataProviderError(RuntimeError):
+    pass
+
+
+class DataCorruptionError(MarketDataProviderError):
     pass
 
 
@@ -111,6 +116,68 @@ class BinanceMarketDataProvider:
                 continue
         raise MarketDataProviderError(f"Binance endpointlerine erişilemedi: {last_error}")
 
+    @staticmethod
+    def _parse_positive_price(value, *, field_name: str) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError) as exc:
+            raise DataCorruptionError(f"{field_name}_invalid") from exc
+        if not math.isfinite(parsed) or parsed <= 0:
+            raise DataCorruptionError(f"{field_name}_invalid")
+        return parsed
+
+    @staticmethod
+    def _parse_non_negative_float(value):
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(parsed) or parsed < 0:
+            return None
+        return parsed
+
+    @staticmethod
+    def _cache_has_invalid_prices(payload: dict) -> bool:
+        rows = payload.get("rows") if isinstance(payload, dict) else []
+        if not isinstance(rows, list):
+            return True
+        for row in rows:
+            if not isinstance(row, dict):
+                return True
+            value = row.get("last_price")
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                return True
+            if not math.isfinite(numeric) or numeric <= 0:
+                return True
+        return False
+
+    def _resolve_last_price_for_symbol(
+        self,
+        *,
+        market_type: str,
+        symbol: str,
+        price_map: dict[str, float],
+        ticker_map: dict[str, dict],
+    ) -> float:
+        if symbol in price_map:
+            return self._parse_positive_price(price_map[symbol], field_name="ticker_price")
+
+        ticker = ticker_map.get(symbol, {})
+        if isinstance(ticker, dict) and ticker.get("lastPrice") not in [None, ""]:
+            return self._parse_positive_price(ticker.get("lastPrice"), field_name="ticker_24h_last_price")
+
+        kline_candidates = self._resolve_endpoint_candidates(market_type, "candles")
+        raw_klines, _ = self._request_with_fallback(
+            kline_candidates,
+            params={"symbol": symbol, "interval": "1m", "limit": 1},
+            timeout_seconds=6,
+        )
+        if not isinstance(raw_klines, list) or len(raw_klines) == 0 or len(raw_klines[0]) < 5:
+            raise DataCorruptionError(f"kline_price_missing:{symbol}")
+        return self._parse_positive_price(raw_klines[0][4], field_name="kline_close_price")
+
     def get_tradable_symbols(self, *, exchange: str, market_type: str, force_refresh: bool = False) -> dict:
         normalized_exchange = (exchange or "binance").strip().lower()
         if normalized_exchange != "binance":
@@ -121,21 +188,16 @@ class BinanceMarketDataProvider:
         if not force_refresh:
             cached = _get_cache_json(cache_key)
             if cached:
-                cached["cache_hit"] = True
-                return cached
+                if not self._cache_has_invalid_prices(cached):
+                    cached["cache_hit"] = True
+                    return cached
+                try:
+                    redis_client.delete(cache_key)
+                except Exception:
+                    pass
 
         endpoint_candidates = self._resolve_endpoint_candidates(normalized_market_type, "symbols")
         payload, used_url = self._request_with_fallback(endpoint_candidates, timeout_seconds=15)
-
-        ticker_candidates = self._resolve_endpoint_candidates(normalized_market_type, "ticker24h")
-        ticker_payload: list[dict] = []
-        ticker_provider_url = None
-        try:
-            ticker_response, ticker_provider_url = self._request_with_fallback(ticker_candidates, timeout_seconds=12)
-            if isinstance(ticker_response, list):
-                ticker_payload = ticker_response
-        except MarketDataProviderError:
-            ticker_payload = []
 
         price_payload: list[dict] = []
         price_provider_url = None
@@ -147,14 +209,24 @@ class BinanceMarketDataProvider:
         except MarketDataProviderError:
             price_payload = []
 
+        ticker_candidates = self._resolve_endpoint_candidates(normalized_market_type, "ticker24h")
+        ticker_payload: list[dict] = []
+        ticker_provider_url = None
+        try:
+            ticker_response, ticker_provider_url = self._request_with_fallback(ticker_candidates, timeout_seconds=12)
+            if isinstance(ticker_response, list):
+                ticker_payload = ticker_response
+        except MarketDataProviderError:
+            ticker_payload = []
+
         price_map: dict[str, float] = {}
         for row in price_payload:
             symbol = str(row.get("symbol", "")).upper()
             if not symbol:
                 continue
             try:
-                price_map[symbol] = float(row.get("price"))
-            except (TypeError, ValueError):
+                price_map[symbol] = self._parse_positive_price(row.get("price"), field_name="ticker_price")
+            except DataCorruptionError:
                 continue
 
         ticker_map: dict[str, dict] = {}
@@ -165,6 +237,7 @@ class BinanceMarketDataProvider:
 
         rows: list[dict] = []
         symbols: list[str] = []
+        price_resolution_errors: list[dict] = []
         for row in payload.get("symbols", []):
             symbol = str(row.get("symbol", "")).upper()
             if not symbol:
@@ -178,12 +251,26 @@ class BinanceMarketDataProvider:
                 is_tradable = row.get("status") == "TRADING" and row.get("contractType") in {"PERPETUAL", "CURRENT_MONTH", "NEXT_MONTH"}
 
             ticker = ticker_map.get(symbol, {})
-            quote_volume_24h = float(ticker.get("quoteVolume")) if ticker.get("quoteVolume") not in [None, ""] else None
-            bid_price = float(ticker.get("bidPrice")) if ticker.get("bidPrice") not in [None, ""] else 0.0
-            ask_price = float(ticker.get("askPrice")) if ticker.get("askPrice") not in [None, ""] else 0.0
-            ticker_last_price = float(ticker.get("lastPrice")) if ticker.get("lastPrice") not in [None, ""] else 0.0
-            last_price = ticker_last_price if ticker_last_price > 0 else float(price_map.get(symbol) or 0.0)
-            spread_pct_24h = abs(ask_price - bid_price) / last_price * 100 if last_price > 0 and bid_price > 0 and ask_price > 0 else None
+            quote_volume_24h = self._parse_non_negative_float((ticker or {}).get("quoteVolume"))
+            bid_price = self._parse_non_negative_float((ticker or {}).get("bidPrice"))
+            ask_price = self._parse_non_negative_float((ticker or {}).get("askPrice"))
+
+            try:
+                last_price = self._resolve_last_price_for_symbol(
+                    market_type=normalized_market_type,
+                    symbol=symbol,
+                    price_map=price_map,
+                    ticker_map=ticker_map,
+                )
+            except (DataCorruptionError, MarketDataProviderError) as exc:
+                price_resolution_errors.append({"symbol": symbol, "error": str(exc)[:140]})
+                continue
+
+            spread_pct_24h = (
+                abs(ask_price - bid_price) / last_price * 100
+                if bid_price and ask_price and bid_price > 0 and ask_price > 0
+                else None
+            )
 
             leveraged_token = any(base_asset.endswith(suffix) for suffix in LEVERAGED_SUFFIXES)
             stablecoin_pair = base_asset in STABLE_ASSETS and quote_asset in STABLE_ASSETS
@@ -208,6 +295,9 @@ class BinanceMarketDataProvider:
 
         rows.sort(key=lambda item: item["symbol"])
         symbols = sorted(set(symbols))
+        if len(rows) == 0:
+            raise DataCorruptionError("no_valid_market_prices_from_binance")
+
         result = {
             "exchange": normalized_exchange,
             "market_type": normalized_market_type,
@@ -220,8 +310,11 @@ class BinanceMarketDataProvider:
             "provider_url": used_url,
             "ticker_provider_url": ticker_provider_url,
             "price_provider_url": price_provider_url,
+            "price_resolution_error_count": len(price_resolution_errors),
+            "price_resolution_errors": price_resolution_errors[:120],
         }
-        _set_cache_json(cache_key, result, ttl_seconds=300)
+        if not self._cache_has_invalid_prices(result):
+            _set_cache_json(cache_key, result, ttl_seconds=300)
         return result
 
     def fetch_candles(

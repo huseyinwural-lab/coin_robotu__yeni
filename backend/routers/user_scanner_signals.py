@@ -225,6 +225,11 @@ def user_scanner_engine_run(payload: dict, current_user: User = Depends(require_
     }
 
 
+@router.post("/scanner-engine/analyze")
+def user_scanner_engine_analyze(payload: dict, current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    return user_scanner_engine_run(payload=payload, current_user=current_user, db=db)
+
+
 @router.post("/scanner-engine/run-async")
 def user_scanner_engine_run_async(
     payload: dict,
@@ -1206,6 +1211,15 @@ def scanner_run(
         },
     )
     return UserScannerRunResponse(**result)
+
+
+@router.post("/scanner/analyze", response_model=UserScannerRunResponse)
+def scanner_analyze(
+    payload: UserScannerRunRequest,
+    current_user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    return scanner_run(payload=payload, current_user=current_user, db=db)
 
 
 @router.post("/scanner/run-async")

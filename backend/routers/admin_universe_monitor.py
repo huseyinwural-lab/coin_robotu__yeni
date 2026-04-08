@@ -1666,6 +1666,11 @@ def scanner_engine_run(payload: ScannerEngineRunRequest, current_admin: User = D
     }
 
 
+@router.post("/scanner-engine/analyze")
+def scanner_engine_analyze(payload: ScannerEngineRunRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return scanner_engine_run(payload=payload, current_admin=current_admin, db=db)
+
+
 @router.get("/scanner-engine/last-run")
 def scanner_engine_last_run(current_admin: User = Depends(require_admin)):
     _super_admin_required(current_admin)

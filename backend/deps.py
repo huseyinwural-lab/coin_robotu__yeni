@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, Request, status
@@ -21,6 +22,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 ADMIN_ROLES = {UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS}
 STEP_UP_MAX_AGE_SECONDS = 10 * 60
 STRICT_SESSION_BINDING_ROLES = {"super_admin", "admin", "ops"}
+logger = logging.getLogger(__name__)
 
 
 def _is_strict_session_binding(payload: dict) -> bool:
@@ -29,6 +31,34 @@ def _is_strict_session_binding(payload: dict) -> bool:
         return True
     role_value = str(payload.get("role") or "").strip().lower()
     return role_value in STRICT_SESSION_BINDING_ROLES
+
+
+def _log_device_binding_event(
+    *,
+    request: Request,
+    event_code: str,
+    strict_binding: bool,
+    is_local_client: bool,
+    has_cookie: bool,
+    has_header: bool,
+    recovered: bool,
+) -> None:
+    path = str(request.url.path if request else "")
+    if not path.startswith("/api/admin/strategy-allocation"):
+        return
+    logger.warning(
+        "auth_device_binding_event",
+        extra={
+            "event_code": event_code,
+            "path": path,
+            "method": str(request.method if request else ""),
+            "strict_binding": strict_binding,
+            "is_local_client": is_local_client,
+            "has_cookie": has_cookie,
+            "has_header": has_header,
+            "recovered": recovered,
+        },
+    )
 
 
 def is_admin_role(role: UserRole) -> bool:
@@ -70,26 +100,73 @@ def get_current_user(
     cookie_device_id = str((request.cookies.get("device_id") if request else "") or "").strip()
     header_device_id = str((request.headers.get("x-session-device") if request else "") or "").strip()
     bound_device_id = header_device_id or cookie_device_id
+    has_cookie = bool(cookie_device_id)
+    has_header = bool(header_device_id)
     is_local_client = bool(getattr(getattr(request, "client", None), "host", None) in {"127.0.0.1", "localhost"})
     strict_binding = _is_strict_session_binding(payload)
-    if not bound_device_id:
-        if is_local_client or not strict_binding:
-            bound_device_id = token_device_id
-        else:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_device_missing")
-    elif bound_device_id != token_device_id:
-        if is_local_client or not strict_binding:
-            bound_device_id = token_device_id
-        else:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_device_mismatch")
-
-    if payload.get("mfa_verified") is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token_mfa_claim")
 
     token_ip_hash = str(payload.get("ip_hash") or "").strip()
     token_device_fingerprint = str(payload.get("device_fingerprint") or "").strip()
     current_ip_hash = resolve_ip_hash(request)
     current_device_fingerprint = resolve_device_fingerprint(request)
+    strict_context_match = bool(
+        token_ip_hash
+        and token_device_fingerprint
+        and token_ip_hash == current_ip_hash
+        and token_device_fingerprint == current_device_fingerprint
+    )
+
+    if not bound_device_id:
+        if is_local_client or not strict_binding or strict_context_match:
+            if strict_binding and not is_local_client and strict_context_match:
+                _log_device_binding_event(
+                    request=request,
+                    event_code="session_device_missing_recovered",
+                    strict_binding=strict_binding,
+                    is_local_client=is_local_client,
+                    has_cookie=has_cookie,
+                    has_header=has_header,
+                    recovered=True,
+                )
+            bound_device_id = token_device_id
+        else:
+            _log_device_binding_event(
+                request=request,
+                event_code="session_device_missing_blocked",
+                strict_binding=strict_binding,
+                is_local_client=is_local_client,
+                has_cookie=has_cookie,
+                has_header=has_header,
+                recovered=False,
+            )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_device_missing")
+    elif bound_device_id != token_device_id:
+        if is_local_client or not strict_binding or strict_context_match:
+            if strict_binding and not is_local_client and strict_context_match:
+                _log_device_binding_event(
+                    request=request,
+                    event_code="session_device_mismatch_recovered",
+                    strict_binding=strict_binding,
+                    is_local_client=is_local_client,
+                    has_cookie=has_cookie,
+                    has_header=has_header,
+                    recovered=True,
+                )
+            bound_device_id = token_device_id
+        else:
+            _log_device_binding_event(
+                request=request,
+                event_code="session_device_mismatch_blocked",
+                strict_binding=strict_binding,
+                is_local_client=is_local_client,
+                has_cookie=has_cookie,
+                has_header=has_header,
+                recovered=False,
+            )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session_device_mismatch")
+
+    if payload.get("mfa_verified") is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token_mfa_claim")
 
     if not token_ip_hash or token_ip_hash != current_ip_hash:
         if is_local_client or not strict_binding:
