@@ -50,6 +50,7 @@ export const UserSignalsPage = () => {
   const [animatedSignalIds, setAnimatedSignalIds] = useState([]);
   const [loadIssue, setLoadIssue] = useState(null);
   const [decisionMap, setDecisionMap] = useState({});
+  const [scannerAutomation, setScannerAutomation] = useState(null);
   const [showSlowLoadingHint, setShowSlowLoadingHint] = useState(false);
   const alertedSignalIdsRef = useRef(new Set());
   const toastTrackerRef = useRef(new Map());
@@ -106,6 +107,7 @@ export const UserSignalsPage = () => {
         { key: "bot_profiles", label: "bot_profiles", critical: true, request: () => apiClient.get("/bot-profiles", { timeout: 15000 }) },
         { key: "status_contract", label: "status_contract", critical: false, request: () => apiClient.get("/user/scanner/status-contract", { timeout: 15000 }) },
         { key: "decision_map", label: "decision_map", critical: false, request: () => apiClient.get("/user/scanner-engine/decision-map", { timeout: 15000 }) },
+        { key: "scanner_automation", label: "scanner_automation", critical: false, request: () => apiClient.get("/user/scanner/automation", { timeout: 15000 }) },
       ];
       const settled = await Promise.allSettled(requestDescriptors.map((item) => item.request()));
       const byKey = requestDescriptors.reduce((acc, descriptor, index) => {
@@ -120,6 +122,7 @@ export const UserSignalsPage = () => {
       const botsRes = byKey.bot_profiles;
       const statusContractRes = byKey.status_contract;
       const decisionMapRes = byKey.decision_map;
+      const scannerAutomationRes = byKey.scanner_automation;
 
       if (signalsRes?.status === "fulfilled") {
         const payload = signalsRes.value?.data;
@@ -156,6 +159,10 @@ export const UserSignalsPage = () => {
       if (decisionMapRes?.status === "fulfilled") {
         const items = decisionMapRes.value?.data?.items;
         setDecisionMap(items && typeof items === "object" ? items : {});
+      }
+
+      if (scannerAutomationRes?.status === "fulfilled") {
+        setScannerAutomation(scannerAutomationRes.value?.data || null);
       }
 
       const rejectedEntries = requestDescriptors
@@ -586,6 +593,9 @@ export const UserSignalsPage = () => {
     [botProfiles],
   );
 
+  const signalModeAutoEnabled = String(signalMode?.mode || "").toUpperCase() === "AUTO";
+  const scannerAutomationAutoEnabled = Boolean(scannerAutomation?.auto_enabled);
+
   const controlPanelState = useMemo(() => {
     const rawMode = String(signalMode?.mode || "ASSISTED").toUpperCase();
     const latestSignal = gridSignals[0] || null;
@@ -709,9 +719,25 @@ export const UserSignalsPage = () => {
             {compactMode ? "Compact: ON" : "Compact: OFF"}
           </Button>
         </div>
-        <p className="mt-3 inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900" data-testid="user-signals-active-execution-mode-badge">
-          Execution Mode: {modeLabelFromRaw(signalMode?.mode)}
-        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="user-signals-active-execution-mode-row">
+          <p className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900" data-testid="user-signals-active-execution-mode-badge">
+            Execution Mode: {modeLabelFromRaw(signalMode?.mode)}
+          </p>
+          <span
+            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${signalModeAutoEnabled ? "border-cyan-400 bg-cyan-300/20 text-cyan-100" : "border-slate-600 bg-slate-700/40 text-slate-200"}`}
+            title="Signal Mode AUTO: Sinyal onay davranışını belirler. Sinyal üretimindeki karar modu budur."
+            data-testid="user-signals-signal-mode-auto-badge"
+          >
+            Signal Mode AUTO: {signalModeAutoEnabled ? "AKTİF" : "PASİF"}
+          </span>
+          <span
+            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${scannerAutomationAutoEnabled ? "border-violet-400 bg-violet-300/20 text-violet-100" : "border-slate-600 bg-slate-700/40 text-slate-200"}`}
+            title="Scanner Automation AUTO: Taramanın zamanlayıcı ile otomatik tetiklenmesini kontrol eder."
+            data-testid="user-signals-scanner-automation-auto-badge"
+          >
+            Scanner Automation AUTO: {scannerAutomationAutoEnabled ? "AKTİF" : "PASİF"}
+          </span>
+        </div>
         <div className="mt-3 flex flex-wrap items-center gap-3" data-testid="user-signals-alert-settings-row">
           <label className="inline-flex items-center gap-2 text-xs text-slate-300" data-testid="user-signals-blocked-alert-toggle-wrapper">
             <input type="checkbox" checked={blockedAlertEnabled} onChange={(event) => setBlockedAlertEnabled(event.target.checked)} data-testid="user-signals-blocked-alert-toggle" />
