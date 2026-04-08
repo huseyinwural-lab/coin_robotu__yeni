@@ -1443,7 +1443,7 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
     row.risk_policy_id = risk_policy.id if risk_policy else None
     row.exchange_connection_id = exchange_connection.id if exchange_connection else None
     row.runtime_owner = bot.name if bot else ""
-    row.requires_manual_approval = True
+    row.requires_manual_approval = bool(requires_manual)
     row.execution_eligible = execution_eligible
     row.blocked_reason_code = primary_reason
     row.blocked_reason_message = message
@@ -1455,12 +1455,11 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
         row.requires_manual_approval = False
         _set_state(row, "EXPIRED")
     else:
-        manual_message, manual_hint = _signal_reason_details("MANUAL_APPROVAL_REQUIRED")
-        row.status = "pending"
-        row.blocked_reason_code = "MANUAL_APPROVAL_REQUIRED"
-        row.blocked_reason_message = manual_message
-        row.blocked_solution_hint = manual_hint
-        _set_state(row, "PENDING_APPROVAL")
+        row.status = "ready"
+        row.blocked_reason_code = ""
+        row.blocked_reason_message = ""
+        row.blocked_solution_hint = ""
+        _set_state(row, "EXECUTION_READY")
 
     return row
 
@@ -2480,8 +2479,21 @@ def run_user_scanner(
         _refresh_pending_signal_snapshot(db, pending_row)
         pending_row.execution_mode_label = _execution_mode_label(mode)
 
-        if pending_row.status == "pending":
+        if pending_row.status in {"pending", "ready"}:
             queued_count += 1
+
+        if mode == "AUTO" and pending_row.execution_eligible:
+            try:
+                connection = _resolve_default_exchange_connection(db, user_id)
+                _dispatch_signal_to_execution(
+                    db,
+                    row=pending_row,
+                    signal=signal_event,
+                    exchange_connection=connection,
+                    actor_user_id=user_id,
+                )
+            except Exception as exc:
+                _apply_order_precheck_failed(pending_row, error_detail=str(exc))
 
         record_decision_trace(
             db,
@@ -2611,7 +2623,7 @@ def approve_pending_signal(db: Session, user_id: str, pending_signal_id: str, no
         raise ValueError("signal_event_not_found")
 
     _refresh_pending_signal_snapshot(db, row)
-    if row.blocked_reason_code and row.blocked_reason_code not in {"MANUAL_APPROVAL_REQUIRED", ""}:
+    if row.blocked_reason_code and row.blocked_reason_code != "":
         raise ValueError(f"signal_blocked:{row.blocked_reason_code}")
 
     decision_note = note or "approved"
@@ -2766,7 +2778,6 @@ def diagnose_pending_signal(
         "SYMBOL_NOT_ALLOWED",
         "BOT_NOT_RUNNING",
         "RISK_POLICY_MISSING",
-        "MANUAL_APPROVAL_REQUIRED",
         "EXCHANGE_NOT_READY",
         "MARKET_TYPE_NOT_ALLOWED",
         "EXECUTION_DISABLED",
@@ -2781,9 +2792,6 @@ def diagnose_pending_signal(
         actions_applied.append("symbol_reload_requested")
 
     if auto_fix and row.blocked_reason_code == "RISK_POLICY_MISSING":
-        actions_applied.append("status_contract_refresh_requested")
-
-    if auto_fix and row.blocked_reason_code == "MANUAL_APPROVAL_REQUIRED" and _has_active_bot(db, row.user_id):
         actions_applied.append("status_contract_refresh_requested")
 
     if auto_fix and row.blocked_reason_code == "ORDER_PRECHECK_FAILED":
@@ -2801,8 +2809,26 @@ def diagnose_pending_signal(
     if not (auto_fix and row.blocked_reason_code in fast_autofix_codes):
         _refresh_pending_signal_snapshot(db, row)
 
-    if auto_fix and row.execution_eligible and row.status in {"pending", "ready"}:
-        actions_applied.append("manual_approval_gate_enforced")
+    if auto_fix and row.mode == "AUTO" and row.execution_eligible and row.status in {"pending", "ready"}:
+        signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
+        if signal is not None:
+            try:
+                exchange_connection = _resolve_exchange_connection_for_market(
+                    db,
+                    user_id,
+                    str(getattr(signal, "market_type", "spot") or "spot"),
+                )
+                _dispatch_signal_to_execution(
+                    db,
+                    row=row,
+                    signal=signal,
+                    exchange_connection=exchange_connection,
+                    actor_user_id=user_id,
+                )
+                actions_applied.append("auto_dispatch_triggered")
+            except Exception as exc:
+                _apply_order_precheck_failed(row, error_detail=str(exc))
+                actions_applied.append("auto_dispatch_precheck_failed")
     record_decision_trace(
         db,
         user_id=user_id,

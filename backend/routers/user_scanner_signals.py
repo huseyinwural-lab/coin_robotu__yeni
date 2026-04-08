@@ -1449,6 +1449,10 @@ def signals(
             blocked_reason_message=row.blocked_reason_message,
             blocked_solution_hint=row.blocked_solution_hint,
         )
+        if blocked_reason_code == "MANUAL_APPROVAL_REQUIRED":
+            blocked_reason_code = ""
+            blocked_reason_message = ""
+            blocked_solution_hint = ""
         first_precheck_failure_code = _extract_first_precheck_failure_code(row.decision_note, blocked_reason_message)
         if blocked_reason_code == "":
             first_precheck_failure_code = ""
@@ -1490,7 +1494,7 @@ def signals(
                 blocked_solution_hint=blocked_solution_hint,
                 tradeable=tradeable,
                 first_precheck_failure_code=first_precheck_failure_code or None,
-                requires_manual_approval=row.requires_manual_approval,
+                requires_manual_approval=False,
                 execution_eligible=row.execution_eligible,
                 bot_profile_id=row.bot_profile_id,
                 risk_policy_id=row.risk_policy_id,
@@ -1684,6 +1688,10 @@ def diagnose_signal(
         blocked_reason_message=row.blocked_reason_message,
         blocked_solution_hint=row.blocked_solution_hint,
     )
+    if blocked_reason_code == "MANUAL_APPROVAL_REQUIRED":
+        blocked_reason_code = ""
+        blocked_reason_message = ""
+        blocked_solution_hint = ""
 
     return UserSignalDiagnoseResponse(
         id=row.id,
@@ -1692,7 +1700,7 @@ def diagnose_signal(
         blocked_reason_code=blocked_reason_code,
         blocked_reason_message=blocked_reason_message,
         blocked_solution_hint=blocked_solution_hint,
-        requires_manual_approval=bool(row.requires_manual_approval),
+        requires_manual_approval=False,
         execution_eligible=bool(row.execution_eligible),
         bot_profile_id=row.bot_profile_id,
         risk_policy_id=row.risk_policy_id,
