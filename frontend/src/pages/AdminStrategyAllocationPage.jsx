@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -77,6 +77,14 @@ const confidenceBandClass = (band) => {
   return "border border-amber-500/60 text-amber-300";
 };
 
+const wsBadgeClass = (status) => {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "connected") return "border-emerald-500/60 bg-emerald-900/30 text-emerald-200";
+  if (normalized === "connecting") return "border-cyan-500/60 bg-cyan-900/30 text-cyan-200";
+  if (normalized === "degraded") return "border-amber-500/60 bg-amber-900/30 text-amber-200";
+  return "border-rose-500/60 bg-rose-900/30 text-rose-200";
+};
+
 const formatRequestAge = (createdAt, nowMs) => {
   const createdMs = new Date(createdAt).getTime();
   if (!Number.isFinite(createdMs)) return "-";
@@ -149,6 +157,21 @@ export const AdminStrategyAllocationPage = () => {
   const [revisionConflict, setRevisionConflict] = useState(null);
   const [exportRelatedRequestId, setExportRelatedRequestId] = useState("");
   const [exportSnapshotId, setExportSnapshotId] = useState("");
+  const [healthSnapshot, setHealthSnapshot] = useState(null);
+  const [isHealthLoading, setIsHealthLoading] = useState(false);
+  const [wsConnectionStatus, setWsConnectionStatus] = useState("connecting");
+  const [wsRetryCount, setWsRetryCount] = useState(0);
+  const [wsLastMessageAt, setWsLastMessageAt] = useState("");
+  const [wsErrorMessage, setWsErrorMessage] = useState("");
+  const [selectedExplainStrategyId, setSelectedExplainStrategyId] = useState("");
+  const [explainabilityData, setExplainabilityData] = useState(null);
+  const [isExplainabilityLoading, setIsExplainabilityLoading] = useState(false);
+  const [pendingRetryAction, setPendingRetryAction] = useState(null);
+
+  const wsRef = useRef(null);
+  const wsReconnectTimerRef = useRef(null);
+  const wsBackoffMsRef = useRef(1200);
+  const wsManualCloseRef = useRef(false);
 
   const role = String(user?.role || "");
   const isOpsReadOnly = role === "ops";
@@ -161,6 +184,145 @@ export const AdminStrategyAllocationPage = () => {
       map[row.strategy_id] = Number(draft.expected_revision || row.revision_id || 1);
     });
     return map;
+  };
+
+  const applyRevisionConflictsToDrafts = (conflicts = []) => {
+    const safeConflicts = Array.isArray(conflicts) ? conflicts : [];
+    if (safeConflicts.length === 0) return;
+    setDrafts((prev) => {
+      const next = { ...prev };
+      safeConflicts.forEach((item) => {
+        const strategyId = String(item?.strategy_id || "").trim();
+        const currentRevision = Number(item?.current_revision || 0);
+        if (!strategyId || currentRevision <= 0) return;
+        const sourceRow = rows.find((row) => row.strategy_id === strategyId);
+        next[strategyId] = {
+          ...(next[strategyId] || createDraftFromRow(sourceRow || { strategy_id: strategyId, revision_id: 1 })),
+          expected_revision: currentRevision,
+        };
+      });
+      return next;
+    });
+  };
+
+  const loadHealthSnapshot = async ({ silent = false } = {}) => {
+    if (!silent) setIsHealthLoading(true);
+    try {
+      const { data } = await apiClient.get("/admin/strategy-allocation/health");
+      setHealthSnapshot(data || null);
+      if (!wsLastMessageAt) {
+        setWsLastMessageAt(new Date().toISOString());
+      }
+    } catch (error) {
+      const message = getApiDetailMessage(error, "Health verisi alınamadı");
+      if (!silent) {
+        setGlobalActionError(message);
+      }
+    } finally {
+      if (!silent) setIsHealthLoading(false);
+    }
+  };
+
+  const loadExplainability = async (strategyId, { silent = false } = {}) => {
+    const key = String(strategyId || "").trim();
+    if (!key) {
+      setExplainabilityData(null);
+      return;
+    }
+    if (!silent) setIsExplainabilityLoading(true);
+    try {
+      const { data } = await apiClient.get(`/admin/strategy-allocation/explainability/${encodeURIComponent(key)}`, {
+        params: { lookback_hours: 24, limit: 8 },
+      });
+      setExplainabilityData(data || null);
+    } catch (error) {
+      const message = getApiDetailMessage(error, "Explainability alınamadı");
+      if (!silent) {
+        toast.error(message);
+      }
+    } finally {
+      if (!silent) setIsExplainabilityLoading(false);
+    }
+  };
+
+  const closeRealtimeSocket = () => {
+    if (wsReconnectTimerRef.current) {
+      window.clearTimeout(wsReconnectTimerRef.current);
+      wsReconnectTimerRef.current = null;
+    }
+    if (wsRef.current) {
+      try {
+        wsRef.current.close();
+      } catch (_) {
+        // noop
+      }
+      wsRef.current = null;
+    }
+  };
+
+  const connectRealtimeSocket = () => {
+    const headerToken = String(apiClient?.defaults?.headers?.common?.Authorization || "").replace(/^Bearer\s+/i, "").trim();
+    const token = headerToken || window.localStorage.getItem("access_token");
+    if (!token) {
+      setWsConnectionStatus("disconnected");
+      setWsErrorMessage("access_token_missing");
+      return;
+    }
+
+    const base = process.env.REACT_APP_BACKEND_URL || window.location.origin;
+    const wsBase = base.replace(/^http/i, "ws").replace(/\/$/, "");
+    const params = new URLSearchParams();
+    params.set("token", token);
+    params.set("interval", "5");
+    if (selectedExplainStrategyId) {
+      params.set("strategy_id", selectedExplainStrategyId);
+    }
+
+    setWsConnectionStatus("connecting");
+    setWsErrorMessage("");
+    const socket = new window.WebSocket(`${wsBase}/api/admin/strategy-allocation/ws/stream?${params.toString()}`);
+    wsRef.current = socket;
+
+    socket.onopen = () => {
+      wsBackoffMsRef.current = 1200;
+      setWsConnectionStatus("connected");
+      setWsErrorMessage("");
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data || "{}");
+        if (payload?.type === "snapshot") {
+          if (payload?.health) setHealthSnapshot(payload.health);
+          if (payload?.explainability) setExplainabilityData(payload.explainability);
+          setWsLastMessageAt(new Date().toISOString());
+          setWsConnectionStatus("connected");
+          return;
+        }
+        if (payload?.type === "error") {
+          setWsConnectionStatus("degraded");
+          setWsErrorMessage(payload?.message || payload?.code || "ws_error");
+        }
+      } catch (_) {
+        setWsConnectionStatus("degraded");
+      }
+    };
+
+    socket.onerror = () => {
+      setWsConnectionStatus("degraded");
+      setWsErrorMessage("ws_connection_error");
+    };
+
+    socket.onclose = () => {
+      if (wsManualCloseRef.current) return;
+      setWsConnectionStatus("disconnected");
+      setWsRetryCount((prev) => prev + 1);
+      const nextDelay = Math.min(wsBackoffMsRef.current * 1.8, 15000);
+      wsBackoffMsRef.current = nextDelay;
+      wsReconnectTimerRef.current = window.setTimeout(() => {
+        connectRealtimeSocket();
+      }, Math.floor(nextDelay));
+    };
   };
 
   const showRevisionConflict = (detail) => {
@@ -184,6 +346,38 @@ export const AdminStrategyAllocationPage = () => {
     setGlobalActionError(message);
     toast.error(message);
     return false;
+  };
+
+  const resolveRevisionConflictAndRetry = async () => {
+    const conflicts = revisionConflict?.conflicts || [];
+    if (conflicts.length === 0) {
+      await load();
+      return;
+    }
+
+    applyRevisionConflictsToDrafts(conflicts);
+    setRevisionConflict(null);
+    setGlobalActionError("");
+    toast.success("Çakışan revision değerleri güncellendi");
+
+    const action = pendingRetryAction;
+    if (!action?.type) return;
+
+    if (action.type === "save" && action.strategyId) {
+      await saveStrategy(action.strategyId, { fromRetry: true });
+      return;
+    }
+    if (action.type === "bulk") {
+      await submitBulkUpdate({ fromRetry: true });
+      return;
+    }
+    if (action.type === "normalize") {
+      await normalizeWeights({ fromRetry: true });
+      return;
+    }
+    if (action.type === "restore") {
+      await submitSnapshotRestore({ fromRetry: true });
+    }
   };
 
   const load = async () => {
@@ -217,7 +411,13 @@ export const AdminStrategyAllocationPage = () => {
       setEditingStrategyIds([]);
       setRebalanceSuggestion(null);
       setWhatIfResult(null);
+      setPendingRetryAction(null);
+      setSelectedExplainStrategyId((prev) => {
+        if (prev && rowsData.some((row) => row.strategy_id === prev)) return prev;
+        return rowsData[0]?.strategy_id || "";
+      });
       setLastUpdatedAt(new Date().toISOString());
+      await loadHealthSnapshot({ silent: true });
     } catch (error) {
       const detail = error?.response?.data?.detail;
       const message =
@@ -234,6 +434,30 @@ export const AdminStrategyAllocationPage = () => {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!selectedExplainStrategyId) return;
+    loadExplainability(selectedExplainStrategyId, { silent: true });
+  }, [selectedExplainStrategyId]);
+
+  useEffect(() => {
+    wsManualCloseRef.current = false;
+    closeRealtimeSocket();
+    connectRealtimeSocket();
+    return () => {
+      wsManualCloseRef.current = true;
+      closeRealtimeSocket();
+    };
+  }, [selectedExplainStrategyId]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (wsConnectionStatus !== "connected") {
+        loadHealthSnapshot({ silent: true });
+      }
+    }, 20000);
+    return () => window.clearInterval(timer);
+  }, [wsConnectionStatus]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setRequestAgeTick(Date.now()), 60000);
@@ -281,6 +505,12 @@ export const AdminStrategyAllocationPage = () => {
     });
     return map;
   }, [whatIfResult]);
+
+  const healthCore = healthSnapshot?.health || {};
+  const healthDebug = healthSnapshot?.debug || {};
+  const scannerFreshness = healthCore?.scanner_freshness || {};
+  const exchangeConnectivity = healthCore?.exchange_connectivity || {};
+  const traceSpineRows = explainabilityData?.trace_spine || [];
 
   const updateDraft = (strategyId, key, value) => {
     setGlobalActionError("");
@@ -344,10 +574,13 @@ export const AdminStrategyAllocationPage = () => {
     return note;
   };
 
-  const saveStrategy = async (strategyId) => {
+  const saveStrategy = async (strategyId, options = {}) => {
     if (isOpsReadOnly) {
       toast.error("ops role read-only");
       return;
+    }
+    if (!options.fromRetry) {
+      setPendingRetryAction({ type: "save", strategyId });
     }
     const note = String(reasonNote || "").trim() || `allocation_save_${strategyId}`;
 
@@ -374,6 +607,7 @@ export const AdminStrategyAllocationPage = () => {
       });
       if (data?.status === "pending_approval") {
         toast.success(data?.message || `Update onaya gönderildi: ${strategyId}`);
+        setPendingRetryAction(null);
         await load();
         return;
       }
@@ -387,16 +621,20 @@ export const AdminStrategyAllocationPage = () => {
       } else {
         setDriftOverrideNotice("");
       }
+      setPendingRetryAction(null);
       await load();
     } catch (error) {
       handleConflictError(error, "Allocation güncellenemedi");
     }
   };
 
-  const normalizeWeights = async () => {
+  const normalizeWeights = async (options = {}) => {
     if (isOpsReadOnly) {
       toast.error("ops role read-only");
       return;
+    }
+    if (!options.fromRetry) {
+      setPendingRetryAction({ type: "normalize" });
     }
     const note = ensureReasonNote();
     if (!note) return;
@@ -410,6 +648,7 @@ export const AdminStrategyAllocationPage = () => {
       });
       toast.success(data?.message || "Weight normalize tamamlandı");
       setRevisionConflict(null);
+      setPendingRetryAction(null);
       await load();
     } catch (error) {
       handleConflictError(error, "Normalize işlemi başarısız");
@@ -526,7 +765,7 @@ export const AdminStrategyAllocationPage = () => {
     setRestoreModal({ open: false, snapshot: null, reason: "", isSubmitting: false });
   };
 
-  const submitSnapshotRestore = async () => {
+  const submitSnapshotRestore = async (options = {}) => {
     if (isOpsReadOnly) {
       toast.error("ops role read-only");
       return;
@@ -543,6 +782,10 @@ export const AdminStrategyAllocationPage = () => {
       return;
     }
 
+    if (!options.fromRetry) {
+      setPendingRetryAction({ type: "restore", snapshotId });
+    }
+
     setRestoreModal((prev) => ({ ...prev, isSubmitting: true }));
     try {
       const { data } = await apiClient.post(`/admin/strategy-allocation/snapshots/${encodeURIComponent(snapshotId)}/restore`, {
@@ -552,6 +795,7 @@ export const AdminStrategyAllocationPage = () => {
       toast.success(data?.message || `Restore tamamlandı: ${snapshotId}`);
       setRestoreModal({ open: false, snapshot: null, reason: "", isSubmitting: false });
       setRevisionConflict(null);
+      setPendingRetryAction(null);
       await load();
     } catch (error) {
       handleConflictError(error, "Snapshot restore başarısız");
@@ -595,13 +839,17 @@ export const AdminStrategyAllocationPage = () => {
     toast.info("Pure Live modunda what-if simulation kaldırıldı.");
   };
 
-  const submitBulkUpdate = async () => {
+  const submitBulkUpdate = async (options = {}) => {
     if (isOpsReadOnly) {
       toast.error("ops role read-only");
       return;
     }
     const note = ensureReasonNote();
     if (!note) return;
+
+    if (!options.fromRetry) {
+      setPendingRetryAction({ type: "bulk" });
+    }
 
     if (selectedStrategyIds.length === 0) {
       toast.error("Bulk update için en az bir strategy seçin");
@@ -639,6 +887,7 @@ export const AdminStrategyAllocationPage = () => {
       });
       if (data?.status === "pending_approval") {
         toast.success(data?.message || "Bulk update onaya gönderildi");
+        setPendingRetryAction(null);
         await load();
         return;
       }
@@ -648,6 +897,7 @@ export const AdminStrategyAllocationPage = () => {
       if (enforcedRows.length > 0) {
         toast.warning(`Critical drawdown auto-reduce uygulandı (${enforcedRows.length} strategy)`);
       }
+      setPendingRetryAction(null);
       await load();
     } catch (error) {
       handleConflictError(error, "Bulk update başarısız");
@@ -783,9 +1033,25 @@ export const AdminStrategyAllocationPage = () => {
               {conflict.strategy_id || "unknown"}: beklenen={String(conflict.expected_revision)} · güncel={String(conflict.current_revision)}
             </p>
           ))}
-          <Button className="mt-2" variant="outline" onClick={load} data-testid="admin-strategy-allocation-revision-conflict-reload-button">
-            En güncel halini yükle
-          </Button>
+          <div className="mt-2 flex flex-wrap gap-2" data-testid="admin-strategy-allocation-revision-conflict-actions">
+            <Button
+              variant="outline"
+              onClick={() => applyRevisionConflictsToDrafts(revisionConflict.conflicts || [])}
+              data-testid="admin-strategy-allocation-revision-conflict-apply-button"
+            >
+              Revision güncellemelerini uygula
+            </Button>
+            <Button
+              variant="outline"
+              onClick={resolveRevisionConflictAndRetry}
+              data-testid="admin-strategy-allocation-revision-conflict-retry-button"
+            >
+              Uygula + son işlemi tekrar dene
+            </Button>
+            <Button className="" variant="outline" onClick={load} data-testid="admin-strategy-allocation-revision-conflict-reload-button">
+              En güncel halini yükle
+            </Button>
+          </div>
         </div>
       )}
 
@@ -810,6 +1076,155 @@ export const AdminStrategyAllocationPage = () => {
           onChange={(event) => setReasonNote(event.target.value)}
           data-testid="admin-strategy-allocation-reason-note-input"
         />
+      </div>
+
+      <div className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-allocation-health-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-strategy-allocation-health-header-row">
+          <div>
+            <h3 className="text-base font-semibold" data-testid="admin-strategy-allocation-health-title">Health (Sistem Sağlığı)</h3>
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-allocation-health-subtitle">API latency, DB pool, queue depth, error rate, exchange bağlantısı, scanner freshness</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2" data-testid="admin-strategy-allocation-health-actions">
+            <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${wsBadgeClass(wsConnectionStatus)}`} data-testid="admin-strategy-allocation-ws-health-badge">
+              WS: {wsConnectionStatus.toUpperCase()}
+            </span>
+            <Button variant="outline" onClick={() => loadHealthSnapshot()} data-testid="admin-strategy-allocation-health-refresh-button">
+              {isHealthLoading ? "Health yenileniyor..." : "Health Yenile"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                wsManualCloseRef.current = true;
+                closeRealtimeSocket();
+                wsManualCloseRef.current = false;
+                connectRealtimeSocket();
+              }}
+              data-testid="admin-strategy-allocation-ws-reconnect-button"
+            >
+              WS Yeniden Bağlan
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-3" data-testid="admin-strategy-allocation-health-grid">
+          <article className="rounded border border-slate-800 bg-slate-950 p-3" data-testid="admin-strategy-allocation-health-latency-card">
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-allocation-health-latency-label">API Latency</p>
+            <p className="text-lg font-semibold" data-testid="admin-strategy-allocation-health-latency-value">{Number(healthCore?.api_latency_ms || 0).toFixed(2)} ms</p>
+          </article>
+          <article className="rounded border border-slate-800 bg-slate-950 p-3" data-testid="admin-strategy-allocation-health-queue-card">
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-allocation-health-queue-label">Queue Depth</p>
+            <p className="text-lg font-semibold" data-testid="admin-strategy-allocation-health-queue-value">{Number(healthCore?.queue_depth || 0)}</p>
+          </article>
+          <article className="rounded border border-slate-800 bg-slate-950 p-3" data-testid="admin-strategy-allocation-health-error-card">
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-allocation-health-error-label">Error Rate (5m)</p>
+            <p className="text-lg font-semibold" data-testid="admin-strategy-allocation-health-error-value">{Number(healthCore?.error_rate_5m || 0).toFixed(4)}</p>
+          </article>
+          <article className="rounded border border-slate-800 bg-slate-950 p-3" data-testid="admin-strategy-allocation-health-dbpool-card">
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-allocation-health-dbpool-label">DB Pool</p>
+            <p className="text-sm" data-testid="admin-strategy-allocation-health-dbpool-value">
+              size={Number(healthCore?.db_pool?.configured_pool_size || 0)} · overflow={Number(healthCore?.db_pool?.configured_max_overflow || 0)}
+            </p>
+            <p className="text-[11px] text-slate-400" data-testid="admin-strategy-allocation-health-db-runtime-value">
+              reachable={String(Boolean(healthCore?.db_pool?.runtime?.reachable))} · initialized={String(Boolean(healthCore?.db_pool?.runtime?.initialized))}
+            </p>
+          </article>
+          <article className="rounded border border-slate-800 bg-slate-950 p-3" data-testid="admin-strategy-allocation-health-exchange-card">
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-allocation-health-exchange-label">Exchange Connectivity</p>
+            <p className="text-sm" data-testid="admin-strategy-allocation-health-exchange-value">
+              status={String(exchangeConnectivity?.status || "unknown")} · spot={String(Boolean(exchangeConnectivity?.spot_connected))} · futures={String(Boolean(exchangeConnectivity?.futures_connected))}
+            </p>
+          </article>
+          <article className="rounded border border-slate-800 bg-slate-950 p-3" data-testid="admin-strategy-allocation-health-freshness-card">
+            <p className="text-xs text-slate-400" data-testid="admin-strategy-allocation-health-freshness-label">Scanner Freshness</p>
+            <p className="text-sm" data-testid="admin-strategy-allocation-health-freshness-value">
+              status={String(scannerFreshness?.status || "unknown")} · age={scannerFreshness?.seconds_since_last_scan ?? "-"}s
+            </p>
+            <p className="text-[11px] text-slate-400" data-testid="admin-strategy-allocation-health-freshness-ts-value">
+              last={scannerFreshness?.last_generated_at || "-"}
+            </p>
+          </article>
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-400" data-testid="admin-strategy-allocation-health-meta-row">
+          <span data-testid="admin-strategy-allocation-ws-retry-count">ws_retry={wsRetryCount}</span>
+          <span data-testid="admin-strategy-allocation-ws-last-message">ws_last_message={wsLastMessageAt || "-"}</span>
+          <span data-testid="admin-strategy-allocation-health-status">health_status={String(healthSnapshot?.status || "unknown")}</span>
+          {wsErrorMessage && <span className="text-amber-300" data-testid="admin-strategy-allocation-ws-error-message">ws_error={wsErrorMessage}</span>}
+        </div>
+
+        <div className="mt-3 rounded border border-slate-800 bg-slate-950 p-3" data-testid="admin-strategy-allocation-explainability-panel">
+          <div className="flex flex-wrap items-center justify-between gap-2" data-testid="admin-strategy-allocation-explainability-header-row">
+            <h4 className="text-sm font-semibold" data-testid="admin-strategy-allocation-explainability-title">Explainability + Trace Spine</h4>
+            <div className="flex items-center gap-2" data-testid="admin-strategy-allocation-explainability-actions">
+              <select
+                value={selectedExplainStrategyId}
+                onChange={(event) => setSelectedExplainStrategyId(event.target.value)}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+                data-testid="admin-strategy-allocation-explainability-strategy-select"
+              >
+                {rows.map((item) => (
+                  <option key={item.strategy_id} value={item.strategy_id}>{item.strategy_id}</option>
+                ))}
+              </select>
+              <Button
+                variant="outline"
+                onClick={() => loadExplainability(selectedExplainStrategyId)}
+                data-testid="admin-strategy-allocation-explainability-refresh-button"
+              >
+                {isExplainabilityLoading ? "Explainability yükleniyor..." : "Explainability Yenile"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-2 grid gap-2 md:grid-cols-2" data-testid="admin-strategy-allocation-explainability-summary-grid">
+            <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-explainability-signal-count">signal_count={Number(explainabilityData?.signal_count || 0)}</p>
+            <p className="text-xs text-slate-300" data-testid="admin-strategy-allocation-explainability-risk-block-count">risk_blocked_count={Number(explainabilityData?.risk_blocked_count || 0)}</p>
+          </div>
+
+          <div className="mt-2 max-h-40 overflow-y-auto rounded border border-slate-800 p-2" data-testid="admin-strategy-allocation-explainability-top-reasons-list">
+            {(explainabilityData?.top_reason_codes || []).length === 0 && (
+              <p className="text-xs text-slate-500" data-testid="admin-strategy-allocation-explainability-top-reasons-empty">No reason data</p>
+            )}
+            {(explainabilityData?.top_reason_codes || []).map((item, index) => (
+              <p key={`${item.code}-${index}`} className="text-xs text-slate-300" data-testid={`admin-strategy-allocation-explainability-top-reason-${index}`}>
+                {item.code} · count={item.count}
+              </p>
+            ))}
+          </div>
+
+          <div className="mt-2 max-h-56 overflow-y-auto rounded border border-slate-800 p-2" data-testid="admin-strategy-allocation-trace-spine-list">
+            {traceSpineRows.length === 0 && (
+              <p className="text-xs text-slate-500" data-testid="admin-strategy-allocation-trace-spine-empty">Trace spine verisi yok.</p>
+            )}
+            {traceSpineRows.map((row, index) => (
+              <div key={`${row.trade_id || row.signal_id || index}-${index}`} className="mb-1 rounded border border-slate-800 bg-slate-900 p-2" data-testid={`admin-strategy-allocation-trace-spine-item-${index}`}>
+                <p className="text-xs text-cyan-200" data-testid={`admin-strategy-allocation-trace-spine-item-main-${index}`}>
+                  {row.symbol || "-"} · {row.status || "-"}
+                </p>
+                <p className="text-[11px] text-slate-300" data-testid={`admin-strategy-allocation-trace-spine-item-chain-${index}`}>
+                  signal={row.signal_id || "-"} → decision={row.decision_card_id || "-"} → intent={row.intent_id || "-"} → trade={row.trade_id || "-"} → exec={row.execution_trace_id || "-"}
+                </p>
+                <p className="text-[10px] text-slate-500" data-testid={`admin-strategy-allocation-trace-spine-item-run-${index}`}>
+                  scan_run={row.scan_run_id || "-"} · created_at={row.created_at || "-"}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-2 rounded border border-slate-800 bg-slate-950 p-2" data-testid="admin-strategy-allocation-debug-events-panel">
+          <p className="text-xs font-semibold text-slate-300" data-testid="admin-strategy-allocation-debug-events-title">Realtime Debug Events</p>
+          <div className="mt-1 max-h-28 overflow-y-auto" data-testid="admin-strategy-allocation-debug-events-list">
+            {(healthDebug?.recent_allocation_events || []).length === 0 && (
+              <p className="text-xs text-slate-500" data-testid="admin-strategy-allocation-debug-events-empty">No data yet</p>
+            )}
+            {(healthDebug?.recent_allocation_events || []).map((event, index) => (
+              <p key={`${event.trace_id || index}-${index}`} className="text-xs text-slate-300" data-testid={`admin-strategy-allocation-debug-event-${index}`}>
+                {event.timestamp || "-"} · {event.action_type || "-"} · admin={event.admin_id || "-"} · trace={event.trace_id || "-"}
+              </p>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="col-span-12 border border-slate-800 bg-slate-900 p-4" data-testid="admin-strategy-allocation-safety-layer-panel">

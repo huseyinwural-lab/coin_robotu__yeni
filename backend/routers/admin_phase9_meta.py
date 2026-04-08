@@ -1,24 +1,31 @@
 import csv
 import json
+import os
+import asyncio
+from collections import Counter
 from io import StringIO
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from db import get_db
+from core.go_live_checklist import get_proxy_exchange_health_snapshot
+from core.security import decode_access_token
+from db import SessionLocal, get_database_runtime_state, get_db
 from deps import require_admin
 from models import (
     ManualOverrideLog,
     PortfolioExposureSnapshot,
+    SignalEvent,
     StrategyAllocation,
     StrategyAllocationApprovalRequest,
     StrategyAllocationSnapshot,
     User,
     UserExecutionIntent,
+    UserTradeProjection,
     UserRole,
 )
 from schemas import (
@@ -64,6 +71,7 @@ from services.meta_strategy_engine_service import (
 )
 from services.canonical_strategy_registry_service import CANONICAL_STRATEGIES
 from services.portfolio_risk_service import list_risk_clusters, load_portfolio_risk_limits, save_portfolio_risk_limits, upsert_risk_cluster
+from services.pipeline.runtime import pipeline_runtime
 
 router = APIRouter(prefix="/admin", tags=["admin_phase9_meta"])
 ALLOCATION_REQUEST_PREFIX = "strategy_allocation"
@@ -98,6 +106,226 @@ def _coerce_expected_revision(value, *, field_name: str = "expected_revision") -
     if revision < 1:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field_name} >= 1 olmalı")
     return revision
+
+
+def _safe_int(value, fallback: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _safe_float(value, fallback: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _coerce_dt(value) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            parsed = datetime.fromisoformat(text)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def _scanner_freshness_payload(db: Session) -> dict:
+    latest_signal = (
+        db.query(SignalEvent)
+        .order_by(SignalEvent.generated_at.desc())
+        .first()
+    )
+    generated_at = _coerce_dt(getattr(latest_signal, "generated_at", None))
+    if generated_at is None:
+        return {
+            "status": "stale",
+            "seconds_since_last_scan": None,
+            "last_generated_at": None,
+            "threshold_seconds": 120,
+        }
+
+    age_seconds = max(int((_now() - generated_at).total_seconds()), 0)
+    status_value = "fresh" if age_seconds <= 120 else "warning" if age_seconds <= 300 else "stale"
+    return {
+        "status": status_value,
+        "seconds_since_last_scan": age_seconds,
+        "last_generated_at": generated_at.isoformat(),
+        "threshold_seconds": 120,
+    }
+
+
+def _exchange_connectivity_payload(db: Session) -> dict:
+    snapshot = get_proxy_exchange_health_snapshot(db)
+    spot = snapshot.get("spot") or {}
+    futures = snapshot.get("futures") or {}
+    spot_connected = bool(spot.get("base_url_set") and spot.get("proxy_token_set") and not spot.get("proxy_token_mismatch"))
+    futures_connected = bool(futures.get("base_url_set") and futures.get("proxy_token_set") and not futures.get("proxy_token_mismatch"))
+    overall_status = "connected" if (spot_connected and futures_connected) else "degraded"
+    return {
+        "status": overall_status,
+        "spot_connected": spot_connected,
+        "futures_connected": futures_connected,
+        "raw": snapshot,
+    }
+
+
+def _build_strategy_allocation_health_payload(db: Session) -> dict:
+    monitoring = pipeline_runtime.monitoring_snapshot(db)
+    db_state = get_database_runtime_state()
+    scanner_freshness = _scanner_freshness_payload(db)
+    exchange_state = _exchange_connectivity_payload(db)
+    signal_rate_5m = _safe_int(monitoring.get("signal_rate_last_5m"), 0)
+    execution_errors_5m = _safe_int(monitoring.get("execution_errors_5m"), 0)
+    error_rate_5m = 0.0 if signal_rate_5m <= 0 else round(execution_errors_5m / max(signal_rate_5m, 1), 6)
+
+    db_pool_size = _safe_int(os.environ.get("DB_POOL_SIZE"), 20)
+    db_max_overflow = _safe_int(os.environ.get("DB_MAX_OVERFLOW"), 40)
+
+    overall = "healthy"
+    if scanner_freshness.get("status") == "stale" or not exchange_state.get("spot_connected"):
+        overall = "degraded"
+    if error_rate_5m >= 0.25:
+        overall = "degraded"
+
+    recent_logs = (
+        db.query(ManualOverrideLog)
+        .filter(ManualOverrideLog.action_type.like("strategy_allocation%"))
+        .order_by(ManualOverrideLog.timestamp.desc())
+        .limit(8)
+        .all()
+    )
+    debug_events = [
+        {
+            "trace_id": str(item.override_id),
+            "action_type": str(item.action_type),
+            "admin_id": str(item.admin_id),
+            "timestamp": item.timestamp.isoformat() if item.timestamp else None,
+        }
+        for item in recent_logs
+    ]
+
+    return {
+        "status": overall,
+        "generated_at": _now().isoformat(),
+        "health": {
+            "api_latency_ms": _safe_float(monitoring.get("latency_ms"), 0.0),
+            "queue_depth": _safe_int(monitoring.get("queue_depth"), 0),
+            "error_rate_5m": error_rate_5m,
+            "execution_errors_5m": execution_errors_5m,
+            "signal_rate_last_5m": signal_rate_5m,
+            "release_gate_status": str(monitoring.get("release_gate_status") or "UNKNOWN"),
+            "scanner_freshness": scanner_freshness,
+            "exchange_connectivity": exchange_state,
+            "websocket_status": str(monitoring.get("websocket_status") or "unknown"),
+            "db_pool": {
+                "configured_pool_size": db_pool_size,
+                "configured_max_overflow": db_max_overflow,
+                "runtime": db_state,
+            },
+        },
+        "debug": {
+            "recent_allocation_events": debug_events,
+            "risk_anomalies_5m": _safe_int(monitoring.get("risk_anomalies_5m"), 0),
+            "websocket_reconnects_5m": _safe_int(monitoring.get("websocket_reconnects_5m"), 0),
+        },
+    }
+
+
+def _build_strategy_explainability_payload(db: Session, *, strategy_id: str, lookback_hours: int = 24, limit: int = 8) -> dict:
+    key = str(strategy_id or "").strip()
+    if not key:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="strategy_id_required")
+
+    since = _now() - timedelta(hours=max(1, int(lookback_hours)))
+    signal_rows = (
+        db.query(SignalEvent)
+        .filter(SignalEvent.strategy_id == key, SignalEvent.generated_at >= since)
+        .order_by(SignalEvent.generated_at.desc())
+        .limit(500)
+        .all()
+    )
+
+    reason_counter = Counter()
+    risk_counter = Counter()
+    for row in signal_rows:
+        for code in (row.reason_codes or []):
+            normalized = str(code or "").strip().lower()
+            if not normalized:
+                continue
+            reason_counter[normalized] += 1
+            if any(mark in normalized for mark in ["risk", "blocked", "cooldown", "veto", "kill"]):
+                risk_counter[normalized] += 1
+
+    signal_ids = [str(item.id) for item in signal_rows[:400]]
+    trace_rows: list[UserTradeProjection] = []
+    if signal_ids:
+        trace_rows = (
+            db.query(UserTradeProjection)
+            .filter(UserTradeProjection.signal_id.in_(signal_ids))
+            .order_by(UserTradeProjection.created_at.desc())
+            .limit(max(1, int(limit)))
+            .all()
+        )
+
+    trace_spine = [
+        {
+            "symbol": row.symbol,
+            "status": row.status,
+            "scan_run_id": row.scan_run_id,
+            "signal_id": row.signal_id,
+            "decision_card_id": row.decision_card_id,
+            "intent_id": row.intent_id,
+            "trade_id": row.trade_id,
+            "execution_trace_id": row.execution_trace_id,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in trace_rows
+    ]
+
+    return {
+        "strategy_id": key,
+        "generated_at": _now().isoformat(),
+        "lookback_hours": max(1, int(lookback_hours)),
+        "signal_count": len(signal_rows),
+        "risk_blocked_count": sum(risk_counter.values()),
+        "top_reason_codes": [{"code": code, "count": count} for code, count in reason_counter.most_common(8)],
+        "top_risk_reason_codes": [{"code": code, "count": count} for code, count in risk_counter.most_common(8)],
+        "trace_spine": trace_spine,
+    }
+
+
+def _resolve_ws_admin_user(db: Session, token: str | None) -> User | None:
+    token_value = str(token or "").strip()
+    if not token_value:
+        return None
+    try:
+        payload = decode_access_token(token_value)
+    except ValueError:
+        return None
+
+    user_id = str(payload.get("sub") or "").strip()
+    if not user_id:
+        return None
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return None
+    if _role_name(user) not in {"super_admin", "admin", "ops"}:
+        return None
+    return user
 
 
 def _build_revision_conflict_payload(*, action_type: str, conflicts: list[dict], request_id: str | None = None) -> dict:
@@ -1232,6 +1460,73 @@ def portfolio_risk_dashboard(
         },
         "risk_alerts": [{"gate_decision": item[0], "count": int(item[1])} for item in risk_alerts],
     }
+
+
+@router.get("/strategy-allocation/health")
+def strategy_allocation_health(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return _build_strategy_allocation_health_payload(db)
+
+
+@router.get("/strategy-allocation/explainability/{strategy_id}")
+def strategy_allocation_explainability(
+    strategy_id: str,
+    lookback_hours: int = Query(default=24, ge=1, le=168),
+    limit: int = Query(default=8, ge=1, le=50),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    _ = current_user
+    return _build_strategy_explainability_payload(
+        db,
+        strategy_id=strategy_id,
+        lookback_hours=lookback_hours,
+        limit=limit,
+    )
+
+
+@router.websocket("/strategy-allocation/ws/stream")
+async def strategy_allocation_ws_stream(websocket: WebSocket):
+    await websocket.accept()
+    db = SessionLocal()
+    try:
+        user = _resolve_ws_admin_user(db, websocket.query_params.get("token"))
+        if user is None:
+            await websocket.send_json({"type": "error", "code": "UNAUTHORIZED", "message": "admin_token_required"})
+            await websocket.close(code=4401)
+            return
+
+        strategy_id = str(websocket.query_params.get("strategy_id") or "").strip()
+        interval_seconds = max(2, min(_safe_int(websocket.query_params.get("interval"), 5), 20))
+
+        while True:
+            snapshot = _build_strategy_allocation_health_payload(db)
+            payload = {
+                "type": "snapshot",
+                "generated_at": _now().isoformat(),
+                "health": snapshot,
+            }
+            if strategy_id:
+                payload["explainability"] = _build_strategy_explainability_payload(
+                    db,
+                    strategy_id=strategy_id,
+                    lookback_hours=24,
+                    limit=6,
+                )
+            await websocket.send_json(payload)
+            await asyncio.sleep(interval_seconds)
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:
+        try:
+            await websocket.send_json({"type": "error", "code": "WS_STREAM_ERROR", "message": str(exc)[:180]})
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
 @router.get("/strategy-allocation", response_model=list[StrategyAllocationResponse])
