@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 
 const WEIGHT_TOLERANCE = 0.0001;
+const DEFAULT_STARTUP_WEIGHT = "0.0833333";
 
 const toNumber = (value) => {
   const parsed = Number(value);
@@ -22,7 +23,7 @@ const formatMoney = (value) => {
 
 const createDraftFromRow = (item) => ({
   expected_revision: Number(item.revision_id || 1),
-  capital_weight: String(item.capital_weight ?? "0"),
+  capital_weight: String(item.capital_weight ?? DEFAULT_STARTUP_WEIGHT),
   max_capital: String(item.max_capital ?? "0"),
   current_capital: String(item.current_capital ?? "0"),
   state: item.state || "ACTIVE",
@@ -303,7 +304,29 @@ export const AdminStrategyAllocationPage = () => {
   const isEditing = (strategyId) => editingStrategyIds.includes(strategyId);
 
   const startEdit = (strategyId) => {
+    const sourceRow = rows.find((row) => row.strategy_id === strategyId);
+    if (sourceRow) {
+      setDrafts((prev) => ({
+        ...prev,
+        [strategyId]: {
+          ...createDraftFromRow(sourceRow),
+        },
+      }));
+    }
     setEditingStrategyIds((prev) => (prev.includes(strategyId) ? prev : [...prev, strategyId]));
+  };
+
+  const cancelEdit = (strategyId) => {
+    const sourceRow = rows.find((row) => row.strategy_id === strategyId);
+    if (sourceRow) {
+      setDrafts((prev) => ({
+        ...prev,
+        [strategyId]: {
+          ...createDraftFromRow(sourceRow),
+        },
+      }));
+    }
+    setEditingStrategyIds((prev) => prev.filter((id) => id !== strategyId));
   };
 
   const ensureReasonNote = () => {
@@ -322,8 +345,7 @@ export const AdminStrategyAllocationPage = () => {
       toast.error("ops role read-only");
       return;
     }
-    const note = ensureReasonNote();
-    if (!note) return;
+    const note = String(reasonNote || "").trim() || `allocation_save_${strategyId}`;
 
     const draft = drafts[strategyId] || {};
     const sourceRow = rows.find((row) => row.strategy_id === strategyId);
@@ -1084,11 +1106,11 @@ export const AdminStrategyAllocationPage = () => {
                       revision={item.revision_id}
                     </p>
                   </td>
-                  <td className="px-3 py-2"><Input value={draft.capital_weight ?? ""} type="number" min="0" max="1" step="0.0001" onChange={(event) => updateDraft(item.strategy_id, "capital_weight", event.target.value)} data-testid={`admin-strategy-allocation-weight-input-${item.strategy_id}`} /></td>
-                  <td className="px-3 py-2"><Input value={draft.max_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "max_capital", event.target.value)} data-testid={`admin-strategy-allocation-max-capital-input-${item.strategy_id}`} /></td>
-                  <td className="px-3 py-2"><Input value={draft.current_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "current_capital", event.target.value)} data-testid={`admin-strategy-allocation-current-capital-input-${item.strategy_id}`} /></td>
+                  <td className="px-3 py-2"><Input value={draft.capital_weight ?? ""} type="number" min="0" max="1" step="0.0001" onChange={(event) => updateDraft(item.strategy_id, "capital_weight", event.target.value)} data-testid={`admin-strategy-allocation-weight-input-${item.strategy_id}`} disabled={!isEditing(item.strategy_id) || isOpsReadOnly} /></td>
+                  <td className="px-3 py-2"><Input value={draft.max_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "max_capital", event.target.value)} data-testid={`admin-strategy-allocation-max-capital-input-${item.strategy_id}`} disabled={!isEditing(item.strategy_id) || isOpsReadOnly} /></td>
+                  <td className="px-3 py-2"><Input value={draft.current_capital ?? ""} type="number" min="0" step="0.01" onChange={(event) => updateDraft(item.strategy_id, "current_capital", event.target.value)} data-testid={`admin-strategy-allocation-current-capital-input-${item.strategy_id}`} disabled={!isEditing(item.strategy_id) || isOpsReadOnly} /></td>
                   <td className="px-3 py-2">
-                    <select className="w-full border border-slate-700 bg-slate-950 px-2 py-1" value={draft.state || "ACTIVE"} onChange={(event) => updateDraft(item.strategy_id, "state", event.target.value)} data-testid={`admin-strategy-allocation-state-select-${item.strategy_id}`}>
+                    <select className="w-full border border-slate-700 bg-slate-950 px-2 py-1" value={draft.state || "ACTIVE"} onChange={(event) => updateDraft(item.strategy_id, "state", event.target.value)} data-testid={`admin-strategy-allocation-state-select-${item.strategy_id}`} disabled={!isEditing(item.strategy_id) || isOpsReadOnly}>
                       <option value="ACTIVE">AKTİF</option>
                       <option value="DISABLED">PASİF</option>
                     </select>
@@ -1142,8 +1164,12 @@ export const AdminStrategyAllocationPage = () => {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-2" data-testid={`admin-strategy-allocation-actions-${item.strategy_id}`}>
-                      <Button variant="outline" onClick={() => startEdit(item.strategy_id)} disabled={isOpsReadOnly} data-testid={`admin-strategy-allocation-edit-button-${item.strategy_id}`}>Düzenle</Button>
-                      <Button variant="outline" onClick={() => saveStrategy(item.strategy_id)} disabled={rowErrors.length > 0 || isOpsReadOnly} data-testid={`admin-strategy-allocation-save-button-${item.strategy_id}`}>Kaydet</Button>
+                      {!isEditing(item.strategy_id) ? (
+                        <Button variant="outline" onClick={() => startEdit(item.strategy_id)} disabled={isOpsReadOnly} data-testid={`admin-strategy-allocation-edit-button-${item.strategy_id}`}>Düzenle</Button>
+                      ) : (
+                        <Button variant="outline" onClick={() => cancelEdit(item.strategy_id)} disabled={isOpsReadOnly} data-testid={`admin-strategy-allocation-cancel-button-${item.strategy_id}`}>İptal</Button>
+                      )}
+                      <Button variant="outline" onClick={() => saveStrategy(item.strategy_id)} disabled={!isEditing(item.strategy_id) || isOpsReadOnly} data-testid={`admin-strategy-allocation-save-button-${item.strategy_id}`}>Kaydet</Button>
                     </div>
                     {rowErrors.length > 0 && (
                       <p className="mt-1 text-xs text-rose-300" data-testid={`admin-strategy-allocation-row-error-${item.strategy_id}`}>{rowErrors[0]}</p>

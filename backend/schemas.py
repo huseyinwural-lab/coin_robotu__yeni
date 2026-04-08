@@ -4455,7 +4455,7 @@ class StrategyAllocationUpdateRequest(BaseModel):
 
 class StrategyAllocationCreateRequest(BaseModel):
     strategy_id: str
-    capital_weight: float = Field(default=0, ge=0, le=1)
+    capital_weight: float = Field(default=0.0833333, ge=0, le=1)
     max_capital: float = Field(default=0, ge=0)
     current_capital: float = Field(default=0, ge=0)
     state: str = "ACTIVE"

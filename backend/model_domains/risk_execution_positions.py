@@ -771,7 +771,7 @@ class StrategyAllocation(Base):
     __tablename__ = "strategy_allocations"
 
     strategy_id: Mapped[str] = mapped_column(String(80), primary_key=True)
-    capital_weight: Mapped[float] = mapped_column(Float, default=1)
+    capital_weight: Mapped[float] = mapped_column(Float, default=0.0833333)
     max_capital: Mapped[float] = mapped_column(Float, default=10000)
     current_capital: Mapped[float] = mapped_column(Float, default=0)
     confidence_score: Mapped[float] = mapped_column(Float, default=0)

@@ -26,6 +26,7 @@ DRAWDOWN_WARNING_THRESHOLD_PCT = 8.0
 DRAWDOWN_ENFORCE_THRESHOLD_PCT = 12.0
 DRAWDOWN_REDUCE_RATIO = 0.15
 WEIGHT_SUM_TOLERANCE = 0.0001
+DEFAULT_STARTUP_CAPITAL_WEIGHT = 0.0833333
 
 
 def _normalize_confidence_for_projection(value: float) -> float:
@@ -513,7 +514,7 @@ def get_or_create_strategy_allocation(db: Session, strategy_id: str) -> Strategy
 
     row = StrategyAllocation(
         strategy_id=key,
-        capital_weight=1.0,
+        capital_weight=DEFAULT_STARTUP_CAPITAL_WEIGHT,
         max_capital=10000,
         current_capital=0,
         confidence_score=0,
@@ -601,7 +602,7 @@ def run_meta_strategy_engine(
     allocation.updated_at = _now()
 
     requested = max(_safe_float(requested_notional, 0), 0)
-    weight = max(_safe_float(allocation.capital_weight, 1), 0.05)
+    weight = max(_safe_float(allocation.capital_weight, DEFAULT_STARTUP_CAPITAL_WEIGHT), 0.05)
     max_capital = max(_safe_float(allocation.max_capital, 0), 0)
     effective_capital_budget = max_capital * weight
     remaining_capital = max(effective_capital_budget - _safe_float(allocation.current_capital, 0), 0)
@@ -653,7 +654,7 @@ def run_meta_strategy_engine(
 
 def list_strategy_allocations(db: Session, limit: int = 200) -> list[StrategyAllocation]:
     canonical_ids = list(CANONICAL_STRATEGIES.keys())
-    default_weight = round(1 / max(len(canonical_ids), 1), 8)
+    default_weight = DEFAULT_STARTUP_CAPITAL_WEIGHT
     for strategy_id in canonical_ids:
         row = db.query(StrategyAllocation).filter(StrategyAllocation.strategy_id == strategy_id).first()
         if not row:
