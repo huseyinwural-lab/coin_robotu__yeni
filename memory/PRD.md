@@ -1,3 +1,25 @@
+## 2026-04-08 — Scanner/Signal/Trade Strict Decoupling + Zorunlu Onay Kapısı ✅
+
+### Uygulanan P0 kapsamı
+- `Scanner` akışı `run_user_scanner` içinde **BC01-BC04 decision map** kaynağına bağlandı.
+- `Signal` akışı yalnızca `/admin/strategy/allocation` tarafındaki **ACTIVE** stratejilerden resolve edilir hale getirildi.
+- `Trade` akışında auto-dispatch kaldırıldı: execution yalnızca `POST /api/user/signal/{id}/approve` ile tetiklenir.
+
+### Backend değişiklikleri
+- `backend/core/users/user_scanner_signal_service.py`
+  - Canonical scanner scan bağı kaldırıldı, scanner-engine decision map (BC01-BC04) ile sıralama eklendi.
+  - `_resolve_decision_box_code` + `_build_ranked_from_scanner_engine_results` ile scanner sonucu strategy_code alanı BC01-BC04 olacak şekilde sabitlendi.
+  - `_list_active_allocation_strategy_ids` + `_resolve_allocated_strategy_id` ile signal strategy’si ACTIVE allocation’dan seçilecek şekilde zorlandı.
+  - `run_user_scanner` içindeki auto `_dispatch_signal_to_execution` çağrısı kaldırıldı.
+  - `diagnose_pending_signal(auto_fix=true)` içindeki auto-dispatch kaldırıldı, `manual_approval_gate_enforced` aksiyonu eklendi.
+  - `_refresh_pending_signal_snapshot` artık uygun sinyali `PENDING_APPROVAL` + `MANUAL_APPROVAL_REQUIRED` durumuna alır.
+
+### Doğrulama
+- Smoke screenshot: PASS (landing render)
+- Backend test agent raporu: `/app/test_reports/iteration_32.json`
+  - 5/5 gereksinim VERIFIED
+  - Critical/minor issue: 0
+
 ## 2026-04-07 — Admin Universe Monitor: Decoupled Short/Long Scanner Engine ✅
 
 ### Uygulanan kapsam (sadece scanner alanı)
