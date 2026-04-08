@@ -179,6 +179,7 @@ class ScannerEngineConfigSaveRequest(BaseModel):
     include_futures: bool = True
     market_scope: dict = Field(default_factory=dict)
     signal_mode: str = Field(default="manual", pattern="^(manual|auto)$")
+    auto_interval_minutes: int = Field(default=3, ge=1, le=5)
     scan_limit: int = Field(default=SCANNER_ENGINE_DEFAULT_SCAN_LIMIT, ge=10, le=SCANNER_ENGINE_MAX_SCAN_LIMIT)
     top_n: int = Field(default=20, ge=1, le=150)
     manual_symbols: list[str] = Field(default_factory=list)
@@ -651,6 +652,7 @@ def _default_scanner_engine_config() -> dict:
             "futures_mode": "top50",
         },
         "signal_mode": "manual",
+        "auto_interval_minutes": 3,
         "scan_limit": SCANNER_ENGINE_DEFAULT_SCAN_LIMIT,
         "top_n": 20,
         "manual_symbols": [],
@@ -705,11 +707,19 @@ def _load_scanner_engine_config() -> dict:
     saved = _read_json_value(SCANNER_ENGINE_CONFIG_KEY, _default_scanner_engine_config())
     if not isinstance(saved, dict):
         saved = {}
+    auto_interval_minutes = 3
+    try:
+        parsed_interval = int(saved.get("auto_interval_minutes") or 3)
+        auto_interval_minutes = parsed_interval if parsed_interval in {1, 3, 5} else 3
+    except Exception:
+        auto_interval_minutes = 3
+
     return {
         **_default_scanner_engine_config(),
         **saved,
         "manual_symbols": _normalize_symbols(saved.get("manual_symbols") or []),
         "market_scope": _sanitize_market_scope(saved.get("market_scope") or {}),
+        "auto_interval_minutes": auto_interval_minutes,
         "decision_boxes": _sanitize_decision_boxes(saved.get("decision_boxes") or {}),
     }
 
@@ -1583,6 +1593,7 @@ def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_
         "include_futures": bool(payload.include_futures),
         "market_scope": _sanitize_market_scope(merged_market_scope),
         "signal_mode": payload.signal_mode,
+        "auto_interval_minutes": int(payload.auto_interval_minutes) if int(payload.auto_interval_minutes) in {1, 3, 5} else 3,
         "scan_limit": int(payload.scan_limit),
         "top_n": int(payload.top_n),
         "manual_symbols": _normalize_symbols(payload.manual_symbols or []),

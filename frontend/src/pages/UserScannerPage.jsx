@@ -397,6 +397,7 @@ export const UserScannerPage = () => {
       futures_mode: "top50",
     },
     signal_mode: "manual",
+    auto_interval_minutes: 3,
     scan_limit: 80,
     top_n: 20,
     manual_symbols: [],
@@ -488,6 +489,32 @@ export const UserScannerPage = () => {
         : requestHealth.health === "CRITICAL"
           ? "border-red-700 bg-red-950/40 text-red-300"
           : "border-slate-700 bg-slate-950 text-slate-300";
+
+  const scannerEngineNextRunAt = useMemo(() => {
+    if (String(scannerEngineConfig?.signal_mode || "manual") !== "auto") {
+      return schedulerState?.next_run_at || activeAutomation?.next_run_at || null;
+    }
+    const baseRaw = scannerEngineRun?.generated_at || activeAutomation?.last_run_at || overview?.latest_generated_at;
+    if (!baseRaw) {
+      return null;
+    }
+    const baseDate = new Date(baseRaw);
+    if (Number.isNaN(baseDate.getTime())) {
+      return null;
+    }
+    const minutes = [1, 3, 5].includes(Number(scannerEngineConfig?.auto_interval_minutes))
+      ? Number(scannerEngineConfig?.auto_interval_minutes)
+      : 3;
+    return new Date(baseDate.getTime() + (minutes * 60 * 1000)).toISOString();
+  }, [
+    activeAutomation?.last_run_at,
+    activeAutomation?.next_run_at,
+    overview?.latest_generated_at,
+    scannerEngineConfig?.auto_interval_minutes,
+    scannerEngineConfig?.signal_mode,
+    scannerEngineRun?.generated_at,
+    schedulerState?.next_run_at,
+  ]);
 
   const requestTrendPolylinePoints = useMemo(() => {
     const width = 160;
@@ -1451,6 +1478,9 @@ export const UserScannerPage = () => {
           futures_mode: futuresMode,
         },
         signal_mode: scannerEngineConfig.signal_mode || "manual",
+        auto_interval_minutes: [1, 3, 5].includes(Number(scannerEngineConfig.auto_interval_minutes))
+          ? Number(scannerEngineConfig.auto_interval_minutes)
+          : 3,
         scan_limit: inferredScanLimit,
         top_n: Number(scannerEngineConfig.top_n || 20),
         manual_symbols: manualSymbols,
@@ -2269,6 +2299,20 @@ export const UserScannerPage = () => {
                 />
                 Auto
               </label>
+
+              {String(scannerEngineConfig.signal_mode || "manual") === "auto" && (
+                <select
+                  value={Number(scannerEngineConfig.auto_interval_minutes || 3)}
+                  onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, auto_interval_minutes: Number(event.target.value || 3) }))}
+                  disabled={scannerEngineBusy}
+                  className="ml-auto h-7 border border-slate-600 bg-black px-2 text-xs"
+                  data-testid="user-scanner-engine-auto-interval-select"
+                >
+                  <option value={1} data-testid="user-scanner-engine-auto-interval-option-1">1 dakika</option>
+                  <option value={3} data-testid="user-scanner-engine-auto-interval-option-3">3 dakika</option>
+                  <option value={5} data-testid="user-scanner-engine-auto-interval-option-5">5 dakika</option>
+                </select>
+              )}
             </div>
           </div>
 
@@ -2285,7 +2329,7 @@ export const UserScannerPage = () => {
 
         <div className="grid gap-2 rounded border border-slate-800 bg-slate-950 p-3 md:grid-cols-2" data-testid="user-scanner-live-scan-timer-section">
           <p className="text-sm" data-testid="user-scanner-last-scan-value">Last Scan time: {formatDateLabel(scannerEngineRun?.generated_at || activeAutomation?.last_run_at || overview?.latest_generated_at)}</p>
-          <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan time: {formatDateLabel(schedulerState?.next_run_at || activeAutomation?.next_run_at)}</p>
+          <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan time: {formatDateLabel(scannerEngineNextRunAt)}</p>
         </div>
       </section>
 
