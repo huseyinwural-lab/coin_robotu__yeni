@@ -1961,6 +1961,7 @@ def run_user_scanner(
     actionable_count = 0
     queued_count = 0
     auto_dispatched_count = 0
+    auto_dispatch_candidates: list[dict] = []
     symbol_direction_seen: dict[str, str] = {}
     stale_evaluation_count = 0
     stale_block_count = 0
@@ -2463,22 +2464,15 @@ def run_user_scanner(
         if pending_row.status in {"pending", "ready"}:
             queued_count += 1
 
-        if mode == "AUTO" and pending_row.execution_eligible and auto_dispatched_count < AUTO_EXECUTION_MAX_PER_RUN:
-            try:
-                connection = _resolve_default_exchange_connection(db, user_id)
-                _dispatch_signal_to_execution(
-                    db,
-                    row=pending_row,
-                    signal=signal_event,
-                    exchange_connection=connection,
-                    actor_user_id=user_id,
-                )
-                if pending_row.created_order_intent_id:
-                    auto_dispatched_count += 1
-            except Exception as exc:
-                _apply_order_precheck_failed(pending_row, error_detail=str(exc))
-        elif mode == "AUTO" and pending_row.execution_eligible and auto_dispatched_count >= AUTO_EXECUTION_MAX_PER_RUN:
-            warning_set.add("auto_execution_cap_reached")
+        if mode == "AUTO" and pending_row.execution_eligible:
+            auto_dispatch_candidates.append(
+                {
+                    "row": pending_row,
+                    "signal": signal_event,
+                    "score": float(score),
+                    "market_type": str(getattr(signal_event, "market_type", bot_market_type) or bot_market_type).lower(),
+                }
+            )
 
         record_decision_trace(
             db,
@@ -2510,6 +2504,47 @@ def run_user_scanner(
                 "requires_manual_approval": pending_row.requires_manual_approval,
             },
         )
+
+    if mode == "AUTO" and auto_dispatch_candidates:
+        ranked_spot = sorted(
+            [item for item in auto_dispatch_candidates if str(item.get("market_type") or "").lower() == "spot"],
+            key=lambda item: float(item.get("score") or 0.0),
+            reverse=True,
+        )[:AUTO_EXECUTION_MAX_PER_RUN]
+        ranked_futures = sorted(
+            [item for item in auto_dispatch_candidates if str(item.get("market_type") or "").lower() == "futures"],
+            key=lambda item: float(item.get("score") or 0.0),
+            reverse=True,
+        )[:AUTO_EXECUTION_MAX_PER_RUN]
+
+        dispatch_plan = sorted(
+            [*ranked_spot, *ranked_futures],
+            key=lambda item: float(item.get("score") or 0.0),
+            reverse=True,
+        )[:AUTO_EXECUTION_MAX_PER_RUN]
+
+        if len(auto_dispatch_candidates) > len(dispatch_plan):
+            warning_set.add("auto_execution_cap_reached")
+
+        for plan_item in dispatch_plan:
+            pending_row = plan_item.get("row")
+            signal_event = plan_item.get("signal")
+            if pending_row is None or signal_event is None:
+                continue
+            try:
+                signal_market = str(getattr(signal_event, "market_type", bot_market_type) or bot_market_type).lower()
+                connection = _resolve_exchange_connection_for_market(db, user_id, signal_market)
+                _dispatch_signal_to_execution(
+                    db,
+                    row=pending_row,
+                    signal=signal_event,
+                    exchange_connection=connection,
+                    actor_user_id=user_id,
+                )
+                if pending_row.created_order_intent_id:
+                    auto_dispatched_count += 1
+            except Exception as exc:
+                _apply_order_precheck_failed(pending_row, error_detail=str(exc))
 
     if actionable_count == 0 and selected:
         warning_set.add("no_actionable_signal_generated")

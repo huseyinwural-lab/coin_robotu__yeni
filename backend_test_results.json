@@ -8,14 +8,14 @@
       "test": "Authentication",
       "status": "PASS",
       "details": "Successfully authenticated as review.user@platform.local",
-      "timestamp": "2026-04-08 11:52:33",
+      "timestamp": "2026-04-08 11:53:54",
       "data": null
     },
     {
       "test": "Scanner Engine Config",
       "status": "PASS",
       "details": "market_scope correct: spot_mode=all, futures_mode=all",
-      "timestamp": "2026-04-08 11:52:34",
+      "timestamp": "2026-04-08 11:53:55",
       "data": {
         "exchange": "binance",
         "include_spot": true,
@@ -81,21 +81,21 @@
       "test": "Scanner Engine Run Limits",
       "status": "FAIL",
       "details": "HTTP 422: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\"],\"msg\":\"Field required\",\"input\":null,\"url\":\"https://errors.pydantic.dev/2.12/v/missing\"}]}",
-      "timestamp": "2026-04-08 11:52:35",
+      "timestamp": "2026-04-08 11:53:56",
       "data": null
     },
     {
       "test": "Scanner Run AUTO All",
       "status": "FAIL",
-      "details": "HTTP 502: The preview environment is not responding. It may be starting up.\n",
-      "timestamp": "2026-04-08 11:53:35",
+      "details": "HTTP 500: {\"detail\":\"scanner_run_failed\"}",
+      "timestamp": "2026-04-08 12:07:01",
       "data": null
     },
     {
       "test": "Tradeability Control",
       "status": "FAIL",
       "details": "Rollout cutting detected or no tradeability passed: passed=0, cut=0",
-      "timestamp": "2026-04-08 11:53:38",
+      "timestamp": "2026-04-08 12:07:04",
       "data": {
         "tradeability_passed": 0,
         "rollout_cut_signals": 0
@@ -104,11 +104,61 @@
     {
       "test": "AUTO Mode Execution Limit",
       "status": "FAIL",
-      "details": "AUTO execution count exceeds limit: 33/5",
-      "timestamp": "2026-04-08 11:53:40",
+      "details": "AUTO execution count exceeds limit: 32/5",
+      "timestamp": "2026-04-08 12:07:06",
       "data": {
-        "auto_execution_count": 33,
+        "auto_execution_count": 32,
         "recent_signals": [
+          {
+            "signal_id": "be2952a3-e874-48d3-b5ed-0512cf27be27",
+            "created_order_intent_id": "53a49224-a31e-405a-8d34-50c1a55dfe19",
+            "created_at": "2026-04-08T12:04:06.650987Z"
+          },
+          {
+            "signal_id": "c00c1a69-0f0e-4fc0-89f0-8b8852467e9f",
+            "created_order_intent_id": "dc4bb259-4807-4a77-bede-2b4cc4b9f2de",
+            "created_at": "2026-04-08T12:03:52.863777Z"
+          },
+          {
+            "signal_id": "7c6a72b6-9d50-4d79-99b4-2c5dc31713a7",
+            "created_order_intent_id": "c7631de7-30d5-415a-9c65-9f20484d512c",
+            "created_at": "2026-04-08T12:01:36.366641Z"
+          },
+          {
+            "signal_id": "935bcd4c-8c3e-43af-9418-b7b5fbe3fd73",
+            "created_order_intent_id": "5de9d747-01c0-41e6-85a0-f435480c87cf",
+            "created_at": "2026-04-08T12:00:12.949726Z"
+          },
+          {
+            "signal_id": "6e753ccf-e566-4e16-aa33-0f23491bd1db",
+            "created_order_intent_id": "a3b71c7e-6f12-4944-b002-5a50dc2aab56",
+            "created_at": "2026-04-08T11:59:29.902798Z"
+          },
+          {
+            "signal_id": "d072b525-e6f8-46d6-bbc5-947a7bdce985",
+            "created_order_intent_id": "f95d5525-ab6c-45d5-aa18-9dbb2be55c49",
+            "created_at": "2026-04-08T11:58:17.600383Z"
+          },
+          {
+            "signal_id": "6df317c0-aca3-4187-acc4-7a6d0d2efeca",
+            "created_order_intent_id": "24cfd0d5-e1a0-42a6-a1a9-5161b3694210",
+            "created_at": "2026-04-08T11:57:40.820647Z"
+          },
+          {
+            "signal_id": "d936a8f7-6660-4545-b484-3eefd6e772a7",
+            "created_order_intent_id": "9e9fcb2c-8536-4401-94d4-bc23b719890c",
+            "created_at": "2026-04-08T11:56:27.160700Z"
+          },
+          {
+            "signal_id": "9b59445f-6898-41a9-b772-fd98835cd98e",
+            "created_order_intent_id": "2d92f68d-9101-4b83-bf7b-0640f60363a9",
+            "created_at": "2026-04-08T11:55:51.162988Z"
+          },
+          {
+            "signal_id": "d6c891ca-289b-482f-ad74-10505b8f0ff5",
+            "created_order_intent_id": "a9e2ced3-7327-4e9f-814f-749ff8ab1737",
+            "created_at": "2026-04-08T11:54:32.248161Z"
+          },
           {
             "signal_id": "a0b51def-bb49-43ec-af74-b6a16826b931",
             "created_order_intent_id": "90cad75a-9e93-4f79-bb08-446953205c0c",
@@ -218,61 +268,6 @@
             "signal_id": "1687df40-de2e-4eb8-835b-03ed44249c46",
             "created_order_intent_id": "e69459d4-3cd0-42e2-84d7-b8ef74bcc4f0",
             "created_at": "2026-04-07T00:08:03.344113Z"
-          },
-          {
-            "signal_id": "47e16bfe-4209-42bf-9d24-19235ea91eac",
-            "created_order_intent_id": "e8e4968e-2e48-4452-a310-928ed428dc38",
-            "created_at": "2026-04-07T00:07:37.222213Z"
-          },
-          {
-            "signal_id": "78177bb7-d844-4f8f-9e18-7c627c14e2e5",
-            "created_order_intent_id": "1bf0fec7-f419-4b5e-a3b8-abb8a797f83a",
-            "created_at": "2026-04-07T00:07:10.549228Z"
-          },
-          {
-            "signal_id": "495cfc8d-89b2-4497-896b-c3fa14a9be98",
-            "created_order_intent_id": "3bcc1f19-61c6-410e-99c4-f11df22f8723",
-            "created_at": "2026-04-07T00:06:41.246719Z"
-          },
-          {
-            "signal_id": "aef1560c-779a-4ed7-a750-8480193c01fc",
-            "created_order_intent_id": "e28222ce-6f9d-4ad1-b2dc-2ed3188ec9bd",
-            "created_at": "2026-04-07T00:06:13.012205Z"
-          },
-          {
-            "signal_id": "f3c758d4-e5c6-4db6-80b9-3bff344f1587",
-            "created_order_intent_id": "54ac64a6-ed3b-455e-8178-0dbb43c9f0bb",
-            "created_at": "2026-04-07T00:05:45.276348Z"
-          },
-          {
-            "signal_id": "0ba278fd-3d84-47dd-9ac9-96dd38409096",
-            "created_order_intent_id": "097a9155-eaf4-42d7-a152-c815874d72b5",
-            "created_at": "2026-04-07T00:05:19.124470Z"
-          },
-          {
-            "signal_id": "a0c65a08-d27d-45ae-be1f-faf9cc9311fc",
-            "created_order_intent_id": "22d9cb2e-87d7-40e0-b3c3-6c7dfebc1acd",
-            "created_at": "2026-04-07T00:04:52.457941Z"
-          },
-          {
-            "signal_id": "d8025ef6-71fc-4d56-9605-79dd56da65d7",
-            "created_order_intent_id": "f797af58-6604-41da-ad56-9aa68fbe31de",
-            "created_at": "2026-04-07T00:04:25.723547Z"
-          },
-          {
-            "signal_id": "0d1435c7-ea8e-41d5-9987-b98a0cf5f95d",
-            "created_order_intent_id": "6b4db0f9-1e36-46de-9f52-200cfec0144b",
-            "created_at": "2026-04-07T00:03:58.243069Z"
-          },
-          {
-            "signal_id": "22ca37a7-dd86-4153-b451-7f4e5fad3b54",
-            "created_order_intent_id": "7a9670a6-a277-45c3-84af-040eac1219ef",
-            "created_at": "2026-04-07T00:03:31.978831Z"
-          },
-          {
-            "signal_id": "7e75d60a-b1c4-4271-95c5-d9f6b27dc6e2",
-            "created_order_intent_id": "79a8970a-b5ff-467a-a1d0-e1a375b198b0",
-            "created_at": "2026-04-07T00:03:05.556198Z"
           }
         ]
       }
@@ -281,7 +276,7 @@
       "test": "MANUAL Mode No Auto Opening",
       "status": "PASS",
       "details": "No auto openings in MANUAL mode: 0 manual signals checked",
-      "timestamp": "2026-04-08 11:53:41",
+      "timestamp": "2026-04-08 12:07:08",
       "data": {
         "manual_signals_count": 0,
         "manual_signals": []
