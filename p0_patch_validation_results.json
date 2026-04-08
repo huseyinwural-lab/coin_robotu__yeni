@@ -1,0 +1,57 @@
+{
+  "total": 8,
+  "passed": 8,
+  "failed": 0,
+  "partial": 0,
+  "risk_level": "Low",
+  "results": [
+    {
+      "test": "User Login with Refresh Token",
+      "status": "PASS",
+      "details": "Access token length: 591, Refresh token length: 531",
+      "timestamp": "2026-04-08T16:28:50.961213"
+    },
+    {
+      "test": "Refresh Token Flow",
+      "status": "PASS",
+      "details": "New access token length: 591, New refresh token length: 531",
+      "timestamp": "2026-04-08T16:28:52.821219"
+    },
+    {
+      "test": "Invalid Refresh Token 401",
+      "status": "PASS",
+      "details": "Correctly returned 401 for invalid refresh token",
+      "timestamp": "2026-04-08T16:28:52.904345"
+    },
+    {
+      "test": "Scanner Engine Config Save",
+      "status": "PASS",
+      "details": "Config saved successfully: market_scope=all, scan_limit=2000",
+      "timestamp": "2026-04-08T16:28:54.450039"
+    },
+    {
+      "test": "Scanner Engine Run Async",
+      "status": "PASS",
+      "details": "Scanner run started successfully, job_id: eaefba1b-be89-40d8-a6d1-7ccc3b6961d6",
+      "timestamp": "2026-04-08T16:28:55.769204"
+    },
+    {
+      "test": "Scanner Job Status Flow",
+      "status": "PASS",
+      "details": "Status flow: queued -> completed",
+      "timestamp": "2026-04-08T16:29:02.723290"
+    },
+    {
+      "test": "Concurrent Scanner Calls",
+      "status": "PASS",
+      "details": "Idempotency working: 2 success, 0 already_running",
+      "timestamp": "2026-04-08T16:29:03.695307"
+    },
+    {
+      "test": "DB Pool Regression",
+      "status": "PASS",
+      "details": "Health, ready, and auth endpoints all responding correctly",
+      "timestamp": "2026-04-08T16:29:04.923040"
+    }
+  ]
+}

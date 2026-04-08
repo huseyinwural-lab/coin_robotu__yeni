@@ -1,6 +1,10 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import logging
@@ -16,11 +20,13 @@ from core.users.user_registry import (
     user_login_with_policy,
 )
 from core.security import create_access_token
-from db import get_db
+from core.config import settings
+from db import get_db, redis_client
 from deps import get_current_user, require_admin
 from models import User, UserRole
 from schemas import (
     AuthOnboardingStatusResponse,
+    AuthRefreshRequest,
     AuthResponse,
     AuthStepUpVerifyRequest,
     EmailVerificationRequest,
@@ -65,6 +71,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 AUTH_PROTECTION_SCOPE = "auth_access"
 MANDATORY_MFA_ROLES = {UserRole.OPS}
+REFRESH_TOKEN_PREFIX = "auth:refresh"
+JWT_REFRESH_EXPIRE_MINUTES = int(os.environ.get("JWT_REFRESH_EXPIRE_MINUTES") or "10080")
 
 
 class AdminProfileUpdateRequest(BaseModel):
@@ -80,6 +88,77 @@ class AdminPasswordChangeRequest(BaseModel):
 class LocalLoginRequest(BaseModel):
     email: str
     password: str
+
+
+def _refresh_token_hash(token: str) -> str:
+    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+
+
+def _refresh_store_key(token_hash: str) -> str:
+    return f"{REFRESH_TOKEN_PREFIX}:{token_hash}"
+
+
+def _store_refresh_payload(refresh_token: str, payload: dict) -> None:
+    key = _refresh_store_key(_refresh_token_hash(refresh_token))
+    raw = json.dumps(payload, ensure_ascii=False, default=str)
+    redis_client.set(key, raw)
+    try:
+        redis_client.expire(key, max(60, JWT_REFRESH_EXPIRE_MINUTES * 60))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _read_refresh_payload(refresh_token: str) -> dict | None:
+    key = _refresh_store_key(_refresh_token_hash(refresh_token))
+    raw = redis_client.get(key)
+    if not raw:
+        return None
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="ignore")
+    try:
+        payload = json.loads(raw)
+    except Exception:  # noqa: BLE001
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _delete_refresh_payload(refresh_token: str) -> None:
+    try:
+        redis_client.delete(_refresh_store_key(_refresh_token_hash(refresh_token)))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _issue_refresh_token(*, user: User, device_id: str, request: Request, step_up_scope: list[str]) -> tuple[str, datetime]:
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=JWT_REFRESH_EXPIRE_MINUTES)
+    claims = {
+        "sub": user.id,
+        "role": user.role.value,
+        "email": user.email,
+        "type": "refresh",
+        "device_id": device_id,
+        "ip_hash": resolve_ip_hash(request),
+        "device_fingerprint": resolve_device_fingerprint(request),
+        "step_up_scope": step_up_scope or ["auth_login"],
+        "exp": expires_at,
+    }
+    token = jwt.encode(claims, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    _store_refresh_payload(
+        token,
+        {
+            "user_id": user.id,
+            "role": user.role.value,
+            "email": user.email,
+            "device_id": device_id,
+            "ip_hash": claims.get("ip_hash"),
+            "device_fingerprint": claims.get("device_fingerprint"),
+            "step_up_scope": claims.get("step_up_scope") or ["auth_login"],
+            "issued_at": now.isoformat(),
+            "expires_at": expires_at.isoformat(),
+        },
+    )
+    return token, expires_at
 
 
 GENERIC_PASSWORD_RESET_MESSAGE = (
@@ -271,6 +350,12 @@ def _login_with_policy(
         device_fingerprint=session_context.get("device_fingerprint"),
         step_up_scope=["auth_login"],
     )
+    refresh_token, refresh_expires_at = _issue_refresh_token(
+        user=user,
+        device_id=device_id,
+        request=request,
+        step_up_scope=["auth_login"],
+    )
     set_device_cookie(response, request, device_id=device_id)
     register_auth_session(db, user=user, access_token=access_token, request=request, commit=False)
     record_login_success(
@@ -296,6 +381,8 @@ def _login_with_policy(
     return AuthResponse(
         access_token=access_token,
         token=access_token,
+        refresh_token=refresh_token,
+        refresh_expires_at=refresh_expires_at,
         token_type="bearer",
         role=user.role.value,
         user=user,
@@ -327,6 +414,87 @@ def admin_login(payload: LocalLoginRequest, request: Request, response: Response
 @router.post("/login/user", response_model=AuthResponse)
 def user_login(payload: LocalLoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     return _login_with_policy(payload, request, response, "login_user", db, target_role=UserRole.USER)
+
+
+@router.post("/refresh", response_model=AuthResponse)
+def refresh_access_token(payload: AuthRefreshRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    token = str(payload.refresh_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="refresh_token_required")
+
+    try:
+        claims = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_refresh_token") from exc
+
+    if str(claims.get("type") or "") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_refresh_token_type")
+
+    stored = _read_refresh_payload(token)
+    if not stored:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh_token_not_found")
+
+    user_id = str(claims.get("sub") or stored.get("user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh_token_subject_missing")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh_user_not_found")
+
+    expected_device_id = str(stored.get("device_id") or claims.get("device_id") or "").strip()
+    device_id, _ = resolve_or_create_device_id(request)
+    if expected_device_id and device_id != expected_device_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh_device_mismatch")
+
+    step_up_scope = [str(item).strip().lower() for item in (stored.get("step_up_scope") or claims.get("step_up_scope") or ["auth_login"]) if str(item).strip()]
+    if not step_up_scope:
+        step_up_scope = ["auth_login"]
+
+    access_token = create_access_token(
+        subject=user.id,
+        role=user.role.value,
+        email=user.email,
+        mfa_verified=False,
+        device_id=device_id,
+        ip_hash=resolve_ip_hash(request),
+        device_fingerprint=resolve_device_fingerprint(request),
+        step_up_scope=step_up_scope,
+    )
+    new_refresh_token, refresh_expires_at = _issue_refresh_token(
+        user=user,
+        device_id=device_id,
+        request=request,
+        step_up_scope=step_up_scope,
+    )
+    _delete_refresh_payload(token)
+
+    register_auth_session(db, user=user, access_token=access_token, request=request, commit=False)
+    set_device_cookie(response, request, device_id=device_id)
+    create_audit_log(
+        db,
+        action="auth_refresh_token_rotated",
+        entity_type="user",
+        entity_id=user.id,
+        actor_user_id=user.id,
+        actor_role=user.role.value,
+        details={"step_up_scope": step_up_scope},
+        commit=False,
+    )
+    db.commit()
+
+    return AuthResponse(
+        access_token=access_token,
+        token=access_token,
+        refresh_token=new_refresh_token,
+        refresh_expires_at=refresh_expires_at,
+        token_type="bearer",
+        role=user.role.value,
+        user=user,
+        mfa_verified=False,
+        requires_step_up=False,
+        step_up_scope=step_up_scope,
+    )
 
 
 @router.post("/step-up", response_model=AuthResponse)
@@ -377,8 +545,16 @@ def post_step_up_auth(
         )
         raise
     access_token = result.get("access_token")
+    refresh_token = None
+    refresh_expires_at = None
     if access_token:
         register_auth_session(db, user=current_user, access_token=access_token, request=request, commit=False)
+        refresh_token, refresh_expires_at = _issue_refresh_token(
+            user=current_user,
+            device_id=device_id,
+            request=request,
+            step_up_scope=requested_scope,
+        )
     record_login_success(
         db,
         request=request,
@@ -401,6 +577,8 @@ def post_step_up_auth(
     db.commit()
     return AuthResponse(
         **result,
+        refresh_token=refresh_token,
+        refresh_expires_at=refresh_expires_at,
         requires_step_up=False,
         risk_level=risk_response.get("risk_level", "low"),
         risk_reasons=risk_response.get("risk_reasons") or [],

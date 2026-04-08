@@ -181,6 +181,7 @@ class AlertChannelConfigUpdateRequest(BaseModel):
 class AuthResponse(BaseModel):
     access_token: str | None = None
     token: str | None = None
+    refresh_token: str | None = None
     token_type: str = "bearer"
     role: str | None = None
     user: UserResponse | None = None
@@ -201,6 +202,11 @@ class AuthResponse(BaseModel):
     step_up_scope: list[str] = Field(default_factory=list)
     email_delivery_status: str | None = None
     email_code_preview: str | None = None
+    refresh_expires_at: datetime | None = None
+
+
+class AuthRefreshRequest(BaseModel):
+    refresh_token: str
 
 
 class MfaSettingsUpdateRequest(BaseModel):

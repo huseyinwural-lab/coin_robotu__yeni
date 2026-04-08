@@ -390,12 +390,12 @@ export const UserScannerPage = () => {
     include_spot: true,
     include_futures: true,
     market_scope: {
-      spot_mode: "top50",
-      futures_mode: "top50",
+      spot_mode: "all",
+      futures_mode: "all",
     },
     signal_mode: "manual",
     auto_interval_minutes: 3,
-    scan_limit: 80,
+    scan_limit: 2000,
     top_n: 20,
     manual_symbols: [],
     weights: {
@@ -1474,13 +1474,9 @@ export const UserScannerPage = () => {
 
       const includeSpot = Boolean(scannerEngineConfig.include_spot);
       const includeFutures = Boolean(scannerEngineConfig.include_futures);
-      const spotMode = String(scannerEngineConfig?.market_scope?.spot_mode || "top50").toLowerCase() === "all" ? "all" : "top50";
-      const futuresMode = String(scannerEngineConfig?.market_scope?.futures_mode || "top50").toLowerCase() === "all" ? "all" : "top50";
-      const inferredScanLimit = (() => {
-        const spotLimit = includeSpot ? (spotMode === "top50" ? 50 : 110) : 0;
-        const futuresLimit = includeFutures ? (futuresMode === "top50" ? 50 : 110) : 0;
-        return Math.max(10, Math.min(220, spotLimit + futuresLimit || 100));
-      })();
+      const spotMode = "all";
+      const futuresMode = "all";
+      const inferredScanLimit = 2000;
 
       const payload = {
         exchange: "binance",
@@ -1517,12 +1513,38 @@ export const UserScannerPage = () => {
   const runScannerEngine = async () => {
     setScannerEngineBusy(true);
     try {
-      const { data } = await apiClient.post("/user/scanner-engine/run", {
+      const { data: queued } = await apiClient.post("/user/scanner-engine/run-async", {
         force_refresh: false,
         reason: "user_scanner_engine_run",
-      });
-      setScannerEngineRun(data || { status: "empty", summary: {}, results: [], top_results: [], errors: [] });
-      toast.success(`Scanner tamamlandı: ${data?.summary?.scored_count || 0} sembol skorlandı`);
+      }, { timeout: 12000 });
+
+      if (queued?.status === "completed_cached") {
+        await load({ silent: true });
+        toast.success(`Önceki sonuç kullanıldı: ${queued?.summary?.scored_count || 0} sembol skorlandı`);
+        return;
+      }
+
+      const jobId = String(queued?.job_id || "").trim();
+      if (!jobId) {
+        throw new Error("scanner_engine_async_job_id_missing");
+      }
+
+      const deadline = Date.now() + 240_000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const { data: statusData } = await apiClient.get(`/user/scanner-engine/run-async/${jobId}`, { timeout: 10000 });
+        const status = String(statusData?.status || "").toLowerCase();
+        if (status === "completed") {
+          await load({ silent: true });
+          toast.success(`Scanner tamamlandı: ${statusData?.summary?.scored_count || 0} sembol skorlandı`);
+          return;
+        }
+        if (status === "failed") {
+          throw new Error(String(statusData?.error || "scanner_engine_run_async_failed"));
+        }
+      }
+
+      throw new Error("scanner_engine_run_async_timeout");
     } catch (error) {
       toast.error(toApiErrorMessage(error, "Scanner Engine run başarısız"));
     } finally {

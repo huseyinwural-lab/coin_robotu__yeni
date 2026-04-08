@@ -225,28 +225,41 @@ def _create_and_verify_engine(database_url: str) -> Engine:
         connect_args.setdefault("keepalives_interval", 10)
         connect_args.setdefault("keepalives_count", 5)
 
+    def _env_int(name: str, fallback: int) -> int:
+        try:
+            return int(str(os.environ.get(name, fallback)).strip())
+        except Exception:
+            return fallback
+
+    base_pool_timeout = _env_int("DB_POOL_TIMEOUT", 30)
+    base_pool_size = _env_int("DB_POOL_SIZE", 10)
+    base_max_overflow = _env_int("DB_MAX_OVERFLOW", 20)
+    base_pool_recycle = _env_int("DB_POOL_RECYCLE_SECONDS", 600)
+    pooler_pool_timeout = _env_int("DB_POOLER_TIMEOUT", 20)
+    pooler_pool_recycle = _env_int("DB_POOLER_RECYCLE_SECONDS", 180)
+
     engine_kwargs: dict = {
         "pool_pre_ping": True,
-        "pool_recycle": 600,
+        "pool_recycle": base_pool_recycle,
         "connect_args": connect_args,
     }
     if use_null_pool:
         engine_kwargs.update(
             {
-                "pool_timeout": 20,
-                "pool_size": 10,
-                "max_overflow": 20,
+                "pool_timeout": pooler_pool_timeout,
+                "pool_size": base_pool_size,
+                "max_overflow": base_max_overflow,
                 "pool_use_lifo": True,
                 "pool_reset_on_return": "rollback",
-                "pool_recycle": 180,
+                "pool_recycle": pooler_pool_recycle,
             }
         )
     else:
         engine_kwargs.update(
             {
-                "pool_timeout": 30,
-                "pool_size": 10,
-                "max_overflow": 20,
+                "pool_timeout": base_pool_timeout,
+                "pool_size": base_pool_size,
+                "max_overflow": base_max_overflow,
                 "pool_use_lifo": True,
                 "pool_reset_on_return": "rollback",
             }

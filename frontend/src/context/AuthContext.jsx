@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-import { apiClient, buildSessionHeaders, FRONTEND_BACKEND_URL, setAuthToken } from "@/lib/api";
+import { apiClient, buildSessionHeaders, FRONTEND_BACKEND_URL, setAuthToken, setRefreshToken } from "@/lib/api";
 
 const AuthContext = createContext(null);
 const AUTH_TOKEN_KEY = "token";
+const REFRESH_TOKEN_KEY = "refresh_token";
 const AUTH_USER_KEY = "auth_user";
 
 const readStoredUser = () => {
@@ -18,9 +19,12 @@ const readStoredUser = () => {
   }
 };
 
-const persistAuthSession = ({ token, user }) => {
+const persistAuthSession = ({ token, refreshToken, user }) => {
   if (token) {
     localStorage.setItem(AUTH_TOKEN_KEY, token);
+  }
+  if (refreshToken) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
   }
   if (user) {
     localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
@@ -29,6 +33,7 @@ const persistAuthSession = ({ token, user }) => {
 
 const clearAuthSession = () => {
   localStorage.removeItem(AUTH_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(AUTH_USER_KEY);
 };
 
@@ -91,6 +96,7 @@ export const AuthProvider = ({ children }) => {
 
       try {
         setAuthToken(token);
+        setRefreshToken(localStorage.getItem(REFRESH_TOKEN_KEY));
         const { data } = await apiClient.get("/auth/me", { timeout: 30000 });
         if (!cancelled) {
           setUser(data);
@@ -142,6 +148,7 @@ export const AuthProvider = ({ children }) => {
           }
           clearAuthSession();
           setAuthToken(null);
+          setRefreshToken(null);
           if (!cancelled) {
             setToken(null);
             setUser(null);
@@ -168,6 +175,7 @@ export const AuthProvider = ({ children }) => {
     const onAuthExpired = () => {
       clearAuthSession();
       setAuthToken(null);
+      setRefreshToken(null);
       setToken(null);
       setUser(null);
     };
@@ -193,6 +201,7 @@ export const AuthProvider = ({ children }) => {
   const login = async ({ email, password, panel = "user" }) => {
     clearAuthSession();
     setAuthToken(null);
+    setRefreshToken(null);
     const panelPath = panel === "admin" ? "/auth/login/admin" : panel === "user" ? "/auth/login/user" : "/auth/login";
     const LOGIN_TOTAL_TIMEOUT_MS = 30000;
     const LOGIN_PRIMARY_TIMEOUT_MS = 12000;
@@ -275,8 +284,9 @@ export const AuthProvider = ({ children }) => {
       };
     }
 
-    persistAuthSession({ token: data.access_token, user: data.user || null });
+    persistAuthSession({ token: data.access_token, refreshToken: data.refresh_token, user: data.user || null });
     setAuthToken(data.access_token);
+    setRefreshToken(data.refresh_token || null);
     setToken(data.access_token);
     setUser(data.user);
     return { mfaRequired: false, user: data.user };
@@ -300,8 +310,9 @@ export const AuthProvider = ({ children }) => {
       }
       data = await authFetchJson("/mfa/verify", { method: "POST", body: { challenge_token: challengeToken, method, code: code || "" }, timeoutMs: 30000 });
     }
-    persistAuthSession({ token: data.access_token, user: data.user || null });
+    persistAuthSession({ token: data.access_token, refreshToken: data.refresh_token, user: data.user || null });
     setAuthToken(data.access_token);
+    setRefreshToken(data.refresh_token || null);
     setToken(data.access_token);
     setUser(data.user);
     return data.user;
@@ -309,8 +320,9 @@ export const AuthProvider = ({ children }) => {
 
   const stepUpAuth = async ({ method, code, scope = [] }) => {
     const { data } = await apiClient.post("/auth/step-up", { method, code, scope });
-    persistAuthSession({ token: data.access_token, user: data.user || null });
+    persistAuthSession({ token: data.access_token, refreshToken: data.refresh_token, user: data.user || null });
     setAuthToken(data.access_token);
+    setRefreshToken(data.refresh_token || null);
     setToken(data.access_token);
     setUser(data.user);
     return data;
@@ -331,6 +343,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     clearAuthSession();
     setAuthToken(null);
+    setRefreshToken(null);
     setToken(null);
     setUser(null);
   };

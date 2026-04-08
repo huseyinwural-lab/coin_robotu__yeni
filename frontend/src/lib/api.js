@@ -7,6 +7,7 @@ const isRemoteBrowser =
   !/^(localhost|127\.0\.0\.1)$/i.test(String(window.location.hostname || ""));
 const BACKEND_URL = CONFIGURED_BACKEND_URL;
 const AUTH_TOKEN_KEY = "token";
+const REFRESH_TOKEN_KEY = "refresh_token";
 const AUTH_USER_KEY = "auth_user";
 
 if (!BACKEND_URL) {
@@ -80,11 +81,30 @@ const readStoredToken = () => {
   return window.localStorage.getItem(AUTH_TOKEN_KEY);
 };
 
+const readStoredRefreshToken = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.localStorage.getItem(REFRESH_TOKEN_KEY);
+};
+
+const storeRefreshToken = (refreshToken) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (refreshToken) {
+    window.localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  } else {
+    window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  }
+};
+
 const clearStoredAuth = () => {
   if (typeof window === "undefined") {
     return;
   }
   window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.localStorage.removeItem(REFRESH_TOKEN_KEY);
   window.localStorage.removeItem(AUTH_USER_KEY);
 };
 
@@ -222,6 +242,46 @@ apiClient.interceptors.request.use((config) => {
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+let refreshInFlightPromise = null;
+
+const requestTokenRefresh = async () => {
+  const refreshToken = readStoredRefreshToken();
+  if (!refreshToken) {
+    throw new Error("missing_refresh_token");
+  }
+
+  const { data } = await axios.post(
+    `${FRONTEND_BACKEND_URL}/api/auth/refresh`,
+    { refresh_token: refreshToken },
+    {
+      timeout: 20000,
+      withCredentials: true,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-ID": ensureSessionId(),
+        "X-Session-Device": ensureDeviceId(),
+        "X-Request-ID": generateRequestId(),
+      },
+    },
+  );
+
+  const newAccessToken = String(data?.access_token || data?.token || "").trim();
+  const newRefreshToken = String(data?.refresh_token || "").trim();
+  if (!newAccessToken) {
+    throw new Error("refresh_access_token_missing");
+  }
+
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(AUTH_TOKEN_KEY, newAccessToken);
+    if (newRefreshToken) {
+      window.localStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken);
+    }
+  }
+  setAuthToken(newAccessToken);
+  syncDeviceIdFromToken(newAccessToken);
+  return { accessToken: newAccessToken, refreshToken: newRefreshToken || null };
+};
+
 const shouldRetryRequest = (error) => {
   const config = error?.config || {};
   const method = String(config.method || "get").toLowerCase();
@@ -277,6 +337,7 @@ apiClient.interceptors.response.use(
     const authSnapshot = String(config.__authTokenSnapshot || "");
     const isLoginLike =
       url.includes("/auth/login") ||
+      url.includes("/auth/refresh") ||
       url.includes("/auth/me") ||
       url.includes("/auth/mfa/challenge/verify") ||
       url.includes("/auth/mfa/verify") ||
@@ -310,6 +371,28 @@ apiClient.interceptors.response.use(
       detail401.includes("invalid_token") ||
       detail401.includes("not_authenticated");
 
+    if (status === 401 && !isLoginLike && shouldForceLogout && !config.__refreshRetried) {
+      config.__refreshRetried = true;
+      try {
+        if (!refreshInFlightPromise) {
+          refreshInFlightPromise = requestTokenRefresh().finally(() => {
+            refreshInFlightPromise = null;
+          });
+        }
+        const refreshed = await refreshInFlightPromise;
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${refreshed.accessToken}`;
+        config.headers["X-Session-ID"] = ensureSessionId();
+        config.headers["X-Session-Device"] = ensureDeviceId();
+        config.headers["X-Request-ID"] = generateRequestId();
+        return apiClient.request(config);
+      } catch {
+        clearStoredAuth();
+        setAuthToken(null);
+        dispatchAuthExpiredOnce();
+      }
+    }
+
     if (status === 401 && !isLoginLike && shouldForceLogout && (!latestStoredToken || latestStoredToken === authSnapshot)) {
       clearStoredAuth();
       setAuthToken(null);
@@ -337,4 +420,8 @@ export const setAuthToken = (token) => {
   } else {
     delete apiClient.defaults.headers.common.Authorization;
   }
+};
+
+export const setRefreshToken = (refreshToken) => {
+  storeRefreshToken(refreshToken || null);
 };

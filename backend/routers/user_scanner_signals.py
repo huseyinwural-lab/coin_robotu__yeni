@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_DOWN
+import hashlib
+import json
 import time
 from uuid import uuid4
 
@@ -116,17 +118,16 @@ def user_scanner_engine_save_config(payload: dict, current_user: User = Depends(
         signal_mode = "manual"
 
     merged_decision_boxes = payload.get("decision_boxes") if isinstance(payload.get("decision_boxes"), dict) else (previous.get("decision_boxes") or {})
-    merged_market_scope = payload.get("market_scope") if isinstance(payload.get("market_scope"), dict) else (previous.get("market_scope") or {})
 
     config = {
         **previous,
         "exchange": "binance",
         "include_spot": include_spot,
         "include_futures": include_futures,
-        "market_scope": _admin_sanitize_market_scope(merged_market_scope),
+        "market_scope": {"spot_mode": "all", "futures_mode": "all"},
         "signal_mode": signal_mode,
         "auto_interval_minutes": auto_interval,
-        "scan_limit": _safe_int(payload.get("scan_limit"), int(previous.get("scan_limit") or 80)),
+        "scan_limit": max(_safe_int(payload.get("scan_limit"), int(previous.get("scan_limit") or 2000)), 2000),
         "top_n": _safe_int(payload.get("top_n"), int(previous.get("top_n") or 20)),
         "manual_symbols": _normalize_symbols(payload.get("manual_symbols") or previous.get("manual_symbols") or []),
         "weights": {
@@ -160,9 +161,50 @@ def user_scanner_engine_save_config(payload: dict, current_user: User = Depends(
 
 @router.post("/scanner-engine/run")
 def user_scanner_engine_run(payload: dict, current_user: User = Depends(require_user), db: Session = Depends(get_db)):
-    config = _load_user_scanner_engine_config(current_user.id)
+    config = _normalize_scanner_engine_config_for_runtime(_load_user_scanner_engine_config(current_user.id))
+    config_fingerprint = _config_fingerprint(config)
     force_refresh = bool(payload.get("force_refresh", False))
-    run_payload = _admin_run_scanner_engine(config, force_refresh=force_refresh)
+
+    if not force_refresh:
+        last_payload = get_json(redis_client, _user_scanner_engine_last_run_key(current_user.id))
+        if _is_recent_run_reusable(last_payload, config_fingerprint=config_fingerprint):
+            return {
+                "status": "cached",
+                "run_id": last_payload.get("run_id"),
+                "generated_at": last_payload.get("generated_at"),
+                "config": last_payload.get("config") or config,
+                "summary": last_payload.get("summary") or {},
+                "results": last_payload.get("results") or [],
+                "top_results": last_payload.get("top_results") or [],
+                "errors": last_payload.get("errors") or [],
+            }
+
+    lock_result = _acquire_scanner_engine_run_lock(
+        user_id=current_user.id,
+        job_id=str(uuid4()),
+        config_fingerprint=config_fingerprint,
+    )
+    if not lock_result.get("acquired"):
+        existing = lock_result.get("existing") or {}
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "SCANNER_ENGINE_RUN_IN_PROGRESS",
+                "job_id": existing.get("job_id"),
+                "started_at": existing.get("started_at"),
+                "message": "Scanner engine çalışıyor. Mevcut job bitince tekrar deneyin.",
+            },
+        )
+
+    try:
+        run_payload = _admin_run_scanner_engine(config, force_refresh=force_refresh)
+    finally:
+        _release_scanner_engine_run_lock(current_user.id)
+    run_payload = {
+        **(run_payload or {}),
+        "config": config,
+        "config_fingerprint": config_fingerprint,
+    }
     _save_user_scanner_engine_last_run(current_user.id, run_payload)
 
     create_audit_log(
@@ -189,6 +231,78 @@ def user_scanner_engine_run(payload: dict, current_user: User = Depends(require_
         "top_results": run_payload.get("top_results") or [],
         "errors": run_payload.get("errors") or [],
     }
+
+
+@router.post("/scanner-engine/run-async")
+def user_scanner_engine_run_async(
+    payload: dict,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(require_user),
+):
+    config = _normalize_scanner_engine_config_for_runtime(_load_user_scanner_engine_config(current_user.id))
+    config_fingerprint = _config_fingerprint(config)
+    force_refresh = bool(payload.get("force_refresh", False))
+    reason = str(payload.get("reason") or "user_scanner_engine_run_async")
+
+    if not force_refresh:
+        last_payload = get_json(redis_client, _user_scanner_engine_last_run_key(current_user.id))
+        if _is_recent_run_reusable(last_payload, config_fingerprint=config_fingerprint):
+            return {
+                "status": "completed_cached",
+                "job_id": None,
+                "run_id": last_payload.get("run_id"),
+                "generated_at": last_payload.get("generated_at"),
+                "summary": last_payload.get("summary") or {},
+            }
+
+    job_id = str(uuid4())
+    lock_result = _acquire_scanner_engine_run_lock(
+        user_id=current_user.id,
+        job_id=job_id,
+        config_fingerprint=config_fingerprint,
+    )
+    if not lock_result.get("acquired"):
+        existing = lock_result.get("existing") or {}
+        return {
+            "status": "already_running",
+            "job_id": existing.get("job_id"),
+            "started_at": existing.get("started_at"),
+        }
+
+    job_key = _user_scanner_engine_async_job_key(current_user.id, job_id)
+    _set_scanner_engine_async_payload(
+        job_key,
+        {
+            "job_id": job_id,
+            "status": "queued",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "config_fingerprint": config_fingerprint,
+        },
+    )
+
+    background_tasks.add_task(
+        _run_scanner_engine_async_job,
+        user_id=current_user.id,
+        job_id=job_id,
+        job_key=job_key,
+        config=config,
+        force_refresh=force_refresh,
+        reason=reason,
+    )
+
+    return {
+        "status": "queued",
+        "job_id": job_id,
+        "config_fingerprint": config_fingerprint,
+    }
+
+
+@router.get("/scanner-engine/run-async/{job_id}")
+def user_scanner_engine_run_async_status(job_id: str, current_user: User = Depends(require_user)):
+    payload = get_json(redis_client, _user_scanner_engine_async_job_key(current_user.id, job_id))
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="scanner_engine_run_async_job_not_found")
+    return payload
 
 
 @router.get("/scanner-engine/last-run")
@@ -231,9 +345,14 @@ def _allowed_quote_notice() -> str:
 
 
 SCANNER_ASYNC_JOB_TTL_SECONDS = 60 * 30
+SCANNER_ENGINE_ASYNC_JOB_TTL_SECONDS = 60 * 45
+SCANNER_ENGINE_REUSE_WINDOW_SECONDS = 180
+SCANNER_ENGINE_RUN_LOCK_SECONDS = 900
 SCANNER_ENGINE_LAST_RUN_CACHE_KEY = "universe:scanner_engine:last_run"
 USER_SCANNER_ENGINE_CONFIG_KEY_PREFIX = "user:scanner_engine:config"
 USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX = "user:scanner_engine:last_run"
+USER_SCANNER_ENGINE_ASYNC_JOB_KEY_PREFIX = "user:scanner_engine:run_async"
+USER_SCANNER_ENGINE_ACTIVE_RUN_KEY_PREFIX = "user:scanner_engine:run_active"
 
 
 def _user_scanner_engine_config_key(user_id: str) -> str:
@@ -242,6 +361,41 @@ def _user_scanner_engine_config_key(user_id: str) -> str:
 
 def _user_scanner_engine_last_run_key(user_id: str) -> str:
     return f"{USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX}:{user_id}"
+
+
+def _user_scanner_engine_async_job_key(user_id: str, job_id: str) -> str:
+    return f"{USER_SCANNER_ENGINE_ASYNC_JOB_KEY_PREFIX}:{user_id}:{job_id}"
+
+
+def _user_scanner_engine_active_run_key(user_id: str) -> str:
+    return f"{USER_SCANNER_ENGINE_ACTIVE_RUN_KEY_PREFIX}:{user_id}"
+
+
+def _set_json_with_ttl(key: str, payload: dict, ttl_seconds: int) -> None:
+    set_json(redis_client, key, payload)
+    try:
+        if hasattr(redis_client, "expire"):
+            redis_client.expire(key, max(int(ttl_seconds), 1))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _config_fingerprint(config: dict) -> str:
+    raw = json.dumps(config or {}, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20]
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _normalize_symbols(values) -> list[str]:
@@ -261,6 +415,71 @@ def _safe_int(value, fallback: int) -> int:
         return fallback
 
 
+def _normalize_scanner_engine_config_for_runtime(config: dict) -> dict:
+    base = dict(config or {})
+    include_spot = bool(base.get("include_spot", True))
+    include_futures = bool(base.get("include_futures", True))
+    if not include_spot and not include_futures:
+        include_spot = True
+
+    requested_scan_limit = _safe_int(base.get("scan_limit"), 2000)
+    return {
+        **base,
+        "include_spot": include_spot,
+        "include_futures": include_futures,
+        "market_scope": {"spot_mode": "all", "futures_mode": "all"},
+        "scan_limit": max(requested_scan_limit, 2000),
+        "manual_symbols": _normalize_symbols(base.get("manual_symbols") or []),
+    }
+
+
+def _is_recent_run_reusable(run_payload: dict, *, config_fingerprint: str) -> bool:
+    if not isinstance(run_payload, dict):
+        return False
+    if not run_payload.get("run_id"):
+        return False
+    if str(run_payload.get("config_fingerprint") or "") != str(config_fingerprint):
+        return False
+    generated_at = _parse_iso_datetime(run_payload.get("generated_at"))
+    if generated_at is None:
+        return False
+    age_seconds = (datetime.now(timezone.utc) - generated_at).total_seconds()
+    return age_seconds <= SCANNER_ENGINE_REUSE_WINDOW_SECONDS
+
+
+def _acquire_scanner_engine_run_lock(*, user_id: str, job_id: str, config_fingerprint: str) -> dict:
+    lock_key = _user_scanner_engine_active_run_key(user_id)
+    now = datetime.now(timezone.utc)
+    existing = get_json(redis_client, lock_key)
+    if isinstance(existing, dict) and str(existing.get("status") or "") == "running":
+        started_at = _parse_iso_datetime(existing.get("started_at"))
+        if started_at is not None:
+            age_seconds = (now - started_at).total_seconds()
+            if age_seconds <= SCANNER_ENGINE_RUN_LOCK_SECONDS:
+                return {"acquired": False, "existing": existing, "lock_key": lock_key}
+
+    payload = {
+        "job_id": job_id,
+        "status": "running",
+        "started_at": now.isoformat(),
+        "config_fingerprint": config_fingerprint,
+    }
+    _set_json_with_ttl(lock_key, payload, SCANNER_ENGINE_RUN_LOCK_SECONDS)
+    return {"acquired": True, "existing": payload, "lock_key": lock_key}
+
+
+def _release_scanner_engine_run_lock(user_id: str) -> None:
+    try:
+        if hasattr(redis_client, "delete"):
+            redis_client.delete(_user_scanner_engine_active_run_key(user_id))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _set_scanner_engine_async_payload(job_key: str, payload: dict) -> None:
+    _set_json_with_ttl(job_key, payload, SCANNER_ENGINE_ASYNC_JOB_TTL_SECONDS)
+
+
 def _load_user_scanner_engine_config(user_id: str) -> dict:
     defaults = _user_scanner_engine_default_config()
     saved = get_json(redis_client, _user_scanner_engine_config_key(user_id))
@@ -275,9 +494,10 @@ def _load_user_scanner_engine_config(user_id: str) -> dict:
         **defaults,
         **saved,
         "manual_symbols": _normalize_symbols(saved.get("manual_symbols") or defaults.get("manual_symbols") or []),
-        "market_scope": _admin_sanitize_market_scope(saved.get("market_scope") or defaults.get("market_scope") or {}),
+        "market_scope": {"spot_mode": "all", "futures_mode": "all"},
         "decision_boxes": _admin_sanitize_decision_boxes(saved.get("decision_boxes") or defaults.get("decision_boxes") or {}),
         "auto_interval_minutes": auto_interval,
+        "scan_limit": max(_safe_int(saved.get("scan_limit"), _safe_int(defaults.get("scan_limit"), 2000)), 2000),
     }
 
 
@@ -287,6 +507,76 @@ def _save_user_scanner_engine_config(user_id: str, config: dict) -> None:
 
 def _save_user_scanner_engine_last_run(user_id: str, payload: dict) -> None:
     set_json(redis_client, _user_scanner_engine_last_run_key(user_id), payload)
+
+
+def _run_scanner_engine_async_job(
+    *,
+    user_id: str,
+    job_id: str,
+    job_key: str,
+    config: dict,
+    force_refresh: bool,
+    reason: str,
+) -> None:
+    db = SessionLocal()
+    started_at = datetime.now(timezone.utc)
+    config_fingerprint = _config_fingerprint(config)
+    try:
+        run_payload = _admin_run_scanner_engine(config, force_refresh=force_refresh)
+        run_payload = {
+            **(run_payload or {}),
+            "config": config,
+            "config_fingerprint": config_fingerprint,
+        }
+        _save_user_scanner_engine_last_run(user_id, run_payload)
+
+        _set_scanner_engine_async_payload(
+            job_key,
+            {
+                "job_id": job_id,
+                "status": "completed",
+                "started_at": started_at.isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "run_id": run_payload.get("run_id"),
+                "summary": run_payload.get("summary") or {},
+                "config_fingerprint": config_fingerprint,
+            },
+        )
+
+        create_audit_log(
+            db,
+            action="USER_SCANNER_ENGINE_RUN_ASYNC",
+            entity_type="user_scanner_engine",
+            entity_id=user_id,
+            actor_user_id=user_id,
+            actor_role="user",
+            severity="info",
+            details={
+                "reason": str(reason or "user_scanner_engine_run_async"),
+                "job_id": job_id,
+                "run_id": run_payload.get("run_id"),
+                "summary": run_payload.get("summary") or {},
+            },
+        )
+    except Exception as exc:  # noqa: BLE001
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        _set_scanner_engine_async_payload(
+            job_key,
+            {
+                "job_id": job_id,
+                "status": "failed",
+                "started_at": started_at.isoformat(),
+                "failed_at": datetime.now(timezone.utc).isoformat(),
+                "error": str(exc)[:500],
+                "config_fingerprint": config_fingerprint,
+            },
+        )
+    finally:
+        _release_scanner_engine_run_lock(user_id)
+        db.close()
 
 
 def _scanner_async_job_key(user_id: str, job_id: str) -> str:
