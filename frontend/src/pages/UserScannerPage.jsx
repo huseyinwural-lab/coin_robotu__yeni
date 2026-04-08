@@ -1813,22 +1813,6 @@ export const UserScannerPage = () => {
       ) : (
       <>
 
-      <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-health-summary-card">
-        <div className="flex flex-wrap items-center gap-3" data-testid="user-scanner-health-summary-row">
-          <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-health-summary-title">Scanner Health Summary</p>
-          <span className={`rounded-full border px-2 py-1 text-xs font-semibold ${requestHealthBadgeClass}`} data-testid="user-scanner-health-summary-badge">
-            {requestHealth.health}
-          </span>
-          <p className="text-xs text-slate-300" data-testid="user-scanner-health-summary-window">Son 60s req: <span className="font-semibold">{requestHealth.total}</span></p>
-          <p className="text-xs text-slate-300" data-testid="user-scanner-health-summary-ok-fail">ok/fail: <span className="font-semibold">{requestHealth.success}/{requestHealth.failed}</span></p>
-          <p className="text-xs text-slate-300" data-testid="user-scanner-health-summary-ratio">başarı: <span className="font-semibold">{(requestHealth.successRatio * 100).toFixed(1)}%</span></p>
-          <p className="text-xs text-slate-400" data-testid="user-scanner-health-summary-error-classes">
-            auth={requestErrorBreakdown.auth_error} · infra={requestErrorBreakdown.infra_error} · trade_blocker={requestErrorBreakdown.trade_blocker}
-          </p>
-          <p className="text-xs text-slate-400" data-testid="user-scanner-health-summary-updated">güncelleme: {formatDateLabel(requestHealth.updatedAt)}</p>
-        </div>
-      </section>
-
       {!SIMPLE_SCANNER_V2 && <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-request-health-mini-indicator">
         <div className="flex flex-wrap items-center gap-3" data-testid="user-scanner-request-health-row">
           <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-request-health-title">Scanner Request Health</p>
@@ -2449,24 +2433,6 @@ export const UserScannerPage = () => {
         ))}
         </div>
       </section>}
-
-      <section className="order-1 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-statistics-section">
-        <div data-testid="user-scanner-statistics-header">
-          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-statistics-kicker">Statistics</p>
-          <h3 className="text-base font-semibold" data-testid="user-scanner-statistics-title">Scanner Activity & Runtime Metrics</h3>
-        </div>
-
-        <div className="grid grid-cols-12 gap-3" data-testid="user-scanner-run-summary-grid">
-        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-mode-card"><p className="text-xs text-slate-500">Aktif Mode</p><p className="text-lg font-semibold text-orange-400" data-testid="user-scanner-summary-mode-value">{overview?.mode ?? mode}</p></div>
-        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-result-count-card"><p className="text-xs text-slate-500">Toplam Sonuç</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-result-count-value">{overview?.total_results ?? scannerResults.length}</p></div>
-        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-actionable-count-card"><p className="text-xs text-slate-500">Son Run ID</p><p className="text-sm font-semibold" data-testid="user-scanner-summary-actionable-count-value">{overview?.latest_run_id ?? "-"}</p></div>
-        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-pending-count-card"><p className="text-xs text-slate-500">Pending Queue</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-pending-count-value">{overview?.pending_signals ?? "-"}</p></div>
-        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-selected-symbol-count-card"><p className="text-xs text-slate-500">Selected Symbols</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-selected-symbol-count-value">{selectedSymbols.length}</p></div>
-        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-runtime-symbols-card"><p className="text-xs text-slate-500">Symbols Scanned</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-runtime-symbols-value">{runtimeSnapshot?.scanner_perf?.symbols_evaluated ?? 0}</p></div>
-        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-runtime-candidates-card"><p className="text-xs text-slate-500">Candidates</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-runtime-candidates-value">{runtimeSnapshot?.scanner_perf?.decision_scope_symbols ?? 0}</p></div>
-        <div className="col-span-6 md:col-span-3 border border-slate-800 bg-slate-900 p-3" data-testid="user-scanner-summary-runtime-qualified-card"><p className="text-xs text-slate-500">Qualified</p><p className="text-lg font-semibold" data-testid="user-scanner-summary-runtime-qualified-value">{runtimeSnapshot?.tiered_scan?.qualification?.qualified_count ?? 0}</p></div>
-        </div>
-      </section>
 
       {!SIMPLE_SCANNER_V2 && <section className="order-11 col-span-12 space-y-3 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-live-readiness-section">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-scanner-live-readiness-header">
