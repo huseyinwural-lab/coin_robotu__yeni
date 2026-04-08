@@ -25,6 +25,7 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { isPureLiveBlockedPath } from "@/config/pureLiveManifest";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient } from "@/lib/api";
 import { localizeAdminDomToTurkish } from "@/lib/adminTurkishLocale";
@@ -273,6 +274,17 @@ export const PanelLayout = () => {
   }, [isAdmin]);
 
   useEffect(() => {
+    const blocked = isPureLiveBlockedPath(location.pathname, isAdmin);
+    if (!blocked) {
+      return;
+    }
+    const redirectPath = isAdmin ? "/admin/dashboard" : "/user/dashboard";
+    if (location.pathname !== redirectPath) {
+      navigate(redirectPath, { replace: true });
+    }
+  }, [isAdmin, location.pathname, navigate]);
+
+  useEffect(() => {
     if (!isAdmin || typeof window === "undefined") {
       return undefined;
     }
@@ -305,21 +317,39 @@ export const PanelLayout = () => {
   const normalizedSearch = useMemo(() => sidebarSearch.trim().toLocaleLowerCase("tr-TR"), [sidebarSearch]);
 
   const filteredAdminGroups = useMemo(() => {
-    if (!normalizedSearch) return adminOnlyItems;
+    const base = adminOnlyItems
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => !isPureLiveBlockedPath(item.to, true)),
+      }))
+      .filter((group) => group.items.length > 0);
+
+    if (!normalizedSearch) return base;
     return adminOnlyItems
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => item.label.toLocaleLowerCase("tr-TR").includes(normalizedSearch)),
+        items: group.items
+          .filter((item) => !isPureLiveBlockedPath(item.to, true))
+          .filter((item) => item.label.toLocaleLowerCase("tr-TR").includes(normalizedSearch)),
       }))
       .filter((group) => group.items.length > 0);
   }, [normalizedSearch]);
 
   const filteredUserGroups = useMemo(() => {
-    if (!normalizedSearch) return userMenuGroups;
+    const base = userMenuGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => !isPureLiveBlockedPath(item.to, false)),
+      }))
+      .filter((group) => group.items.length > 0);
+
+    if (!normalizedSearch) return base;
     return userMenuGroups
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => item.label.toLocaleLowerCase("tr-TR").includes(normalizedSearch)),
+        items: group.items
+          .filter((item) => !isPureLiveBlockedPath(item.to, false))
+          .filter((item) => item.label.toLocaleLowerCase("tr-TR").includes(normalizedSearch)),
       }))
       .filter((group) => group.items.length > 0);
   }, [normalizedSearch]);
