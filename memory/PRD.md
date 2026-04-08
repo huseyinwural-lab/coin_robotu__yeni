@@ -1,3 +1,20 @@
+## 2026-04-08 — Frontend UI Regression Kapatma (4 Kritik Sayfa) ✅
+
+### Uygulanan kapsam (P0)
+- `UserSignalsPage.jsx`: yükleme sırasında kritik aksiyonlar görünür hale getirildi (`Yenile`, `Compact toggle`), timeout davranışı hızlandırıldı.
+- `UserScannerPage.jsx`: ana aksiyon paneli eklendi (mode/market/symbol input, `Scanner Çalıştır`, `Run + Start Bot`, `Yenile`, `Compact`), sembol inputu ile seçim akışı görünürleştirildi.
+- `AdminUniverseMonitorPage.jsx`: Scanner Engine alanlarında gizli (`hidden`) bloklar açıldı; `Ayarları Kaydet`, `Scanner Çalıştır`, `START BOT` butonları görünür/tıklanabilir hale getirildi.
+- `AdminStrategyAllocationPage.jsx`: load error mesajı object döndüğünde sayfa kırılmasına yol açan render riski giderildi (string-safe hata mesajı).
+
+### Doğrulama
+- Frontend test agent raporu: `/app/test_reports/iteration_33.json`
+  - Frontend başarı oranı: **%100**
+  - Test edilen sayfalar: `/user/signals`, `/user/scanner`, `/admin/universe-monitor`, `/admin/strategy/allocation`
+  - Kritik UI bug / integration issue: **0**
+
+### Not
+- Preview ortamında altyapı gecikme banner’ı görülebilir; bu durum infra kaynaklı ve fonksiyonel akışı bloklamıyor.
+
 ## 2026-04-08 — Scanner/Signal/Trade Strict Decoupling + Zorunlu Onay Kapısı ✅
 
 ### Uygulanan P0 kapsamı
