@@ -1,3 +1,39 @@
+## 2026-04-08 — GO-LIVE P0 Hardening (4/4) ✅
+
+### P0-1 — Scanner timeout/latency dayanıklılığı
+- User Scanner Engine için yeni async akış eklendi:
+  - `POST /api/user/scanner-engine/run-async`
+  - `GET /api/user/scanner-engine/run-async/{job_id}`
+- Frontend `UserScannerPage` scanner engine run akışı sync çağrıdan async queue+poll modeline geçirildi (request timeout riski düşürüldü).
+- Kısa pencere cache reuse eklendi (`recent-run reuse`) ve gereksiz tekrar run çağrıları azaltıldı.
+
+### P0-2 — Scanner idempotency / yarış durumu koruması
+- Scanner Engine run lock eklendi (aynı kullanıcı için eşzamanlı run önleme).
+- Eşzamanlı ikinci çağrı artık deterministik `already_running` döndürüyor.
+- Job status cache + TTL ile run yaşam döngüsü (`queued/completed/failed`) izlenebilir hale getirildi.
+
+### P0-3 — Auth refresh token mekanizması
+- Auth response modeli refresh token alanı ile genişletildi.
+- Login ve step-up sonrası refresh token üretimi eklendi.
+- Yeni endpoint: `POST /api/auth/refresh` (refresh rotation + yeni access token üretimi).
+- Frontend API katmanına 401 sonrası refresh deneme akışı eklendi (başarılıysa isteği otomatik retry).
+
+### P0-4 — Ölçeklenebilirlik (DB pool ayarlanabilirliği)
+- DB engine pool parametreleri environment üzerinden ayarlanabilir hale getirildi:
+  - `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT`, `DB_POOL_RECYCLE_SECONDS`
+  - `DB_POOLER_TIMEOUT`, `DB_POOLER_RECYCLE_SECONDS`
+- `backend/.env` bu parametrelerle güncellendi.
+
+### Ek zorlama kuralı (ürün gereksinimi uyumu)
+- Scanner Engine config save/load tarafında `market_scope` zorunlu `all/all` ve `scan_limit` min `2000` enforce edildi.
+
+### Doğrulama
+- Backend doğrulama (deep test): **PASS 8/8**
+  - refresh token flow, scanner-engine async/idempotency, pool regresyonu
+- Frontend kapsamlı doğrulama (UI): **PASS 11/12 (%91.7)**
+  - Kritik akışlar PASS, risk seviyesi: **LOW**
+  - Tek minor not: scanner async status element visibility kısa pencerede kısmi
+
 ## 2026-04-08 — Frontend UI Regression Kapatma (4 Kritik Sayfa) ✅
 
 ### Uygulanan kapsam (P0)
