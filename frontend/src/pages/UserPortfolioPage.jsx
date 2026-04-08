@@ -38,7 +38,7 @@ export const UserPortfolioPage = () => {
     [performance, portfolio],
   );
 
-  const hideMockWallet = String(portfolio?.execution_mode || "").toLowerCase() === "mocked";
+  const hideMockWallet = false;
 
   if (isLoading) {
     return <LoadingSkeleton rows={5} testId="user-portfolio-loading-skeleton" />;
@@ -68,7 +68,7 @@ export const UserPortfolioPage = () => {
 
         {hideMockWallet && (
           <p className="col-span-12 text-xs text-amber-300" data-testid="user-portfolio-mock-wallet-hidden-note">
-            Live cüzdan bağlı değil. Test/paper bakiye metrikleri gizlendi.
+            Pure Live aktif.
           </p>
         )}
         <div className="col-span-12 flex flex-wrap gap-2" data-testid="user-portfolio-tab-group">

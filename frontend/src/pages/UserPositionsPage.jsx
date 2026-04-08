@@ -98,7 +98,7 @@ export const UserPositionsPage = () => {
               <th className="px-3 py-2">Current</th>
               <th className="px-3 py-2">Unrealized PnL</th>
               <th className="px-3 py-2">Leverage</th>
-              <th className="px-3 py-2">Execution Mode</th>
+              <th className="px-3 py-2">Live Status</th>
               <th className="px-3 py-2">Strategy</th>
               <th className="px-3 py-2">Cluster</th>
               <th className="px-3 py-2">Recommended Action</th>
@@ -117,8 +117,8 @@ export const UserPositionsPage = () => {
                 <td className="px-3 py-2" data-testid={`user-positions-unrealized-${row.position_id}`}>{row.unrealized_pnl}</td>
                 <td className="px-3 py-2" data-testid={`user-positions-leverage-${row.position_id}`}>{row.leverage}</td>
                 <td className="px-3 py-2" data-testid={`user-positions-execution-mode-${row.position_id}`}>
-                  <span className="inline-flex rounded-full border border-cyan-500/60 bg-cyan-500/15 px-2 py-0.5 text-xs text-cyan-100" data-testid={`user-positions-execution-mode-badge-${row.position_id}`}>
-                    {String(row.execution_mode || "mocked").toLowerCase()}
+                  <span className="inline-flex rounded-full border border-emerald-500/60 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-100" data-testid={`user-positions-execution-mode-badge-${row.position_id}`}>
+                    live
                   </span>
                 </td>
                 <td className="px-3 py-2" data-testid={`user-positions-strategy-${row.position_id}`}>{row.strategy_id || "-"}</td>

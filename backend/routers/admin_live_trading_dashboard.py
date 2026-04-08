@@ -246,7 +246,7 @@ def admin_live_trading_action_audit_detail(
 
 
 @router.post("/control-layer/execution-mode")
-def admin_live_trading_switch_execution_mode(
+def admin_live_trading_execution_mode_removed(
     payload: ExecutionModeSwitchRequest,
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),

@@ -37,8 +37,6 @@ import { BacktestInsightsPage } from "@/pages/BacktestInsightsPage";
 import { BotProfilesPage } from "@/pages/BotProfilesPage";
 import { CorrelationMatrixPage } from "@/pages/CorrelationMatrixPage";
 import { ExecutionPoliciesPage } from "@/pages/ExecutionPoliciesPage";
-import { ExecutionAnalyticsPage } from "@/pages/ExecutionAnalyticsPage";
-import { ExecutionStatesPage } from "@/pages/ExecutionStatesPage";
 import { ExecutionIdempotencyPage } from "@/pages/ExecutionIdempotencyPage";
 import { ExecutionTracePage } from "@/pages/ExecutionTracePage";
 import { AdminExecutionAlertsPage } from "@/pages/AdminExecutionAlertsPage";
@@ -48,7 +46,6 @@ import { HardeningChecklistPage } from "@/pages/HardeningChecklistPage";
 import { LandingPage } from "@/pages/LandingPage";
 import { MarketUniversePage } from "@/pages/MarketUniversePage";
 import { MonitoringPage } from "@/pages/MonitoringPage";
-import { Phase4LiveControlPage } from "@/pages/Phase4LiveControlPage";
 import { RiskPoliciesPage } from "@/pages/RiskPoliciesPage";
 import { StateRebuildLogsPage } from "@/pages/StateRebuildLogsPage";
 import { StrategyTemplatesPage } from "@/pages/StrategyTemplatesPage";
@@ -84,7 +81,6 @@ import { AdminStrategyIntelligencePage } from "@/pages/AdminStrategyIntelligence
 import { AdminCrossDashboardConsistencyPage } from "@/pages/AdminCrossDashboardConsistencyPage";
 import { AdminCanonicalStrategyRegistryPage } from "@/pages/AdminCanonicalStrategyRegistryPage";
 import { AdminLearningPanelPage } from "@/pages/AdminLearningPanelPage";
-import { AdminLearningImpactSimulatorPage } from "@/pages/AdminLearningImpactSimulatorPage";
 import { AdminLiveTradingDashboardPage } from "@/pages/AdminLiveTradingDashboardPage";
 import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
 import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
@@ -203,7 +199,7 @@ function App() {
             <Route path="runtime/quarantine" element={<AdminRuntimeQuarantinePage />} />
             <Route path="runtime/recovery" element={<AdminRuntimeRecoveryPage />} />
             <Route path="market-universe" element={<MarketUniversePage />} />
-            <Route path="execution-policies" element={<ExecutionPoliciesPage />} />
+            <Route path="execution-policies" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
             <Route path="execution-readiness" element={<AdminExecutionReadinessPage />} />
             <Route path="execution/operator-center" element={<AdminExecutionOperatorCenterPage />} />
@@ -223,26 +219,26 @@ function App() {
             <Route path="strategy/intelligence" element={<AdminStrategyIntelligencePage />} />
             <Route path="strategy/canonical-registry" element={<AdminCanonicalStrategyRegistryPage />} />
             <Route path="learning-panel" element={<AdminLearningPanelPage />} />
-            <Route path="learning-impact-simulator" element={<AdminLearningImpactSimulatorPage />} />
+            <Route path="learning-impact-simulator" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="universe-monitor" element={<AdminUniverseMonitorPage />} />
             <Route path="freshness-heatmap" element={<AdminFreshnessHeatmapPage />} />
             <Route path="exposure-groups" element={<ExposureGroupsPage />} />
             <Route path="correlation-matrix" element={<CorrelationMatrixPage />} />
-            <Route path="strategy/execution-state-machine" element={<ExecutionStatesPage />} />
+            <Route path="strategy/execution-state-machine" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="hardening-checklist" element={<HardeningChecklistPage />} />
             <Route path="failed-events" element={<FailedEventsPage />} />
             <Route path="state-rebuild" element={<StateRebuildLogsPage />} />
-            <Route path="execution/states" element={<ExecutionStatesPage />} />
-            <Route path="execution/analytics" element={<ExecutionAnalyticsPage />} />
+            <Route path="execution/states" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="execution/analytics" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="execution/failures" element={<FailedEventsPage />} />
             <Route path="execution/idempotency" element={<ExecutionIdempotencyPage />} />
             <Route path="execution/trace" element={<ExecutionTracePage />} />
             <Route path="execution/alerts" element={<AdminExecutionAlertsPage />} />
             <Route path="execution/rebuild" element={<StateRebuildLogsPage />} />
             <Route path="backtest-cards" element={<BacktestCardsPage />} />
-            <Route path="monitoring" element={<MonitoringPage />} />
-            <Route path="system-status" element={<MonitoringPage />} />
-            <Route path="phase4-live" element={<Phase4LiveControlPage />} />
+            <Route path="monitoring" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="system-status" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="phase4-live" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="audit-logs" element={<AuditLogsPage />} />
             <Route path="log" element={<Navigate to="/admin/audit-logs" replace />} />
             <Route path="logs" element={<Navigate to="/admin/audit-logs" replace />} />

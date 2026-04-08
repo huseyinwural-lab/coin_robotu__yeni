@@ -259,7 +259,7 @@ export const UserTradePage = () => {
           // stale cancel hatası preview akışını bloklamasın
         }
       }
-      const hasExecutionModeSwitch = (validation?.violations || []).some((item) => item.code === "execution_mode_switch_required");
+      const hasExecutionModeSwitch = false;
       const resolvedOrderType = (() => {
         const currentType = String(form.order_type || "market").toUpperCase();
         if (!hasExecutionModeSwitch) {
@@ -286,7 +286,7 @@ export const UserTradePage = () => {
         take_profit_price: form.take_profit_price ? Number(form.take_profit_price) : undefined,
         take_profit_mode: form.take_profit_mode,
         stop_loss_mode: form.stop_loss_mode,
-        execution_mode: "manual",
+        execution_mode: "LIVE",
         exchange_connection_id: selectedConnectionId || null,
       };
       const data = await postJsonWithSession("/v1/user/trading/preview", payload);
@@ -335,8 +335,7 @@ export const UserTradePage = () => {
         preview_hash: previewResult.preview.preview_hash,
       });
 
-      const executionMode =
-        submitRes?.execution_mode || previewResult?.preview?.execution_mode || "mocked";
+      const executionMode = "LIVE";
 
       setExecutionResult({
         status: "submitted",
@@ -358,7 +357,7 @@ export const UserTradePage = () => {
 
       setExecutionResult({
         status: "failed",
-        execution_mode: previewResult?.preview?.execution_mode || validationResult?.execution_mode || "mocked",
+        execution_mode: "LIVE",
         violations,
         explain: validationResult?.explain || [],
         error_text: statusCode === 423 ? "EXECUTION_BLOCKED_BY_READINESS" : parseErrorText(error),
@@ -668,7 +667,7 @@ export const UserTradePage = () => {
             {executionResult.intent_id && <p className="mt-1 text-xs" data-testid="user-trade-result-intent-id">intent_id: {executionResult.intent_id}</p>}
             {executionResult.queue_state && <p className="mt-1 text-xs" data-testid="user-trade-result-queue-state">queue_state: {executionResult.queue_state}</p>}
             <p className="mt-1 inline-flex rounded-full border border-current px-2 py-0.5 text-xs" data-testid="user-trade-result-execution-mode">
-              execution_mode: {executionResult.execution_mode}
+              live_status: LIVE
             </p>
             {executionResult.error_text && (
               <p className="mt-2 text-xs" data-testid="user-trade-result-error-text">{executionResult.error_text}</p>

@@ -610,20 +610,5 @@ def verify_kill_switch_rollback_endpoint(
 
 
 @router.get("/execution/mode")
-def get_execution_mode(current_user: User = Depends(require_admin)):
-    mode = "live"
-    return {
-        "status": "ok",
-        "requested_by": current_user.id,
-        "mode": mode,
-        "compatibility_alias": "LIVE",
-        "compatibility_notice": None,
-        "flags": {
-            "LIVE_TRADING_ENABLED": str(os.environ.get("LIVE_TRADING_ENABLED") or "false"),
-            "LIVE_ROUTE_APPROVED": str(os.environ.get("LIVE_ROUTE_APPROVED") or "false"),
-            "CANARY_MODE": str(os.environ.get("CANARY_MODE") or "false"),
-            "CANARY_MAX_NOTIONAL": str(os.environ.get("CANARY_MAX_NOTIONAL") or "100"),
-            "CANARY_ALLOWED_STRATEGIES": str(os.environ.get("CANARY_ALLOWED_STRATEGIES") or "ema_rsi"),
-            "CANARY_ALLOWED_USER_IDS": str(os.environ.get("CANARY_ALLOWED_USER_IDS") or ""),
-        },
-    }
+def execution_mode_removed_endpoint(current_user: User = Depends(require_admin)):
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "execution mode endpoint kaldırıldı"})
