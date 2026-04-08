@@ -1,0 +1,439 @@
+{
+  "audit_timestamp": "2026-04-08T16:49:57.629349",
+  "overall_risk_level": "HIGH",
+  "risk_summary": {
+    "high_risk_areas": 1,
+    "medium_risk_areas": 1,
+    "low_risk_areas": 3
+  },
+  "detailed_findings": {
+    "1_advisory_mode_rules": {
+      "blocked_rules_found": [],
+      "non_tradeable_rules": [],
+      "active_affecting_rules": [],
+      "risk_level": "LOW"
+    },
+    "2_mock_static_usage": {
+      "scanner_data_sources": [],
+      "mock_endpoints_detected": [],
+      "real_exchange_evidence": [],
+      "static_json_usage": [
+        {
+          "endpoint": "/api/market/ticker",
+          "issue": "Zero or invalid price suggests static/mock data"
+        },
+        {
+          "endpoint": "/api/user/scanner-engine/run",
+          "issue": "All zero scores suggest static/mock data"
+        }
+      ],
+      "risk_level": "HIGH",
+      "scanner_config": {
+        "exchange": "binance",
+        "include_spot": true,
+        "include_futures": true,
+        "market_scope": {
+          "spot_mode": "all",
+          "futures_mode": "all"
+        },
+        "signal_mode": "manual",
+        "auto_interval_minutes": 3,
+        "scan_limit": 2000,
+        "top_n": 20,
+        "manual_symbols": [
+          "BTCUSDT",
+          "ETHUSDT"
+        ],
+        "indicator_timeframe": "1h",
+        "execution_timeframe": "15m",
+        "weights": {
+          "trend": 10,
+          "volume": 50,
+          "momentum": 100,
+          "bollinger": 1,
+          "max_score": 161
+        },
+        "decision_boxes": {
+          "bc01": {
+            "ema_period": 20,
+            "stddev_multiplier": 1.6
+          },
+          "bc02": {
+            "y1_period": 120,
+            "y2_period": 210,
+            "y2y_period": 90,
+            "y3_period": 5
+          },
+          "bc03": {
+            "z1_ma_period": 21,
+            "z1_ref_bars": 3,
+            "z2_ma_period": 3,
+            "hlf_period": 25,
+            "hhv_h_period": 20,
+            "z4_threshold": 0.0
+          },
+          "bc04": {
+            "stofk_k_period": 14,
+            "stofk_d_period": 6,
+            "rsi_period": 14,
+            "mfi_period": 14,
+            "cci_period": 14,
+            "willr_period": 14,
+            "mo_period": 14,
+            "ult_fast": 7,
+            "ult_mid": 14,
+            "ult_slow": 28,
+            "tke_threshold": 79.0
+          }
+        },
+        "updated_at": "2026-04-08T16:28:53.485993+00:00",
+        "updated_by": "dab99b55-794f-4158-a268-a94daaea821a"
+      }
+    },
+    "3_scanner_idempotency": {
+      "idempotency_tests": [
+        {
+          "test": "scanner_engine_multiple_runs",
+          "results": [
+            {
+              "run": 1,
+              "job_id": null,
+              "status": "completed_cached",
+              "timestamp": "2026-04-08T16:49:28.756814"
+            },
+            {
+              "run": 2,
+              "job_id": null,
+              "status": "completed_cached",
+              "timestamp": "2026-04-08T16:49:30.568840"
+            },
+            {
+              "run": 3,
+              "job_id": null,
+              "status": "completed_cached",
+              "timestamp": "2026-04-08T16:49:32.383775"
+            }
+          ],
+          "analysis": "Check if multiple runs with same parameters produce consistent behavior"
+        },
+        {
+          "test": "concurrent_scanner_calls",
+          "results": [
+            {
+              "status_code": 200,
+              "response": {
+                "status": "completed_cached",
+                "job_id": null,
+                "run_id": "8f49ce4e-f6c2-4ca8-ae48-dfd91d7b2834",
+                "generated_at": "2026-04-08T16:49:16.357806+00:00",
+                "summary": {
+                  "exchange": "binance",
+                  "indicator_timeframe": "1h",
+                  "execution_timeframe": "15m",
+                  "market_selection": {
+                    "spot": true,
+                    "futures": true,
+                    "spot_mode": "all",
+                    "futures_mode": "all"
+                  },
+                  "candidate_count": 2,
+                  "scored_count": 2,
+                  "error_count": 0,
+                  "strong_long_count": 0,
+                  "strong_short_count": 0,
+                  "long_signal_count": 0,
+                  "short_signal_count": 0,
+                  "top_n": 20,
+                  "max_score": 161
+                }
+              },
+              "timestamp": "2026-04-08T16:49:34.201813"
+            },
+            {
+              "status_code": 200,
+              "response": {
+                "status": "completed_cached",
+                "job_id": null,
+                "run_id": "8f49ce4e-f6c2-4ca8-ae48-dfd91d7b2834",
+                "generated_at": "2026-04-08T16:49:16.357806+00:00",
+                "summary": {
+                  "exchange": "binance",
+                  "indicator_timeframe": "1h",
+                  "execution_timeframe": "15m",
+                  "market_selection": {
+                    "spot": true,
+                    "futures": true,
+                    "spot_mode": "all",
+                    "futures_mode": "all"
+                  },
+                  "candidate_count": 2,
+                  "scored_count": 2,
+                  "error_count": 0,
+                  "strong_long_count": 0,
+                  "strong_short_count": 0,
+                  "long_signal_count": 0,
+                  "short_signal_count": 0,
+                  "top_n": 20,
+                  "max_score": 161
+                }
+              },
+              "timestamp": "2026-04-08T16:49:35.108580"
+            },
+            {
+              "status_code": 200,
+              "response": {
+                "status": "completed_cached",
+                "job_id": null,
+                "run_id": "8f49ce4e-f6c2-4ca8-ae48-dfd91d7b2834",
+                "generated_at": "2026-04-08T16:49:16.357806+00:00",
+                "summary": {
+                  "exchange": "binance",
+                  "indicator_timeframe": "1h",
+                  "execution_timeframe": "15m",
+                  "market_selection": {
+                    "spot": true,
+                    "futures": true,
+                    "spot_mode": "all",
+                    "futures_mode": "all"
+                  },
+                  "candidate_count": 2,
+                  "scored_count": 2,
+                  "error_count": 0,
+                  "strong_long_count": 0,
+                  "strong_short_count": 0,
+                  "long_signal_count": 0,
+                  "short_signal_count": 0,
+                  "top_n": 20,
+                  "max_score": 161
+                }
+              },
+              "timestamp": "2026-04-08T16:49:35.020948"
+            },
+            {
+              "status_code": 200,
+              "response": {
+                "status": "completed_cached",
+                "job_id": null,
+                "run_id": "8f49ce4e-f6c2-4ca8-ae48-dfd91d7b2834",
+                "generated_at": "2026-04-08T16:49:16.357806+00:00",
+                "summary": {
+                  "exchange": "binance",
+                  "indicator_timeframe": "1h",
+                  "execution_timeframe": "15m",
+                  "market_selection": {
+                    "spot": true,
+                    "futures": true,
+                    "spot_mode": "all",
+                    "futures_mode": "all"
+                  },
+                  "candidate_count": 2,
+                  "scored_count": 2,
+                  "error_count": 0,
+                  "strong_long_count": 0,
+                  "strong_short_count": 0,
+                  "long_signal_count": 0,
+                  "short_signal_count": 0,
+                  "top_n": 20,
+                  "max_score": 161
+                }
+              },
+              "timestamp": "2026-04-08T16:49:35.110147"
+            },
+            {
+              "status_code": 200,
+              "response": {
+                "status": "completed_cached",
+                "job_id": null,
+                "run_id": "8f49ce4e-f6c2-4ca8-ae48-dfd91d7b2834",
+                "generated_at": "2026-04-08T16:49:16.357806+00:00",
+                "summary": {
+                  "exchange": "binance",
+                  "indicator_timeframe": "1h",
+                  "execution_timeframe": "15m",
+                  "market_selection": {
+                    "spot": true,
+                    "futures": true,
+                    "spot_mode": "all",
+                    "futures_mode": "all"
+                  },
+                  "candidate_count": 2,
+                  "scored_count": 2,
+                  "error_count": 0,
+                  "strong_long_count": 0,
+                  "strong_short_count": 0,
+                  "long_signal_count": 0,
+                  "short_signal_count": 0,
+                  "top_n": 20,
+                  "max_score": 161
+                }
+              },
+              "timestamp": "2026-04-08T16:49:35.109498"
+            }
+          ],
+          "analysis": "Check system behavior under concurrent scanner requests"
+        }
+      ],
+      "timeout_scenarios": [
+        {
+          "test": "short_timeout_simulation",
+          "status_code": 200,
+          "result": "Request completed within timeout"
+        }
+      ],
+      "state_consistency_checks": [],
+      "crash_recovery_evidence": [],
+      "risk_level": "LOW"
+    },
+    "4_resource_consumption": {
+      "current_metrics": {
+        "cpu_usage_percent": 3.0,
+        "memory_total_gb": 31.29,
+        "memory_used_gb": 13.53,
+        "memory_usage_percent": 43.2,
+        "disk_total_gb": 106.0,
+        "disk_used_gb": 16.9,
+        "disk_usage_percent": 15.94,
+        "api_response_times": {
+          "/api/health": {
+            "response_time_ms": 157.36,
+            "status_code": 200,
+            "success": true
+          },
+          "/api/market/ticker?symbol=BTCUSDT": {
+            "response_time_ms": 1253.56,
+            "status_code": 200,
+            "success": true
+          },
+          "/api/user/signals": {
+            "response_time_ms": 1771.57,
+            "status_code": 200,
+            "success": true
+          },
+          "/api/user/scanner-engine/config": {
+            "response_time_ms": 707.38,
+            "status_code": 200,
+            "success": true
+          }
+        }
+      },
+      "pool_capacity_analysis": {},
+      "load_test_simulation": {
+        "concurrent_requests": 10,
+        "successful_requests": 10,
+        "success_rate": 1.0,
+        "average_response_time_ms": 331.73,
+        "results": [
+          {
+            "response_time_ms": 187.44,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "response_time_ms": 292.69,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "response_time_ms": 178.29,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "response_time_ms": 178.39,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "response_time_ms": 178.94,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "response_time_ms": 469.41,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "response_time_ms": 459.74,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "response_time_ms": 439.17,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "response_time_ms": 433.29,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "response_time_ms": 499.89,
+            "status_code": 200,
+            "success": true
+          }
+        ]
+      },
+      "10x_load_risk_assessment": {
+        "current_avg_response_ms": 331.73,
+        "estimated_10x_response_ms": 995.18,
+        "risk_factors": [],
+        "risk_factor_count": 0
+      },
+      "risk_level": "LOW"
+    },
+    "5_auth_persistence": {
+      "jwt_mechanism_analysis": {
+        "token_structure": "Valid JWT structure (3 parts)",
+        "header": {
+          "alg": "HS256",
+          "typ": "JWT"
+        },
+        "payload_claims": [
+          "sub",
+          "role",
+          "email",
+          "exp",
+          "mfa_verified",
+          "device_id",
+          "mfa_verified_at",
+          "ip_hash",
+          "device_fingerprint",
+          "step_up_at",
+          "step_up_scope"
+        ],
+        "has_expiration": true,
+        "has_issued_at": false,
+        "token_length": 591
+      },
+      "cookie_persistence_test": {
+        "cookies_set": true,
+        "cookie_names": [
+          "device_id"
+        ],
+        "cookie_count": 1,
+        "cookie_auth_works": false
+      },
+      "refresh_token_flow": {
+        "refresh_endpoint_exists": true,
+        "refresh_status_code": 422,
+        "refresh_response": "{\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\"],\"msg\":\"Field required\",\"input\":null,\"url\":\"https://errors.pydantic.dev/2.12/v/missing\"}]}"
+      },
+      "session_management": {
+        "concurrent_sessions_allowed": true,
+        "session1_status": 200,
+        "session2_status": 200
+      },
+      "cdn_waf_independence": {
+        "auth_works_with_different_headers": true,
+        "bypass_status_code": 200,
+        "backend_direct_access": true
+      },
+      "risk_level": "MEDIUM",
+      "risk_factors": [
+        "Unlimited concurrent sessions allowed"
+      ]
+    }
+  }
+}
