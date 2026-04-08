@@ -1,0 +1,117 @@
+{
+  "overall_decision": "NO-GO",
+  "overall_risk": "HIGH",
+  "risk_counts": {
+    "critical": 0,
+    "high": 2,
+    "medium": 1,
+    "low": 2
+  },
+  "area_assessments": {
+    "advisory_mode": {
+      "risk": "LOW",
+      "go_no_go": "GO - No blocking rules affecting trading"
+    },
+    "mock_static_json": {
+      "risk": "HIGH",
+      "go_no_go": "NO-GO - Mock/static data detected, real exchange integration failing"
+    },
+    "race_idempotency": {
+      "risk": "HIGH",
+      "go_no_go": "NO-GO - Race conditions causing errors"
+    },
+    "scalability": {
+      "risk": "LOW",
+      "go_no_go": "GO - System can handle increased load"
+    },
+    "auth_persistence": {
+      "risk": "MEDIUM",
+      "go_no_go": "CAUTION - Some auth concerns"
+    }
+  },
+  "detailed_results": {
+    "advisory_mode": {
+      "status": "PASS",
+      "violations_count": 0,
+      "blocking_violations": [],
+      "advisory_mode": false,
+      "execution_mode": "live",
+      "evidence": "Trading validation: 0 violations, 0 blocking"
+    },
+    "mock_static_json": {
+      "status": "FAIL",
+      "real_data_evidence": [],
+      "mock_evidence": [
+        "Market ticker: BTCUSDT price=0 (likely mocked)",
+        "Scanner analysis: HTTP 404"
+      ],
+      "real_count": 0,
+      "mock_count": 2
+    },
+    "race_idempotency": {
+      "status": "FAIL",
+      "concurrent_calls": 3,
+      "success_count": 3,
+      "conflict_count": 0,
+      "error_count": 0,
+      "strategy_allocation_ok": false,
+      "evidence": "Concurrent calls: 3 success, 0 conflicts, 0 errors"
+    },
+    "scalability": {
+      "status": "PASS",
+      "load_test_success_rate": "10/10",
+      "avg_response_time": 0.153,
+      "symbol_count": 0,
+      "risk_factors": [],
+      "metrics": {
+        "status": "ok",
+        "service": "backend-api",
+        "checks": {
+          "process": {
+            "status": "up",
+            "uptime_seconds": 439
+          },
+          "database": {
+            "configured": true,
+            "url_valid": true,
+            "initialized": true,
+            "reachable": true,
+            "last_error": null,
+            "last_checked_at": "2026-04-08T21:09:23.180110+00:00",
+            "database_url": "postgresql+psycopg2://postgres.wpaejjyirhblphihxnli:iY9yPPYAe4dLU3+@aws-1-eu-west-1.pooler.supabase.com:6543/postgres?options=-csearch_path=public"
+          },
+          "redis": {
+            "status": "ready",
+            "reason": null
+          },
+          "startup": {
+            "database_url_valid": true,
+            "migration_ok": true,
+            "database_ready": true,
+            "seed_admin_ok": false,
+            "state_rebuild_ok": true,
+            "pipeline_runtime_ok": false,
+            "background_loops_started": false,
+            "preview_smoke_gate": {
+              "status": "pending",
+              "mode": "deploy_http_gate",
+              "checked_at": "2026-04-08T21:09:49.540372+00:00"
+            },
+            "last_error": ""
+          }
+        },
+        "timestamp": "2026-04-08T21:16:32.716019+00:00"
+      }
+    },
+    "auth_persistence": {
+      "status": "PARTIAL",
+      "session_valid": true,
+      "refresh_available": false,
+      "concurrent_sessions_ok": true,
+      "external_access_ok": true,
+      "risk_factors": [
+        "Refresh token mechanism not available"
+      ]
+    }
+  }
+}

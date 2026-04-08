@@ -1,0 +1,72 @@
+{
+  "timestamp": 1775683095.2039413,
+  "market_evidence": [
+    "MOCK: BTCUSDT price=0",
+    "MOCK: ETHUSDT price=0",
+    "MOCK: ADAUSDT price=0"
+  ],
+  "scanner_evidence": [
+    "WORKING: Scanner config endpoint accessible",
+    "WORKING: Scanner run successful"
+  ],
+  "strategy_evidence": [
+    "BROKEN: Strategy allocation HTTP 401",
+    "Error details: {\"detail\":\"session_device_missing\"}"
+  ],
+  "concurrent_evidence": [
+    "Concurrent scanner calls: 5 success, 0 conflicts, 0 errors",
+    "Total calls: 5"
+  ],
+  "concurrent_results": [
+    {
+      "call_id": 0,
+      "status": 200,
+      "duration": 11.3,
+      "response": {
+        "status": "already_running",
+        "job_id": "5c45ca15-01bf-497c-bb13-a1510e8bab2b",
+        "started_at": "2026-04-08T21:16:30.600440+00:00"
+      }
+    },
+    {
+      "call_id": 1,
+      "status": 200,
+      "duration": 11.29,
+      "response": {
+        "status": "already_running",
+        "job_id": "5c45ca15-01bf-497c-bb13-a1510e8bab2b",
+        "started_at": "2026-04-08T21:16:30.600440+00:00"
+      }
+    },
+    {
+      "call_id": 2,
+      "status": 200,
+      "duration": 1.25,
+      "response": {
+        "status": "already_running",
+        "job_id": "5c45ca15-01bf-497c-bb13-a1510e8bab2b",
+        "started_at": "2026-04-08T21:16:30.600440+00:00"
+      }
+    },
+    {
+      "call_id": 3,
+      "status": 200,
+      "duration": 1.42,
+      "response": {
+        "status": "already_running",
+        "job_id": "5c45ca15-01bf-497c-bb13-a1510e8bab2b",
+        "started_at": "2026-04-08T21:16:30.600440+00:00"
+      }
+    },
+    {
+      "call_id": 4,
+      "status": 200,
+      "duration": 11.57,
+      "response": {
+        "status": "already_running",
+        "job_id": "5c45ca15-01bf-497c-bb13-a1510e8bab2b",
+        "started_at": "2026-04-08T21:16:30.600440+00:00"
+      }
+    }
+  ]
+}
