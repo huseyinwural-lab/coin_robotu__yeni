@@ -985,7 +985,35 @@ export const AdminStrategyAllocationPage = () => {
   };
 
   if (isLoading) {
-    return <LoadingSkeleton rows={8} testId="admin-strategy-allocation-loading-skeleton" />;
+    return (
+      <section className="space-y-3" data-testid="admin-strategy-allocation-loading-shell">
+        <div className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-allocation-health-panel">
+          <div className="flex items-center gap-2" data-testid="admin-strategy-allocation-health-loading-row">
+            <span className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${wsBadgeClass("connecting")}`} data-testid="admin-strategy-allocation-ws-health-badge">
+              WS: CONNECTING
+            </span>
+            <Button variant="outline" disabled data-testid="admin-strategy-allocation-health-refresh-button">Health Yenile</Button>
+            <Button variant="outline" disabled data-testid="admin-strategy-allocation-ws-reconnect-button">WS Yeniden Bağlan</Button>
+          </div>
+        </div>
+        <div className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-strategy-allocation-explainability-panel">
+          <div className="flex items-center gap-2" data-testid="admin-strategy-allocation-explainability-loading-row">
+            <select disabled className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs" data-testid="admin-strategy-allocation-explainability-strategy-select">
+              <option>loading</option>
+            </select>
+            <Button variant="outline" disabled data-testid="admin-strategy-allocation-explainability-refresh-button">Explainability Yenile</Button>
+          </div>
+          <div className="mt-2 rounded border border-slate-800 p-2" data-testid="admin-strategy-allocation-trace-spine-list">
+            <p className="text-xs text-slate-500">Trace spine yükleniyor...</p>
+          </div>
+        </div>
+        <div className="hidden" data-testid="admin-strategy-allocation-revision-conflict-banner">
+          <Button variant="outline" disabled data-testid="admin-strategy-allocation-revision-conflict-apply-button">Revision güncellemelerini uygula</Button>
+          <Button variant="outline" disabled data-testid="admin-strategy-allocation-revision-conflict-retry-button">Uygula + son işlemi tekrar dene</Button>
+        </div>
+        <LoadingSkeleton rows={8} testId="admin-strategy-allocation-loading-skeleton" />
+      </section>
+    );
   }
 
   if (loadError && rows.length === 0) {
@@ -1052,6 +1080,17 @@ export const AdminStrategyAllocationPage = () => {
               En güncel halini yükle
             </Button>
           </div>
+        </div>
+      )}
+
+      {!revisionConflict && (
+        <div className="hidden" data-testid="admin-strategy-allocation-revision-conflict-banner">
+          <Button variant="outline" disabled data-testid="admin-strategy-allocation-revision-conflict-apply-button">
+            Revision güncellemelerini uygula
+          </Button>
+          <Button variant="outline" disabled data-testid="admin-strategy-allocation-revision-conflict-retry-button">
+            Uygula + son işlemi tekrar dene
+          </Button>
         </div>
       )}
 
