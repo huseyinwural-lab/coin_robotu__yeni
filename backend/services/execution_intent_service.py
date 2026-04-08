@@ -16,7 +16,6 @@ from services.audit_service import create_audit_log
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
 from services.execution_pipeline_orchestrator import ExecutionPipelineViolation, run_execution_pipeline
-from services.execution_mode_control_service import enforce_execution_mode_for_intent
 from services.execution_readiness_service import enforce_execution_guard_or_raise, get_exchange_readiness, validate_order_precheck
 from services.execution_safety_service import enforce_execution_open_allowed_or_raise
 from services.commercial_controls_enforcement_service import enforce_commercial_control_or_raise
@@ -1556,14 +1555,12 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
             db.refresh(intent)
             raise ValueError(f"order_validation_failed:{first_failure_code}")
 
-    enforce_execution_mode_for_intent(
-        db,
-        redis_client,
-        intent,
-        actor_user_id=user_id,
-        actor_role="USER",
-        source="execution_intent_service_submit",
-    )
+    normalized_payload = dict(intent.normalized_order_payload or {})
+    normalized_payload["execution_mode_applied"] = "LIVE"
+    normalized_payload["execution_mode_requested"] = "LIVE"
+    normalized_payload["execution_mode_enforcement"] = "pure_live_forced"
+    intent.normalized_order_payload = normalized_payload
+    intent.queue_mode = "LIVE"
 
     intent.status = "SUBMITTED"
     intent.submitted_at = datetime.now(timezone.utc)

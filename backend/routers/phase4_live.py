@@ -49,7 +49,6 @@ from schemas import (
     LiveGateWizardProgressUpdateRequest,
 )
 from services.audit_service import create_audit_log
-from services.execution_mode_control_service import get_execution_mode, normalize_execution_mode, switch_execution_mode
 from services.live_mode_service import (
     adapter,
     apply_config_update,
@@ -1080,63 +1079,7 @@ def admin_production_gate_mode_transition(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    requested_mode = str(request.target_mode or "").strip().upper()
-    target_mode = normalize_execution_mode(requested_mode)
-    if target_mode is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_mode")
-
-    expected_phrase = MODE_TRANSITION_PHRASES[target_mode]
-    if str(request.confirmation_phrase or "").strip().upper() != expected_phrase:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "invalid_confirmation_phrase", "expected_phrase": expected_phrase},
-        )
-
-    previous_mode = get_execution_mode(db, redis_client)
-    if target_mode == "LIVE":
-        enforce_production_gate_or_raise(
-            db,
-            actor_user_id=current_admin.id,
-            actor_role=current_admin.role.value,
-            action_type="production_gate_mode_transition",
-            reason_text=request.reason_text,
-        )
-
-    try:
-        switch_payload = switch_execution_mode(
-            db,
-            redis_client,
-            mode=target_mode,
-            reason=request.reason_text,
-            actor_user_id=current_admin.id,
-            actor_role=current_admin.role.value,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-    create_audit_log(
-        db,
-        action="PRODUCTION_GATE_MODE_TRANSITION",
-        entity_type="production_gate",
-        entity_id="global",
-        actor_user_id=current_admin.id,
-        actor_role=current_admin.role.value,
-        severity="warning" if target_mode == "LIVE" else "info",
-        details={
-            "previous_state": previous_mode,
-            "next_state": target_mode,
-            "requested_mode": requested_mode,
-            "reason_code": "MODE_TRANSITION",
-            "reason_text": request.reason_text,
-            "expiry": None,
-        },
-    )
-    gate_payload = get_production_gate_status(db, refresh_checks=False, audit_limit=40)
-    return {
-        "status": "ok",
-        "transition": switch_payload,
-        "gate": gate_payload,
-    }
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "production gate mode transition kaldırıldı"})
 
 
 @router.get("/admin/production-gate/export", response_model=ProductionGateExportResponse)

@@ -30,7 +30,6 @@ from models import (
     UserExecutionIntent,
 )
 from runtime_control.pipeline_controller import PIPELINE_QUEUE_KEYS
-from services.execution_mode_control_service import get_execution_mode, normalize_execution_mode
 from services.admin_exchange_credentials_service import execution_credentials_for_adapter, get_execution_credentials
 from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter
 from services.exchange_adapter.market_data_adapter import ExchangeMarketDataAdapter
@@ -286,7 +285,10 @@ def _is_stale(raw: Any, *, threshold_sec: int) -> bool:
 
 
 def _normalize_mode(value: str | None) -> str | None:
-    return normalize_execution_mode(value)
+    normalized = str(value or "").strip().upper()
+    if normalized in {"LIVE", "PROD", "PRODUCTION"}:
+        return "LIVE"
+    return None
 
 
 def _latest_connection(db: Session, user_id: str | None) -> UserExchangeConnection | None:
@@ -381,7 +383,7 @@ def build_go_live_context(
 ) -> dict:
     overrides = overrides or {}
     config = overrides.get("config") or get_or_create_live_config(db)
-    execution_mode = overrides.get("execution_mode") or get_execution_mode(db, cache)
+    execution_mode = "LIVE"
     env_mode = _normalize_mode(os.environ.get("EXECUTION_MODE"))
 
     kill_switch_payload = overrides.get("kill_switch")

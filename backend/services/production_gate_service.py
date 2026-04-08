@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from db import SessionLocal, redis_client
 from models import AuditLog, BrandSetting, ReleaseGateOverride, UserExchangeConnection
 from services.audit_service import create_audit_log
-from services.execution_mode_control_service import read_mode_snapshots
 from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter
 from services.live_mode_service import validate_exchange_credentials_for_user
 from services.prod_config_remediation_service import build_prod_config_remediation_state
@@ -1019,21 +1018,20 @@ def list_mode_history(db: Session, *, limit: int = 40) -> list[dict]:
             }
         )
 
-    # snapshot-only fallback (actor unknown)
+    # Pure Live: mode snapshot fallback kaldırıldı.
     if len(items) == 0:
-        for snap in read_mode_snapshots(redis_client, limit=limit):
-            items.append(
-                {
-                    "changed_at": _parse_dt(snap.get("captured_at")) or _utcnow(),
-                    "actor_user_id": None,
-                    "actor_role": "system",
-                    "from_mode": str(snap.get("previous_mode") or "UNKNOWN").upper(),
-                    "to_mode": str(snap.get("mode") or "UNKNOWN").upper(),
-                    "reason": snap.get("reason"),
-                    "request_id": None,
-                    "trace_id": None,
-                }
-            )
+        items.append(
+            {
+                "changed_at": _utcnow(),
+                "actor_user_id": None,
+                "actor_role": "system",
+                "from_mode": "LIVE",
+                "to_mode": "LIVE",
+                "reason": "pure_live_enforced",
+                "request_id": None,
+                "trace_id": None,
+            }
+        )
 
     return sorted(items, key=lambda item: _parse_dt(item.get("changed_at")) or _utcnow(), reverse=True)[:limit]
 

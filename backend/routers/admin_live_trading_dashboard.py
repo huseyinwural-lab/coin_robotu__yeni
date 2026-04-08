@@ -9,16 +9,9 @@ from sqlalchemy.orm import Session
 from db import get_db, redis_client
 from core.process_guard import spawn_shell_and_reap
 from deps import require_admin
-from models import AuditLog, FailedEvent, PaperPosition, RiskOrchestratorPolicy, StateRebuildLog, SystemAlert, User, UserExecutionIntent, UserRole
+from models import AuditLog, FailedEvent, Position, RiskOrchestratorPolicy, StateRebuildLog, SystemAlert, User, UserExecutionIntent, UserRole
 from services.audit_service import create_audit_log
-from services.execution_mode_control_service import (
-    get_execution_mode,
-    get_latency_thresholds,
-    normalize_execution_mode,
-    read_mode_snapshots,
-    set_latency_thresholds,
-    switch_execution_mode,
-)
+from services.execution_mode_control_service import get_latency_thresholds, set_latency_thresholds
 from services.execution_safety_service import execution_safety_snapshot, update_execution_safety_state
 from services.live_trading_dashboard_service import (
     build_daily_report,
@@ -29,7 +22,6 @@ from services.live_trading_dashboard_service import (
     build_scanner_health,
     export_daily_report_csv,
 )
-from services.production_gate_service import enforce_production_gate_or_raise
 
 router = APIRouter(prefix="/admin/live-trading", tags=["admin_live_trading_dashboard"])
 logger = logging.getLogger(__name__)
@@ -160,8 +152,8 @@ def admin_live_trading_control_state(
     db: Session = Depends(get_db),
 ):
     _ = current_admin
-    mode = get_execution_mode(db, redis_client)
-    snapshots = read_mode_snapshots(redis_client, limit=10)
+    mode = "LIVE"
+    snapshots = []
     latency_thresholds = get_latency_thresholds(redis_client)
     kill_switch = _read_json_value(redis_client, "pipeline:kill_switch", {"active": False, "reasons": []})
     fallback = _read_json_value(redis_client, "control_layer:fallback", {"active": False})
@@ -169,7 +161,7 @@ def admin_live_trading_control_state(
 
     retry_queue_count = db.query(FailedEvent).filter(FailedEvent.status == "pending").count()
     failed_orders_count = db.query(FailedEvent).filter(FailedEvent.status.in_(["pending", "failed"])).count()
-    open_positions_count = db.query(PaperPosition).filter(PaperPosition.status == "open").count()
+    open_positions_count = db.query(Position).filter(Position.status == "open").count()
     scanner_symbol_universe = _read_symbol_universe(redis_client)
 
     return {
@@ -260,56 +252,6 @@ def admin_live_trading_switch_execution_mode(
     db: Session = Depends(get_db),
 ):
     raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "execution mode switching kaldırıldı"})
-
-    manager = _require_manager(current_admin)
-    previous_mode = get_execution_mode(db, redis_client)
-
-    normalized_mode = normalize_execution_mode(payload.mode)
-    if normalized_mode is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_mode")
-
-    if normalized_mode == "LIVE":
-        enforce_production_gate_or_raise(
-            db,
-            actor_user_id=manager.id,
-            actor_role=manager.role.value,
-            action_type="admin_live_trading_execution_mode",
-            reason_text=payload.reason,
-        )
-
-    expected_phrase = MODE_SWITCH_PHRASE[str(payload.mode).strip().upper()]
-    if payload.confirmation_phrase.strip().upper() != expected_phrase:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "invalid_confirmation_phrase", "expected_phrase": expected_phrase},
-        )
-
-    result = switch_execution_mode(
-        db,
-        redis_client,
-        mode=normalized_mode,
-        reason=payload.reason,
-        actor_user_id=manager.id,
-        actor_role=manager.role.value,
-    )
-    create_audit_log(
-        db,
-        action="PRODUCTION_GATE_MODE_TRANSITION",
-        entity_type="production_gate",
-        entity_id="global",
-        actor_user_id=manager.id,
-        actor_role=manager.role.value,
-        severity="warning" if normalized_mode == "LIVE" else "info",
-        details={
-            "previous_state": previous_mode,
-            "next_state": normalized_mode,
-            "requested_mode": str(payload.mode).strip().upper(),
-            "reason_code": "MODE_TRANSITION",
-            "reason_text": payload.reason,
-            "expiry": None,
-        },
-    )
-    return {"status": "ok", **result}
 
 
 @router.post("/control-layer/system-health")
@@ -734,30 +676,7 @@ def admin_live_trading_open_positions(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    _ = current_admin
-    rows = (
-        db.query(PaperPosition)
-        .filter(PaperPosition.status == "open")
-        .order_by(PaperPosition.updated_at.desc())
-        .limit(limit)
-        .all()
-    )
-    return {
-        "items": [
-            {
-                "id": row.id,
-                "symbol": row.symbol,
-                "side": row.side,
-                "quantity": row.quantity,
-                "entry_price": row.entry_price,
-                "unrealized_pnl": row.unrealized_pnl,
-                "opened_at": row.opened_at.isoformat() if row.opened_at else None,
-                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-            }
-            for row in rows
-        ],
-        "count": len(rows),
-    }
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "paper open positions kaldırıldı"})
 
 
 @router.post("/control-layer/trading-performance/snapshot")
