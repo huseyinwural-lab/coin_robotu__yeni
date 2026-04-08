@@ -515,6 +515,21 @@ export const UserScannerPage = () => {
     schedulerState?.next_run_at,
   ]);
 
+  const scannerEngineDecisionApprovalMap = useMemo(() => {
+    const rows = (scannerEngineRun?.results || []);
+    const map = {};
+    rows.forEach((item) => {
+      const symbol = String(item?.symbol || "").toUpperCase();
+      if (!symbol) {
+        return;
+      }
+      if (item?.decisions && typeof item.decisions === "object") {
+        map[symbol] = item.decisions;
+      }
+    });
+    return map;
+  }, [scannerEngineRun?.results]);
+
   const requestTrendPolylinePoints = useMemo(() => {
     const width = 160;
     const height = 32;
@@ -2476,6 +2491,7 @@ export const UserScannerPage = () => {
         <ScannerResultsTable
           results={scannerResults}
           compactMode={compactMode}
+          decisionApprovalMap={scannerEngineDecisionApprovalMap}
           onOpenTrade={openExecuteFromScanner}
           onViewCard={(item) => onSelectDecisionCard(item.symbol)}
           onAddWatchlist={addWatchlistFromResult}

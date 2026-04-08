@@ -42,6 +42,7 @@ export const ScannerResultsTable = ({
   onOpenTrade,
   onViewCard,
   onAddWatchlist,
+  decisionApprovalMap,
 }) => {
   const [selectedStrategy, setSelectedStrategy] = useState("all");
   const [minConfidence, setMinConfidence] = useState(0);
@@ -49,22 +50,56 @@ export const ScannerResultsTable = ({
   const [signalType, setSignalType] = useState("all");
   const [expandedRowId, setExpandedRowId] = useState("");
 
+  const resolveDecisionStrategyLabel = (item) => {
+    const symbol = String(item?.symbol || "").toUpperCase();
+    const decisions = item?.decisions || (decisionApprovalMap || {})[symbol] || null;
+    if (!decisions || typeof decisions !== "object") {
+      return String(item?.strategy_code || "legacy");
+    }
+
+    const signal = String(item?.signal || "").toLowerCase();
+    const side = signal === "short" ? "short" : "long";
+    const keyMap = [
+      ["bc01", "KARAR1(BC01)"],
+      ["bc02", "KARAR2(BC02)"],
+      ["bc03", "KARAR3(BC03)"],
+      ["bc04", "KARAR4(BC04)"],
+    ];
+
+    const matched = keyMap
+      .filter(([key]) => Boolean(decisions?.[key]?.[side]))
+      .map(([, label]) => label);
+
+    if (matched.length > 0) {
+      return matched.join(" + ");
+    }
+
+    const fallback = keyMap
+      .filter(([key]) => Boolean(decisions?.[key]?.long || decisions?.[key]?.short))
+      .map(([, label]) => label);
+    if (fallback.length > 0) {
+      return fallback.join(" + ");
+    }
+
+    return String(item?.strategy_code || "legacy");
+  };
+
   const strategyOptions = useMemo(() => {
-    const dynamic = (results || []).map((item) => String(item.strategy_code || "unknown"));
+    const dynamic = (results || []).map((item) => String(resolveDecisionStrategyLabel(item) || "unknown"));
     const unique = Array.from(new Set([...CANONICAL_STRATEGY_OPTIONS, ...dynamic]));
     return unique.filter(Boolean).sort();
-  }, [results]);
+  }, [results, decisionApprovalMap]);
 
   const filtered = useMemo(() => {
     return (results || []).filter((item) => {
-      const strategyPass = selectedStrategy === "all" || String(item.strategy_code || "") === selectedStrategy;
+      const strategyPass = selectedStrategy === "all" || String(resolveDecisionStrategyLabel(item) || "") === selectedStrategy;
       const confidencePass = Number(item.confidence || 0) >= Number(minConfidence || 0);
       const scorePass = Number(item.signal_score || 0) >= Number(minScore || 0);
       const signal = String(item.signal || "none").toLowerCase();
       const signalPass = signalType === "all" || signal === signalType;
       return strategyPass && confidencePass && scorePass && signalPass;
     });
-  }, [results, selectedStrategy, minConfidence, minScore, signalType]);
+  }, [results, selectedStrategy, minConfidence, minScore, signalType, decisionApprovalMap]);
 
   const performance = useMemo(() => {
     const candidates = Number(results?.length || 0);
@@ -256,7 +291,7 @@ export const ScannerResultsTable = ({
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-first-precheck-failure-${item.id}`}>
                       <span className="text-xs text-rose-200">{item.first_precheck_failure_code || "-"}</span>
                     </td>
-                    <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-strategy-${item.id}`}>{item.strategy_code}</td>
+                    <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-strategy-${item.id}`}>{resolveDecisionStrategyLabel(item)}</td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-policy-${item.id}`}>
                       {unsupported ? "UNSUPPORTED" : "SUPPORTED"}
                     </td>

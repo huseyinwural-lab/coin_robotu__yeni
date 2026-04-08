@@ -1244,13 +1244,24 @@ def _score_candidate_symbol(candidate: dict, config: dict, force_refresh: bool) 
     if not symbol or market_type not in {"spot", "futures"}:
         return None
 
+    decision_boxes = _sanitize_decision_boxes(config.get("decision_boxes") or {})
+    bc02 = decision_boxes.get("bc02") or {}
+    bc03 = decision_boxes.get("bc03") or {}
+    bc04 = decision_boxes.get("bc04") or {}
+    min_indicator_bars = max(
+        int(bc02.get("y2_period") or 210) + 8,
+        int(bc03.get("z1_ma_period") or 21) + int(bc03.get("z1_ref_bars") or 3) + 8,
+        int(bc04.get("ult_slow") or 28) + 8,
+        220,
+    )
+
     candles = scanner_market_data_provider.fetch_indicator_and_execution_candles(
         exchange="binance",
         market_type=market_type,
         symbol=symbol,
         indicator_timeframe=str(config.get("indicator_timeframe") or "1h"),
         execution_timeframe=str(config.get("execution_timeframe") or "15m"),
-        indicator_limit=180,
+        indicator_limit=min(400, max(220, min_indicator_bars)),
         execution_limit=140,
         force_refresh=force_refresh,
     )
