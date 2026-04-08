@@ -285,12 +285,7 @@ export const AdminLiveTradingDashboardPage = () => {
     setIsActionRunning(true);
     try {
       if (actionDialog.actionKey.startsWith("mode_")) {
-        const mode = actionDialog.actionKey.replace("mode_", "").toUpperCase();
-        await apiClient.post("/admin/live-trading/control-layer/execution-mode", {
-          mode,
-          reason: actionDialog.reason,
-          confirmation_phrase: actionDialog.phrase,
-        });
+        toast.info("Pure Live modunda execution-mode switch kaldırıldı.");
       }
 
       if (["kill_on", "kill_off", "fallback_on", "fallback_off", "set_latency"].includes(actionDialog.actionKey)) {

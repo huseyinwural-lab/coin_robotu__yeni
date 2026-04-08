@@ -765,28 +765,16 @@ export const UserScannerPage = () => {
   };
 
   const saveAutomationConfig = async ({ autoEnabled, withToast = true } = {}) => {
-    const nextEnabled = typeof autoEnabled === "boolean" ? autoEnabled : Boolean(automationConfig?.auto_enabled ?? true);
-    setIsSavingAutomation(true);
-    try {
-      const { data } = await apiClient.put("/user/scanner/automation", {
-        auto_enabled: nextEnabled,
-        interval_seconds: normalizeIntervalSeconds(autoScanInterval),
-        max_results: 25,
-        symbol_source: symbolSource,
-        symbol_selection_mode: SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode),
-        selected_symbols: selectedSymbols,
-      });
-      setAutomationConfig(data || null);
-      if (withToast) {
-        toast.success(nextEnabled ? "3 dakikalık otomatik scanner aktif" : "Otomatik scanner kapatıldı");
-      }
-      return data;
-    } catch (error) {
-      toast.error(toApiErrorMessage(error, "Otomasyon ayarı kaydedilemedi"));
-      throw error;
-    } finally {
-      setIsSavingAutomation(false);
+    if (withToast) {
+      toast.info("Pure Live modunda automation kaldırıldı.");
     }
+    return {
+      auto_enabled: false,
+      interval_seconds: normalizeIntervalSeconds(autoScanInterval),
+      symbol_source: symbolSource,
+      symbol_selection_mode: "manual_selection",
+      selected_symbols: selectedSymbols,
+    };
   };
 
   const syncAutoRunNotifications = (profiles, { notify = false } = {}) => {
@@ -820,89 +808,19 @@ export const UserScannerPage = () => {
   };
 
   const saveActiveProfile = async ({ autoEnabled, withToast = true } = {}) => {
-    if (!activeProfile) {
-      return saveAutomationConfig({ autoEnabled, withToast });
-    }
-
-    setIsSavingAutomation(true);
-    try {
-      const nextEnabled = typeof autoEnabled === "boolean" ? autoEnabled : Boolean(activeProfile.auto_enabled);
-      const { data } = await apiClient.put(`/user/scanner/automation-profiles/${activeProfile.id}`, {
-        name: activeProfile.name,
-        auto_enabled: nextEnabled,
-        is_active: true,
-        interval_seconds: normalizeIntervalSeconds(activeProfile.interval_seconds),
-        max_results: 25,
-        symbol_source: symbolSource,
-        symbol_selection_mode: SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode),
-        selected_symbols: selectedSymbols,
-      });
-      setAutomationProfiles((prev) => prev.map((item) => (item.id === data.id ? data : { ...item, is_active: false })));
-      setActiveProfileId(data.id);
-      if (withToast) {
-        toast.success(nextEnabled ? `Profil güncellendi: ${data.name}` : `Profil pasif: ${data.name}`);
-      }
-      return data;
-    } catch (error) {
-      toast.error(toApiErrorMessage(error, "Profil kaydedilemedi"));
-      throw error;
-    } finally {
-      setIsSavingAutomation(false);
-    }
+    return saveAutomationConfig({ autoEnabled, withToast });
   };
 
   const createAutomationProfile = async () => {
-    const profileName = profileNameInput.trim();
-    if (!profileName) {
-      toast.error("Profil adı zorunlu");
-      return;
-    }
-    setIsSavingAutomation(true);
-    try {
-      await apiClient.post("/user/scanner/automation-profiles", {
-        name: profileName,
-        auto_enabled: true,
-        is_active: true,
-        interval_seconds: normalizeIntervalSeconds(profileIntervalInput),
-        max_results: 25,
-        symbol_source: symbolSource,
-        symbol_selection_mode: SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode),
-        selected_symbols: selectedSymbols,
-      });
-      setProfileNameInput("");
-      await load({ hydrateSelection: true, notifyAutoRuns: false });
-      toast.success("Otomasyon profili oluşturuldu");
-    } catch (error) {
-      toast.error(toApiErrorMessage(error, "Profil oluşturulamadı"));
-    } finally {
-      setIsSavingAutomation(false);
-    }
+    toast.info("Pure Live modunda automation profile kaldırıldı.");
   };
 
   const activateAutomationProfile = async (profileId) => {
-    setIsSavingAutomation(true);
-    try {
-      await apiClient.post(`/user/scanner/automation-profiles/${profileId}/activate`);
-      await load({ hydrateSelection: true, notifyAutoRuns: false });
-      toast.success("Profil aktif edildi");
-    } catch (error) {
-      toast.error(toApiErrorMessage(error, "Profil aktif edilemedi"));
-    } finally {
-      setIsSavingAutomation(false);
-    }
+    toast.info("Pure Live modunda automation profile kaldırıldı.");
   };
 
   const deleteAutomationProfile = async (profileId) => {
-    setIsSavingAutomation(true);
-    try {
-      await apiClient.delete(`/user/scanner/automation-profiles/${profileId}`);
-      await load({ hydrateSelection: true, notifyAutoRuns: false });
-      toast.success("Profil silindi");
-    } catch (error) {
-      toast.error(toApiErrorMessage(error, "Profil silinemedi"));
-    } finally {
-      setIsSavingAutomation(false);
-    }
+    toast.info("Pure Live modunda automation profile kaldırıldı.");
   };
 
   const load = useCallback(async ({ hydrateSelection = false, silent = false, notifyAutoRuns = false } = {}) => {
@@ -912,7 +830,6 @@ export const UserScannerPage = () => {
     try {
       const requestDescriptors = SIMPLE_SCANNER_V2
         ? [
-            { key: "signal_mode", request: apiClient.get("/user/signal-mode", { timeout: 8000 }) },
             { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 12000 }) },
             {
               key: "scanner_results",
@@ -925,7 +842,6 @@ export const UserScannerPage = () => {
               }),
             },
             { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 15000 }) },
-            { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 12000 }) },
             { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 12000 }) },
             { key: "scanner_engine_config", request: apiClient.get("/user/scanner-engine/config", { timeout: 12000 }) },
             { key: "scanner_engine_last_run", request: apiClient.get("/user/scanner-engine/last-run", { timeout: 15000 }) },
@@ -933,7 +849,6 @@ export const UserScannerPage = () => {
             { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
           ]
         : [
-            { key: "signal_mode", request: apiClient.get("/user/signal-mode", { timeout: 12000 }) },
             { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 12000 }) },
             {
               key: "scanner_results",
@@ -946,8 +861,6 @@ export const UserScannerPage = () => {
               }),
             },
             { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 15000 }) },
-            { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 12000 }) },
-            { key: "scanner_profiles", request: apiClient.get("/user/scanner/automation-profiles", { timeout: 12000 }) },
             { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 }, timeout: 12000 }) },
             { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 12000 }) },
             { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", { timeout: 12000 }) },
@@ -1040,12 +953,9 @@ export const UserScannerPage = () => {
         return acc;
       }, {});
 
-      const modeRes = byKey.signal_mode;
       const overviewRes = byKey.scanner_overview;
       const resultsRes = byKey.scanner_results;
       const templatesRes = byKey.strategy_templates;
-      const automationRes = byKey.scanner_automation;
-      const profilesRes = byKey.scanner_profiles;
       const cardsRes = byKey.decision_cards;
       const persistedSelectionRes = byKey.symbol_selection;
       const runtimeRes = byKey.runtime_snapshot;
@@ -1056,17 +966,17 @@ export const UserScannerPage = () => {
       const scannerEngineConfigRes = byKey.scanner_engine_config;
       const scannerEngineRunRes = byKey.scanner_engine_last_run;
 
-      setMode((prev) => modeRes?.data?.mode || prev || "ASSISTED");
+      setMode((prev) => prev || "AUTO");
       setOverview((prev) => overviewRes?.data || prev || null);
       const nextScannerResults = Array.isArray(resultsRes?.data) ? resultsRes.data : [];
       setScannerResults((prev) => nextScannerResults || prev || []);
       const activeTemplates = (templatesRes?.data || []).filter((item) => item.is_active);
       setScannerTemplates(activeTemplates);
       setSelectedTemplateId((prev) => prev || activeTemplates[0]?.id || "");
-      const automation = automationRes?.data || null;
-      const profiles = profilesRes?.data || [];
-      setAutomationConfig(automation);
-      setAutomationProfiles(profiles);
+      const automation = null;
+      const profiles = [];
+      setAutomationConfig(null);
+      setAutomationProfiles([]);
       const cards = cardsRes?.data?.items || [];
       const persistedSelection = persistedSelectionRes?.data || null;
       setRuntimeSnapshot((prev) => runtimeRes?.data || prev || null);
@@ -1120,25 +1030,12 @@ export const UserScannerPage = () => {
         setSelectedDecisionSymbol("");
         setSymbolExplainability(null);
       }
-      syncAutoRunNotifications(profiles, { notify: notifyAutoRuns });
+      syncAutoRunNotifications([], { notify: false });
 
       if (hydrateSelection) {
         const localRunSettings = readScannerRunSettings();
-        const selectedProfile = profiles.find((item) => item.is_active) || profiles[0] || null;
-        if (selectedProfile) {
-          setActiveProfileId(selectedProfile.id);
-          setProfileIntervalInput(normalizeIntervalSeconds(selectedProfile.interval_seconds));
-            setAutoScanInterval(normalizeIntervalSeconds(selectedProfile.interval_seconds));
-          setSymbolSource(selectedProfile.symbol_source || "crypto");
-          setSymbolMode(selectedProfile.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"));
-          setSelectedSymbols(Array.isArray(selectedProfile.selected_symbols) ? selectedProfile.selected_symbols : []);
-        } else if (automation) {
-          setActiveProfileId("");
-            setAutoScanInterval(normalizeIntervalSeconds(automation.interval_seconds));
-          setSymbolSource(automation.symbol_source || "crypto");
-          setSymbolMode(automation.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"));
-          setSelectedSymbols(Array.isArray(automation.selected_symbols) ? automation.selected_symbols : []);
-        }
+        const selectedProfile = null;
+        setActiveProfileId("");
         if (persistedSelection) {
           setSymbolSource(persistedSelection.symbol_source || "crypto");
           setSymbolMode(persistedSelection.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"));
@@ -1156,8 +1053,8 @@ export const UserScannerPage = () => {
             setWatchlistOnly(Boolean(localRunSettings.watchlistOnly));
           }
         }
-          const normalizedMode = String((persistedSelection?.symbol_selection_mode || selectedProfile?.symbol_selection_mode || automation?.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"))).toLowerCase();
-          setWatchlistOnly(normalizedMode === "manual_selection" && Array.isArray(persistedSelection?.selected_symbols || selectedProfile?.selected_symbols || automation?.selected_symbols) && (persistedSelection?.selected_symbols || selectedProfile?.selected_symbols || automation?.selected_symbols || []).length > 0);
+          const normalizedMode = String((persistedSelection?.symbol_selection_mode || (SIMPLE_SCANNER_V2 ? "manual_selection" : "all_market_symbols"))).toLowerCase();
+          setWatchlistOnly(normalizedMode === "manual_selection" && Array.isArray(persistedSelection?.selected_symbols) && (persistedSelection?.selected_symbols || []).length > 0);
         if (SIMPLE_SCANNER_V2) {
           setSymbolMode("manual_selection");
         }
@@ -1231,44 +1128,8 @@ export const UserScannerPage = () => {
   }, [load]);
 
   useEffect(() => {
-    if (PURE_LIVE_DISABLE_AUTOMATION || !SIMPLE_SCANNER_V2 || !selectionHydrated || !activeAutomation?.id) {
-      return;
-    }
-    if (String(activeAutomation.symbol_selection_mode || "").toLowerCase() === "manual_selection") {
-      return;
-    }
-
-    let cancelled = false;
-    const normalizeAutomationMode = async () => {
-      try {
-        await apiClient.put("/user/scanner/automation", {
-          auto_enabled: Boolean(activeAutomation.auto_enabled),
-          interval_seconds: Number(activeAutomation.interval_seconds || autoScanInterval || AUTO_SCAN_INTERVAL_SECONDS),
-          max_results: Number(activeAutomation.max_results || 120),
-          symbol_source: symbolSource,
-          symbol_selection_mode: "manual_selection",
-          selected_symbols: selectedSymbols,
-        });
-        if (!cancelled) {
-          setAutomationConfig((prev) => (prev ? { ...prev, symbol_selection_mode: "manual_selection" } : prev));
-          setAutomationProfiles((prev) => prev.map((item) => (
-            item.id === activeAutomation?.id
-              ? { ...item, symbol_selection_mode: "manual_selection" }
-              : item
-          )));
-        }
-      } catch (error) {
-        if (!cancelled) {
-          toast.error(toApiErrorMessage(error, "Automation modu manual_selection olarak sabitlenemedi"));
-        }
-      }
-    };
-
-    normalizeAutomationMode();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeAutomation?.id, activeAutomation?.symbol_selection_mode, activeAutomation?.auto_enabled, activeAutomation?.interval_seconds, activeAutomation?.max_results, autoScanInterval, selectedSymbols, selectionHydrated, symbolSource]);
+    // Pure Live: automation endpointleri kaldırıldı.
+  }, []);
 
   useEffect(() => {
     if (!watchlistOnly) {
@@ -1891,96 +1752,7 @@ export const UserScannerPage = () => {
         <p className="mt-2 text-xs text-cyan-100" data-testid="user-scanner-active-mode-indicator-run-type-detail">{scannerRunTypeDetail}</p>
       </section>}
 
-      {false && !SIMPLE_SCANNER_V2 && <section className="order-3 col-span-12 rounded border border-emerald-800/50 bg-emerald-950/20 p-4" data-testid="user-scanner-automation-card">
-        <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="user-scanner-automation-title">
-          {activeProfile ? `Scanner Otomasyon Profili: ${activeProfile.name}` : "Scanner Otomasyon (Legacy)"}
-        </p>
-        <div className="mt-2 grid gap-2 md:grid-cols-4" data-testid="user-scanner-automation-grid">
-          <p className="text-sm" data-testid="user-scanner-automation-status">Durum: {activeAutomation?.auto_enabled ? "AKTİF" : "PASİF"}</p>
-          <p className="text-sm" data-testid="user-scanner-automation-interval">Periyot: {Number(activeAutomation?.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS)} saniye</p>
-          <p className="text-sm" data-testid="user-scanner-automation-last-run">Son Çalışma: {formatDateLabel(activeAutomation?.last_run_at)}</p>
-          <p className="text-sm" data-testid="user-scanner-automation-next-run">Sonraki Çalışma: {formatDateLabel(activeAutomation?.next_run_at)}</p>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2" data-testid="user-scanner-automation-actions">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => saveActiveProfile({ autoEnabled: !(activeAutomation?.auto_enabled ?? true) })}
-            disabled={isSavingAutomation}
-            data-testid="user-scanner-automation-toggle-button"
-          >
-            {isSavingAutomation ? "Kaydediliyor..." : activeAutomation?.auto_enabled ? "Otomatik Tetiklemeyi Kapat" : "Otomatik Tetiklemeyi Aç"}
-          </Button>
-          <Button
-            type="button"
-            onClick={() => saveActiveProfile({ autoEnabled: true })}
-            disabled={isSavingAutomation}
-            data-testid="user-scanner-automation-save-selection-button"
-          >
-            {isSavingAutomation ? "Kaydediliyor..." : "Seçimi Kaydet (Otomasyona)"}
-          </Button>
-        </div>
-        <p className="mt-2 text-xs text-emerald-200" data-testid="user-scanner-automation-hint">
-          Kaynak + seçim modu + seçili semboller profilde saklanır; otomatik scanner kayıtlı profil periyoduyla çalışır.
-        </p>
-        <p className="mt-1 text-xs text-emerald-100" data-testid="user-scanner-selection-persisted-at">
-          Sembol Kaydı: {formatDateLabel(selectionSavedAt)}
-        </p>
-      </section>}
-
-      {false && !SIMPLE_SCANNER_V2 && <section className="order-4 col-span-12 rounded border border-violet-800/50 bg-violet-950/20 p-4" data-testid="user-scanner-automation-profiles-card">
-        <p className="text-xs uppercase tracking-widest text-violet-300" data-testid="user-scanner-automation-profiles-title">Çoklu Otomasyon Profilleri</p>
-        <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="user-scanner-automation-profiles-create-grid">
-          <input
-            value={profileNameInput}
-            onChange={(event) => setProfileNameInput(event.target.value)}
-            placeholder="örn: scalp-3m"
-            className="h-10 rounded border border-violet-300 bg-white px-3 text-sm text-slate-900"
-            data-testid="user-scanner-automation-profile-name-input"
-          />
-          <select
-            value={profileIntervalInput}
-            onChange={(event) => setProfileIntervalInput(Number(event.target.value))}
-            className="h-10 rounded border border-violet-300 bg-white px-3 text-sm text-slate-900"
-            data-testid="user-scanner-automation-profile-interval-select"
-          >
-            {PROFILE_INTERVAL_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value} data-testid={`user-scanner-automation-profile-interval-option-${option.value}`}>{option.label}</option>
-            ))}
-          </select>
-          <Button type="button" onClick={createAutomationProfile} disabled={isSavingAutomation} data-testid="user-scanner-automation-profile-create-button">
-            {isSavingAutomation ? "Kaydediliyor..." : "Profil Oluştur"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => saveActiveProfile({ autoEnabled: activeAutomation?.auto_enabled ?? true })}
-            disabled={isSavingAutomation || !activeProfile}
-            data-testid="user-scanner-automation-profile-update-button"
-          >
-            Aktif Profili Güncelle
-          </Button>
-        </div>
-        <div className="mt-3 grid gap-2" data-testid="user-scanner-automation-profiles-list">
-          {automationProfiles.length === 0 && (
-            <p className="text-xs text-violet-200" data-testid="user-scanner-automation-profiles-empty">Henüz profil yok. İlk profilinizi oluşturabilirsiniz.</p>
-          )}
-          {automationProfiles.map((profile) => (
-            <div key={profile.id} className="flex flex-wrap items-center gap-2 rounded border border-violet-300/80 bg-white p-2 text-slate-900" data-testid={`user-scanner-automation-profile-row-${profile.id}`}>
-              <span className="text-sm font-semibold" data-testid={`user-scanner-automation-profile-name-${profile.id}`}>{profile.name}</span>
-              <span className="text-xs" data-testid={`user-scanner-automation-profile-meta-${profile.id}`}>{Math.round(Number(profile.interval_seconds || 180) / 60)} dk · {profile.auto_enabled ? "aktif" : "pasif"}</span>
-              <span className="text-xs" data-testid={`user-scanner-automation-profile-last-run-${profile.id}`}>son: {formatDateLabel(profile.last_run_at)}</span>
-              <span className="text-xs" data-testid={`user-scanner-automation-profile-last-actionable-${profile.id}`}>yeni sinyal: {profile.last_actionable_count || 0}</span>
-              <Button type="button" variant="outline" onClick={() => activateAutomationProfile(profile.id)} disabled={isSavingAutomation || profile.is_active} data-testid={`user-scanner-automation-profile-activate-button-${profile.id}`}>
-                {profile.is_active ? "Aktif" : "Aktif Et"}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => deleteAutomationProfile(profile.id)} disabled={isSavingAutomation} data-testid={`user-scanner-automation-profile-delete-button-${profile.id}`}>
-                Sil
-              </Button>
-            </div>
-          ))}
-        </div>
-      </section>}
+      {/* Pure Live: automation/paper profilleri kaldırıldı */}
 
       {!SIMPLE_SCANNER_V2 && <section className="order-8 col-span-12 rounded border border-amber-800/50 bg-amber-950/20 p-4" data-testid="user-scanner-auto-alerts-card">
         <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="user-scanner-auto-alerts-title">Otomatik Run Uyarıları</p>

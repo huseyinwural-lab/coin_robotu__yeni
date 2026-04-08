@@ -102,7 +102,6 @@ export const UserDashboardPage = () => {
         apiClient.get("/user/portfolio"),
         apiClient.get("/user/performance"),
         apiClient.get("/risk-policies"),
-        apiClient.get("/user/signal-mode"),
         apiClient.get("/bot-profiles"),
         apiClient.get("/user/signals", { params: { limit: 50 } }),
         apiClient.get("/user/decision-cards", { params: { limit: 12 } }),
@@ -113,7 +112,6 @@ export const UserDashboardPage = () => {
         "user_portfolio",
         "user_performance",
         "risk_policies",
-        "signal_mode",
         "bot_profiles",
         "user_signals",
         "decision_cards",
@@ -149,16 +147,16 @@ export const UserDashboardPage = () => {
         closed_trades: 0,
       });
       const riskPoliciesData = readData(3, []);
-      const signalModeData = readData(4, { mode: "ASSISTED" });
-      const botProfilesData = readData(5, []);
-      const recentSignalsData = readData(6, []);
-      const decisionCardsData = readData(7, { items: [] });
+      const botProfilesData = readData(4, []);
+      const recentSignalsData = readData(5, []);
+      const decisionCardsData = readData(6, { items: [] });
 
       setDashboard(dashboardData);
       setPortfolio(portfolioData);
       setPerformance(performanceData);
       setRiskPolicies(riskPoliciesData || []);
-      setSignalMode(signalModeData || null);
+      const inferredMode = String((Array.isArray(recentSignalsData) && recentSignalsData.length > 0 ? recentSignalsData[0]?.mode : "AUTO") || "AUTO").toUpperCase();
+      setSignalMode({ mode: inferredMode });
       setBotProfiles(botProfilesData || []);
       setRecentSignals(recentSignalsData || []);
       const cards = decisionCardsData?.items || [];
