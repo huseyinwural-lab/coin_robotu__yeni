@@ -1470,6 +1470,7 @@ def _build_signal_intent_payload(
     signal: SignalEvent,
     exchange_connection: UserExchangeConnection | None,
     position_size_value_usdt: float,
+    futures_leverage_plan: dict | None = None,
 ) -> dict:
     side = "buy" if signal.direction == "long" else "sell"
     market_type = (signal.market_type or "spot").lower()
@@ -1511,7 +1512,8 @@ def _build_signal_intent_payload(
 
     if market_type == "futures":
         payload["margin_mode"] = "isolated"
-        payload["leverage"] = 1
+        payload["leverage"] = int((futures_leverage_plan or {}).get("applied_leverage") or 1)
+        payload["leverage_policy"] = futures_leverage_plan or {}
 
     if exchange_connection is not None:
         payload.update(
@@ -1541,6 +1543,42 @@ def _resolve_dynamic_trade_notional_usdt(db: Session, user_id: str) -> float:
     return round(reference_balance * 0.19, 4)
 
 
+def _resolve_runtime_futures_leverage_plan(user_id: str) -> dict:
+    from services.live_mode_service import _market_volatility_pct, resolve_effective_config_for_user
+
+    exchange_cap = 20
+    volatility_pct = float(_market_volatility_pct() or 0.0)
+    volatility_regime = "high" if volatility_pct >= 0.035 else ("medium" if volatility_pct >= 0.02 else "low")
+
+    if volatility_pct >= 0.035:
+        requested = 2
+    elif volatility_pct >= 0.02:
+        requested = 3
+    else:
+        requested = 5
+
+    config = resolve_effective_config_for_user(redis_client, user_id=user_id)
+    risk_cap = max(1, min(int((config or {}).get("max_leverage") or 5), exchange_cap))
+
+    clamp_reasons: list[str] = []
+    if requested > exchange_cap:
+        clamp_reasons.append("exchange_leverage_cap")
+    if requested > risk_cap:
+        clamp_reasons.append("risk_policy_leverage_cap")
+
+    applied = max(1, min(requested, exchange_cap, risk_cap))
+
+    return {
+        "volatility_pct": round(volatility_pct, 6),
+        "volatility_regime": volatility_regime,
+        "requested_leverage": int(requested),
+        "recommended_leverage": int(requested),
+        "applied_leverage": int(applied),
+        "leverage_policy_mode": "scanner_runtime_volatility_threshold",
+        "leverage_clamp_reasons": clamp_reasons,
+    }
+
+
 def _dispatch_signal_to_execution(
     db: Session,
     *,
@@ -1559,7 +1597,17 @@ def _dispatch_signal_to_execution(
     row.decision_note = row.decision_note or "approved"
 
     dynamic_notional_usdt = _resolve_dynamic_trade_notional_usdt(db, row.user_id)
-    payload = _build_signal_intent_payload(row, signal, exchange_connection, dynamic_notional_usdt)
+    futures_leverage_plan = None
+    if str(getattr(signal, "market_type", "spot") or "spot").lower() == "futures":
+        futures_leverage_plan = _resolve_runtime_futures_leverage_plan(row.user_id)
+
+    payload = _build_signal_intent_payload(
+        row,
+        signal,
+        exchange_connection,
+        dynamic_notional_usdt,
+        futures_leverage_plan=futures_leverage_plan,
+    )
     intent, validation = preview_execution_intent(db, row.user_id, payload)
     row.created_order_intent_id = intent.id
     _set_state(row, "ORDER_INTENT_CREATED")
@@ -2336,6 +2384,10 @@ def run_user_scanner(
         db.add(signal_event)
         db.flush()
 
+        runtime_precheck_leverage = int(getattr(bot, "leverage", 1) or 1)
+        if str(bot_market_type or "spot").lower() == "futures":
+            runtime_precheck_leverage = int(_resolve_runtime_futures_leverage_plan(user_id).get("applied_leverage") or 1)
+
         candidate_precheck = _evaluate_candidate_tradeability(
             db=db,
             symbol=symbol,
@@ -2345,7 +2397,7 @@ def run_user_scanner(
             risk_notional_cap=per_trade_notional_cap,
             available_balance=available_balance_snapshot,
             exchange_connection=default_exchange_connection,
-            leverage=int(getattr(bot, "leverage", 1) or 1),
+            leverage=runtime_precheck_leverage,
             margin_mode="isolated" if str(bot_market_type or "spot").lower() == "futures" else "",
             symbol_filters_cache=symbol_filters_cache,
             exchange_readiness_cache=exchange_readiness_cache,
