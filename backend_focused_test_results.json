@@ -1,0 +1,65 @@
+[
+  {
+    "test": "Authentication",
+    "status": "FAIL",
+    "details": "Exception: Request timeout after 15s",
+    "classification": "",
+    "timestamp": "2026-04-08T14:41:43.634094"
+  },
+  {
+    "test": "Auth Persistence",
+    "status": "SKIP",
+    "details": "No admin token available",
+    "classification": "",
+    "timestamp": "2026-04-08T14:41:43.634125"
+  },
+  {
+    "test": "Advisory Mode Quick Check",
+    "status": "SKIP",
+    "details": "No user token available",
+    "classification": "",
+    "timestamp": "2026-04-08T14:41:43.634130"
+  },
+  {
+    "test": "Mock Detection Quick",
+    "status": "SKIP",
+    "details": "No user token available",
+    "classification": "",
+    "timestamp": "2026-04-08T14:41:43.634134"
+  },
+  {
+    "test": "Scanner Engine Timeout Test",
+    "status": "SKIP",
+    "details": "No user token available",
+    "classification": "",
+    "timestamp": "2026-04-08T14:41:43.634138"
+  },
+  {
+    "test": "Critical Endpoint: User Signals",
+    "status": "SKIP",
+    "details": "No token available",
+    "classification": "",
+    "timestamp": "2026-04-08T14:41:43.634143"
+  },
+  {
+    "test": "Critical Endpoint: Admin Strategy Allocation",
+    "status": "SKIP",
+    "details": "No token available",
+    "classification": "",
+    "timestamp": "2026-04-08T14:41:43.634146"
+  },
+  {
+    "test": "Critical Endpoint: Admin Universe Monitor",
+    "status": "SKIP",
+    "details": "No token available",
+    "classification": "",
+    "timestamp": "2026-04-08T14:41:43.634150"
+  },
+  {
+    "test": "Idempotency Quick Test",
+    "status": "SKIP",
+    "details": "No user token available",
+    "classification": "",
+    "timestamp": "2026-04-08T14:41:43.634155"
+  }
+]

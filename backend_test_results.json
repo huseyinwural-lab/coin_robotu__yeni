@@ -1,286 +1,51 @@
-{
-  "status": "PARTIAL",
-  "passed": 2,
-  "total": 6,
-  "success_rate": "33.3%",
-  "results": [
-    {
-      "test": "Authentication",
-      "status": "PASS",
-      "details": "Successfully authenticated as review.user@platform.local",
-      "timestamp": "2026-04-08 11:53:54",
-      "data": null
-    },
-    {
-      "test": "Scanner Engine Config",
-      "status": "PASS",
-      "details": "market_scope correct: spot_mode=all, futures_mode=all",
-      "timestamp": "2026-04-08 11:53:55",
-      "data": {
-        "exchange": "binance",
-        "include_spot": true,
-        "include_futures": true,
-        "market_scope": {
-          "spot_mode": "all",
-          "futures_mode": "all"
-        },
-        "signal_mode": "auto",
-        "auto_interval_minutes": 3,
-        "scan_limit": 100,
-        "top_n": 20,
-        "manual_symbols": [
-          "BTCUSDT"
-        ],
-        "indicator_timeframe": "1h",
-        "execution_timeframe": "15m",
-        "weights": {
-          "trend": 10,
-          "volume": 50,
-          "momentum": 100,
-          "bollinger": 1,
-          "max_score": 161
-        },
-        "decision_boxes": {
-          "bc01": {
-            "ema_period": 20,
-            "stddev_multiplier": 1.6
-          },
-          "bc02": {
-            "y1_period": 120,
-            "y2_period": 210,
-            "y2y_period": 90,
-            "y3_period": 5
-          },
-          "bc03": {
-            "z1_ma_period": 21,
-            "z1_ref_bars": 3,
-            "z2_ma_period": 3,
-            "hlf_period": 25,
-            "hhv_h_period": 20,
-            "z4_threshold": 0.0
-          },
-          "bc04": {
-            "stofk_k_period": 14,
-            "stofk_d_period": 6,
-            "rsi_period": 14,
-            "mfi_period": 14,
-            "cci_period": 14,
-            "willr_period": 14,
-            "mo_period": 14,
-            "ult_fast": 7,
-            "ult_mid": 14,
-            "ult_slow": 28,
-            "tke_threshold": 79.0
-          }
-        },
-        "updated_at": "2026-04-08T01:13:55.861583+00:00",
-        "updated_by": "dab99b55-794f-4158-a268-a94daaea821a"
-      }
-    },
-    {
-      "test": "Scanner Engine Run Limits",
-      "status": "FAIL",
-      "details": "HTTP 422: {\"detail\":[{\"type\":\"missing\",\"loc\":[\"body\"],\"msg\":\"Field required\",\"input\":null,\"url\":\"https://errors.pydantic.dev/2.12/v/missing\"}]}",
-      "timestamp": "2026-04-08 11:53:56",
-      "data": null
-    },
-    {
-      "test": "Scanner Run AUTO All",
-      "status": "FAIL",
-      "details": "HTTP 500: {\"detail\":\"scanner_run_failed\"}",
-      "timestamp": "2026-04-08 12:07:01",
-      "data": null
-    },
-    {
-      "test": "Tradeability Control",
-      "status": "FAIL",
-      "details": "Rollout cutting detected or no tradeability passed: passed=0, cut=0",
-      "timestamp": "2026-04-08 12:07:04",
-      "data": {
-        "tradeability_passed": 0,
-        "rollout_cut_signals": 0
-      }
-    },
-    {
-      "test": "AUTO Mode Execution Limit",
-      "status": "FAIL",
-      "details": "AUTO execution count exceeds limit: 32/5",
-      "timestamp": "2026-04-08 12:07:06",
-      "data": {
-        "auto_execution_count": 32,
-        "recent_signals": [
-          {
-            "signal_id": "be2952a3-e874-48d3-b5ed-0512cf27be27",
-            "created_order_intent_id": "53a49224-a31e-405a-8d34-50c1a55dfe19",
-            "created_at": "2026-04-08T12:04:06.650987Z"
-          },
-          {
-            "signal_id": "c00c1a69-0f0e-4fc0-89f0-8b8852467e9f",
-            "created_order_intent_id": "dc4bb259-4807-4a77-bede-2b4cc4b9f2de",
-            "created_at": "2026-04-08T12:03:52.863777Z"
-          },
-          {
-            "signal_id": "7c6a72b6-9d50-4d79-99b4-2c5dc31713a7",
-            "created_order_intent_id": "c7631de7-30d5-415a-9c65-9f20484d512c",
-            "created_at": "2026-04-08T12:01:36.366641Z"
-          },
-          {
-            "signal_id": "935bcd4c-8c3e-43af-9418-b7b5fbe3fd73",
-            "created_order_intent_id": "5de9d747-01c0-41e6-85a0-f435480c87cf",
-            "created_at": "2026-04-08T12:00:12.949726Z"
-          },
-          {
-            "signal_id": "6e753ccf-e566-4e16-aa33-0f23491bd1db",
-            "created_order_intent_id": "a3b71c7e-6f12-4944-b002-5a50dc2aab56",
-            "created_at": "2026-04-08T11:59:29.902798Z"
-          },
-          {
-            "signal_id": "d072b525-e6f8-46d6-bbc5-947a7bdce985",
-            "created_order_intent_id": "f95d5525-ab6c-45d5-aa18-9dbb2be55c49",
-            "created_at": "2026-04-08T11:58:17.600383Z"
-          },
-          {
-            "signal_id": "6df317c0-aca3-4187-acc4-7a6d0d2efeca",
-            "created_order_intent_id": "24cfd0d5-e1a0-42a6-a1a9-5161b3694210",
-            "created_at": "2026-04-08T11:57:40.820647Z"
-          },
-          {
-            "signal_id": "d936a8f7-6660-4545-b484-3eefd6e772a7",
-            "created_order_intent_id": "9e9fcb2c-8536-4401-94d4-bc23b719890c",
-            "created_at": "2026-04-08T11:56:27.160700Z"
-          },
-          {
-            "signal_id": "9b59445f-6898-41a9-b772-fd98835cd98e",
-            "created_order_intent_id": "2d92f68d-9101-4b83-bf7b-0640f60363a9",
-            "created_at": "2026-04-08T11:55:51.162988Z"
-          },
-          {
-            "signal_id": "d6c891ca-289b-482f-ad74-10505b8f0ff5",
-            "created_order_intent_id": "a9e2ced3-7327-4e9f-814f-749ff8ab1737",
-            "created_at": "2026-04-08T11:54:32.248161Z"
-          },
-          {
-            "signal_id": "a0b51def-bb49-43ec-af74-b6a16826b931",
-            "created_order_intent_id": "90cad75a-9e93-4f79-bb08-446953205c0c",
-            "created_at": "2026-04-08T10:27:08.879378Z"
-          },
-          {
-            "signal_id": "312c9ec6-f2df-44f7-b646-831a54bfc00f",
-            "created_order_intent_id": "8da1e615-454d-400b-be5f-b2987adf0c19",
-            "created_at": "2026-04-08T10:22:25.484452Z"
-          },
-          {
-            "signal_id": "1f769d33-095a-485e-9f85-c4f27d8f9b61",
-            "created_order_intent_id": "41e7a082-3316-41f2-874a-f5d3a1b29539",
-            "created_at": "2026-04-08T10:21:48.720125Z"
-          },
-          {
-            "signal_id": "19af4cca-d438-419a-ad81-6024a0b4940a",
-            "created_order_intent_id": "2c646239-674c-49d1-bdf1-8cd7922054a1",
-            "created_at": "2026-04-08T10:20:33.968043Z"
-          },
-          {
-            "signal_id": "06b1b121-fa96-4458-9b2a-5924ea04afef",
-            "created_order_intent_id": "dfbf4309-4f13-4a36-a94f-f078319db261",
-            "created_at": "2026-04-08T10:09:01.455719Z"
-          },
-          {
-            "signal_id": "41f85950-dba2-4ffd-9ca7-739f64cb4356",
-            "created_order_intent_id": "fa31ae19-0202-4046-929f-865abae115ec",
-            "created_at": "2026-04-08T09:42:27.146639Z"
-          },
-          {
-            "signal_id": "3a72d673-01e4-4817-a6ac-28a1137fa60f",
-            "created_order_intent_id": "6e9be663-dedd-411b-a62a-8331ea7c9343",
-            "created_at": "2026-04-08T09:41:20.744392Z"
-          },
-          {
-            "signal_id": "19bae0c4-f6ca-4351-a3ed-2f3d9817184e",
-            "created_order_intent_id": "73eb404a-a78a-428c-afa9-15fb0c4ecc71",
-            "created_at": "2026-04-08T09:39:41.409121Z"
-          },
-          {
-            "signal_id": "0b4abd41-4f4c-49ea-9292-bb5c0e882093",
-            "created_order_intent_id": "752f2870-f420-4307-b17a-f9be398be0c4",
-            "created_at": "2026-04-08T09:38:19.051620Z"
-          },
-          {
-            "signal_id": "177db35b-8408-4e53-a924-de3aa5e8d23c",
-            "created_order_intent_id": "d74c6d73-40fa-4360-81e7-01f7d8e7be6d",
-            "created_at": "2026-04-08T02:52:15.718998Z"
-          },
-          {
-            "signal_id": "c00270d6-c25a-47e9-8a2c-6b784fbd5bc6",
-            "created_order_intent_id": "d79802f6-1635-4aee-a2a6-4f1cb4bd9bd4",
-            "created_at": "2026-04-08T02:51:22.208288Z"
-          },
-          {
-            "signal_id": "16222460-cf79-4c4f-b04b-539040c1d181",
-            "created_order_intent_id": "371c8670-052f-4b1e-92c0-b9f3e0350079",
-            "created_at": "2026-04-08T00:59:15.310340Z"
-          },
-          {
-            "signal_id": "fbce4f90-8044-4d21-89d0-96826012f97d",
-            "created_order_intent_id": "d2679e8b-c6f4-4c70-96d3-d89b9aa11f2b",
-            "created_at": "2026-04-08T00:57:25.642825Z"
-          },
-          {
-            "signal_id": "2bf80611-1730-4aa5-a6cc-4e15a683e4fa",
-            "created_order_intent_id": "d9390038-5596-4aa7-8926-fd139a521dff",
-            "created_at": "2026-04-08T00:55:37.360578Z"
-          },
-          {
-            "signal_id": "e8826bf1-94c6-4a39-a9dd-1565c5fde9ec",
-            "created_order_intent_id": "2fb4977e-7adf-44f3-a20d-e9af1dac599c",
-            "created_at": "2026-04-08T00:53:49.883071Z"
-          },
-          {
-            "signal_id": "58f0c437-fcd1-4dab-a400-f9a8786612d5",
-            "created_order_intent_id": "d7801700-f06d-4a62-aa6e-70d77012622a",
-            "created_at": "2026-04-07T00:10:43.072319Z"
-          },
-          {
-            "signal_id": "042702b0-78a2-415f-a565-d3e16ece666e",
-            "created_order_intent_id": "7cba331c-34d2-4b68-a0ae-02e696b3ff87",
-            "created_at": "2026-04-07T00:10:16.945595Z"
-          },
-          {
-            "signal_id": "baed36fc-da16-4daa-b6fa-0c0109b8ee1d",
-            "created_order_intent_id": "943cf056-7750-4400-b4ea-52ae5b903029",
-            "created_at": "2026-04-07T00:09:50.638623Z"
-          },
-          {
-            "signal_id": "8a331070-d49d-46dd-af7b-4974c8a2fb3d",
-            "created_order_intent_id": "afc9e683-df9f-4736-8a65-50ff09f3b039",
-            "created_at": "2026-04-07T00:09:24.575034Z"
-          },
-          {
-            "signal_id": "1a2ddac5-fb6c-4e44-a80e-fac1691837a8",
-            "created_order_intent_id": "9e15a8e1-353e-49db-bdf2-7671f45d3cdb",
-            "created_at": "2026-04-07T00:08:57.134999Z"
-          },
-          {
-            "signal_id": "ed259736-8f5d-4aaf-b5ed-eeee8f9380dd",
-            "created_order_intent_id": "5d41dc6c-da8d-4720-8288-7faea95ee821",
-            "created_at": "2026-04-07T00:08:29.525484Z"
-          },
-          {
-            "signal_id": "1687df40-de2e-4eb8-835b-03ed44249c46",
-            "created_order_intent_id": "e69459d4-3cd0-42e2-84d7-b8ef74bcc4f0",
-            "created_at": "2026-04-07T00:08:03.344113Z"
-          }
-        ]
-      }
-    },
-    {
-      "test": "MANUAL Mode No Auto Opening",
-      "status": "PASS",
-      "details": "No auto openings in MANUAL mode: 0 manual signals checked",
-      "timestamp": "2026-04-08 12:07:08",
-      "data": {
-        "manual_signals_count": 0,
-        "manual_signals": []
-      }
-    }
-  ]
-}
+[
+  {
+    "test": "Admin Auth Persistence",
+    "status": "PASS",
+    "details": "Admin login successful, token persistent, email: canary.admin@platform.local",
+    "timestamp": "2026-04-08T14:36:02.604001",
+    "response_data": null
+  },
+  {
+    "test": "User Auth Persistence",
+    "status": "PASS",
+    "details": "User login successful, email: review.user@platform.local",
+    "timestamp": "2026-04-08T14:36:07.898468",
+    "response_data": null
+  },
+  {
+    "test": "Advisory Mode Effects",
+    "status": "FAIL",
+    "details": "Exception: Request timeout after 30s",
+    "timestamp": "2026-04-08T14:36:37.929821",
+    "response_data": null
+  },
+  {
+    "test": "Mock Detection",
+    "status": "FAIL",
+    "details": "Exception: Request timeout after 30s",
+    "timestamp": "2026-04-08T14:37:08.050766",
+    "response_data": null
+  },
+  {
+    "test": "Idempotency Test",
+    "status": "FAIL",
+    "details": "Exception: Request timeout after 30s",
+    "timestamp": "2026-04-08T14:37:23.158306",
+    "response_data": null
+  },
+  {
+    "test": "Performance Test",
+    "status": "PASS",
+    "details": "5 calls in 103.49s, Avg latency: 20.00s, Success: 0/5",
+    "timestamp": "2026-04-08T14:39:06.651886",
+    "response_data": null
+  },
+  {
+    "test": "Critical Endpoints Regression",
+    "status": "PASS",
+    "details": "Endpoint status: /api/user/signals?limit=20: 200 (OK); /api/user/scanner-engine/run: ERROR (Request timeout after 30s); /api/admin/strategy-allocation: 401 (4xx); /api/admin/universe-monitor: 401 (4xx)",
+    "timestamp": "2026-04-08T14:39:31.249234",
+    "response_data": null
+  }
+]
