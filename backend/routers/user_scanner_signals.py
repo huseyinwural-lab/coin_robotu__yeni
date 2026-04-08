@@ -10,24 +10,14 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from core.users.user_scanner_signal_service import (
-    activate_scanner_automation_profile,
     approve_pending_signal,
     bulk_fix_blocked_signals,
-    create_scanner_automation_profile,
-    delete_scanner_automation_profile,
     diagnose_pending_signal,
-    get_or_create_scanner_automation_config,
     get_or_create_signal_mode,
-    list_scanner_automation_profiles,
     list_user_scanner_results,
     list_user_signals,
     reject_pending_signal,
     run_user_scanner,
-    scanner_automation_config_response_payload,
-    scanner_automation_profile_response_payload,
-    update_signal_mode,
-    update_scanner_automation_profile,
-    update_scanner_automation_config,
 )
 from db import SessionLocal, get_db, redis_client
 from deps import require_user

@@ -679,28 +679,7 @@ def admin_dry_run_strategy_version(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    result = run_strategy_version_dry_run(
-        db,
-        strategy_id=strategy_id,
-        version_id=version_id,
-        actor_user_id=current_admin.id,
-        context_payload=payload.context_snapshot,
-    )
-    create_audit_log(
-        db,
-        action="strategy_version_dry_run",
-        entity_type="strategy_version",
-        entity_id=version_id,
-        actor_user_id=current_admin.id,
-        actor_role=current_admin.role.value,
-        details={
-            "strategy_id": strategy_id,
-            "dry_run_status": result.get("dry_run_status"),
-            "lifecycle_state": result.get("lifecycle_state"),
-            "decision_hash": ((result.get("report") or {}).get("output") or {}).get("decision_hash"),
-        },
-    )
-    return result
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "strategy dry-run kaldırıldı"})
 
 
 @router.post("/admin/strategies/{strategy_id}/versions/{version_id}/stage")
@@ -952,22 +931,7 @@ def admin_bulk_dry_run_strategies(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    result = bulk_dry_run_strategies(
-        db,
-        strategy_ids=payload.strategy_ids,
-        actor_user_id=current_admin.id,
-        context_snapshot=payload.context_snapshot,
-    )
-    create_audit_log(
-        db,
-        action="strategy_bulk_dry_run",
-        entity_type="strategy_definition",
-        entity_id="bulk",
-        actor_user_id=current_admin.id,
-        actor_role=current_admin.role.value,
-        details={"success_count": result.get("success_count"), "failed_count": result.get("failed_count")},
-    )
-    return result
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "strategy bulk dry-run kaldırıldı"})
 
 
 @router.post("/admin/strategies/bulk/tag")

@@ -9,7 +9,6 @@ from services.futures_strategy_service import (
     get_futures_strategy_execution_quality,
     get_futures_strategy_performance,
     get_futures_strategy_status,
-    run_futures_strategy_paper_cycle,
 )
 from services.pipeline.runtime import pipeline_runtime
 
@@ -43,23 +42,6 @@ def futures_strategy_status(
 @router.post("/run-paper-cycle")
 def run_futures_strategy_cycle(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "paper cycle kaldırıldı"})
-
-    status_payload = run_futures_strategy_paper_cycle(db, pipeline_runtime.cache, current_admin.id)
-    create_audit_log(
-        db,
-        action="FUTURES_STRATEGY_PAPER_CYCLE_RUN",
-        entity_type="futures_strategy_cycle",
-        entity_id=current_admin.id,
-        actor_user_id=current_admin.id,
-        actor_role=current_admin.role.value,
-        severity="info",
-        details={
-            "strategy": status_payload.get("strategy"),
-            "signals": (status_payload.get("metrics") or {}).get("futures_strategy_signal_total", 0),
-            "allowed": (status_payload.get("metrics") or {}).get("futures_strategy_allowed_total", 0),
-        },
-    )
-    return status_payload
 
 
 @router.get("/performance")

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -18,7 +18,6 @@ from services.user_live_dashboard_service import (
     build_user_live_trades,
     export_user_live_daily_report_csv,
 )
-from core.users.user_scanner_signal_service import get_or_create_scanner_automation_config, scanner_automation_config_response_payload
 
 router = APIRouter(prefix="/user/live", tags=["user_live_dashboard"])
 
@@ -148,12 +147,4 @@ def user_strategy_performance(
 
 @router.get("/scheduler/next-run")
 def user_scheduler_next_run(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
-    row = get_or_create_scanner_automation_config(db, current_user.id)
-    payload = scanner_automation_config_response_payload(row)
-    return {
-        "auto_enabled": payload.get("auto_enabled"),
-        "last_run_at": payload.get("last_run_at"),
-        "next_run_at": payload.get("next_run_at"),
-        "interval_seconds": payload.get("interval_seconds"),
-        "source": "scheduler_config",
-    }
+    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "scheduler automation kaldırıldı"})
