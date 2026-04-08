@@ -3,21 +3,6 @@ import { Fragment, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 const ALLOWED_QUOTE_ASSETS = new Set(["USDT", "USDC"]);
-const CANONICAL_STRATEGY_OPTIONS = [
-  "ichimoku_trend_continuation",
-  "golden_cross_regime",
-  "supertrend_flip",
-  "vortex_directional_cross",
-  "bollinger_squeeze_breakout",
-  "moving_momentum",
-  "fibonacci_pullback_continuation",
-  "macd_impulse",
-  "fisher_reversal",
-  "divergence_reversal_suite",
-  "structure_breakout",
-  "stochastic_exhaustion_reentry",
-];
-
 const detectQuoteAsset = (symbol) => {
   const normalized = String(symbol || "").trim().toUpperCase();
   if (normalized.endsWith("USDT")) return "USDT";
@@ -36,6 +21,31 @@ const scoreClassName = (score) => {
   return "text-slate-400";
 };
 
+const fallbackDecisionFromStrategyCode = (strategyCode) => {
+  const code = String(strategyCode || "").toLowerCase();
+  if (code.includes("bollinger")) {
+    return "KARAR1(BC01)";
+  }
+  if (code.includes("breakout") || code.includes("structure") || code.includes("vortex")) {
+    return "KARAR2(BC02)";
+  }
+  if (
+    code.includes("momentum") ||
+    code.includes("macd") ||
+    code.includes("golden") ||
+    code.includes("ichimoku") ||
+    code.includes("supertrend") ||
+    code.includes("fibonacci") ||
+    code.includes("moving")
+  ) {
+    return "KARAR3(BC03)";
+  }
+  if (code.includes("fisher") || code.includes("divergence") || code.includes("stochastic") || code.includes("reversal")) {
+    return "KARAR4(BC04)";
+  }
+  return "KARAR3(BC03)";
+};
+
 export const ScannerResultsTable = ({
   results,
   compactMode,
@@ -44,10 +54,6 @@ export const ScannerResultsTable = ({
   onAddWatchlist,
   decisionApprovalMap,
 }) => {
-  const [selectedStrategy, setSelectedStrategy] = useState("all");
-  const [minConfidence, setMinConfidence] = useState(0);
-  const [minScore, setMinScore] = useState(0);
-  const [signalType, setSignalType] = useState("all");
   const [expandedRowId, setExpandedRowId] = useState("");
 
   const resolveDecisionStrategyLabel = (item) => {
@@ -81,126 +87,20 @@ export const ScannerResultsTable = ({
       return fallback.join(" + ");
     }
 
-    return String(item?.strategy_code || "legacy");
+    return fallbackDecisionFromStrategyCode(item?.strategy_code);
   };
 
-  const strategyOptions = useMemo(() => {
-    const dynamic = (results || []).map((item) => String(resolveDecisionStrategyLabel(item) || "unknown"));
-    const unique = Array.from(new Set([...CANONICAL_STRATEGY_OPTIONS, ...dynamic]));
-    return unique.filter(Boolean).sort();
-  }, [results, decisionApprovalMap]);
-
   const filtered = useMemo(() => {
-    return (results || []).filter((item) => {
-      const strategyPass = selectedStrategy === "all" || String(resolveDecisionStrategyLabel(item) || "") === selectedStrategy;
-      const confidencePass = Number(item.confidence || 0) >= Number(minConfidence || 0);
-      const scorePass = Number(item.signal_score || 0) >= Number(minScore || 0);
-      const signal = String(item.signal || "none").toLowerCase();
-      const signalPass = signalType === "all" || signal === signalType;
-      return strategyPass && confidencePass && scorePass && signalPass;
-    });
-  }, [results, selectedStrategy, minConfidence, minScore, signalType, decisionApprovalMap]);
-
-  const performance = useMemo(() => {
-    const candidates = Number(results?.length || 0);
-    const qualified = filtered.filter((item) => Number(item.signal_score || 0) >= 60).length;
-    const actionable = filtered.filter((item) => {
-      const signal = String(item.signal || "none").toLowerCase();
-      return (signal === "long" || signal === "short") && Boolean(item.tradeable);
-    }).length;
-    return {
-      symbols_scanned: candidates,
-      candidates,
-      qualified,
-      signals: actionable,
-    };
-  }, [results, filtered]);
+    return results || [];
+  }, [results]);
 
   return (
     <section className="space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="scanner-results-section">
       <div className="flex flex-wrap items-center justify-between gap-2" data-testid="scanner-results-header">
         <div data-testid="scanner-results-title-wrap">
           <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="scanner-results-kicker">Scanner Results</p>
-          <h3 className="text-base font-semibold" data-testid="scanner-results-title">Filtered Signal Grid</h3>
+          <h3 className="text-base font-semibold" data-testid="scanner-results-title">Signal Grid</h3>
         </div>
-      </div>
-
-      <div className="grid gap-2 rounded border border-slate-800 bg-slate-950 p-3 md:grid-cols-4" data-testid="scanner-results-filter-bar">
-        <label className="space-y-1" data-testid="scanner-results-filter-strategy-field">
-          <span className="text-xs text-slate-400">Strategy</span>
-          <select
-            value={selectedStrategy}
-            onChange={(event) => setSelectedStrategy(event.target.value)}
-            className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-xs"
-            data-testid="scanner-results-filter-strategy-select"
-          >
-            <option value="all" data-testid="scanner-results-filter-strategy-option-all">all</option>
-            {strategyOptions.map((item) => (
-              <option key={item} value={item} data-testid={`scanner-results-filter-strategy-option-${item}`}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1" data-testid="scanner-results-filter-confidence-field">
-          <span className="text-xs text-slate-400">Confidence ≥</span>
-          <input
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            value={minConfidence}
-            onChange={(event) => setMinConfidence(Number(event.target.value || 0))}
-            className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-xs"
-            data-testid="scanner-results-filter-confidence-input"
-          />
-        </label>
-        <label className="space-y-1" data-testid="scanner-results-filter-score-field">
-          <span className="text-xs text-slate-400">Score ≥</span>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={1}
-            value={minScore}
-            onChange={(event) => setMinScore(Number(event.target.value || 0))}
-            className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-xs"
-            data-testid="scanner-results-filter-score-input"
-          />
-        </label>
-        <label className="space-y-1" data-testid="scanner-results-filter-signal-type-field">
-          <span className="text-xs text-slate-400">Signal Type</span>
-          <select
-            value={signalType}
-            onChange={(event) => setSignalType(event.target.value)}
-            className="h-9 w-full rounded border border-slate-700 bg-black px-2 text-xs"
-            data-testid="scanner-results-filter-signal-type-select"
-          >
-            <option value="all" data-testid="scanner-results-filter-signal-type-option-all">all</option>
-            <option value="long" data-testid="scanner-results-filter-signal-type-option-long">long</option>
-            <option value="short" data-testid="scanner-results-filter-signal-type-option-short">short</option>
-            <option value="none" data-testid="scanner-results-filter-signal-type-option-none">none</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="scanner-results-performance-panel">
-        <article className="rounded border border-slate-700 bg-slate-950 p-2" data-testid="scanner-performance-symbols-scanned-card">
-          <p className="text-xs text-slate-400" data-testid="scanner-performance-symbols-scanned-label">Symbols Scanned</p>
-          <p className="text-lg font-bold" data-testid="scanner-performance-symbols-scanned-value">{performance.symbols_scanned}</p>
-        </article>
-        <article className="rounded border border-slate-700 bg-slate-950 p-2" data-testid="scanner-performance-candidates-card">
-          <p className="text-xs text-slate-400" data-testid="scanner-performance-candidates-label">Candidates</p>
-          <p className="text-lg font-bold" data-testid="scanner-performance-candidates-value">{performance.candidates}</p>
-        </article>
-        <article className="rounded border border-slate-700 bg-slate-950 p-2" data-testid="scanner-performance-qualified-card">
-          <p className="text-xs text-slate-400" data-testid="scanner-performance-qualified-label">Qualified</p>
-          <p className="text-lg font-bold" data-testid="scanner-performance-qualified-value">{performance.qualified}</p>
-        </article>
-        <article className="rounded border border-slate-700 bg-slate-950 p-2" data-testid="scanner-performance-signals-card">
-          <p className="text-xs text-slate-400" data-testid="scanner-performance-signals-label">Signals</p>
-          <p className="text-lg font-bold" data-testid="scanner-performance-signals-value">{performance.signals}</p>
-        </article>
       </div>
 
       <div className="grid gap-3 md:hidden" data-testid="scanner-results-mobile-cards">
