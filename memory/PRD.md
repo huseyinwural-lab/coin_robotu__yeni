@@ -1,3 +1,30 @@
+## 2026-04-08 — Pure Live GO/NO-GO P0 Düzeltmeleri (Tamamlandı)
+
+### Tamamlanan Kritik Düzeltmeler
+- **P0-1 Market Data Zero-Price**: `market_data_provider.py` içinde katı fiyat doğrulaması eklendi. Artık `0/None/NaN` fiyatlar `DataCorruptionError` olarak ele alınıyor ve cache'e yazılmıyor.
+- Binance fiyat zinciri **tickerPrice -> ticker/24hr -> klines** olarak uygulandı; geçersiz fiyat satırları atlanıyor, tüm satırlar geçersizse hata üretiliyor.
+- Mevcut bozuk sembol cache anahtarları temizlendi; yeni cache yazımı yalnızca pozitif fiyatlar için aktif.
+
+- **P0-2 Scanner Analyze 404**: Geriye uyumluluk için yeni alias endpointleri eklendi:
+  - `POST /api/user/scanner-engine/analyze`
+  - `POST /api/user/scanner/analyze`
+  - `POST /api/admin/universe-monitor/scanner-engine/analyze`
+  Bu path'ler artık 404 üretmiyor (method/payload durumuna göre 405/422/200).
+
+- **P0-3 session_device_missing (401)**: `deps.py` içinde strict admin session binding daha dayanıklı hale getirildi.
+  - Parallel/allocation çağrılarında `x-session-device` veya cookie eksikse, token context (ip_hash + device_fingerprint) eşleşiyorsa güvenli recovery uygulanıyor.
+  - `/api/admin/strategy-allocation*` için auth trace log'ları eklendi (`auth_device_binding_event`).
+
+### Doğrulama Sonuçları
+- Backend smoke + hedefli doğrulama: **PASS**
+- `BTCUSDT` fiyatı pozitif doğrulandı, `last_price <= 0` satır sayısı: **0**
+- Analyze endpointleri için 404 tekrar üretilemedi.
+- Allocation akışında `session_device_missing` recovery log'ları gözlendi, bloklayıcı 401 doğrulanmadı.
+
+### Kalan Kısa Liste
+- P1: Refresh token replay protection ve access TTL sertleştirmesi.
+- P1: Dashboard tarafındaki non-blocking `ERR_ABORTED` API çağrıları için timeout/perf incelemesi.
+
 ## 2026-04-08 — AUTO Mod Ayrıştırma UX (Signal vs Scanner Automation) ✅
 
 - `UserSignalsPage` üzerinde iki ayrı durum rozeti eklendi:
