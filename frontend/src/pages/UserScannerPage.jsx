@@ -11,30 +11,6 @@ import { saveExecutionContext } from "@/lib/userFlowContext";
 import { DecisionCard } from "@/pages/user/components/DecisionCard";
 import { ExplainabilityDrawer } from "@/pages/user/components/ExplainabilityDrawer";
 
-const scannerQuickPresets = [
-  {
-    id: "manual-discovery",
-    label: "Manual Discovery",
-    mode: "MANUAL",
-    maxResults: 20,
-    note: "Sinyalleri manuel inceleyip onaylamak için.",
-  },
-  {
-    id: "assisted-balanced",
-    label: "Semi-Auto Balanced",
-    mode: "ASSISTED",
-    maxResults: 25,
-    note: "Risk ve queue kontrollü yarı otomatik akış.",
-  },
-  {
-    id: "auto-momentum",
-    label: "Full Auto Momentum",
-    mode: "AUTO",
-    maxResults: 30,
-    note: "Uygun sinyallerde intent hattını otomatik başlatır.",
-  },
-];
-
 const AUTO_SCAN_INTERVAL_SECONDS = 60;
 const PROFILE_INTERVAL_OPTIONS = [
   { value: 30, label: "30 saniye" },
@@ -329,7 +305,6 @@ export const UserScannerPage = () => {
   const [marketType, setMarketType] = useState("spot");
   const [overview, setOverview] = useState(null);
   const [scannerResults, setScannerResults] = useState([]);
-  const [isRunning, setIsRunning] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [symbolSource, setSymbolSource] = useState("crypto");
@@ -1417,36 +1392,6 @@ export const UserScannerPage = () => {
     setScannerSection(nextSection);
   }, [searchParams]);
 
-  const runPreset = async (preset) => {
-    if (!ensureScannerRunReady()) {
-      return;
-    }
-
-    const effectiveMode = SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode);
-    setIsRunning(true);
-    try {
-      setMode(preset.mode);
-      const data = await executeScannerRunWithChunks({
-        runMode: preset.mode,
-        maxResults: preset.maxResults,
-        effectiveMode,
-        selectedForRun: selectedSymbols,
-        targetMarketType: marketType,
-      });
-      setLastRunEnvelope(data);
-      setLastRunStartBotReport(null);
-      await load();
-      if ((data?.warnings || []).length > 0) {
-        toast.warning((data.warnings || []).join(","));
-      }
-      toast.success(`Preset çalıştı: ${preset.label}`);
-    } catch (error) {
-      toast.error(toApiErrorMessage(error, "Preset çalıştırılamadı"));
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <section className="space-y-4" data-testid="user-scanner-page">
@@ -1912,30 +1857,7 @@ export const UserScannerPage = () => {
                 />
                 Manuel
               </label>
-              <label className="flex items-center gap-1 text-xs" data-testid="user-scanner-engine-signal-mode-auto-label">
-                <input
-                  type="checkbox"
-                  checked={String(scannerEngineConfig.signal_mode || "manual") === "auto"}
-                  onChange={() => setScannerEngineConfig((prev) => ({ ...prev, signal_mode: "auto" }))}
-                  disabled={scannerEngineBusy}
-                  data-testid="user-scanner-engine-signal-mode-auto-checkbox"
-                />
-                Auto
-              </label>
-
-              {String(scannerEngineConfig.signal_mode || "manual") === "auto" && (
-                <select
-                  value={Number(scannerEngineConfig.auto_interval_minutes || 3)}
-                  onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, auto_interval_minutes: Number(event.target.value || 3) }))}
-                  disabled={scannerEngineBusy}
-                  className="ml-auto h-7 border border-slate-600 bg-black px-2 text-xs"
-                  data-testid="user-scanner-engine-auto-interval-select"
-                >
-                  <option value={1} data-testid="user-scanner-engine-auto-interval-option-1">1 dakika</option>
-                  <option value={3} data-testid="user-scanner-engine-auto-interval-option-3">3 dakika</option>
-                  <option value={5} data-testid="user-scanner-engine-auto-interval-option-5">5 dakika</option>
-                </select>
-              )}
+              <span className="ml-auto text-[11px] text-cyan-200" data-testid="user-scanner-engine-signal-mode-fixed-note">Pure Live: AUTO/Scheduler switching kaldırıldı</span>
             </div>
           </div>
 
@@ -1952,7 +1874,7 @@ export const UserScannerPage = () => {
 
         <div className="grid gap-2 rounded border border-slate-800 bg-slate-950 p-3 md:grid-cols-2" data-testid="user-scanner-live-scan-timer-section">
           <p className="text-sm" data-testid="user-scanner-last-scan-value">Last Scan time: {formatDateLabel(scannerEngineRun?.generated_at || activeAutomation?.last_run_at || overview?.latest_generated_at)}</p>
-          <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan time: {formatDateLabel(scannerEngineNextRunAt)}</p>
+          <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan time: -</p>
         </div>
       </section>
 
@@ -1961,8 +1883,8 @@ export const UserScannerPage = () => {
         <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="user-scanner-parameters-grid">
           <p className="text-sm" data-testid="user-scanner-parameters-market">Market: <span className="font-semibold">{String(marketType || "spot").toUpperCase()}</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-mode">Signal Mode: <span className="font-semibold">{String(mode || "ASSISTED").toUpperCase()}</span></p>
-          <p className="text-sm" data-testid="user-scanner-parameters-auto">Auto Scan: <span className="font-semibold">{activeAutomation?.auto_enabled ? "ON" : "OFF"}</span></p>
-          <p className="text-sm" data-testid="user-scanner-parameters-interval">Interval: <span className="font-semibold">{Number(activeAutomation?.interval_seconds || autoScanInterval || AUTO_SCAN_INTERVAL_SECONDS)}s</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-auto">Automation: <span className="font-semibold">REMOVED</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-interval">Interval: <span className="font-semibold">-</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-selected-count">Selected Symbols: <span className="font-semibold">{selectedSymbols.length}</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-max-results">Max Results: <span className="font-semibold">{SIMPLE_SCANNER_V2 ? 120 : 25}</span></p>
           <p className="text-sm md:col-span-3" data-testid="user-scanner-parameters-selected-sample">
@@ -2056,23 +1978,7 @@ export const UserScannerPage = () => {
         </div>
       </section>}
 
-      {!SIMPLE_SCANNER_V2 && <section className="order-8 col-span-12 space-y-3 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-strategy-presets-section">
-        <div data-testid="user-scanner-strategy-presets-header">
-          <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-strategy-presets-kicker">Strategy Presets</p>
-          <h3 className="text-base font-semibold" data-testid="user-scanner-strategy-presets-title">Preset Runner</h3>
-        </div>
-        <div className="grid gap-3 md:grid-cols-3" data-testid="user-scanner-quick-preset-section">
-        {scannerQuickPresets.map((preset) => (
-          <article key={preset.id} className="rounded border border-slate-700 bg-slate-950 p-3" data-testid={`user-scanner-quick-preset-card-${preset.id}`}>
-            <p className="text-sm font-semibold text-slate-100" data-testid={`user-scanner-quick-preset-title-${preset.id}`}>{preset.label}</p>
-            <p className="mt-1 text-xs text-slate-400" data-testid={`user-scanner-quick-preset-note-${preset.id}`}>{preset.note}</p>
-            <Button className="mt-3" variant="outline" onClick={() => runPreset(preset)} disabled={isRunning} data-testid={`user-scanner-quick-preset-run-button-${preset.id}`}>
-              {isRunning ? "Çalışıyor..." : "Preset Çalıştır"}
-            </Button>
-          </article>
-        ))}
-        </div>
-      </section>}
+      {/* Pure Live: preset runner kaldırıldı */}
 
       {!SIMPLE_SCANNER_V2 && <section className="order-11 col-span-12 space-y-3 rounded border border-cyan-800/50 bg-cyan-950/20 p-4" data-testid="user-scanner-live-readiness-section">
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-scanner-live-readiness-header">
