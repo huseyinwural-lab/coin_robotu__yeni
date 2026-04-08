@@ -180,7 +180,7 @@ class ScannerEngineConfigSaveRequest(BaseModel):
     market_scope: dict = Field(default_factory=dict)
     signal_mode: str = Field(default="manual", pattern="^(manual|auto)$")
     auto_interval_minutes: int = Field(default=3, ge=1, le=5)
-    scan_limit: int = Field(default=SCANNER_ENGINE_DEFAULT_SCAN_LIMIT, ge=10, le=SCANNER_ENGINE_MAX_SCAN_LIMIT)
+    scan_limit: int = Field(default=SCANNER_ENGINE_DEFAULT_SCAN_LIMIT, ge=1)
     top_n: int = Field(default=20, ge=1, le=150)
     manual_symbols: list[str] = Field(default_factory=list)
     trend_weight: int = Field(default=10, ge=0, le=200)
@@ -648,8 +648,8 @@ def _default_scanner_engine_config() -> dict:
         "include_spot": True,
         "include_futures": True,
         "market_scope": {
-            "spot_mode": "top50",
-            "futures_mode": "top50",
+            "spot_mode": "all",
+            "futures_mode": "all",
         },
         "signal_mode": "manual",
         "auto_interval_minutes": 3,
@@ -729,17 +729,10 @@ def _save_scanner_engine_config(config: dict):
 
 
 def _sanitize_market_scope(input_scope: dict) -> dict:
-    defaults = ("top50", "top50")
-    if not isinstance(input_scope, dict):
-        input_scope = {}
-
-    def _mode(value, fallback: str) -> str:
-        normalized = str(value or fallback).strip().lower()
-        return normalized if normalized in {"top50", "all"} else fallback
-
+    _ = input_scope
     return {
-        "spot_mode": _mode(input_scope.get("spot_mode"), defaults[0]),
-        "futures_mode": _mode(input_scope.get("futures_mode"), defaults[1]),
+        "spot_mode": "all",
+        "futures_mode": "all",
     }
 
 
@@ -1311,11 +1304,7 @@ def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
         force_refresh=force_refresh,
     )
 
-    rows = [
-        item
-        for item in (universe.get("rows") or [])
-        if bool(item.get("is_tradable")) and str(item.get("symbol") or "").endswith("USDT")
-    ]
+    rows = [item for item in (universe.get("rows") or []) if str(item.get("symbol") or "").strip()]
 
     market_scope = _sanitize_market_scope(config.get("market_scope") or {})
     spot_mode = str(market_scope.get("spot_mode") or "top50")
@@ -1328,9 +1317,9 @@ def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
 
     scoped_rows: list[dict] = []
     if bool(config.get("include_spot", True)):
-        scoped_rows.extend(spot_rows[:50] if spot_mode == "top50" else spot_rows)
+        scoped_rows.extend(spot_rows)
     if bool(config.get("include_futures", True)):
-        scoped_rows.extend(futures_rows[:50] if futures_mode == "top50" else futures_rows)
+        scoped_rows.extend(futures_rows)
 
     rows = scoped_rows
 
@@ -1339,11 +1328,7 @@ def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
         rows = [item for item in rows if str(item.get("symbol") or "").upper() in manual_symbols]
 
     rows.sort(key=lambda item: _to_float(item.get("volume_24h")), reverse=True)
-    scan_limit = max(10, min(int(config.get("scan_limit") or SCANNER_ENGINE_DEFAULT_SCAN_LIMIT), SCANNER_ENGINE_MAX_SCAN_LIMIT))
-    if len(rows) > scan_limit:
-        candidates = rows[:scan_limit]
-    else:
-        candidates = rows
+    candidates = rows
 
     scored: list[dict] = []
     errors: list[dict] = []

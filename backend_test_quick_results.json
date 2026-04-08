@@ -1,0 +1,43 @@
+{
+  "overall_status": "PARTIAL",
+  "passed": 3,
+  "total": 6,
+  "success_rate": "50.0%",
+  "results": [
+    [
+      "Authentication",
+      "PASS",
+      "Successfully authenticated"
+    ],
+    [
+      "1) Scanner Engine Config",
+      "PASS",
+      "market_scope correct: spot_mode=all, futures_mode=all"
+    ],
+    [
+      "2) Scanner Engine Run Limits",
+      "TIMEOUT/FAIL",
+      "Exception: HTTPConnectionPool(host='127.0.0.1', port=8001): Read timed out. (read timeout=15)"
+    ],
+    [
+      "3) Scanner Run AUTO All",
+      "TIMEOUT/FAIL",
+      "Exception: HTTPConnectionPool(host='127.0.0.1', port=8001): Read timed out. (read timeout=15)"
+    ],
+    [
+      "4) Tradeability Control",
+      "PASS",
+      "Active signals without rollout cutting: 30/30"
+    ],
+    [
+      "5) AUTO Mode Execution Limit",
+      "FAIL",
+      "AUTO executions exceed limit: 15/5"
+    ],
+    [
+      "6) MANUAL Mode No Auto Opening",
+      "PASS",
+      "No auto openings in MANUAL: 0 manual signals"
+    ]
+  ]
+}

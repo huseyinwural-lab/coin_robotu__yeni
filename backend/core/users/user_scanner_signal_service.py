@@ -59,6 +59,7 @@ FRESHNESS_SLA_SECONDS = {
 SCANNER_ENGINE_LAST_RUN_CACHE_KEY = "universe:scanner_engine:last_run"
 USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX = "user:scanner_engine:last_run"
 BC_MAX_SCORE = 161.0
+AUTO_EXECUTION_MAX_PER_RUN = 5
 
 SIGNAL_PENDING_REASON_HINTS = {
     "MANUAL_APPROVAL_REQUIRED": (
@@ -1875,11 +1876,9 @@ def run_user_scanner(
         "ignore_for_now": [],
         "decision_scope": [],
     }
-    rollout_state = get_rollout_state(db)
-    rollout_stage = str(rollout_state.current_stage or "top_volume_subset")
+    rollout_stage = "full_universe_no_rollout_cut"
     dropped_symbol_count = 0
     duplicate_suppressed_count = 0
-    acquired_symbol_locks: list[str] = []
 
     if scanner_scope:
         candidate_tiers = _build_candidate_tiers(
@@ -1893,54 +1892,35 @@ def run_user_scanner(
         decision_scope_raw = candidate_tiers.get("decision_scope") or []
         decision_scope: list[str] = []
 
-        if effective_selection_mode != "manual_selection":
-            if rollout_stage == "top_volume_subset":
-                decision_scope_raw = decision_scope_raw[:60]
-            elif rollout_stage == "mid_segment":
-                decision_scope_raw = decision_scope_raw[:160]
-
         for symbol in decision_scope_raw:
-            lock_key = f"scanner:symbol:lock:{symbol}"
-            lock_acquired = _acquire_symbol_lock(lock_key, run_id, ttl_seconds=90)
-            if lock_acquired:
-                acquired_symbol_locks.append(lock_key)
+            if symbol not in decision_scope:
                 decision_scope.append(symbol)
-            else:
-                duplicate_suppressed_count += 1
 
         dropped_symbol_count = max(0, len(scanner_scope) - len(decision_scope))
-        dropped_symbol_count += duplicate_suppressed_count
         if dropped_symbol_count > 0:
             warning_set.add("low_priority_symbols_deferred")
-        if duplicate_suppressed_count > 0:
-            warning_set.add("same_symbol_duplicate_suppressed")
+        scanner_engine_payload = _load_scanner_engine_last_run_payload(user_id)
+        scanner_engine_results = scanner_engine_payload.get("results")
+        if not isinstance(scanner_engine_results, list):
+            scanner_engine_results = []
 
-        try:
-            scanner_engine_payload = _load_scanner_engine_last_run_payload(user_id)
-            scanner_engine_results = scanner_engine_payload.get("results")
-            if not isinstance(scanner_engine_results, list):
-                scanner_engine_results = []
+        ranked = _build_ranked_from_scanner_engine_results(
+            scanner_rows=scanner_engine_results,
+            decision_scope=decision_scope,
+            market_type=normalized_market_type,
+        )
 
-            ranked = _build_ranked_from_scanner_engine_results(
-                scanner_rows=scanner_engine_results,
-                decision_scope=decision_scope,
-                market_type=normalized_market_type,
-            )
-
-            engine_version = "scanner-engine.bc01-bc04.v1"
-            schema_version = "decision-box-map.v1"
-            scan_performance = {
-                "source": "scanner_engine_decision_map",
-                "scanner_run_id": scanner_engine_payload.get("run_id"),
-                "scanner_generated_at": scanner_engine_payload.get("generated_at"),
-                "scored_rows": len(scanner_engine_results),
-                "ranked_rows": len(ranked),
-            }
-            if not ranked:
-                warning_set.add("scanner_engine_decision_map_empty")
-        finally:
-            for key in acquired_symbol_locks:
-                _release_symbol_lock(key)
+        engine_version = "scanner-engine.bc01-bc04.v1"
+        schema_version = "decision-box-map.v1"
+        scan_performance = {
+            "source": "scanner_engine_decision_map",
+            "scanner_run_id": scanner_engine_payload.get("run_id"),
+            "scanner_generated_at": scanner_engine_payload.get("generated_at"),
+            "scored_rows": len(scanner_engine_results),
+            "ranked_rows": len(ranked),
+        }
+        if not ranked:
+            warning_set.add("scanner_engine_decision_map_empty")
     else:
         scanner_engine_payload = _load_scanner_engine_last_run_payload(user_id)
         scanner_engine_results = scanner_engine_payload.get("results")
@@ -1963,7 +1943,7 @@ def run_user_scanner(
         }
         warning_set.add("scanner_scope_unavailable_using_last_bc_run")
 
-    selected = ranked[:max_results]
+    selected = ranked
     selected_symbols = [str(item.get("symbol") or "").upper() for item in selected if str(item.get("symbol") or "").strip()]
     if len(selected) == 0:
         warning_set.add("scanner_no_bc_match")
@@ -1980,6 +1960,7 @@ def run_user_scanner(
     bot = _default_bot_for_user(db, user_id, selected_symbols, bot_market_type)
     actionable_count = 0
     queued_count = 0
+    auto_dispatched_count = 0
     symbol_direction_seen: dict[str, str] = {}
     stale_evaluation_count = 0
     stale_block_count = 0
@@ -2482,7 +2463,7 @@ def run_user_scanner(
         if pending_row.status in {"pending", "ready"}:
             queued_count += 1
 
-        if mode == "AUTO" and pending_row.execution_eligible:
+        if mode == "AUTO" and pending_row.execution_eligible and auto_dispatched_count < AUTO_EXECUTION_MAX_PER_RUN:
             try:
                 connection = _resolve_default_exchange_connection(db, user_id)
                 _dispatch_signal_to_execution(
@@ -2492,8 +2473,12 @@ def run_user_scanner(
                     exchange_connection=connection,
                     actor_user_id=user_id,
                 )
+                if pending_row.created_order_intent_id:
+                    auto_dispatched_count += 1
             except Exception as exc:
                 _apply_order_precheck_failed(pending_row, error_detail=str(exc))
+        elif mode == "AUTO" and pending_row.execution_eligible and auto_dispatched_count >= AUTO_EXECUTION_MAX_PER_RUN:
+            warning_set.add("auto_execution_cap_reached")
 
         record_decision_trace(
             db,
