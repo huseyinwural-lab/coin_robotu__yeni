@@ -49,6 +49,7 @@ export const UserSignalsPage = () => {
   const [isStaleCleanupRunning, setIsStaleCleanupRunning] = useState(false);
   const [animatedSignalIds, setAnimatedSignalIds] = useState([]);
   const [loadIssue, setLoadIssue] = useState(null);
+  const [decisionMap, setDecisionMap] = useState({});
   const [showSlowLoadingHint, setShowSlowLoadingHint] = useState(false);
   const alertedSignalIdsRef = useRef(new Set());
   const toastTrackerRef = useRef(new Map());
@@ -104,6 +105,7 @@ export const UserSignalsPage = () => {
         { key: "signal_mode", label: "signal_mode", critical: true, request: () => apiClient.get("/user/signal-mode", { timeout: 15000 }) },
         { key: "bot_profiles", label: "bot_profiles", critical: true, request: () => apiClient.get("/bot-profiles", { timeout: 15000 }) },
         { key: "status_contract", label: "status_contract", critical: false, request: () => apiClient.get("/user/scanner/status-contract", { timeout: 15000 }) },
+        { key: "decision_map", label: "decision_map", critical: false, request: () => apiClient.get("/user/scanner-engine/decision-map", { timeout: 15000 }) },
       ];
       const settled = await Promise.allSettled(requestDescriptors.map((item) => item.request()));
       const byKey = requestDescriptors.reduce((acc, descriptor, index) => {
@@ -117,6 +119,7 @@ export const UserSignalsPage = () => {
       const modeRes = byKey.signal_mode;
       const botsRes = byKey.bot_profiles;
       const statusContractRes = byKey.status_contract;
+      const decisionMapRes = byKey.decision_map;
 
       if (signalsRes?.status === "fulfilled") {
         const payload = signalsRes.value?.data;
@@ -148,6 +151,11 @@ export const UserSignalsPage = () => {
 
       if (statusContractRes?.status === "fulfilled") {
         setStatusContract(statusContractRes.value?.data ?? null);
+      }
+
+      if (decisionMapRes?.status === "fulfilled") {
+        const items = decisionMapRes.value?.data?.items;
+        setDecisionMap(items && typeof items === "object" ? items : {});
       }
 
       const rejectedEntries = requestDescriptors
@@ -330,6 +338,41 @@ export const UserSignalsPage = () => {
     }
     return "Signal->Execution hattı sağlıklı. Filled oranını artırmak için confidence >= 0.7 filtreleyin.";
   }, [signalRows]);
+
+  const resolveDecisionLabel = useCallback((signal) => {
+    const symbol = String(signal?.symbol || "").toUpperCase();
+    const decisions = symbol ? decisionMap?.[symbol] : null;
+    const rawSide = String(signal?.signal || signal?.meta_engine_decision || "").toLowerCase();
+    const side = rawSide.includes("short") ? "short" : rawSide.includes("long") ? "long" : null;
+    const mapping = [
+      ["bc01", "KARAR1(BC01)"],
+      ["bc02", "KARAR2(BC02)"],
+      ["bc03", "KARAR3(BC03)"],
+      ["bc04", "KARAR4(BC04)"],
+    ];
+
+    if (decisions && typeof decisions === "object") {
+      const exact = mapping
+        .filter(([key]) => side && Boolean(decisions?.[key]?.[side]))
+        .map(([, label]) => label);
+      if (exact.length > 0) {
+        return exact.join(" + ");
+      }
+      const any = mapping
+        .filter(([key]) => Boolean(decisions?.[key]?.long || decisions?.[key]?.short))
+        .map(([, label]) => label);
+      if (any.length > 0) {
+        return any.join(" + ");
+      }
+    }
+
+    const code = String(signal?.strategy_code || "").toLowerCase();
+    if (code.includes("bollinger")) return "KARAR1(BC01)";
+    if (code.includes("breakout") || code.includes("structure") || code.includes("vortex")) return "KARAR2(BC02)";
+    if (code.includes("momentum") || code.includes("macd") || code.includes("golden") || code.includes("ichimoku") || code.includes("supertrend") || code.includes("fibonacci") || code.includes("moving")) return "KARAR3(BC03)";
+    if (code.includes("fisher") || code.includes("divergence") || code.includes("stochastic") || code.includes("reversal")) return "KARAR4(BC04)";
+    return "KARAR3(BC03)";
+  }, [decisionMap]);
 
   const blockedPlaybookItems = useMemo(() => {
     const blockedByCode = signalRows.reduce((acc, row) => {
@@ -853,7 +896,7 @@ export const UserSignalsPage = () => {
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-solution-hint-${signal.id}`}>hint: {signal.blocked_solution_hint || "-"}</p>
             <p className="text-xs text-slate-300" data-testid={`user-signals-mobile-tradeable-${signal.id}`}>tradeable: <span className={`font-semibold ${signal.tradeable ? "text-emerald-300" : "text-rose-300"}`}>{String(Boolean(signal.tradeable)).toUpperCase()}</span></p>
             <p className="text-xs text-rose-200" data-testid={`user-signals-mobile-first-precheck-failure-${signal.id}`}>first_precheck_failure_code: {signal.first_precheck_failure_code || "-"}</p>
-            <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-strategy-${signal.id}`}>{signal.strategy_code}</p>
+            <p className="text-xs text-slate-500" data-testid={`user-signals-mobile-strategy-${signal.id}`}>{resolveDecisionLabel(signal)}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-intent-status-${signal.id}`}>intent: {signal.execution_intent_status || "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-proposed-notional-${signal.id}`}>notional: {signal.proposed_notional ?? "-"}</p>
             <p className="text-xs text-slate-400" data-testid={`user-signals-mobile-strategy-weight-${signal.id}`}>weight: {signal.strategy_weight ?? "-"}</p>
@@ -923,7 +966,7 @@ export const UserSignalsPage = () => {
               <tr key={signal.id} className="border-t border-slate-800" data-testid={`user-signals-table-row-${signal.id}`}>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-symbol-${signal.id}`}>{signal.symbol}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-market-type-${signal.id}`}>{String(signal.market_type || "spot").toUpperCase()}</td>
-                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-strategy-${signal.id}`}>{signal.strategy_code}</td>
+                <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-strategy-${signal.id}`}>{resolveDecisionLabel(signal)}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-confidence-${signal.id}`}>{signal.confidence}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-weight-${signal.id}`}>{signal.strategy_weight ?? "-"}</td>
                 <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`user-signals-table-allocation-${signal.id}`}>{signal.allocation_source ?? "-"}</td>
