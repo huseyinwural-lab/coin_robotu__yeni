@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -209,6 +210,24 @@ DB_POOL_TIMEOUT_HINTS = (
     "broken pipe",
 )
 
+# Stage-1 Pure Live hard block list (mode-switch / simulation / dry-run / paper)
+PURE_LIVE_BLOCKED_PATH_PREFIXES = (
+    "/api/paper-positions",
+    "/api/execution-safety/execution/dry-run",
+    "/api/execution-safety/execution/shadow",
+    "/api/runtime-execution/go-live/dry-run",
+    "/api/admin/futures-strategy-status/run-paper-cycle",
+    "/api/admin/live-trading-dashboard/control-layer/execution-mode",
+    "/api/admin/strategy-allocation/what-if-simulation",
+    "/api/user/signal-mode",
+    "/api/user/scanner/automation",
+)
+
+PURE_LIVE_BLOCKED_REGEX = (
+    re.compile(r"^/api/admin/strategies/.*/dry-run$", re.IGNORECASE),
+    re.compile(r"^/api/admin/strategies/bulk/dry-run$", re.IGNORECASE),
+)
+
 
 def _resolve_trace_id(request: Request) -> str:
     request_state_id = str(getattr(getattr(request, "state", None), "request_id", "") or "").strip()
@@ -223,6 +242,26 @@ def _is_db_pool_timeout_error(exc: Exception) -> bool:
         text_parts.append(str(origin))
     normalized = " | ".join(text_parts).strip().lower()
     return any(hint in normalized for hint in DB_POOL_TIMEOUT_HINTS)
+
+
+def _is_pure_live_blocked_path(path: str) -> bool:
+    normalized = str(path or "").strip()
+    if not normalized.startswith("/api/"):
+        return False
+    if any(normalized.startswith(prefix) for prefix in PURE_LIVE_BLOCKED_PATH_PREFIXES):
+        return True
+    return any(regex.match(normalized) for regex in PURE_LIVE_BLOCKED_REGEX)
+
+
+def _pure_live_keyword_block(path: str) -> bool:
+    # Admin/User simulation-mode switch uçları için genel güvenlik ağı.
+    normalized = str(path or "").strip().lower()
+    if not normalized.startswith("/api/"):
+        return False
+    if "/api/auth/" in normalized:
+        return False
+    blocked_keywords = ("/simulate", "simulation", "dry-run", "dry_run", "paper", "/execution-mode")
+    return any(keyword in normalized for keyword in blocked_keywords)
 
 
 def _db_pool_timeout_response(request: Request, *, error_text: str | None = None) -> JSONResponse:
@@ -529,7 +568,7 @@ def api_root():
     return {
         "message": "Algorithmic trading platform phase-3 hardening core is running",
         "phase": "3-iter1",
-        "execution_mode": "paper",
+        "execution_mode": "pure_live",
     }
 
 
@@ -645,6 +684,24 @@ fastapi_app.add_middleware(RequestObservabilityMiddleware)
 
 @fastapi_app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
+    path = str(request.url.path or "")
+    method = str(request.method or "GET").upper()
+    if method in {"POST", "PUT", "PATCH", "DELETE"}:
+        if _is_pure_live_blocked_path(path) or _pure_live_keyword_block(path):
+            trace_id = _resolve_trace_id(request)
+            return JSONResponse(
+                status_code=410,
+                content={
+                    "detail": "FEATURE_REMOVED_PURE_LIVE",
+                    "code": "PURE_LIVE_410",
+                    "message": "Bu endpoint Pure Live geçişi kapsamında sistemden kaldırıldı.",
+                    "path": path,
+                    "method": method,
+                    "trace_id": trace_id,
+                },
+                headers={"X-Request-ID": trace_id},
+            )
+
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
