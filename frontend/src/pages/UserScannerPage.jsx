@@ -334,7 +334,6 @@ export const UserScannerPage = () => {
   const [symbolSource, setSymbolSource] = useState("crypto");
   const [symbolMode, setSymbolMode] = useState("manual_selection");
   const [selectedSymbols, setSelectedSymbols] = useState([]);
-  const [selectedSymbolsInput, setSelectedSymbolsInput] = useState("");
   const [watchlistOnly, setWatchlistOnly] = useState(false);
   const [automationConfig, setAutomationConfig] = useState(null);
   const [automationProfiles, setAutomationProfiles] = useState([]);
@@ -349,7 +348,6 @@ export const UserScannerPage = () => {
   const [schedulerState, setSchedulerState] = useState(null);
   const [scannerLoadDegraded, setScannerLoadDegraded] = useState(false);
   const [scannerLoadFailures, setScannerLoadFailures] = useState([]);
-  const [showSlowLoadingHint, setShowSlowLoadingHint] = useState(false);
   const [decisionCards, setDecisionCards] = useState([]);
   const [selectedDecisionSymbol, setSelectedDecisionSymbol] = useState("");
   const [isExplainabilityDrawerOpen, setIsExplainabilityDrawerOpen] = useState(false);
@@ -1214,10 +1212,6 @@ export const UserScannerPage = () => {
   }, [selectionHydrated, mode, marketType, watchlistOnly]);
 
   useEffect(() => {
-    setSelectedSymbolsInput((selectedSymbols || []).join(","));
-  }, [selectedSymbols]);
-
-  useEffect(() => {
     if (!selectionHydrated) {
       return;
     }
@@ -1552,159 +1546,6 @@ export const UserScannerPage = () => {
     }
   };
 
-  const runScanner = async () => {
-    if (!ensureScannerRunReady()) {
-      return;
-    }
-
-    const effectiveMode = SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode);
-    setIsRunning(true);
-    setShowSlowLoadingHint(false);
-    try {
-      if (activeAutomation?.auto_enabled) {
-        await saveActiveProfile({ autoEnabled: true, withToast: false });
-      }
-      await apiClient.put("/user/signal-mode", { mode });
-      const data = await executeScannerRunWithChunks({
-        runMode: mode,
-        maxResults: SIMPLE_SCANNER_V2 ? 120 : 25,
-        effectiveMode,
-        selectedForRun: selectedSymbols,
-        targetMarketType: marketType,
-      });
-      setLastRunEnvelope(data);
-      setLastRunStartBotReport(null);
-      await load();
-      if ((data?.warnings || []).length > 0) {
-        toast.warning((data.warnings || []).join(","));
-      }
-      toast.success("Scanner çalıştırıldı");
-    } catch (error) {
-      toast.error(toApiErrorMessage(error, "Scanner çalıştırılamadı"));
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
-  const runScannerAndStartBot = async () => {
-    if (!ensureScannerRunReady()) {
-      return;
-    }
-
-    const effectiveMode = SIMPLE_SCANNER_V2 ? "manual_selection" : (watchlistOnly ? "manual_selection" : symbolMode);
-    setIsRunning(true);
-    setShowSlowLoadingHint(false);
-    try {
-      if (activeAutomation?.auto_enabled) {
-        await saveActiveProfile({ autoEnabled: true, withToast: false });
-      }
-      await apiClient.put("/user/signal-mode", { mode });
-      const data = await executeScannerRunWithChunks({
-        runMode: mode,
-        maxResults: SIMPLE_SCANNER_V2 ? 120 : 25,
-        effectiveMode,
-        selectedForRun: selectedSymbols,
-        targetMarketType: marketType,
-      });
-      setLastRunEnvelope(data);
-
-      const botsRes = await apiClient.get("/bot-profiles", { timeout: 10000 });
-      const botRows = Array.isArray(botsRes?.data) ? botsRes.data : [];
-      const requestedMarkets = String(marketType || "spot").toLowerCase() === "both" ? ["spot", "futures"] : [String(marketType || "spot").toLowerCase()];
-
-      const startedBotNames = [];
-      const botStartResults = [];
-      for (const requestedMarket of requestedMarkets) {
-        const candidates = botRows.filter((bot) => {
-          const botMarket = String(bot?.market_type || "spot").toLowerCase();
-          const isEnabled = Boolean(bot?.is_enabled);
-          const modeOk = String(bot?.mode || "live_ready") === "live_ready";
-          return isEnabled && modeOk && botMarket === requestedMarket;
-        });
-        if (candidates.length === 0) {
-          botStartResults.push({
-            market_type: requestedMarket,
-            status: "no_bot",
-            message: "Bu market için uygun bot bulunamadı.",
-            blocking_reasons: [],
-            status_contract: null,
-            bot_name: null,
-            bot_id: null,
-          });
-          continue;
-        }
-
-        const target = candidates[0];
-        try {
-          await apiClient.post(`/bot-profiles/${target.id}/start`, null, { timeout: 12000 });
-          const startedName = String(target.name || target.id || requestedMarket);
-          startedBotNames.push(startedName);
-          botStartResults.push({
-            market_type: requestedMarket,
-            status: "started",
-            message: "Bot başarıyla başlatıldı.",
-            blocking_reasons: [],
-            status_contract: null,
-            bot_name: startedName,
-            bot_id: target.id,
-          });
-        } catch (startError) {
-          const detail = startError?.response?.data?.detail;
-          const blockingReasons = Array.isArray(detail?.blocking_reasons) ? detail.blocking_reasons : [];
-          botStartResults.push({
-            market_type: requestedMarket,
-            status: "failed",
-            message: toApiErrorMessage(startError, "Bot start başarısız"),
-            blocking_reasons: blockingReasons,
-            status_contract: detail?.status_contract || null,
-            bot_name: String(target.name || target.id || requestedMarket),
-            bot_id: target.id,
-          });
-        }
-      }
-
-      setLastRunStartBotReport({
-        executed_at: new Date().toISOString(),
-        scanner_runs: Array.isArray(data?.runs) ? data.runs : [],
-        requested_markets: requestedMarkets,
-        actionable_count: Number(data?.actionable_count || 0),
-        non_tradeable_count: Number(data?.non_tradeable_count || 0),
-        bot_start_results: botStartResults,
-      });
-
-      await load();
-
-      const actionable = Number(data?.actionable_count || 0);
-      const nonTradeable = Number(data?.non_tradeable_count || 0);
-      if ((data?.warnings || []).length > 0) {
-        toast.warning((data.warnings || []).join(","));
-      }
-      const failedBotCount = botStartResults.filter((item) => item.status === "failed").length;
-      const noBotCount = botStartResults.filter((item) => item.status === "no_bot").length;
-      toast.success(
-        startedBotNames.length > 0
-          ? `Run tamamlandı · actionable=${actionable} · non_tradeable=${nonTradeable} · bot başlatıldı: ${startedBotNames.join(", ")}`
-          : `Run tamamlandı · actionable=${actionable} · non_tradeable=${nonTradeable} · bot başlatılamadı`,
-      );
-      if (failedBotCount > 0 || noBotCount > 0) {
-        toast.warning(`Bot start özeti: başarısız=${failedBotCount}, bot_yok=${noBotCount}`);
-      }
-    } catch (error) {
-      toast.error(toApiErrorMessage(error, "Run + Start akışı başarısız"));
-    } finally {
-      setIsRunning(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isRunning) {
-      setShowSlowLoadingHint(false);
-      return undefined;
-    }
-    const timer = window.setTimeout(() => setShowSlowLoadingHint(true), 4000);
-    return () => window.clearTimeout(timer);
-  }, [isRunning]);
-
   useEffect(() => {
     if (SIMPLE_SCANNER_V2) {
       setScannerSection("results");
@@ -1746,20 +1587,6 @@ export const UserScannerPage = () => {
     } finally {
       setIsRunning(false);
     }
-  };
-
-  const applySelectedSymbolsFromInput = () => {
-    const parsed = normalizeSymbolsForRun(
-      String(selectedSymbolsInput || "")
-        .split(/[\s,;]+/)
-        .map((item) => String(item || "").trim().toUpperCase()),
-    );
-    setSelectedSymbols(parsed);
-    if (parsed.length === 0) {
-      toast.warning("Geçerli USDT/USDC sembol bulunamadı");
-      return;
-    }
-    toast.success(`${parsed.length} sembol seçildi`);
   };
 
   if (isLoading) {
@@ -1844,76 +1671,6 @@ export const UserScannerPage = () => {
         <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-scanner-title">Scanner</h2>
         <p className="mt-2 text-sm text-slate-400" data-testid="user-scanner-description">Responsive scanner + compact table + mobile card yapısı.</p>
       </header>
-
-      <section className="col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-primary-actions-panel">
-        <div className="grid gap-3 xl:grid-cols-6" data-testid="user-scanner-primary-actions-grid">
-          <label className="space-y-1" data-testid="user-scanner-primary-mode-field">
-            <span className="text-xs uppercase tracking-widest text-slate-500">Signal Mode</span>
-            <select
-              value={mode}
-              onChange={(event) => setMode(String(event.target.value || "ASSISTED").toUpperCase())}
-              className="h-10 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              data-testid="user-scanner-primary-mode-select"
-            >
-              <option value="MANUAL" data-testid="user-scanner-primary-mode-option-manual">MANUAL</option>
-              <option value="ASSISTED" data-testid="user-scanner-primary-mode-option-assisted">ASSISTED</option>
-              <option value="AUTO" data-testid="user-scanner-primary-mode-option-auto">AUTO</option>
-            </select>
-          </label>
-
-          <label className="space-y-1" data-testid="user-scanner-primary-market-type-field">
-            <span className="text-xs uppercase tracking-widest text-slate-500">Market Type</span>
-            <select
-              value={marketType}
-              onChange={(event) => setMarketType(String(event.target.value || "spot").toLowerCase())}
-              className="h-10 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              data-testid="user-scanner-primary-market-type-select"
-            >
-              <option value="spot" data-testid="user-scanner-primary-market-type-option-spot">SPOT</option>
-              <option value="futures" data-testid="user-scanner-primary-market-type-option-futures">FUTURES</option>
-              <option value="both" data-testid="user-scanner-primary-market-type-option-both">BOTH</option>
-            </select>
-          </label>
-
-          <label className="space-y-1 xl:col-span-2" data-testid="user-scanner-primary-symbols-field">
-            <span className="text-xs uppercase tracking-widest text-slate-500">Sembol Listesi</span>
-            <input
-              value={selectedSymbolsInput}
-              onChange={(event) => setSelectedSymbolsInput(event.target.value)}
-              placeholder="BTCUSDT,ETHUSDT"
-              className="h-10 w-full border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-              data-testid="user-scanner-primary-symbols-input"
-            />
-          </label>
-
-          <div className="space-y-1" data-testid="user-scanner-primary-apply-symbols-wrap">
-            <span className="text-xs uppercase tracking-widest text-slate-500">Sembol Uygula</span>
-            <Button type="button" variant="outline" onClick={applySelectedSymbolsFromInput} className="h-10 w-full" data-testid="user-scanner-primary-apply-symbols-button">
-              Uygula
-            </Button>
-          </div>
-
-          <div className="space-y-1" data-testid="user-scanner-primary-refresh-wrap">
-            <span className="text-xs uppercase tracking-widest text-slate-500">Yenile</span>
-            <Button type="button" variant="outline" onClick={() => load({ silent: false })} className="h-10 w-full" data-testid="user-scanner-primary-refresh-button">
-              Yenile
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="user-scanner-primary-run-actions-row">
-          <Button type="button" onClick={runScanner} disabled={isRunning} data-testid="user-scanner-primary-run-button">
-            {isRunning ? "Çalışıyor..." : "Scanner Çalıştır"}
-          </Button>
-          <Button type="button" variant="outline" onClick={runScannerAndStartBot} disabled={isRunning} data-testid="user-scanner-primary-run-start-bot-button">
-            {isRunning ? "Çalışıyor..." : "Run + Start Bot"}
-          </Button>
-          <Button type="button" variant="outline" onClick={() => setCompactMode((previous) => !previous)} data-testid="user-scanner-primary-compact-toggle-button">
-            {compactMode ? "Compact: ON" : "Compact: OFF"}
-          </Button>
-          <span className="text-xs text-slate-400" data-testid="user-scanner-primary-selected-symbol-count">Seçili: {selectedSymbols.length}</span>
-        </div>
-      </section>
 
       {!SIMPLE_SCANNER_V2 && <section className="order-2 col-span-12 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-section-toggle-panel">
         <div className="flex flex-wrap items-center gap-2" data-testid="user-scanner-section-toggle-group">
