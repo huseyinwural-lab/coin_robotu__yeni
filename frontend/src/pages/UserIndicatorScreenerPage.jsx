@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiClient } from "@/lib/api";
-import { saveExecutionContext } from "@/lib/userFlowContext";
 
 const createSignalRuleFeatureEnabled = false;
 const FILTER_SCHEMA_VERSION = 2;
@@ -94,44 +93,24 @@ const numberCell = (value, digits = 4) => {
 const toCsv = (rows) => {
   const headers = [
     "#",
-    "exchange",
-    "market_type",
     "symbol",
-    "timeframe",
-    "close",
+    "periyot",
+    "birim",
+    "kapanis",
     "rsi14",
     "rsi7",
-    "ema20",
-    "ema50",
-    "volume_24h",
-    "signal_score",
-    "confidence",
-    "rr_estimate",
-    "executable",
-    "stale_data",
-    "matched_rules",
-    "updated_at",
+    "ema21",
   ];
 
   const body = rows.map((row) => [
     row.index,
-    row.exchange,
-    row.market_type,
     row.symbol,
     row.timeframe,
+    String(row.quote_asset || "USDT").toUpperCase(),
     row.close,
     row.rsi14,
     row.rsi7,
-    row.ema20,
-    row.ema50,
-    row.volume_24h,
-    row.signal_score,
-    row.confidence,
-    row.rr_estimate,
-    row.executable,
-    row.stale_data,
-    (row.matched_rules || []).join(" | "),
-    row.updated_at || "",
+    row.ema21,
   ]);
 
   return [headers.join(","), ...body.map((line) => line.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","))].join("\n");
@@ -188,8 +167,6 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
   const [manualRsiGreaterThan, setManualRsiGreaterThan] = useState("");
   const [showSlowHint, setShowSlowHint] = useState(false);
   const runAbortControllerRef = useRef(null);
-
-  const watchlistSymbolSet = useMemo(() => new Set((watchlistRows || []).map((item) => `${item.symbol}:${item.market_type}`)), [watchlistRows]);
 
   const loadBootstrap = useCallback(async () => {
     setIsBootLoading(true);
@@ -519,30 +496,6 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
     toast.success(`Sorgu + filtre yüklendi: ${item.name}`);
   };
 
-  const addToWatchlist = async (row) => {
-    try {
-      await apiClient.post("/user/indicator-screener/watchlist", {
-        exchange: row.exchange,
-        market_type: row.market_type,
-        symbol: row.symbol,
-        note: `indicator-screener:${filters.query_expression}`,
-        context_snapshot: {
-          query_expression: filters.query_expression,
-          filter_payload: buildFilterPayload(),
-          source_result: {
-            symbol: row.symbol,
-            market_type: row.market_type,
-            timeframe: row.timeframe,
-          },
-        },
-      });
-      toast.success(`${row.symbol} watchlist'e eklendi`);
-      await loadBootstrap();
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Watchlist ekleme başarısız");
-    }
-  };
-
   const deleteWatchlist = async (watchId) => {
     try {
       await apiClient.delete(`/user/indicator-screener/watchlist/${watchId}`);
@@ -566,36 +519,6 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
     link.download = `indicator_screener_${Date.now()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  };
-
-  const openInExecute = (row) => {
-    const bridgePayload = {
-      query_expression: filters.query_expression,
-      filter_payload: buildFilterPayload(),
-      source_row: {
-        symbol: row.symbol,
-        market_type: row.market_type,
-        timeframe: row.timeframe,
-        signal_score: row.signal_score,
-        confidence: row.confidence,
-      },
-    };
-    const side = Number(row.signal_score || 0) < 0 ? "sell" : "buy";
-    saveExecutionContext({
-      source: "indicator-screener",
-      symbol: row.symbol,
-      market_type: row.market_type,
-      side,
-      query_expression: filters.query_expression,
-      filter_payload: buildFilterPayload(),
-      signal_score: row.signal_score,
-      confidence: row.confidence,
-    });
-    const encodedBridge = encodeURIComponent(JSON.stringify(bridgePayload));
-    toast.success(`${row.symbol} (${row.market_type}) Execute ekranına aktarılıyor`);
-    navigate(
-      `/user/execute?symbol=${encodeURIComponent(row.symbol)}&market_type=${encodeURIComponent(row.market_type)}&side=${encodeURIComponent(side)}&source=indicator-screener&exchange=${encodeURIComponent(row.exchange || filters.exchange)}&environment=live&bridge_context=${encodedBridge}`,
-    );
   };
 
   const applyStarterPreset = async (presetKey) => {
@@ -1272,53 +1195,30 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
             <article key={`mobile-${row.symbol}-${row.market_type}`} className="rounded-md border border-slate-300 bg-slate-50 p-3" data-testid={`user-indicator-screener-mobile-card-${row.symbol}-${row.market_type}`}>
               <div className="flex items-center justify-between" data-testid={`user-indicator-screener-mobile-card-header-${row.symbol}-${row.market_type}`}>
                 <p className="font-semibold text-slate-900" data-testid={`user-indicator-screener-mobile-symbol-${row.symbol}-${row.market_type}`}>{row.symbol}</p>
-                <p className="text-xs text-slate-600" data-testid={`user-indicator-screener-mobile-market-${row.symbol}-${row.market_type}`}>{row.market_type} / {row.timeframe}</p>
+                <p className="text-xs text-slate-600" data-testid={`user-indicator-screener-mobile-timeframe-${row.symbol}-${row.market_type}`}>{row.timeframe}</p>
               </div>
-              <p className="mt-1 text-sm text-slate-700" data-testid={`user-indicator-screener-mobile-rsi-${row.symbol}-${row.market_type}`}>RSI14: {numberCell(row.rsi14, 2)} | RSI7: {numberCell(row.rsi7, 2)}</p>
-              <p className="text-sm text-slate-700" data-testid={`user-indicator-screener-mobile-close-${row.symbol}-${row.market_type}`}>Close: {numberCell(row.close, 6)}</p>
-              <p className="text-xs text-slate-600" data-testid={`user-indicator-screener-mobile-quality-${row.symbol}-${row.market_type}`}>Score: {numberCell(row.signal_score, 2)} | Conf: {numberCell(row.confidence, 2)} | RR: {numberCell(row.rr_estimate, 2)}</p>
-              <div className="mt-2 flex gap-2" data-testid={`user-indicator-screener-mobile-actions-${row.symbol}-${row.market_type}`}>
-                <Button size="sm" className={buttonClass.primary} onClick={() => openInExecute(row)} data-testid={`user-indicator-screener-mobile-open-execute-button-${row.symbol}-${row.market_type}`}>Execute</Button>
-                <Button size="sm" className={buttonClass.secondary} onClick={() => addToWatchlist(row)} disabled={watchlistSymbolSet.has(`${row.symbol}:${row.market_type}`)} data-testid={`user-indicator-screener-mobile-watchlist-button-${row.symbol}-${row.market_type}`}>{watchlistSymbolSet.has(`${row.symbol}:${row.market_type}`) ? "Watchlist" : "Add WL"}</Button>
-              </div>
+              <p className="mt-1 text-xs text-slate-700" data-testid={`user-indicator-screener-mobile-unit-${row.symbol}-${row.market_type}`}>Birim: {String(row.quote_asset || "USDT").toUpperCase()}</p>
+              <p className="text-sm text-slate-700" data-testid={`user-indicator-screener-mobile-close-${row.symbol}-${row.market_type}`}>Kapanış: {numberCell(row.close, 6)}</p>
+              <p className="text-sm text-slate-700" data-testid={`user-indicator-screener-mobile-rsi-${row.symbol}-${row.market_type}`}>RSI14: {numberCell(row.rsi14, 2)} | RSI7: {numberCell(row.rsi7, 2)} | EMA21: {numberCell(row.ema21, 6)}</p>
             </article>
           ))}
         </div>
 
-        <div className="mt-3 hidden md:block overflow-x-auto" data-testid="user-indicator-screener-table-wrapper">
-          <table className={`min-w-[2200px] text-sm ${densityMode === "compact" ? "[&_td]:py-1 [&_th]:py-1" : "[&_td]:py-2 [&_th]:py-2"}`} data-testid="user-indicator-screener-table">
+        <div className="mt-3 hidden overflow-x-auto md:block" data-testid="user-indicator-screener-table-wrapper">
+          <table className={`min-w-[980px] text-sm ${densityMode === "compact" ? "[&_td]:py-1 [&_th]:py-1" : "[&_td]:py-2 [&_th]:py-2"}`} data-testid="user-indicator-screener-table">
             <thead className="sticky top-0 z-20 bg-emerald-50 text-left" data-testid="user-indicator-screener-table-head">
               <tr>
                 {[
                   ["index", "#", false],
-                  ["exchange", "Exchange", false],
-                  ["market_type", "Market", true],
                   ["symbol", "Symbol", true],
-                  ["timeframe", "TF", false],
+                  ["timeframe", "Periyot", false],
+                  ["unit", "Birim", false],
                   ["close", "Close", true],
                   ["rsi14", "RSI14", true],
                   ["rsi7", "RSI7", true],
-                  ["ema20", "EMA20", false],
-                  ["ema50", "EMA50", false],
-                  ["fibo_161_8", "FIBO 161.8", false],
-                  ["fibo_127_2", "FIBO 127.2", false],
-                  ["fibo_100", "FIBO 100", false],
-                  ["fibo_78_6", "FIBO 78.6", false],
-                  ["volume_24h", "24h Vol", true],
-                  ["signal_score", "Score", true],
-                  ["confidence", "Confidence", true],
-                  ["rr_estimate", "RR", true],
-                  ["executable", "Executable", false],
-                  ["stale_data", "Fresh", false],
-                  ["matched_rules", "Matched Rules", false],
-                  ["updated_at", "Updated At", true],
-                  ["last_candle_time", "Last Candle", false],
-                  ["evaluated_at", "Evaluated At", false],
-                  ["data_source", "Data Source", false],
-                  ["cache_hit", "Cache", false],
-                  ["fresh_fetch", "Fresh Fetch", false],
+                  ["ema21", "EMA21", false],
                 ].map(([field, label, sortable]) => (
-                  <th key={field} className={`px-2 font-semibold text-slate-700 ${["close", "rsi14", "rsi7", "volume_24h", "signal_score", "confidence", "rr_estimate"].includes(field) ? "text-right" : ""}`} data-testid={`user-indicator-screener-head-${field}`}>
+                  <th key={field} className={`px-2 font-semibold text-slate-700 ${["close", "rsi14", "rsi7", "ema21"].includes(field) ? "text-right" : ""}`} data-testid={`user-indicator-screener-head-${field}`}>
                     {sortable ? (
                       <button type="button" onClick={() => applySortFromTableHeader(field)} className="inline-flex items-center gap-1 text-xs uppercase tracking-wide" data-testid={`user-indicator-screener-sort-button-${field}`}>
                         {label}
@@ -1329,7 +1229,6 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
                     )}
                   </th>
                 ))}
-                <th className="sticky right-0 z-30 bg-emerald-50 px-2 text-xs uppercase tracking-wide text-slate-700" data-testid="user-indicator-screener-head-actions">Actions</th>
               </tr>
             </thead>
             <tbody data-testid="user-indicator-screener-table-body">
@@ -1339,45 +1238,19 @@ export const UserIndicatorScreenerPage = ({ embedded = false }) => {
                 return (
                   <tr key={rowKey} onClick={() => setSelectedRowKey(rowKey)} className={`border-t border-slate-200 hover:bg-emerald-50/50 ${isSelected ? "bg-emerald-50" : "bg-white"}`} data-testid={`user-indicator-screener-row-${row.symbol}-${row.market_type}`}>
                     <td className="px-2" data-testid={`user-indicator-screener-cell-index-${row.symbol}-${row.market_type}`}>{row.index}</td>
-                    <td className="px-2" data-testid={`user-indicator-screener-cell-exchange-${row.symbol}-${row.market_type}`}>{row.exchange}</td>
-                    <td className="px-2" data-testid={`user-indicator-screener-cell-market-type-${row.symbol}-${row.market_type}`}>{row.market_type}</td>
                     <td className="px-2 font-semibold" data-testid={`user-indicator-screener-cell-symbol-${row.symbol}-${row.market_type}`}>{row.symbol}</td>
                     <td className="px-2" data-testid={`user-indicator-screener-cell-timeframe-${row.symbol}-${row.market_type}`}>{row.timeframe}</td>
+                    <td className="px-2" data-testid={`user-indicator-screener-cell-unit-${row.symbol}-${row.market_type}`}>{String(row.quote_asset || "USDT").toUpperCase()}</td>
                     <td className={`px-2 text-right tabular-nums ${isMatchedField(row, "close") ? "bg-emerald-100 text-emerald-900" : ""}`} data-testid={`user-indicator-screener-cell-close-${row.symbol}-${row.market_type}`}>{numberCell(row.close, 6)}</td>
                     <td className={`px-2 text-right tabular-nums ${row.rsi14 < 30 ? "text-rose-600 font-semibold" : ""} ${isMatchedField(row, "rsi14") ? "bg-emerald-100" : ""}`} data-testid={`user-indicator-screener-cell-rsi14-${row.symbol}-${row.market_type}`}>{numberCell(row.rsi14, 2)}</td>
                     <td className={`px-2 text-right tabular-nums ${row.rsi7 < 30 ? "text-amber-600 font-semibold" : ""} ${isMatchedField(row, "rsi7") ? "bg-emerald-100" : ""}`} data-testid={`user-indicator-screener-cell-rsi7-${row.symbol}-${row.market_type}`}>{numberCell(row.rsi7, 2)}</td>
-                    <td className={`px-2 text-right tabular-nums ${isMatchedField(row, "ema20") ? "bg-emerald-100 text-emerald-900" : ""}`} data-testid={`user-indicator-screener-cell-ema20-${row.symbol}-${row.market_type}`}>{numberCell(row.ema20, 6)}</td>
-                    <td className={`px-2 text-right tabular-nums ${isMatchedField(row, "ema50") ? "bg-emerald-100 text-emerald-900" : ""}`} data-testid={`user-indicator-screener-cell-ema50-${row.symbol}-${row.market_type}`}>{numberCell(row.ema50, 6)}</td>
-                    <td className={`px-2 text-right tabular-nums ${isMatchedField(row, "fibo_161_8") ? "bg-emerald-100 text-emerald-900" : ""}`} data-testid={`user-indicator-screener-cell-fibo-1618-${row.symbol}-${row.market_type}`}>{numberCell(row.fibo_161_8, 6)}</td>
-                    <td className={`px-2 text-right tabular-nums ${isMatchedField(row, "fibo_127_2") ? "bg-emerald-100 text-emerald-900" : ""}`} data-testid={`user-indicator-screener-cell-fibo-1272-${row.symbol}-${row.market_type}`}>{numberCell(row.fibo_127_2, 6)}</td>
-                    <td className={`px-2 text-right tabular-nums ${isMatchedField(row, "fibo_100") ? "bg-emerald-100 text-emerald-900" : ""}`} data-testid={`user-indicator-screener-cell-fibo-100-${row.symbol}-${row.market_type}`}>{numberCell(row.fibo_100, 6)}</td>
-                    <td className={`px-2 text-right tabular-nums ${isMatchedField(row, "fibo_78_6") ? "bg-emerald-100 text-emerald-900" : ""}`} data-testid={`user-indicator-screener-cell-fibo-786-${row.symbol}-${row.market_type}`}>{numberCell(row.fibo_78_6, 6)}</td>
-                    <td className="px-2 text-right tabular-nums" data-testid={`user-indicator-screener-cell-volume24h-${row.symbol}-${row.market_type}`}>{numberCell(row.volume_24h, 2)}</td>
-                    <td className="px-2 text-right tabular-nums" data-testid={`user-indicator-screener-cell-score-${row.symbol}-${row.market_type}`}>{numberCell(row.signal_score, 2)}</td>
-                    <td className="px-2 text-right tabular-nums" data-testid={`user-indicator-screener-cell-confidence-${row.symbol}-${row.market_type}`}>{numberCell(row.confidence, 2)}</td>
-                    <td className="px-2 text-right tabular-nums" data-testid={`user-indicator-screener-cell-rr-${row.symbol}-${row.market_type}`}>{numberCell(row.rr_estimate, 2)}</td>
-                    <td className={`px-2 text-center ${row.executable ? "text-emerald-700" : "text-rose-600"}`} data-testid={`user-indicator-screener-cell-executable-${row.symbol}-${row.market_type}`}>{String(row.executable)}</td>
-                    <td className={`px-2 text-center ${row.stale_data ? "text-rose-600" : "text-emerald-700"}`} data-testid={`user-indicator-screener-cell-freshness-${row.symbol}-${row.market_type}`}>{row.stale_data ? "stale" : "fresh"}</td>
-                    <td className="px-2 text-xs text-slate-700" data-testid={`user-indicator-screener-cell-matched-rules-${row.symbol}-${row.market_type}`}>{(row.matched_rules || []).join(" | ") || "-"}</td>
-                    <td className="px-2 text-xs text-slate-600" data-testid={`user-indicator-screener-cell-updated-at-${row.symbol}-${row.market_type}`}>{row.updated_at ? new Date(row.updated_at).toLocaleString() : "-"}</td>
-                    <td className="px-2 text-xs text-slate-600" data-testid={`user-indicator-screener-cell-last-candle-time-${row.symbol}-${row.market_type}`}>{row.last_candle_time ? new Date(row.last_candle_time).toLocaleString() : "-"}</td>
-                    <td className="px-2 text-xs text-slate-600" data-testid={`user-indicator-screener-cell-evaluated-at-${row.symbol}-${row.market_type}`}>{row.evaluated_at ? new Date(row.evaluated_at).toLocaleString() : "-"}</td>
-                    <td className="px-2 text-xs text-slate-700" data-testid={`user-indicator-screener-cell-data-source-${row.symbol}-${row.market_type}`}>{row.data_source || "-"}</td>
-                    <td className="px-2 text-center text-xs text-slate-700" data-testid={`user-indicator-screener-cell-cache-hit-${row.symbol}-${row.market_type}`}>{String(Boolean(row.cache_hit))}</td>
-                    <td className="px-2 text-center text-xs text-slate-700" data-testid={`user-indicator-screener-cell-fresh-fetch-${row.symbol}-${row.market_type}`}>{String(Boolean(row.fresh_fetch))}</td>
-                    <td className="sticky right-0 z-10 px-2 bg-white" data-testid={`user-indicator-screener-cell-actions-${row.symbol}-${row.market_type}`}>
-                      <div className="flex flex-nowrap gap-1" data-testid={`user-indicator-screener-row-actions-${row.symbol}-${row.market_type}`}>
-                        <Button size="sm" className={buttonClass.primary} onClick={() => openInExecute(row)} data-testid={`user-indicator-screener-open-execute-button-${row.symbol}-${row.market_type}`}>Open in Execute</Button>
-                        <Button size="sm" className={buttonClass.secondary} onClick={() => addToWatchlist(row)} disabled={watchlistSymbolSet.has(`${row.symbol}:${row.market_type}`)} data-testid={`user-indicator-screener-add-watchlist-button-${row.symbol}-${row.market_type}`}>{watchlistSymbolSet.has(`${row.symbol}:${row.market_type}`) ? "Watchlist" : "Add to Watchlist"}</Button>
-                        <Button size="sm" className={buttonClass.warning} onClick={createSignalRule} disabled={!createSignalRuleFeatureEnabled} data-testid={`user-indicator-screener-create-signal-rule-button-${row.symbol}-${row.market_type}`}>Create Signal Rule</Button>
-                      </div>
-                    </td>
+                    <td className={`px-2 text-right tabular-nums ${isMatchedField(row, "ema21") ? "bg-emerald-100 text-emerald-900" : ""}`} data-testid={`user-indicator-screener-cell-ema21-${row.symbol}-${row.market_type}`}>{numberCell(row.ema21, 6)}</td>
                   </tr>
                 );
               })}
               {rows.length === 0 && (
                 <tr className="border-t border-slate-200" data-testid="user-indicator-screener-table-empty-row">
-                  <td colSpan={28} className="px-2 py-4 text-center text-sm text-slate-500" data-testid="user-indicator-screener-table-empty-text">Sonuç bulunmuyor.</td>
+                  <td colSpan={8} className="px-2 py-4 text-center text-sm text-slate-500" data-testid="user-indicator-screener-table-empty-text">Sonuç bulunmuyor.</td>
                 </tr>
               )}
             </tbody>

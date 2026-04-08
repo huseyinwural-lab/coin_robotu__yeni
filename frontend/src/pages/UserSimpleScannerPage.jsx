@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LineChart, Play, Settings2 } from "lucide-react";
+import { Play, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -67,29 +67,6 @@ const formatNumber = (value, digits = 6) => {
   const num = Number(value);
   if (!Number.isFinite(num)) return "-";
   return num.toFixed(digits).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
-};
-
-const buildConditionSummary = (row, queryExpression) => {
-  const tokens = extractConditionTokens(queryExpression);
-  const conditionMetricValues = row?.condition_metric_values || {};
-  const tokenValues = tokens
-    .map((token) => {
-      const value = Object.prototype.hasOwnProperty.call(conditionMetricValues, token)
-        ? conditionMetricValues[token]
-        : row?.[token];
-      if (value === null || value === undefined || value === "") return null;
-      return `${token.toUpperCase()}:${formatNumber(value)}`;
-    })
-    .filter(Boolean);
-
-  const matchedRule = Array.isArray(row?.matched_rules) && row.matched_rules.length > 0
-    ? row.matched_rules.join(" | ")
-    : queryExpression;
-
-  return {
-    rule: matchedRule || "-",
-    tokenLabel: tokenValues.length > 0 ? tokenValues.join(" · ") : "-",
-  };
 };
 
 export const UserSimpleScannerPage = () => {
@@ -246,48 +223,35 @@ export const UserSimpleScannerPage = () => {
           <table className="min-w-full border-collapse text-sm" data-testid="simple-scanner-results-table">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                <th className="px-2 py-2" data-testid="simple-scanner-col-index">#</th>
                 <th className="px-2 py-2" data-testid="simple-scanner-col-symbol">Symbol</th>
                 <th className="px-2 py-2" data-testid="simple-scanner-col-timeframe">Periyot</th>
-                <th className="px-2 py-2" data-testid="simple-scanner-col-scan-price">Tarama Fiyatı</th>
-                <th className="px-2 py-2" data-testid="simple-scanner-col-last-price">Anlık Fiyat</th>
-                <th className="px-2 py-2" data-testid="simple-scanner-col-condition-summary">Koşul Özeti</th>
-                <th className="px-2 py-2" data-testid="simple-scanner-col-score">Skor</th>
-                <th className="px-2 py-2" data-testid="simple-scanner-col-chart">Grafik</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-unit">Birim</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-close">Kapanış</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-rsi14">RSI14</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-rsi7">RSI7</th>
+                <th className="px-2 py-2" data-testid="simple-scanner-col-ema21">EMA21</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row, index) => {
                 const symbol = String(row?.symbol || "").toUpperCase();
-                const conditionSummary = buildConditionSummary(row, lastRunQueryExpression || liveQueryPreview);
                 return (
                   <tr key={`${symbol}-${index}`} className="border-b border-slate-100" data-testid={`simple-scanner-row-${index}`}>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-index-${index}`}>{index + 1}</td>
                     <td className="px-2 py-2 font-semibold text-slate-900" data-testid={`simple-scanner-row-symbol-${index}`}>{symbol}</td>
                     <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-timeframe-${index}`}>{row?.timeframe || timeframe}</td>
-                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-scan-price-${index}`}>{formatNumber(row?.scan_price ?? row?.close, 8)}</td>
-                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-last-price-${index}`}>{formatNumber(row?.last_price, 8)}</td>
-                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-condition-summary-${index}`}>
-                      <div className="font-medium text-slate-900" data-testid={`simple-scanner-row-condition-rule-${index}`}>{conditionSummary.rule}</div>
-                      <div className="text-xs text-slate-500" data-testid={`simple-scanner-row-condition-tokens-${index}`}>{conditionSummary.tokenLabel}</div>
-                    </td>
-                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-score-${index}`}>{formatNumber(row?.signal_score, 4)}</td>
-                    <td className="px-2 py-2" data-testid={`simple-scanner-row-chart-cell-${index}`}>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate(`/user/chart?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(row?.timeframe || timeframe)}`)}
-                        data-testid={`simple-scanner-open-chart-button-${index}`}
-                      >
-                        <LineChart className="mr-1 h-4 w-4" />
-                        Grafik
-                      </Button>
-                    </td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-unit-${index}`}>USDT</td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-close-${index}`}>{formatNumber(row?.close, 8)}</td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-rsi14-${index}`}>{formatNumber(row?.rsi14, 4)}</td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-rsi7-${index}`}>{formatNumber(row?.rsi7, 4)}</td>
+                    <td className="px-2 py-2 text-slate-700" data-testid={`simple-scanner-row-ema21-${index}`}>{formatNumber(row?.ema21, 8)}</td>
                   </tr>
                 );
               })}
               {rows.length === 0 && (
                 <tr data-testid="simple-scanner-empty-row">
-                  <td colSpan={7} className="px-2 py-6 text-center text-sm text-slate-500" data-testid="simple-scanner-empty-message">
+                  <td colSpan={8} className="px-2 py-6 text-center text-sm text-slate-500" data-testid="simple-scanner-empty-message">
                     Henüz sonuç yok. Üstten manuel koşulu girip Run yap.
                   </td>
                 </tr>

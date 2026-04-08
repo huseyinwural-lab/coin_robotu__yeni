@@ -2773,6 +2773,7 @@ class IndicatorScreenerRowResponse(BaseModel):
     volume: float
     rsi14: float
     rsi7: float
+    ema21: float
     ema20: float
     ema50: float
     sma20: float

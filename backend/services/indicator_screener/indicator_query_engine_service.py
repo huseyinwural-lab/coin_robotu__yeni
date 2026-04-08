@@ -405,6 +405,7 @@ def _build_result_row(
         "volume": round(float(indicator_values["volume"]), 8),
         "rsi14": round(float(indicator_values["rsi14"]), 6),
         "rsi7": round(float(indicator_values["rsi7"]), 6),
+        "ema21": round(float(indicator_values["ema21"]), 8),
         "ema20": round(float(indicator_values["ema20"]), 8),
         "ema50": round(float(indicator_values["ema50"]), 8),
         "sma20": round(float(indicator_values["sma20"]), 8),

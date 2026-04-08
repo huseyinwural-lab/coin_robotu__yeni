@@ -95,6 +95,7 @@ def calculate_indicator_values(candles: list[dict]) -> dict[str, float]:
         "volume": _safe_float(last_candle.get("volume")),
         "rsi14": _rsi(closes, 14),
         "rsi7": _rsi(closes, 7),
+        "ema21": _ema(closes, 21),
         "ema20": _ema(closes, 20),
         "ema50": _ema(closes, 50),
         "sma20": _sma(closes, 20),
