@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { ScannerResultsTable } from "@/components/ScannerResultsTable";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/context/AuthContext";
 import { apiClient, classifyApiError } from "@/lib/api";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { saveExecutionContext } from "@/lib/userFlowContext";
@@ -324,8 +323,6 @@ const deriveRequestHealth = (events) => {
 
 export const UserScannerPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const isSuperAdmin = String(user?.role || "").toLowerCase() === "super_admin";
   const [searchParams, setSearchParams] = useSearchParams();
   const [mode, setMode] = useState("ASSISTED");
   const [marketType, setMarketType] = useState("spot");
@@ -930,6 +927,8 @@ export const UserScannerPage = () => {
             { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 15000 }) },
             { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 12000 }) },
             { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 12000 }) },
+            { key: "scanner_engine_config", request: apiClient.get("/user/scanner-engine/config", { timeout: 12000 }) },
+            { key: "scanner_engine_last_run", request: apiClient.get("/user/scanner-engine/last-run", { timeout: 15000 }) },
             { key: "scanner_engine_decision_map", request: apiClient.get("/user/scanner-engine/decision-map", { timeout: 12000 }) },
             { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
           ]
@@ -954,16 +953,11 @@ export const UserScannerPage = () => {
             { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", { timeout: 12000 }) },
             { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" }, timeout: 12000 }) },
             { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, timeout: 12000 }) },
+            { key: "scanner_engine_config", request: apiClient.get("/user/scanner-engine/config", { timeout: 12000 }) },
+            { key: "scanner_engine_last_run", request: apiClient.get("/user/scanner-engine/last-run", { timeout: 15000 }) },
             { key: "scanner_engine_decision_map", request: apiClient.get("/user/scanner-engine/decision-map", { timeout: 12000 }) },
             { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
           ];
-
-      if (isSuperAdmin) {
-        requestDescriptors.push(
-          { key: "scanner_engine_config", request: apiClient.get("/admin/universe-monitor/scanner-engine/config", { timeout: 12000 }) },
-          { key: "scanner_engine_last_run", request: apiClient.get("/admin/universe-monitor/scanner-engine/last-run", { timeout: 15000 }) },
-        );
-      }
       const responses = await Promise.allSettled(requestDescriptors.map((entry) => entry.request));
       const responsesWithEndpointMeta = responses.map((entry, index) => ({
         ...entry,
@@ -1082,18 +1076,16 @@ export const UserScannerPage = () => {
       setScannerEngineDecisionMap(() => (scannerEngineDecisionMapRes?.data?.items && typeof scannerEngineDecisionMapRes?.data?.items === "object")
         ? scannerEngineDecisionMapRes.data.items
         : {});
-      if (isSuperAdmin) {
-        const nextConfig = scannerEngineConfigRes?.data || {};
-        setScannerEngineConfig((prev) => ({ ...prev, ...nextConfig }));
-        setScannerEngineManualSymbols((prev) => (prev ? prev : (nextConfig?.manual_symbols || []).join(",")));
-        setScannerEngineRun(scannerEngineRunRes?.data || {
-          status: "empty",
-          summary: { max_score: 161, candidate_count: 0, scored_count: 0, strong_long_count: 0, strong_short_count: 0 },
-          results: [],
-          top_results: [],
-          errors: [],
-        });
-      }
+      const nextConfig = scannerEngineConfigRes?.data || {};
+      setScannerEngineConfig((prev) => ({ ...prev, ...nextConfig }));
+      setScannerEngineManualSymbols((prev) => (prev ? prev : (nextConfig?.manual_symbols || []).join(",")));
+      setScannerEngineRun(scannerEngineRunRes?.data || {
+        status: "empty",
+        summary: { max_score: 161, candidate_count: 0, scored_count: 0, strong_long_count: 0, strong_short_count: 0 },
+        results: [],
+        top_results: [],
+        errors: [],
+      });
       setDecisionCards(cards);
 
       if (!silent && nextScannerResults.length === 0 && !scannerSeedTriggered) {
@@ -1178,7 +1170,6 @@ export const UserScannerPage = () => {
     }
   }, [
     emitScannerToast,
-    isSuperAdmin,
     marketType,
     mode,
     scannerSeedTriggered,
@@ -1469,10 +1460,6 @@ export const UserScannerPage = () => {
   };
 
   const saveScannerEngineConfig = async () => {
-    if (!isSuperAdmin) {
-      toast.error("Bu ayarı sadece süper admin değiştirebilir");
-      return;
-    }
     setScannerEngineBusy(true);
     try {
       const manualSymbols = scannerEngineManualSymbols
@@ -1511,7 +1498,7 @@ export const UserScannerPage = () => {
         bollinger_weight: Number(scannerEngineConfig?.weights?.bollinger ?? 1),
         reason: "user_scanner_engine_config_save",
       };
-      const { data } = await apiClient.post("/admin/universe-monitor/scanner-engine/config/save", payload);
+      const { data } = await apiClient.post("/user/scanner-engine/config/save", payload);
       setScannerEngineConfig((prev) => ({ ...prev, ...(data?.config || payload) }));
       toast.success("Scanner Engine ayarları kaydedildi");
       await load({ silent: true });
@@ -1523,13 +1510,9 @@ export const UserScannerPage = () => {
   };
 
   const runScannerEngine = async () => {
-    if (!isSuperAdmin) {
-      toast.error("Bu işlemi sadece süper admin çalıştırabilir");
-      return;
-    }
     setScannerEngineBusy(true);
     try {
-      const { data } = await apiClient.post("/admin/universe-monitor/scanner-engine/run", {
+      const { data } = await apiClient.post("/user/scanner-engine/run", {
         force_refresh: false,
         reason: "user_scanner_engine_run",
       });

@@ -66,6 +66,12 @@ from services.quote_asset_policy import extract_quote_asset, filter_allowed_quot
 from services.pipeline.cache_store import get_json, set_json
 from services.bot_runtime_service import list_bot_runtime_summaries
 from services.execution_readiness_service import get_exchange_readiness
+from routers.admin_universe_monitor import (
+    _default_scanner_engine_config as _admin_default_scanner_engine_config,
+    _sanitize_decision_boxes as _admin_sanitize_decision_boxes,
+    _sanitize_market_scope as _admin_sanitize_market_scope,
+    _run_scanner_engine as _admin_run_scanner_engine,
+)
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
 
@@ -83,6 +89,142 @@ def get_scanner_presets(
     return presets
 
 
+@router.get("/scanner-engine/config")
+def user_scanner_engine_get_config(current_user: User = Depends(require_user)):
+    return _load_user_scanner_engine_config(current_user.id)
+
+
+@router.post("/scanner-engine/config/save")
+def user_scanner_engine_save_config(payload: dict, current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    include_spot = bool(payload.get("include_spot", True))
+    include_futures = bool(payload.get("include_futures", True))
+    if not include_spot and not include_futures:
+        raise HTTPException(status_code=400, detail="spot_or_futures_required")
+
+    previous = _load_user_scanner_engine_config(current_user.id)
+    trend = _safe_int(payload.get("trend_weight"), int((previous.get("weights") or {}).get("trend") or 10))
+    volume = _safe_int(payload.get("volume_weight"), int((previous.get("weights") or {}).get("volume") or 50))
+    momentum = _safe_int(payload.get("momentum_weight"), int((previous.get("weights") or {}).get("momentum") or 100))
+    bollinger = _safe_int(payload.get("bollinger_weight"), int((previous.get("weights") or {}).get("bollinger") or 1))
+
+    auto_interval = _safe_int(payload.get("auto_interval_minutes"), int(previous.get("auto_interval_minutes") or 3))
+    if auto_interval not in {1, 3, 5}:
+        auto_interval = 3
+
+    signal_mode = str(payload.get("signal_mode") or previous.get("signal_mode") or "manual").lower().strip()
+    if signal_mode not in {"manual", "auto"}:
+        signal_mode = "manual"
+
+    merged_decision_boxes = payload.get("decision_boxes") if isinstance(payload.get("decision_boxes"), dict) else (previous.get("decision_boxes") or {})
+    merged_market_scope = payload.get("market_scope") if isinstance(payload.get("market_scope"), dict) else (previous.get("market_scope") or {})
+
+    config = {
+        **previous,
+        "exchange": "binance",
+        "include_spot": include_spot,
+        "include_futures": include_futures,
+        "market_scope": _admin_sanitize_market_scope(merged_market_scope),
+        "signal_mode": signal_mode,
+        "auto_interval_minutes": auto_interval,
+        "scan_limit": _safe_int(payload.get("scan_limit"), int(previous.get("scan_limit") or 80)),
+        "top_n": _safe_int(payload.get("top_n"), int(previous.get("top_n") or 20)),
+        "manual_symbols": _normalize_symbols(payload.get("manual_symbols") or previous.get("manual_symbols") or []),
+        "weights": {
+            "trend": trend,
+            "volume": volume,
+            "momentum": momentum,
+            "bollinger": bollinger,
+            "max_score": int(trend + volume + momentum + bollinger),
+        },
+        "decision_boxes": _admin_sanitize_decision_boxes(merged_decision_boxes),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": current_user.id,
+    }
+    _save_user_scanner_engine_config(current_user.id, config)
+
+    create_audit_log(
+        db,
+        action="USER_SCANNER_ENGINE_CONFIG_SAVED",
+        entity_type="user_scanner_engine",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="info",
+        details={
+            "reason": str(payload.get("reason") or "user_scanner_engine_config_save"),
+            "config": config,
+        },
+    )
+    return {"status": "success", "config": config}
+
+
+@router.post("/scanner-engine/run")
+def user_scanner_engine_run(payload: dict, current_user: User = Depends(require_user), db: Session = Depends(get_db)):
+    config = _load_user_scanner_engine_config(current_user.id)
+    force_refresh = bool(payload.get("force_refresh", False))
+    run_payload = _admin_run_scanner_engine(config, force_refresh=force_refresh)
+    _save_user_scanner_engine_last_run(current_user.id, run_payload)
+
+    create_audit_log(
+        db,
+        action="USER_SCANNER_ENGINE_RUN",
+        entity_type="user_scanner_engine",
+        entity_id=current_user.id,
+        actor_user_id=current_user.id,
+        actor_role=current_user.role.value,
+        severity="info",
+        details={
+            "reason": str(payload.get("reason") or "user_scanner_engine_run"),
+            "run_id": run_payload.get("run_id"),
+            "summary": run_payload.get("summary") or {},
+        },
+    )
+    return {
+        "status": "success",
+        "run_id": run_payload.get("run_id"),
+        "generated_at": run_payload.get("generated_at"),
+        "config": run_payload.get("config") or {},
+        "summary": run_payload.get("summary") or {},
+        "results": run_payload.get("results") or [],
+        "top_results": run_payload.get("top_results") or [],
+        "errors": run_payload.get("errors") or [],
+    }
+
+
+@router.get("/scanner-engine/last-run")
+def user_scanner_engine_last_run(current_user: User = Depends(require_user)):
+    payload = get_json(redis_client, _user_scanner_engine_last_run_key(current_user.id))
+    if not isinstance(payload, dict):
+        payload = {}
+    if not payload.get("run_id"):
+        return {
+            "status": "empty",
+            "config": _load_user_scanner_engine_config(current_user.id),
+            "summary": {
+                "exchange": "binance",
+                "candidate_count": 0,
+                "scored_count": 0,
+                "error_count": 0,
+                "strong_long_count": 0,
+                "strong_short_count": 0,
+                "max_score": 161,
+            },
+            "results": [],
+            "top_results": [],
+            "errors": [],
+        }
+    return {
+        "status": "success",
+        "run_id": payload.get("run_id"),
+        "generated_at": payload.get("generated_at"),
+        "config": payload.get("config") or _load_user_scanner_engine_config(current_user.id),
+        "summary": payload.get("summary") or {},
+        "results": payload.get("results") or [],
+        "top_results": payload.get("top_results") or [],
+        "errors": payload.get("errors") or [],
+    }
+
+
 def _allowed_quote_notice() -> str:
     quotes = ", ".join(allowed_quote_assets())
     return f"İşlem için en az bir geçerli market seçmelisiniz. Allowed quote assets: {quotes}"
@@ -90,6 +232,61 @@ def _allowed_quote_notice() -> str:
 
 SCANNER_ASYNC_JOB_TTL_SECONDS = 60 * 30
 SCANNER_ENGINE_LAST_RUN_CACHE_KEY = "universe:scanner_engine:last_run"
+USER_SCANNER_ENGINE_CONFIG_KEY_PREFIX = "user:scanner_engine:config"
+USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX = "user:scanner_engine:last_run"
+
+
+def _user_scanner_engine_config_key(user_id: str) -> str:
+    return f"{USER_SCANNER_ENGINE_CONFIG_KEY_PREFIX}:{user_id}"
+
+
+def _user_scanner_engine_last_run_key(user_id: str) -> str:
+    return f"{USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX}:{user_id}"
+
+
+def _normalize_symbols(values) -> list[str]:
+    if not values:
+        return []
+    return sorted({str(item).strip().upper() for item in values if str(item).strip()})
+
+
+def _user_scanner_engine_default_config() -> dict:
+    return _admin_default_scanner_engine_config()
+
+
+def _safe_int(value, fallback: int) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return fallback
+
+
+def _load_user_scanner_engine_config(user_id: str) -> dict:
+    defaults = _user_scanner_engine_default_config()
+    saved = get_json(redis_client, _user_scanner_engine_config_key(user_id))
+    if not isinstance(saved, dict):
+        saved = {}
+
+    auto_interval = _safe_int(saved.get("auto_interval_minutes"), 3)
+    if auto_interval not in {1, 3, 5}:
+        auto_interval = 3
+
+    return {
+        **defaults,
+        **saved,
+        "manual_symbols": _normalize_symbols(saved.get("manual_symbols") or defaults.get("manual_symbols") or []),
+        "market_scope": _admin_sanitize_market_scope(saved.get("market_scope") or defaults.get("market_scope") or {}),
+        "decision_boxes": _admin_sanitize_decision_boxes(saved.get("decision_boxes") or defaults.get("decision_boxes") or {}),
+        "auto_interval_minutes": auto_interval,
+    }
+
+
+def _save_user_scanner_engine_config(user_id: str, config: dict) -> None:
+    set_json(redis_client, _user_scanner_engine_config_key(user_id), config)
+
+
+def _save_user_scanner_engine_last_run(user_id: str, payload: dict) -> None:
+    set_json(redis_client, _user_scanner_engine_last_run_key(user_id), payload)
 
 
 def _scanner_async_job_key(user_id: str, job_id: str) -> str:
@@ -1045,8 +1242,9 @@ def scanner_results(
 
 @router.get("/scanner-engine/decision-map")
 def scanner_engine_decision_map(current_user: User = Depends(require_user)):
-    _ = current_user
-    payload = get_json(redis_client, SCANNER_ENGINE_LAST_RUN_CACHE_KEY)
+    payload = get_json(redis_client, _user_scanner_engine_last_run_key(current_user.id))
+    if not isinstance(payload, dict) or not payload.get("run_id"):
+        payload = get_json(redis_client, SCANNER_ENGINE_LAST_RUN_CACHE_KEY)
     if not isinstance(payload, dict):
         payload = {}
 
