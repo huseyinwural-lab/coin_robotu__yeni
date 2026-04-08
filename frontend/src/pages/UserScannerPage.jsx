@@ -422,6 +422,7 @@ export const UserScannerPage = () => {
     top_results: [],
     errors: [],
   });
+  const [scannerEngineDecisionMap, setScannerEngineDecisionMap] = useState({});
   const [scannerEngineBusy, setScannerEngineBusy] = useState(false);
   const [scannerFailureSummary, setScannerFailureSummary] = useState({
     auth_error: 0,
@@ -516,8 +517,8 @@ export const UserScannerPage = () => {
   ]);
 
   const scannerEngineDecisionApprovalMap = useMemo(() => {
-    const rows = (scannerEngineRun?.results || []);
-    const map = {};
+    const rows = scannerEngineRun?.results || [];
+    const map = { ...(scannerEngineDecisionMap || {}) };
     rows.forEach((item) => {
       const symbol = String(item?.symbol || "").toUpperCase();
       if (!symbol) {
@@ -528,7 +529,7 @@ export const UserScannerPage = () => {
       }
     });
     return map;
-  }, [scannerEngineRun?.results]);
+  }, [scannerEngineDecisionMap, scannerEngineRun?.results]);
 
   const requestTrendPolylinePoints = useMemo(() => {
     const width = 160;
@@ -929,6 +930,7 @@ export const UserScannerPage = () => {
             { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 15000 }) },
             { key: "scanner_automation", request: apiClient.get("/user/scanner/automation", { timeout: 12000 }) },
             { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 12000 }) },
+            { key: "scanner_engine_decision_map", request: apiClient.get("/user/scanner-engine/decision-map", { timeout: 12000 }) },
             { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
           ]
         : [
@@ -952,6 +954,7 @@ export const UserScannerPage = () => {
             { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", { timeout: 12000 }) },
             { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" }, timeout: 12000 }) },
             { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, timeout: 12000 }) },
+            { key: "scanner_engine_decision_map", request: apiClient.get("/user/scanner-engine/decision-map", { timeout: 12000 }) },
             { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
           ];
 
@@ -1055,6 +1058,7 @@ export const UserScannerPage = () => {
       const readinessRes = byKey.live_readiness;
       const dailyRes = byKey.daily_report;
       const schedulerRes = byKey.scheduler_next_run;
+      const scannerEngineDecisionMapRes = byKey.scanner_engine_decision_map;
       const scannerEngineConfigRes = byKey.scanner_engine_config;
       const scannerEngineRunRes = byKey.scanner_engine_last_run;
 
@@ -1075,6 +1079,9 @@ export const UserScannerPage = () => {
       setLiveReadiness((prev) => readinessRes?.data || prev || null);
       setScannerDailyReport((prev) => dailyRes?.data || prev || null);
       setSchedulerState((prev) => schedulerRes?.data || prev || null);
+      setScannerEngineDecisionMap(() => (scannerEngineDecisionMapRes?.data?.items && typeof scannerEngineDecisionMapRes?.data?.items === "object")
+        ? scannerEngineDecisionMapRes.data.items
+        : {});
       if (isSuperAdmin) {
         const nextConfig = scannerEngineConfigRes?.data || {};
         setScannerEngineConfig((prev) => ({ ...prev, ...nextConfig }));

@@ -89,6 +89,7 @@ def _allowed_quote_notice() -> str:
 
 
 SCANNER_ASYNC_JOB_TTL_SECONDS = 60 * 30
+SCANNER_ENGINE_LAST_RUN_CACHE_KEY = "universe:scanner_engine:last_run"
 
 
 def _scanner_async_job_key(user_id: str, job_id: str) -> str:
@@ -1040,6 +1041,34 @@ def scanner_results(
         )
         for row in rows
     ]
+
+
+@router.get("/scanner-engine/decision-map")
+def scanner_engine_decision_map(current_user: User = Depends(require_user)):
+    _ = current_user
+    payload = get_json(redis_client, SCANNER_ENGINE_LAST_RUN_CACHE_KEY)
+    if not isinstance(payload, dict):
+        payload = {}
+
+    results = payload.get("results") or []
+    if not isinstance(results, list):
+        results = []
+
+    items: dict[str, dict] = {}
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        symbol = str(row.get("symbol") or "").upper().strip()
+        decisions = row.get("decisions")
+        if symbol and isinstance(decisions, dict):
+            items[symbol] = decisions
+
+    return {
+        "run_id": payload.get("run_id"),
+        "generated_at": payload.get("generated_at"),
+        "count": len(items),
+        "items": items,
+    }
 
 
 @router.get("/scanner", response_model=UserScannerOverviewResponse)
