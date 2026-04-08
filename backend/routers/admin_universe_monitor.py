@@ -177,6 +177,7 @@ class ScannerEngineConfigSaveRequest(BaseModel):
     exchange: str = Field(default="binance", pattern="^binance$")
     include_spot: bool = True
     include_futures: bool = True
+    market_scope: dict = Field(default_factory=dict)
     signal_mode: str = Field(default="manual", pattern="^(manual|auto)$")
     scan_limit: int = Field(default=SCANNER_ENGINE_DEFAULT_SCAN_LIMIT, ge=10, le=SCANNER_ENGINE_MAX_SCAN_LIMIT)
     top_n: int = Field(default=20, ge=1, le=150)
@@ -645,6 +646,10 @@ def _default_scanner_engine_config() -> dict:
         "exchange": "binance",
         "include_spot": True,
         "include_futures": True,
+        "market_scope": {
+            "spot_mode": "top50",
+            "futures_mode": "top50",
+        },
         "signal_mode": "manual",
         "scan_limit": SCANNER_ENGINE_DEFAULT_SCAN_LIMIT,
         "top_n": 20,
@@ -704,12 +709,28 @@ def _load_scanner_engine_config() -> dict:
         **_default_scanner_engine_config(),
         **saved,
         "manual_symbols": _normalize_symbols(saved.get("manual_symbols") or []),
+        "market_scope": _sanitize_market_scope(saved.get("market_scope") or {}),
         "decision_boxes": _sanitize_decision_boxes(saved.get("decision_boxes") or {}),
     }
 
 
 def _save_scanner_engine_config(config: dict):
     _write_json_value(SCANNER_ENGINE_CONFIG_KEY, config)
+
+
+def _sanitize_market_scope(input_scope: dict) -> dict:
+    defaults = ("top50", "top50")
+    if not isinstance(input_scope, dict):
+        input_scope = {}
+
+    def _mode(value, fallback: str) -> str:
+        normalized = str(value or fallback).strip().lower()
+        return normalized if normalized in {"top50", "all"} else fallback
+
+    return {
+        "spot_mode": _mode(input_scope.get("spot_mode"), defaults[0]),
+        "futures_mode": _mode(input_scope.get("futures_mode"), defaults[1]),
+    }
 
 
 def _sanitize_decision_boxes(input_boxes: dict) -> dict:
@@ -1275,13 +1296,33 @@ def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
         if bool(item.get("is_tradable")) and str(item.get("symbol") or "").endswith("USDT")
     ]
 
+    market_scope = _sanitize_market_scope(config.get("market_scope") or {})
+    spot_mode = str(market_scope.get("spot_mode") or "top50")
+    futures_mode = str(market_scope.get("futures_mode") or "top50")
+
+    spot_rows = [item for item in rows if str(item.get("market_type") or "") == "spot"]
+    futures_rows = [item for item in rows if str(item.get("market_type") or "") == "futures"]
+    spot_rows.sort(key=lambda item: _to_float(item.get("volume_24h")), reverse=True)
+    futures_rows.sort(key=lambda item: _to_float(item.get("volume_24h")), reverse=True)
+
+    scoped_rows: list[dict] = []
+    if bool(config.get("include_spot", True)):
+        scoped_rows.extend(spot_rows[:50] if spot_mode == "top50" else spot_rows)
+    if bool(config.get("include_futures", True)):
+        scoped_rows.extend(futures_rows[:50] if futures_mode == "top50" else futures_rows)
+
+    rows = scoped_rows
+
     manual_symbols = set(_normalize_symbols(config.get("manual_symbols") or []))
     if str(config.get("signal_mode") or "manual") == "manual" and manual_symbols:
         rows = [item for item in rows if str(item.get("symbol") or "").upper() in manual_symbols]
 
     rows.sort(key=lambda item: _to_float(item.get("volume_24h")), reverse=True)
     scan_limit = max(10, min(int(config.get("scan_limit") or SCANNER_ENGINE_DEFAULT_SCAN_LIMIT), SCANNER_ENGINE_MAX_SCAN_LIMIT))
-    candidates = rows[:scan_limit]
+    if len(rows) > scan_limit:
+        candidates = rows[:scan_limit]
+    else:
+        candidates = rows
 
     scored: list[dict] = []
     errors: list[dict] = []
@@ -1327,6 +1368,8 @@ def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
             "market_selection": {
                 "spot": bool(config.get("include_spot", True)),
                 "futures": bool(config.get("include_futures", True)),
+                "spot_mode": spot_mode,
+                "futures_mode": futures_mode,
             },
             "candidate_count": len(candidates),
             "scored_count": len(scored),
@@ -1532,11 +1575,13 @@ def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_
     trace_id = str(uuid.uuid4())
     previous_config = _load_scanner_engine_config()
     merged_decision_boxes = payload.decision_boxes if payload.decision_boxes else (previous_config.get("decision_boxes") or {})
+    merged_market_scope = payload.market_scope if payload.market_scope else (previous_config.get("market_scope") or {})
     config = {
         **previous_config,
         "exchange": "binance",
         "include_spot": bool(payload.include_spot),
         "include_futures": bool(payload.include_futures),
+        "market_scope": _sanitize_market_scope(merged_market_scope),
         "signal_mode": payload.signal_mode,
         "scan_limit": int(payload.scan_limit),
         "top_n": int(payload.top_n),
