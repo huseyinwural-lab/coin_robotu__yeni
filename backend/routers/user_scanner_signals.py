@@ -662,68 +662,120 @@ def _is_exchange_connection_ready(connection: UserExchangeConnection | None) -> 
     if connection is None:
         return False
     snapshot = dict(getattr(connection, "readiness_snapshot", {}) or {})
-    health = str(snapshot.get("connection_health") or "unknown").strip().lower()
+    health = str(snapshot.get("connection_health") or getattr(connection, "connection_health", "unknown") or "unknown").strip().lower()
     can_trade = snapshot.get("can_trade_effective")
     if can_trade is None:
         can_trade = snapshot.get("can_trade_snapshot")
     if can_trade is None:
         can_trade = snapshot.get("can_trade")
+    if can_trade is None:
+        can_trade = getattr(connection, "can_trade_effective", False)
     return bool(can_trade) and health in {"online", "degraded"}
 
 
-def _build_user_status_contract(db: Session, user_id: str) -> dict:
-    live_config = get_or_create_live_config(db)
-    live_mode_enabled = bool(getattr(live_config, "live_mode_enabled", False))
-
-    latest_scanner_row = (
-        db.query(UserScannerResult)
-        .filter(UserScannerResult.user_id == user_id)
-        .order_by(UserScannerResult.generated_at.desc())
-        .first()
-    )
-    scanner_ready = latest_scanner_row is not None
-
-    bot_summaries = list_bot_runtime_summaries(db, user_id=user_id)
-    primary_bot = (
-        next((item for item in bot_summaries if bool(item.get("is_enabled")) and str(item.get("status") or "").upper() == "RUNNING"), None)
-        or next((item for item in bot_summaries if bool(item.get("is_enabled"))), None)
-        or (bot_summaries[0] if bot_summaries else None)
+def _select_primary_bot_for_market(bot_summaries: list[dict], market_type: str) -> dict | None:
+    normalized_market_type = str(market_type or "spot").strip().lower()
+    scoped = [item for item in bot_summaries if str(item.get("market_type") or "").strip().lower() == normalized_market_type]
+    if not scoped:
+        return None
+    return (
+        next((item for item in scoped if bool(item.get("is_enabled")) and str(item.get("status") or "").upper() == "RUNNING"), None)
+        or next((item for item in scoped if bool(item.get("is_enabled"))), None)
+        or next((item for item in scoped if str(item.get("status") or "").upper() == "RUNNING"), None)
+        or scoped[0]
     )
 
+
+def _resolve_status_contract_connection(
+    db: Session,
+    *,
+    user_id: str,
+    market_type: str,
+    preferred_connection_id: str | None,
+) -> UserExchangeConnection | None:
+    normalized_market_type = str(market_type or "spot").strip().lower()
+    base_query = db.query(UserExchangeConnection).filter(UserExchangeConnection.user_id == user_id)
+
+    preferred = None
+    if preferred_connection_id:
+        preferred = base_query.filter(UserExchangeConnection.id == str(preferred_connection_id).strip()).first()
+        if preferred is not None:
+            preferred_market = str(getattr(preferred, "market_type", "") or "").strip().lower()
+            if preferred_market == normalized_market_type and _is_exchange_connection_ready(preferred):
+                return preferred
+
+    market_candidates = (
+        base_query
+        .filter(UserExchangeConnection.market_type == normalized_market_type)
+        .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
+        .all()
+    )
+
+    ready_market = next((row for row in market_candidates if _is_exchange_connection_ready(row)), None)
+    if ready_market is not None:
+        return ready_market
+
+    if preferred is not None:
+        preferred_market = str(getattr(preferred, "market_type", "") or "").strip().lower()
+        if preferred_market == normalized_market_type:
+            return preferred
+
+    if market_candidates:
+        return market_candidates[0]
+
+    all_candidates = base_query.order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc()).all()
+    ready_any = next((row for row in all_candidates if _is_exchange_connection_ready(row)), None)
+    if ready_any is not None:
+        return ready_any
+    return all_candidates[0] if all_candidates else None
+
+
+def _scanner_result_market_type(row: UserScannerResult | None) -> str | None:
+    if row is None:
+        return None
+    payload = dict(getattr(row, "payload", {}) or {})
+    candidate = (
+        payload.get("market_type")
+        or payload.get("scanner_market_type")
+        or payload.get("execution_market_type")
+    )
+    normalized = str(candidate or "").strip().lower()
+    if normalized in {"spot", "futures"}:
+        return normalized
+    return None
+
+
+def _build_market_status_contract(
+    db: Session,
+    *,
+    user_id: str,
+    market_type: str,
+    primary_bot: dict | None,
+    latest_scanner_row: UserScannerResult | None,
+    live_mode_enabled: bool,
+) -> dict:
     binding_validation = dict((primary_bot or {}).get("binding_validation") or {})
     strategy_ready = bool(binding_validation.get("strategy_bound"))
     risk_ready = bool(binding_validation.get("risk_bound"))
     execution_ready = bool(binding_validation.get("execution_bound"))
     symbols_ready = bool(binding_validation.get("symbols_resolved"))
 
-    selected_connection_id = str((primary_bot or {}).get("selected_exchange_connection_id") or "").strip()
-    selected_connection = None
-    if selected_connection_id:
-        selected_connection = (
-            db.query(UserExchangeConnection)
-            .filter(UserExchangeConnection.id == selected_connection_id, UserExchangeConnection.user_id == user_id)
-            .first()
-        )
-    if selected_connection is None:
-        selected_connection = (
-            db.query(UserExchangeConnection)
-            .filter(UserExchangeConnection.user_id == user_id)
-            .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
-            .first()
-        )
-    exchange_ready = bool(execution_ready)
+    selected_connection_id = str((primary_bot or {}).get("selected_exchange_connection_id") or "").strip() or None
+    selected_connection = _resolve_status_contract_connection(
+        db,
+        user_id=user_id,
+        market_type=market_type,
+        preferred_connection_id=selected_connection_id,
+    )
+
+    exchange_ready = bool(execution_ready) and _is_exchange_connection_ready(selected_connection)
     wallet_last_check_at = None
     wallet_available_balance = None
     wallet_balance = None
+    effective_connection_id = selected_connection_id
     if selected_connection is not None:
         snapshot = dict(getattr(selected_connection, "readiness_snapshot", None) or {})
-        connection_health = str(snapshot.get("connection_health") or getattr(selected_connection, "connection_health", "unknown") or "unknown").lower()
-        can_trade_effective = bool(
-            snapshot.get("can_trade_effective")
-            if "can_trade_effective" in snapshot
-            else getattr(selected_connection, "can_trade_effective", False)
-        )
-        exchange_ready = can_trade_effective and connection_health in {"online", "degraded"}
+        effective_connection_id = selected_connection.id
         wallet_last_check_at = (
             snapshot.get("checked_at")
             or snapshot.get("updated_at")
@@ -734,29 +786,34 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         wallet_balance = perms.get("wallet_balance")
 
     blocked_rows = (
-        db.query(PendingSignal)
-        .filter(PendingSignal.user_id == user_id, PendingSignal.status.in_(["blocked", "non_tradeable"]))
+        db.query(PendingSignal, SignalEvent.market_type)
+        .outerjoin(SignalEvent, SignalEvent.id == PendingSignal.signal_id)
+        .filter(
+            PendingSignal.user_id == user_id,
+            PendingSignal.status.in_(["blocked", "non_tradeable"]),
+        )
         .order_by(PendingSignal.created_at.desc())
-        .limit(200)
+        .limit(400)
         .all()
     )
     blocked_reason_counts: dict[str, int] = {}
-    for row in blocked_rows:
+    for row, row_market_type in blocked_rows:
+        normalized_row_market = str(row_market_type or "").strip().lower()
+        if normalized_row_market in {"spot", "futures"} and normalized_row_market != str(market_type or "spot").lower():
+            continue
         code, _, _ = _normalize_blocked_payload(
             status=row.status,
             blocked_reason_code=row.blocked_reason_code,
             blocked_reason_message=row.blocked_reason_message,
             blocked_solution_hint=row.blocked_solution_hint,
         )
-        if (not live_mode_enabled) and code == "ORDER_PRECHECK_FAILED":
-            continue
-        if (not live_mode_enabled) and code == "SYMBOL_NOT_ALLOWED":
+        if (not live_mode_enabled) and code in {"ORDER_PRECHECK_FAILED", "SYMBOL_NOT_ALLOWED"}:
             continue
         if code:
             blocked_reason_counts[code] = blocked_reason_counts.get(code, 0) + 1
 
     blocking_reasons: list[dict] = []
-    if not scanner_ready:
+    if latest_scanner_row is None:
         blocking_reasons.append({"code": "SCANNER_NOT_READY", "message": "Henüz scanner sonucu yok.", "hint": "Scanner run-async tetikleyin."})
     if not strategy_ready:
         blocking_reasons.append({"code": "STRATEGY_NOT_READY", "message": "Strategy binding hazır değil.", "hint": "Bot strategy/template eşleşmesini kontrol edin."})
@@ -766,7 +823,6 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         blocking_reasons.append({"code": "EXECUTION_NOT_READY", "message": "Execution binding hazır değil.", "hint": "Exchange connection bağlayın."})
     if not symbols_ready:
         blocking_reasons.append({"code": "SYMBOLS_NOT_READY", "message": "Symbol resolution tamamlanmadı.", "hint": "manual_selection sembollerini güncelleyin."})
-    # Exchange readiness sinyal akışını bloklamaz; execution katmanında guard tarafından zorlanır.
     if exchange_ready and wallet_available_balance in {None, 0, 0.0} and wallet_balance in {None, 0, 0.0} and live_mode_enabled:
         blocking_reasons.append({"code": "WALLET_REFRESH_FAILED", "message": "Cüzdan snapshot güncel değil veya boş.", "hint": "wallet refresh tetikleyin; güncel balance olmadan trade açılmaz."})
 
@@ -780,9 +836,11 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         )
 
     health = "HEALTHY" if len(blocking_reasons) == 0 else "BLOCKED"
+    latest_scanner_run_at = latest_scanner_row.generated_at.isoformat() if latest_scanner_row and latest_scanner_row.generated_at else None
 
     return {
-        "scanner_ready": bool(scanner_ready),
+        "market_type": str(market_type or "spot").lower(),
+        "scanner_ready": bool(latest_scanner_row is not None),
         "strategy_ready": bool(strategy_ready),
         "risk_ready": bool(risk_ready),
         "execution_ready": bool(execution_ready),
@@ -791,11 +849,93 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         "bot_status": str((primary_bot or {}).get("status") or "NOT_CONFIGURED"),
         "health": health,
         "blocking_reasons": blocking_reasons,
-        "latest_scanner_run_at": latest_scanner_row.generated_at.isoformat() if latest_scanner_row and latest_scanner_row.generated_at else None,
+        "latest_scanner_run_at": latest_scanner_run_at,
         "active_bot_id": (primary_bot or {}).get("id"),
         "wallet_last_check_at": wallet_last_check_at,
         "wallet_available_balance": wallet_available_balance,
         "wallet_balance": wallet_balance,
+        "selected_exchange_connection_id": effective_connection_id,
+    }
+
+
+def _build_user_status_contract(db: Session, user_id: str, *, preferred_market: str | None = None) -> dict:
+    live_config = get_or_create_live_config(db)
+    live_mode_enabled = bool(getattr(live_config, "live_mode_enabled", False))
+
+    bot_summaries = list_bot_runtime_summaries(db, user_id=user_id)
+
+    recent_scanner_rows = (
+        db.query(UserScannerResult)
+        .filter(UserScannerResult.user_id == user_id)
+        .order_by(UserScannerResult.generated_at.desc())
+        .limit(400)
+        .all()
+    )
+
+    latest_scanner_rows: dict[str, UserScannerResult | None] = {"spot": None, "futures": None}
+    for row in recent_scanner_rows:
+        market = _scanner_result_market_type(row)
+        if market in latest_scanner_rows and latest_scanner_rows[market] is None:
+            latest_scanner_rows[market] = row
+        if latest_scanner_rows["spot"] is not None and latest_scanner_rows["futures"] is not None:
+            break
+
+    market_contracts: dict[str, dict] = {}
+    for market in ("spot", "futures"):
+        market_bot = _select_primary_bot_for_market(bot_summaries, market)
+        if market_bot is None and latest_scanner_rows.get(market) is None:
+            continue
+        market_contracts[market] = _build_market_status_contract(
+            db,
+            user_id=user_id,
+            market_type=market,
+            primary_bot=market_bot,
+            latest_scanner_row=latest_scanner_rows.get(market),
+            live_mode_enabled=live_mode_enabled,
+        )
+
+    if not market_contracts:
+        market_contracts["spot"] = _build_market_status_contract(
+            db,
+            user_id=user_id,
+            market_type="spot",
+            primary_bot=None,
+            latest_scanner_row=None,
+            live_mode_enabled=live_mode_enabled,
+        )
+
+    latest_scanner_row_global = recent_scanner_rows[0] if recent_scanner_rows else None
+
+    preferred_market_candidate = str(preferred_market or "").strip().lower()
+    if preferred_market_candidate not in {"spot", "futures"}:
+        preferred_market_candidate = ""
+
+    if not preferred_market_candidate and latest_scanner_row_global is not None:
+        latest_market = _scanner_result_market_type(latest_scanner_row_global) or ""
+        if latest_market in market_contracts:
+            preferred_market_candidate = latest_market
+
+    if not preferred_market_candidate:
+        running_market = next(
+            (
+                market
+                for market, contract in market_contracts.items()
+                if str(contract.get("bot_status") or "").upper() == "RUNNING"
+            ),
+            None,
+        )
+        preferred_market_candidate = running_market or next(iter(market_contracts.keys()))
+
+    selected_contract = market_contracts.get(preferred_market_candidate) or next(iter(market_contracts.values()))
+    overall_health = "HEALTHY" if all(str(contract.get("health") or "").upper() == "HEALTHY" for contract in market_contracts.values()) else "BLOCKED"
+
+    return {
+        **selected_contract,
+        "health": str(selected_contract.get("health") or "BLOCKED"),
+        "overall_health": overall_health,
+        "preferred_market": preferred_market_candidate,
+        "market_contracts": market_contracts,
+        "active_bot_ids": {market: contract.get("active_bot_id") for market, contract in market_contracts.items()},
     }
 
 
@@ -1317,10 +1457,13 @@ def scanner_run_async_both(
 
 @router.get("/scanner/status-contract")
 def scanner_status_contract(
+    market_type: str = Query(default="auto"),
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    return _build_user_status_contract(db, current_user.id)
+    normalized_market_type = str(market_type or "auto").strip().lower()
+    preferred_market = normalized_market_type if normalized_market_type in {"spot", "futures"} else None
+    return _build_user_status_contract(db, current_user.id, preferred_market=preferred_market)
 
 
 @router.get("/scanner/exchange-readiness")

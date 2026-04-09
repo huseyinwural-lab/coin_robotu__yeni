@@ -210,7 +210,7 @@ def _build_start_status_contract(
                 db,
                 connection_id=selected_connection.id,
                 market_type=str(getattr(bot, "market_type", "spot") or "spot"),
-                symbol=(resolved_symbols[0] if resolved_symbols else None),
+                symbol=None,
             )
             exchange_ready = bool(exchange_readiness.get("is_ready"))
             exchange_reason_code = str(exchange_readiness.get("reason_code") or "ready")
@@ -412,31 +412,65 @@ def _resolve_bindings(db, bot: BotProfile) -> dict:
 
 def _resolve_symbol_source(db, bot: BotProfile) -> dict:
     source_type = str(getattr(bot, "symbol_source_type", "manual") or "manual")
+    bot_market_type = str(getattr(bot, "market_type", "spot") or "spot").strip().lower()
+
+    def _dedup_symbols(values: list[str]) -> list[str]:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for item in values:
+            symbol = str(item or "").upper().strip()
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            ordered.append(symbol)
+        return ordered
+
+    def _scanner_row_market_type(row: UserScannerResult) -> str | None:
+        payload = dict(getattr(row, "payload", {}) or {})
+        candidate = payload.get("market_type") or payload.get("scanner_market_type") or payload.get("execution_market_type")
+        normalized = str(candidate or "").strip().lower()
+        return normalized if normalized in {"spot", "futures"} else None
+
     if source_type == "scanner" and str(getattr(bot, "scanner_id", "") or "").strip():
         scanner_id = str(getattr(bot, "scanner_id", "") or "").strip()
-        bot_symbols_fallback = [
+        bot_symbols_fallback = _dedup_symbols([
             str(symbol).upper().strip()
             for symbol in list(getattr(bot, "symbols", []) or [])
             if str(symbol).strip()
-        ]
+        ])
         selection_row = (
             db.query(UserScannerSymbolSelection)
             .filter(UserScannerSymbolSelection.user_id == bot.user_id, UserScannerSymbolSelection.scanner_id == scanner_id)
             .first()
         )
-        selected_symbols = [
+        selected_symbols = _dedup_symbols([
             str(symbol).upper().strip()
             for symbol in list((selection_row.selected_symbols if selection_row else []) or [])
             if str(symbol).strip()
-        ]
+        ])
         selected_set = set(selected_symbols)
         rows = (
             db.query(UserScannerResult)
             .filter(UserScannerResult.user_id == bot.user_id)
             .order_by(UserScannerResult.generated_at.desc())
-            .limit(25)
+            .limit(400)
             .all()
         )
+        if bot_market_type in {"spot", "futures"}:
+            filtered_rows = [row for row in rows if _scanner_row_market_type(row) == bot_market_type]
+            if filtered_rows:
+                rows = filtered_rows
+
+        allowed_symbols_by_market = {
+            str(getattr(row, "symbol", "") or "").upper().strip()
+            for row in rows
+            if str(getattr(row, "symbol", "") or "").strip()
+        }
+        if allowed_symbols_by_market:
+            selected_symbols = [symbol for symbol in selected_symbols if symbol in allowed_symbols_by_market]
+            selected_set = set(selected_symbols)
+            bot_symbols_fallback = [symbol for symbol in bot_symbols_fallback if symbol in allowed_symbols_by_market]
+
         symbols = []
         for row in rows:
             symbol = str(getattr(row, "symbol", "") or "").upper().strip()
@@ -652,7 +686,7 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "execution_profile_id": runtime.get("execution_profile_id"),
         "last_heartbeat": runtime.get("last_heartbeat"),
         "runtime_context": runtime.get("runtime_context") or {},
-        "symbol_source": runtime.get("symbol_source", "manual"),
+        "symbol_source": symbol_resolution.get("source_type") or runtime.get("symbol_source", "manual"),
         "symbol_source_summary": symbol_resolution,
         "binding_validation": binding_summary,
         "compatibility": compatibility,

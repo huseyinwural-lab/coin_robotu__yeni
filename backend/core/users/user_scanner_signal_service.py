@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 from datetime import datetime, timedelta, timezone
 from time import perf_counter
 
@@ -43,6 +44,8 @@ from services.scanner_observability_service import (
     resolve_fallback_mode,
 )
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_SIGNAL_MODES = {"AUTO"}
 DEFAULT_SIGNAL_MODE = "AUTO"
@@ -859,20 +862,48 @@ def _resolve_default_exchange_connection(db: Session, user_id: str) -> UserExcha
     )
 
 
-def _resolve_exchange_connection_for_market(db: Session, user_id: str, market_type: str) -> UserExchangeConnection | None:
+def _resolve_exchange_connection_for_market(
+    db: Session,
+    user_id: str,
+    market_type: str,
+    *,
+    preferred_connection_id: str | None = None,
+) -> UserExchangeConnection | None:
     normalized_market_type = str(market_type or "spot").strip().lower()
-    scoped = (
-        db.query(UserExchangeConnection)
-        .filter(
-            UserExchangeConnection.user_id == user_id,
-            UserExchangeConnection.market_type == normalized_market_type,
-        )
+    base_query = db.query(UserExchangeConnection).filter(UserExchangeConnection.user_id == user_id)
+
+    preferred = None
+    if preferred_connection_id:
+        preferred = base_query.filter(UserExchangeConnection.id == str(preferred_connection_id).strip()).first()
+        if preferred is not None:
+            preferred_market = str(getattr(preferred, "market_type", "") or "").strip().lower()
+            if preferred_market == normalized_market_type and _is_connection_trade_ready(preferred):
+                return preferred
+
+    market_candidates = (
+        base_query
+        .filter(UserExchangeConnection.market_type == normalized_market_type)
         .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
-        .first()
+        .all()
     )
-    if scoped is not None:
-        return scoped
-    return _resolve_default_exchange_connection(db, user_id)
+    ready_market = next((row for row in market_candidates if _is_connection_trade_ready(row)), None)
+    if ready_market is not None:
+        return ready_market
+
+    if preferred is not None:
+        preferred_market = str(getattr(preferred, "market_type", "") or "").strip().lower()
+        if preferred_market == normalized_market_type:
+            return preferred
+
+    if market_candidates:
+        return market_candidates[0]
+
+    all_candidates = base_query.order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc()).all()
+    ready_any = next((row for row in all_candidates if _is_connection_trade_ready(row)), None)
+    if ready_any is not None:
+        return ready_any
+
+    return all_candidates[0] if all_candidates else None
 
 
 def _safe_float(value, fallback: float = 0.0) -> float:
@@ -1405,7 +1436,16 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
 
     bot = db.query(BotProfile).filter(BotProfile.id == signal.bot_profile_id, BotProfile.is_deleted.is_(False)).first()
     risk_policy = _resolve_default_risk_policy(db, row.user_id)
-    exchange_connection = _resolve_exchange_connection_for_market(db, row.user_id, str(signal.market_type or "spot"))
+    preferred_connection_id = ""
+    if bot is not None:
+        bot_snapshot = dict(getattr(bot, "symbol_resolution_snapshot", {}) or {})
+        preferred_connection_id = str(bot_snapshot.get("selected_exchange_connection_id") or "").strip()
+    exchange_connection = _resolve_exchange_connection_for_market(
+        db,
+        row.user_id,
+        str(signal.market_type or "spot"),
+        preferred_connection_id=preferred_connection_id or None,
+    )
     reason_codes, requires_manual, execution_eligible = _evaluate_signal_blockers(
         db,
         row=row,
@@ -1754,10 +1794,16 @@ def list_user_signals(
                 signal = signal_map.get(str(row.signal_id))
                 if signal is not None:
                     try:
+                        bot = db.query(BotProfile).filter(BotProfile.id == signal.bot_profile_id, BotProfile.is_deleted.is_(False)).first() if signal else None
+                        preferred_connection_id = ""
+                        if bot is not None:
+                            bot_snapshot = dict(getattr(bot, "symbol_resolution_snapshot", {}) or {})
+                            preferred_connection_id = str(bot_snapshot.get("selected_exchange_connection_id") or "").strip()
                         exchange_connection = _resolve_exchange_connection_for_market(
                             db,
                             row.user_id,
                             str(signal.market_type or "spot").lower(),
+                            preferred_connection_id=preferred_connection_id or None,
                         )
                         _dispatch_signal_to_execution(
                             db,
@@ -1767,9 +1813,13 @@ def list_user_signals(
                             actor_user_id=row.user_id,
                         )
                         mutated = True
-                    except Exception:
-                        # auto-dispatch denemesi başarısızsa snapshot durumu korunur
-                        pass
+                    except Exception as exc:
+                        logger.exception(
+                            "SIGNAL_AUTO_DISPATCH_REFRESH_FAILED",
+                            extra={"user_id": row.user_id, "pending_signal_id": row.id, "signal_id": row.signal_id},
+                        )
+                        _apply_order_precheck_failed(row, error_detail=f"auto_dispatch_refresh_failed:{exc.__class__.__name__}:{str(exc)[:120]}")
+                        mutated = True
         row.execution_mode_label = _execution_mode_label(row.mode)
 
     if refresh_snapshot and mutated:
@@ -2607,7 +2657,14 @@ def run_user_scanner(
                 continue
             try:
                 signal_market = str(getattr(signal_event, "market_type", bot_market_type) or bot_market_type).lower()
-                connection = _resolve_exchange_connection_for_market(db, user_id, signal_market)
+                bot_snapshot = dict(getattr(bot, "symbol_resolution_snapshot", {}) or {})
+                preferred_connection_id = str(bot_snapshot.get("selected_exchange_connection_id") or "").strip()
+                connection = _resolve_exchange_connection_for_market(
+                    db,
+                    user_id,
+                    signal_market,
+                    preferred_connection_id=preferred_connection_id or None,
+                )
                 _dispatch_signal_to_execution(
                     db,
                     row=pending_row,
@@ -2618,6 +2675,10 @@ def run_user_scanner(
                 if pending_row.created_order_intent_id:
                     auto_dispatched_count += 1
             except Exception as exc:
+                logger.exception(
+                    "SIGNAL_AUTO_DISPATCH_RUN_FAILED",
+                    extra={"user_id": user_id, "pending_signal_id": getattr(pending_row, "id", None), "signal_id": getattr(signal_event, "id", None)},
+                )
                 _apply_order_precheck_failed(pending_row, error_detail=str(exc))
 
     if actionable_count == 0 and selected:
@@ -2907,10 +2968,16 @@ def diagnose_pending_signal(
         signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
         if signal is not None:
             try:
+                bot = db.query(BotProfile).filter(BotProfile.id == signal.bot_profile_id, BotProfile.is_deleted.is_(False)).first() if signal else None
+                preferred_connection_id = ""
+                if bot is not None:
+                    bot_snapshot = dict(getattr(bot, "symbol_resolution_snapshot", {}) or {})
+                    preferred_connection_id = str(bot_snapshot.get("selected_exchange_connection_id") or "").strip()
                 exchange_connection = _resolve_exchange_connection_for_market(
                     db,
                     user_id,
                     str(getattr(signal, "market_type", "spot") or "spot"),
+                    preferred_connection_id=preferred_connection_id or None,
                 )
                 _dispatch_signal_to_execution(
                     db,
@@ -2921,6 +2988,10 @@ def diagnose_pending_signal(
                 )
                 actions_applied.append("auto_dispatch_triggered")
             except Exception as exc:
+                logger.exception(
+                    "SIGNAL_AUTO_DISPATCH_DIAGNOSE_FAILED",
+                    extra={"user_id": user_id, "pending_signal_id": row.id, "signal_id": row.signal_id},
+                )
                 _apply_order_precheck_failed(row, error_detail=str(exc))
                 actions_applied.append("auto_dispatch_precheck_failed")
     record_decision_trace(
