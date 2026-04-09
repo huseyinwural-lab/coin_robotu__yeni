@@ -711,7 +711,6 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
             .order_by(UserExchangeConnection.is_default.desc(), UserExchangeConnection.updated_at.desc())
             .first()
         )
-    exchange_reason_code = "connection_not_selected"
     exchange_ready = bool(execution_ready)
     wallet_last_check_at = None
     wallet_available_balance = None
@@ -725,12 +724,6 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
             else getattr(selected_connection, "can_trade_effective", False)
         )
         exchange_ready = can_trade_effective and connection_health in {"online", "degraded"}
-        exchange_reason_code = str(
-            snapshot.get("reason_code")
-            or snapshot.get("connection_health_reason")
-            or getattr(selected_connection, "connection_health_reason", "ready")
-            or "ready"
-        )
         wallet_last_check_at = (
             snapshot.get("checked_at")
             or snapshot.get("updated_at")
@@ -773,8 +766,7 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         blocking_reasons.append({"code": "EXECUTION_NOT_READY", "message": "Execution binding hazır değil.", "hint": "Exchange connection bağlayın."})
     if not symbols_ready:
         blocking_reasons.append({"code": "SYMBOLS_NOT_READY", "message": "Symbol resolution tamamlanmadı.", "hint": "manual_selection sembollerini güncelleyin."})
-    if not exchange_ready and live_mode_enabled:
-        blocking_reasons.append({"code": "EXCHANGE_NOT_READY", "message": f"Exchange trade-ready değil ({exchange_reason_code}).", "hint": "connection revalidate / permission kontrol / market_type doğrulaması yapın."})
+    # Exchange readiness sinyal akışını bloklamaz; execution katmanında guard tarafından zorlanır.
     if exchange_ready and wallet_available_balance in {None, 0, 0.0} and wallet_balance in {None, 0, 0.0} and live_mode_enabled:
         blocking_reasons.append({"code": "WALLET_REFRESH_FAILED", "message": "Cüzdan snapshot güncel değil veya boş.", "hint": "wallet refresh tetikleyin; güncel balance olmadan trade açılmaz."})
 

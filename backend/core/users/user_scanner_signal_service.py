@@ -1378,7 +1378,11 @@ def _evaluate_signal_blockers(
             reason_codes.append("EXCHANGE_NOT_READY")
 
     deduped = list(dict.fromkeys(reason_codes))
-    hard_blockers = [code for code in deduped if code != "MANUAL_APPROVAL_REQUIRED"]
+    hard_blockers = [
+        code
+        for code in deduped
+        if code not in {"MANUAL_APPROVAL_REQUIRED", "EXCHANGE_NOT_READY"}
+    ]
     execution_eligible = len(hard_blockers) == 0
     return deduped, requires_manual, execution_eligible
 
@@ -1430,7 +1434,7 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
         row.requires_manual_approval = False
         _set_state(row, "EXPIRED")
     elif primary_reason:
-        if primary_reason == "MANUAL_APPROVAL_REQUIRED":
+        if primary_reason in {"MANUAL_APPROVAL_REQUIRED", "EXCHANGE_NOT_READY"}:
             row.status = "pending"
             row.execution_eligible = False
             row.blocked_reason_code = ""
