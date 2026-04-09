@@ -458,3 +458,19 @@ def enabled_production_strategies(db: Session) -> list[CanonicalStrategyRegistry
         .order_by(CanonicalStrategyRegistry.priority.asc(), CanonicalStrategyRegistry.strategy_id.asc())
         .all()
     )
+
+
+def tracked_core_canonical_strategies(db: Session) -> list[CanonicalStrategyRegistry]:
+    tracked_ids = list(CANONICAL_STRATEGIES.keys())
+    rows = (
+        db.query(CanonicalStrategyRegistry)
+        .filter(
+            CanonicalStrategyRegistry.strategy_id.in_(tracked_ids),
+            CanonicalStrategyRegistry.is_legacy_candidate.is_(False),
+            CanonicalStrategyRegistry.in_production_path.is_(True),
+        )
+        .all()
+    )
+    by_id = {row.strategy_id: row for row in rows}
+    ordered = [by_id[sid] for sid in tracked_ids if sid in by_id]
+    return ordered

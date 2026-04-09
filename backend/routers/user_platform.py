@@ -75,7 +75,7 @@ from services.user_live_dashboard_service import (
     build_user_trade_pending_orders,
     build_user_trade_projection_list,
 )
-from services.canonical_strategy_registry_service import enabled_production_strategies
+from services.canonical_strategy_registry_service import tracked_core_canonical_strategies
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/user", tags=["user_platform"])
@@ -136,7 +136,8 @@ def create_user_strategy_template(
 
 @router.get("/canonical-strategies", response_model=list[CanonicalStrategyRegistryResponse])
 def list_user_canonical_strategies(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
-    return enabled_production_strategies(db)
+    _ = current_user
+    return tracked_core_canonical_strategies(db)
 
 
 def _with_routing_metadata(*, row: dict, user_id: str, db: Session) -> dict:

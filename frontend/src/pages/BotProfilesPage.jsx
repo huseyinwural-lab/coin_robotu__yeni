@@ -56,20 +56,6 @@ const LEGACY_TOP_FORM = true;
 const STRATEGY_PRIORITY_MIN = 1;
 const STRATEGY_PRIORITY_MAX = 100;
 const STRATEGY_WEIGHT_LIMIT = 1;
-const CORE_STRATEGY_IDS = [
-  "trend_following",
-  "mean_reversion",
-  "volatility_breakout",
-  "low_vol_scalping",
-  "momentum_ignition",
-  "volume_profile_reclaim",
-  "range_rotation",
-  "funding_rate_carry",
-  "basis_arbitrage",
-  "orderflow_imbalance",
-  "news_sentiment_reaction",
-  "scalping",
-];
 
 const toNum = (value) => {
   const num = Number(value);
@@ -156,12 +142,12 @@ const getConnectionRanking = (connection) => {
 };
 
 const toCanonicalStrategyOptions = (items = []) => {
-  const enabledRows = (items || [])
-    .filter((item) => Boolean(item?.is_enabled) && Boolean(item?.in_production_path));
-  const byId = new Map(enabledRows.map((item) => [String(item.strategy_id || ""), item]));
-
-  return CORE_STRATEGY_IDS.slice(0, 12).map((strategyId, idx) => {
-    const item = byId.get(strategyId) || {};
+  return (items || [])
+    .filter((item) => Boolean(item?.in_production_path) && !Boolean(item?.is_legacy_candidate))
+    .sort((a, b) => Number(a?.priority || 999) - Number(b?.priority || 999))
+    .slice(0, 12)
+    .map((item, idx) => {
+      const strategyId = String(item.strategy_id || `canonical_${idx}`);
     return {
       id: String(item.strategy_id || `canonical-${idx}`),
       strategy_id: strategyId,
