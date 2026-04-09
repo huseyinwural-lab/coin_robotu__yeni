@@ -118,6 +118,17 @@ DEFAULT_DECISION_GATE_CONFIG = {
 }
 
 
+def _raise_admin_execution_action_moved_to_user(action_name: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": "PURE_LIVE_410",
+            "message": "Admin işlem aksiyonları user paneline taşındı.",
+            "action": action_name,
+        },
+    )
+
+
 def _queue_control_state() -> dict:
     raw = redis_client.get(QUEUE_CONTROL_STATE_KEY)
     if raw and isinstance(raw, bytes):
@@ -572,6 +583,7 @@ def approve_intent(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_approve")
     gate_config = _decision_gate_config(db)
     gate_enforced = bool(gate_config.get("execution_decision_gate_enforced", True))
 
@@ -706,6 +718,7 @@ def execute_intent(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_execute")
     queue_state = _queue_control_state()
     if queue_state.get("paused") and not bool(payload.override_execute):
         _log_decision_block(db, action="execute", intent_id=intent_id, actor=current_user, reason_code="execution_queue_paused")
@@ -784,6 +797,7 @@ def reject_intent(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_reject")
     decision_reason = _resolve_decision_reason(payload)
     if len(decision_reason) < 3:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="decision_reason_required")
@@ -828,6 +842,7 @@ def retry_intent(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_retry")
     queue_state = _queue_control_state()
     if queue_state.get("paused"):
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="execution_queue_paused")
@@ -869,6 +884,7 @@ def cancel_intent_by_admin(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_cancel")
     decision_reason = _resolve_decision_reason(payload)
     if len(decision_reason) < 3:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="decision_reason_required")
@@ -979,6 +995,7 @@ def execution_queue_bulk_decision(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_bulk_decision")
     action = str(payload.action or "").lower()
     if action not in {"approve", "reject", "cancel"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_bulk_action")
@@ -1063,6 +1080,7 @@ def pause_execution_queue(
     current_super_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_control_pause")
     reason = str(payload.reason or "").strip()
     if len(reason) < 3:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="decision_reason_required")
@@ -1086,6 +1104,7 @@ def resume_execution_queue(
     current_super_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_control_resume")
     reason = str(payload.reason or "").strip()
     if len(reason) < 3:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="decision_reason_required")
@@ -1108,6 +1127,7 @@ def clear_execution_queue(
     current_super_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_control_clear")
     reason = str(payload.reason or "").strip()
     if len(reason) < 3:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="decision_reason_required")
@@ -1155,6 +1175,7 @@ def edit_execution_queue_intent(
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_execution_action_moved_to_user("execution_queue_edit")
     patch = {
         "notional": payload.notional,
         "size": payload.size,

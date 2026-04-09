@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 
 const endpointCallOptions = {
-  "/admin/execution-queue": { params: { status_filter: "all", limit: 200 } },
+  "/admin/system-alerts": { params: { status_filter: "open", limit: 200 } },
   "/strategy-domain/admin/risk-orchestrator/analytics": { params: { days: 7 } },
 };
 

@@ -69,6 +69,17 @@ SCANNER_ENGINE_BOT_JOB_KEY_PREFIX = "universe:scanner_engine:bot_job"
 SCANNER_ENGINE_DEFAULT_SCAN_LIMIT = 80
 SCANNER_ENGINE_MAX_SCAN_LIMIT = 220
 
+
+def _raise_admin_scanner_action_moved_to_user(action_name: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": "PURE_LIVE_410",
+            "message": "Admin scanner aksiyonları user paneline taşındı.",
+            "action": action_name,
+        },
+    )
+
 SLA_UPDATE_PHRASE = "UPDATE SLA CONFIG"
 RESCAN_STALE_PHRASE = "RESCAN STALE"
 KPI_GENERATE_PHRASE = "GENERATE KPI RECOMMENDATION"
@@ -1574,6 +1585,7 @@ def scanner_engine_get_config(current_admin: User = Depends(require_admin)):
 
 @router.post("/scanner-engine/config/save")
 def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _raise_admin_scanner_action_moved_to_user("scanner_engine_config_save")
     manager = _super_admin_required(current_admin)
     if not payload.include_spot and not payload.include_futures:
         raise HTTPException(status_code=400, detail="spot_or_futures_required")
@@ -1627,6 +1639,7 @@ def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_
 
 @router.post("/scanner-engine/run")
 def scanner_engine_run(payload: ScannerEngineRunRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _raise_admin_scanner_action_moved_to_user("scanner_engine_run")
     manager = _super_admin_required(current_admin)
     trace_id = str(uuid.uuid4())
     config = _load_scanner_engine_config()
@@ -1668,6 +1681,7 @@ def scanner_engine_run(payload: ScannerEngineRunRequest, current_admin: User = D
 
 @router.post("/scanner-engine/analyze")
 def scanner_engine_analyze(payload: ScannerEngineRunRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _raise_admin_scanner_action_moved_to_user("scanner_engine_analyze")
     return scanner_engine_run(payload=payload, current_admin=current_admin, db=db)
 
 
@@ -1709,6 +1723,7 @@ def scanner_engine_last_run(current_admin: User = Depends(require_admin)):
 
 @router.post("/scanner-engine/bot/start")
 def scanner_engine_bot_start(payload: ScannerEngineStartBotRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _raise_admin_scanner_action_moved_to_user("scanner_engine_bot_start")
     manager = _super_admin_required(current_admin)
     trace_id = str(uuid.uuid4())
     latest_run = _read_json_value(SCANNER_ENGINE_LAST_RUN_KEY, {})
@@ -1773,6 +1788,7 @@ def scanner_engine_bot_jobs(limit: int = Query(default=30, ge=1, le=200), curren
 
 @router.post("/scanner/start")
 def scanner_start(payload: RuntimeActionRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _raise_admin_scanner_action_moved_to_user("scanner_start")
     manager = _manager_required(current_admin)
     _require_phrase(payload.confirmation_phrase, SCANNER_START_PHRASE)
 
@@ -1809,6 +1825,7 @@ def scanner_start(payload: RuntimeActionRequest, current_admin: User = Depends(r
 
 @router.post("/scanner/stop")
 def scanner_stop(payload: RuntimeActionRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _raise_admin_scanner_action_moved_to_user("scanner_stop")
     manager = _manager_required(current_admin)
     _require_phrase(payload.confirmation_phrase, SCANNER_STOP_PHRASE)
 
@@ -1845,6 +1862,7 @@ def scanner_stop(payload: RuntimeActionRequest, current_admin: User = Depends(re
 
 @router.post("/scanner/trigger")
 def scanner_trigger(payload: ScannerTriggerRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _raise_admin_scanner_action_moved_to_user("scanner_trigger")
     manager = _manager_required(current_admin)
     _require_phrase(payload.confirmation_phrase, SCANNER_TRIGGER_PHRASE)
 
@@ -2462,6 +2480,7 @@ def freshness_stale_list(
 
 @router.post("/scanner/rescan-stale")
 def scanner_rescan_stale(payload: RescanStaleRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _raise_admin_scanner_action_moved_to_user("scanner_rescan_stale")
     manager = _manager_required(current_admin)
     _require_phrase(payload.confirmation_phrase, RESCAN_STALE_PHRASE)
 

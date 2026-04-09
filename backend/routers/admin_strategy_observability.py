@@ -46,6 +46,17 @@ SCORE_OVERRIDE_LOG_KEY = "strategy:score_override_logs:v1"
 status_contract_bearer = HTTPBearer(auto_error=False)
 
 
+def _raise_admin_signal_action_moved_to_user(action_name: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": "PURE_LIVE_410",
+            "message": "Admin sinyal/işlem aksiyonları user paneline taşındı.",
+            "action": action_name,
+        },
+    )
+
+
 def require_admin_relaxed_for_status_contract(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(status_contract_bearer),
@@ -1094,6 +1105,7 @@ def approve_signal(
     current_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_signal_action_moved_to_user("strategy_signals_approve")
     signal_row = db.query(StrategyObservabilityEvent).filter(StrategyObservabilityEvent.id == payload.signal_id).first()
     if signal_row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="signal_not_found")
@@ -1134,6 +1146,7 @@ def reject_signal(
     current_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_signal_action_moved_to_user("strategy_signals_reject")
     signal_row = db.query(StrategyObservabilityEvent).filter(StrategyObservabilityEvent.id == payload.signal_id).first()
     if signal_row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="signal_not_found")
@@ -1174,6 +1187,7 @@ def simulate_top_signals(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_signal_action_moved_to_user("strategy_top_signals_simulate")
     rows = _fetch_signals_by_ids(db, payload.signal_ids)
     if not rows:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="signals_not_found")
@@ -1213,6 +1227,7 @@ def execute_top_signals(
     current_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_signal_action_moved_to_user("strategy_top_signals_execute")
     if not payload.confirm:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="confirm_required")
     preview = _read_preview_token(payload.preview_token)
@@ -1282,6 +1297,7 @@ def bulk_simulate_top_signals(
     current_admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_signal_action_moved_to_user("strategy_top_signals_bulk_simulate")
     top_payload = get_top_signals(db, window=payload.window, top_n=payload.top_n)
     signal_ids = [item["signal_id"] for item in top_payload.get("items", []) if item.get("signal_id")]
     if not signal_ids:
@@ -1320,6 +1336,7 @@ def bulk_execute_top_signals(
     current_admin: User = Depends(require_super_admin),
     db: Session = Depends(get_db),
 ):
+    _raise_admin_signal_action_moved_to_user("strategy_top_signals_bulk_execute")
     if payload.mode == "preview":
         top_payload = get_top_signals(db, window=payload.window, top_n=payload.top_n)
         signal_ids = [item["signal_id"] for item in top_payload.get("items", []) if item.get("signal_id")]

@@ -131,7 +131,6 @@ const adminOnlyItems = [
       { to: "/admin/strategy/intelligence", label: "Strategy Intelligence", icon: BarChart3, testId: "nav-admin-strategy-intelligence-link" },
       { to: "/admin/strategy/canonical-registry", label: "Canonical Strategy Registry", icon: ClipboardList, testId: "nav-admin-strategy-canonical-registry-link" },
       { to: "/admin/strategy/execution-state-machine", label: "Execution State Machine", icon: Activity, testId: "nav-admin-strategy-execution-state-machine-link" },
-      { to: "/admin/strategy/observability", label: "Strategy Observability", icon: Gauge, testId: "nav-admin-strategy-observability-link" },
     ],
   },
   {
@@ -140,7 +139,6 @@ const adminOnlyItems = [
     defaultOpen: true,
     items: [
       { to: "/admin/risk-orchestrator", label: "Risk Engine", icon: ShieldAlert, testId: "nav-admin-risk-engine-link" },
-      { to: "/admin/execution-queue", label: "Execution Monitor", icon: Wrench, testId: "nav-admin-execution-queue-link" },
       { to: "/admin/execution-readiness", label: "Execution Readiness", icon: Activity, testId: "nav-admin-execution-readiness-link" },
       { to: "/admin/execution/operator-center", label: "Operator Center", icon: Activity, testId: "nav-admin-execution-operator-center-link" },
       { to: "/admin/incident-intelligence", label: "Incident Intelligence", icon: ShieldAlert, testId: "nav-admin-incident-intelligence-link" },

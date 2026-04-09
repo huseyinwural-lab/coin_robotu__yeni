@@ -29,7 +29,7 @@ const DRILLDOWN_METRICS = [
   { key: "open_alerts", label: "open_alerts", route: "/admin/system-alerts" },
   { key: "pending_approvals", label: "pending_approvals", route: "/admin/user-approvals" },
   { key: "stale_pending_approvals", label: "stale_pending_approvals", route: "/admin/user-approvals" },
-  { key: "rejected_intents", label: "rejected_intents", route: "/admin/execution-queue" },
+  { key: "rejected_intents", label: "rejected_intents", route: "/admin/runtime/recovery" },
   { key: "timeout_rejected_intents", label: "timeout_rejected_intents", route: "/admin/runtime/recovery" },
   { key: "kill_switch_active", label: "kill_switch_active", route: "/admin/phase4-live" },
 ];
@@ -48,7 +48,7 @@ const KPI_CONFIG = [
 
 const QUICK_ACTIONS = [
   { key: "go-approvals", label: "Go to approvals", route: "/admin/user-approvals" },
-  { key: "go-intents", label: "Go to intents", route: "/admin/execution-queue" },
+  { key: "go-intents", label: "Go to runtime recovery", route: "/admin/runtime/recovery" },
   { key: "go-recovery", label: "Go to runtime recovery", route: "/admin/runtime/recovery" },
   { key: "go-alerts", label: "Go to system alerts", route: "/admin/system-alerts" },
   { key: "go-audit", label: "Go to audit logs", route: "/admin/audit-logs" },
@@ -1233,7 +1233,7 @@ export const AdminDashboardPage = () => {
           </div>
           <div className="mt-2 flex flex-wrap gap-2" data-testid="admin-dashboard-action-center-direct-links">
             <Button variant="outline" onClick={() => navigate("/admin/user-approvals")} data-testid="admin-dashboard-go-approvals-button">Go to approvals</Button>
-            <Button variant="outline" onClick={() => navigate("/admin/execution-queue")} data-testid="admin-dashboard-go-intents-button">Go to intents</Button>
+            <Button variant="outline" onClick={() => navigate("/admin/runtime/recovery")} data-testid="admin-dashboard-go-intents-button">Go to runtime recovery</Button>
           </div>
         </article>
         <article className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-dashboard-action-center-result-card">
@@ -1856,7 +1856,7 @@ export const AdminDashboardPage = () => {
             <div className="flex flex-wrap gap-2" data-testid="admin-dashboard-drilldown-actions">
               <Button onClick={() => navigate(drilldown.route || "/admin/dashboard")} data-testid="admin-dashboard-drilldown-go-target-button">İlgili Sayfaya Git</Button>
               <Button variant="outline" onClick={() => navigate("/admin/user-approvals")} data-testid="admin-dashboard-drilldown-go-approvals-button">Go to approvals</Button>
-              <Button variant="outline" onClick={() => navigate("/admin/execution-queue")} data-testid="admin-dashboard-drilldown-go-intents-button">Go to intents</Button>
+              <Button variant="outline" onClick={() => navigate("/admin/runtime/recovery")} data-testid="admin-dashboard-drilldown-go-intents-button">Go to runtime recovery</Button>
             </div>
           </div>
         </SheetContent>

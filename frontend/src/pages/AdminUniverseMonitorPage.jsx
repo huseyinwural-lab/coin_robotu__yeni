@@ -504,10 +504,12 @@ export const AdminUniverseMonitorPage = () => {
                 </label>
                 <p className="text-[11px] text-cyan-300" data-testid="admin-universe-monitor-decision-bc01-formula">CROSS(C, X1), REF(C,-1), REF(X1,-1)</p>
               </fieldset>
+              {!governanceOnly && (
               <div className="flex items-center gap-2" data-testid="admin-universe-monitor-decision-bc01-action-row">
                 <Button type="button" variant="outline" onClick={() => openDecisionEdit("bc01")} disabled={!isSuperAdmin || scannerEngineBusy} data-testid="admin-universe-monitor-decision-bc01-edit-button">Düzenle</Button>
                 <Button type="button" variant="outline" onClick={() => saveScannerEngineConfig("bc01")} disabled={!isSuperAdmin || scannerEngineBusy || decisionEditKey !== "bc01"} data-testid="admin-universe-monitor-decision-bc01-save-button">Kaydet</Button>
               </div>
+              )}
             </article>
 
             <article className="rounded border border-cyan-700/30 bg-black/30 p-3 space-y-2" data-testid="admin-universe-monitor-decision-bc02-card">
@@ -521,10 +523,12 @@ export const AdminUniverseMonitorPage = () => {
                 </div>
                 <p className="text-[11px] text-cyan-300" data-testid="admin-universe-monitor-decision-bc02-formula">Y1/Y2/Y2Y/Y3: HHV(...), REF(...,-1)</p>
               </fieldset>
+              {!governanceOnly && (
               <div className="flex items-center gap-2" data-testid="admin-universe-monitor-decision-bc02-action-row">
                 <Button type="button" variant="outline" onClick={() => openDecisionEdit("bc02")} disabled={!isSuperAdmin || scannerEngineBusy} data-testid="admin-universe-monitor-decision-bc02-edit-button">Düzenle</Button>
                 <Button type="button" variant="outline" onClick={() => saveScannerEngineConfig("bc02")} disabled={!isSuperAdmin || scannerEngineBusy || decisionEditKey !== "bc02"} data-testid="admin-universe-monitor-decision-bc02-save-button">Kaydet</Button>
               </div>
+              )}
             </article>
 
             <article className="rounded border border-cyan-700/30 bg-black/30 p-3 space-y-2" data-testid="admin-universe-monitor-decision-bc03-card">
@@ -539,10 +543,12 @@ export const AdminUniverseMonitorPage = () => {
                   <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc03-z4th-field"><span className="text-[11px] text-cyan-200">Z4 Eşik</span><input type="number" step="0.1" min={-1000} max={1000} value={scannerEngineConfig?.decision_boxes?.bc03?.z4_threshold ?? 0} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc03: { ...(prev?.decision_boxes?.bc03 || {}), z4_threshold: Number(event.target.value || 0) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc03-z4th-input" /></label>
                 </div>
               </fieldset>
+              {!governanceOnly && (
               <div className="flex items-center gap-2" data-testid="admin-universe-monitor-decision-bc03-action-row">
                 <Button type="button" variant="outline" onClick={() => openDecisionEdit("bc03")} disabled={!isSuperAdmin || scannerEngineBusy} data-testid="admin-universe-monitor-decision-bc03-edit-button">Düzenle</Button>
                 <Button type="button" variant="outline" onClick={() => saveScannerEngineConfig("bc03")} disabled={!isSuperAdmin || scannerEngineBusy || decisionEditKey !== "bc03"} data-testid="admin-universe-monitor-decision-bc03-save-button">Kaydet</Button>
               </div>
+              )}
             </article>
 
             <article className="rounded border border-cyan-700/30 bg-black/30 p-3 space-y-2" data-testid="admin-universe-monitor-decision-bc04-card">
@@ -559,10 +565,12 @@ export const AdminUniverseMonitorPage = () => {
                 <label className="space-y-1" data-testid="admin-universe-monitor-decision-bc04-tke-field"><span className="text-[11px] text-cyan-200">TKE CROSS Eşik</span><input type="number" step="0.1" min={1} max={99} value={scannerEngineConfig?.decision_boxes?.bc04?.tke_threshold ?? 79} onChange={(event) => setScannerEngineConfig((prev) => ({ ...prev, decision_boxes: { ...(prev?.decision_boxes || {}), bc04: { ...(prev?.decision_boxes?.bc04 || {}), tke_threshold: Number(event.target.value || 79) } } }))} className="h-9 w-full rounded border border-cyan-700/30 bg-slate-950 px-2 text-xs" data-testid="admin-universe-monitor-decision-bc04-tke-input" /></label>
               </div>
               </fieldset>
+              {!governanceOnly && (
               <div className="flex items-center gap-2" data-testid="admin-universe-monitor-decision-bc04-action-row">
                 <Button type="button" variant="outline" onClick={() => openDecisionEdit("bc04")} disabled={!isSuperAdmin || scannerEngineBusy} data-testid="admin-universe-monitor-decision-bc04-edit-button">Düzenle</Button>
                 <Button type="button" variant="outline" onClick={() => saveScannerEngineConfig("bc04")} disabled={!isSuperAdmin || scannerEngineBusy || decisionEditKey !== "bc04"} data-testid="admin-universe-monitor-decision-bc04-save-button">Kaydet</Button>
               </div>
+              )}
             </article>
           </div>
 

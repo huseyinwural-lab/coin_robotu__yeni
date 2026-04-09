@@ -24,9 +24,6 @@ import { AdminRiskOrchestratorAnalyticsPage } from "@/pages/AdminRiskOrchestrato
 import { AdminRuntimeQuarantinePage } from "@/pages/AdminRuntimeQuarantinePage";
 import { AdminRuntimeRecoveryPage } from "@/pages/AdminRuntimeRecoveryPage";
 import { AdminStrategiesPage } from "@/pages/AdminStrategiesPage";
-import { AdminStrategyObservabilityPage } from "@/pages/AdminStrategyObservabilityPage";
-import AdminStrategyObservabilityDetailPage from "@/pages/AdminStrategyObservabilityDetailPage";
-import AdminStrategyTimelineChainPage from "@/pages/AdminStrategyTimelineChainPage";
 import { AdminSystemAlertsPage } from "@/pages/AdminSystemAlertsPage";
 import { AdminUserApprovalsPage } from "@/pages/AdminUserApprovalsPage";
 import { AdminUsersPage } from "@/pages/AdminUsersPage";
@@ -73,7 +70,6 @@ import { UserPositionsPage } from "@/pages/UserPositionsPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "@/pages/ResetPasswordPage";
 import UserLiveTradingDashboardPage from "@/pages/user/UserLiveTradingDashboardPage";
-import { AdminExecutionQueuePage } from "@/pages/AdminExecutionQueuePage";
 import { AdminStrategyAllocationPage } from "@/pages/AdminStrategyAllocationPage";
 import { AdminPortfolioRiskPage } from "@/pages/AdminPortfolioRiskPage";
 import { AdminPositionsMonitorPage } from "@/pages/AdminPositionsMonitorPage";
@@ -174,9 +170,9 @@ function App() {
             <Route path="core/kullanicilar/kullanici-ekonomisi" element={<Navigate to="/admin/kullanicilar/kullanici-ekonomisi" replace />} />
             <Route path="onboarding-observability" element={<AdminOnboardingObservabilityPage />} />
             <Route path="system-alerts" element={<AdminSystemAlertsPage />} />
-            <Route path="strategy/observability" element={<AdminStrategyObservabilityPage />} />
-            <Route path="strategy/observability/:strategyId" element={<AdminStrategyObservabilityDetailPage />} />
-            <Route path="strategy/timeline/:chainId" element={<AdminStrategyTimelineChainPage />} />
+            <Route path="strategy/observability" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="strategy/observability/:strategyId" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="strategy/timeline/:chainId" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="futures/risk-monitor" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="futures/liquidation-protection" element={<AdminFuturesRiskMonitorPage />} />
             <Route path="futures/strategy-control" element={<AdminFuturesStrategyControlGovernancePage />} />
@@ -200,7 +196,7 @@ function App() {
             <Route path="runtime/recovery" element={<AdminRuntimeRecoveryPage />} />
             <Route path="market-universe" element={<MarketUniversePage />} />
             <Route path="execution-policies" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="execution-queue" element={<AdminExecutionQueuePage />} />
+            <Route path="execution-queue" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="execution-readiness" element={<AdminExecutionReadinessPage />} />
             <Route path="execution/operator-center" element={<AdminExecutionOperatorCenterPage />} />
             <Route path="action-audit" element={<AdminActionAuditPage />} />
@@ -249,7 +245,7 @@ function App() {
             <Route path="canonical-strategy-registry" element={<Navigate to="/admin/strategy/canonical-registry" replace />} />
             <Route path="execution-states" element={<Navigate to="/admin/execution/states" replace />} />
             <Route path="execution-failures" element={<Navigate to="/admin/execution/failures" replace />} />
-            <Route path="strategy-observability" element={<Navigate to="/admin/strategy/observability" replace />} />
+            <Route path="strategy-observability" element={<Navigate to="/admin/dashboard" replace />} />
           </Route>
 
           <Route
