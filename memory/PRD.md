@@ -1,3 +1,41 @@
+## 2026-04-10 — Permission Drift + Admin Readiness Yanlış Negatif Düzeltmeleri
+
+### Kapsam
+- İstek: Admin mantığı korunarak `permission_drift_internal` kaynaklı yanlış alarmları azaltma ve admin readiness tarafındaki yanlış negatifleri toparlama.
+
+### Uygulanan düzeltmeler
+- `live_mode_service.py`:
+  - `permission_status_for_user` connection-aware hale getirildi.
+    - Spot/Futures kontrolleri `UserExchangeConnection` snapshotları üzerinden ayrı değerlendiriliyor.
+    - `can_trade`, `can_futures`, `timestamp_sync`, `rate_limit_ok` kontrolleri standart response shape ile dönüyor.
+  - `_is_trade_capable` iyileştirildi:
+    - `TRD_GRP_*` ve `LEVERAGED` patternleri trade-capable yorumuna dahil edildi.
+  - `validate_exchange_credentials_for_user` içinde `canTrade` alanı payload’da yoksa permission bazlı fallback eklendi.
+  - `_record_permission_snapshot_and_drift` connection-aware baseline ile güncellendi:
+    - drift kıyaslaması artık connection snapshot + context (`market_type`, `environment`) ile yapılıyor.
+    - context yok/mismatch durumlarında false drift üretimi engellendi.
+  - `_sync_requested_connection` snapshot alanları güçlendirildi (`can_trade_effective`, `permissions`, `validation_success`, `reason_codes`).
+  - `_pick_latest_exchange_user` seçim mantığı connection snapshot skorlamasıyla iyileştirildi (admin readiness probe kullanıcı seçimi).
+  - `_permission_drift_alert_active` politikalı eşik (critical/day) ile çalışacak şekilde güncellendi (tek bir kritik olayla anında bloklama yerine threshold).
+
+- Önceki sprintte yapılan SPOT/FUTURES P0 düzeltmeleri korunarak birlikte çalıştırıldı:
+  - market-aware status-contract,
+  - trade-ready connection önceliği,
+  - symbol fallback market stabilizasyonu,
+  - auto-dispatch hata görünürlüğü.
+
+### Doğrulama
+- Lint: PASS (`live_mode_service.py` ve ilgili backend dosyaları)
+- Backend regression test (subagent): PASS (9/9)
+  - `/api/phase4/admin/permission-status` 200
+  - `/api/phase4/admin/live-readiness-score` 200
+  - `/api/phase4/admin/release-gate?environment=prod` 200
+  - `/api/user/scanner/status-contract` (+ spot/futures query) 200
+  - revalidate çağrıları başarılı, gereksiz drift artışı gözlenmedi.
+
+### Kalan not
+- Ortamda gerçek credential doğrulamalarında `invalid_key` dönen connection’lar mevcutsa admin permission status doğal olarak fail kalır; bu artık yanlış-negatif değil, gerçek veri durumudur.
+
 ## 2026-04-09 — SPOT/FUTURES Bot Root-Cause Kalıcı Düzeltmeleri (P0)
 
 ### Kapsam
