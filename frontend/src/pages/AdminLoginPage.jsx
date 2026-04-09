@@ -106,7 +106,12 @@ export const AdminLoginPage = () => {
         return;
       }
       toast.success("Admin girişi başarılı");
-      window.location.assign("/admin/dashboard");
+      navigate("/admin/dashboard", { replace: true });
+      window.setTimeout(() => {
+        if (window.location.pathname !== "/admin/dashboard") {
+          window.location.assign("/admin/dashboard");
+        }
+      }, 180);
     } catch (error) {
       toast.error(getErrorMessage(error, "Admin girişi başarısız"));
     } finally {
