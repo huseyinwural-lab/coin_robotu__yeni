@@ -1,3 +1,38 @@
+## 2026-04-09 — SPOT/FUTURES Bot Root-Cause Kalıcı Düzeltmeleri (P0)
+
+### Kapsam
+- İstek: SPOT + FUTURES botlarında `exchange_ready=false` ve scanner→signal→trade akışında bot/connection seçim tutarsızlıklarının kalıcı giderilmesi.
+
+### Uygulanan P0 Düzeltmeler
+- **P0-1 (Status Contract market-aware):**
+  - `GET /api/user/scanner/status-contract` artık market-bazlı kontratları döndürüyor:
+    - `market_contracts.spot`, `market_contracts.futures`
+    - `overall_health`, `preferred_market`, `active_bot_ids`
+  - Eski frontend uyumluluğu için flat alanlar korunarak `preferred_market` kontratı üst seviyeye yansıtıldı.
+  - Endpoint’e `market_type` query param eklendi (`spot|futures|auto`).
+
+- **P0-2 (Connection seçiminde trade-ready önceliği):**
+  - `user_scanner_signal_service._resolve_exchange_connection_for_market` iyileştirildi.
+  - Öncelik sırası: preferred_connection(trade-ready) -> market içi trade-ready -> preferred -> market fallback -> any ready -> any.
+  - Auto-dispatch çağrılarında bot snapshot’taki `selected_exchange_connection_id` tercih edilecek şekilde güncellendi.
+
+- **P0-3 (Symbol fallback market stabilizasyonu):**
+  - `bot_runtime_service._resolve_symbol_source` içinde scanner satırları payload market_type bilgisine göre filtreleniyor.
+  - `selected_symbols` ve `bot_symbols_fallback` market bazlı scanner evreniyle normalize ediliyor.
+  - Start readiness kontrolünde symbol-specific false-positive azaltmak için `get_exchange_readiness(..., symbol=None)` kullanıldı.
+  - Bot listesinde `symbol_source` artık summary/source ile uyumlu döndürülüyor.
+
+- **P0-4 (Auto-dispatch hata görünürlüğü):**
+  - Signal auto-dispatch path’lerinde broad `except: pass` kaldırıldı.
+  - Hatalar artık loglanıyor (`SIGNAL_AUTO_DISPATCH_*`) ve pending signal üzerinde precheck/block state’e yansıyor.
+
+### Doğrulama
+- Python lint: PASS (`user_scanner_signals.py`, `user_scanner_signal_service.py`, `bot_runtime_service.py`)
+- Backend test subagent: PASS (7/7)
+  - `/api/user/scanner/status-contract` + `?market_type=spot/futures` -> 200
+  - `/api/bot-profiles` -> symbol source alanları mevcut
+  - `/api/user/signals` -> regresyon yok
+
 ## 2026-04-09 — Bot Profiles Strateji Listesi Admin ile Birebir Senkron
 
 ### Problem
