@@ -1,3 +1,47 @@
+## 2026-04-09 — User Pure-Live Auto Trade (Manual Trade/Approve Kapatma)
+
+### Talep
+- User tarafında manuel alım-satım tamamen kapatılacak.
+- Signal onayı adımı kaldırılacak; uygun sinyaller doğrudan bot tarafından otomatik execution hattına gidecek.
+
+### Uygulanan değişiklikler
+- Backend (manual trade kapatma):
+  - `POST /api/user/validate-order` → `410 PURE_LIVE_410`
+  - `POST /api/v1/user/trading/preview` → `410 PURE_LIVE_410`
+  - `POST /api/user/open-position` → `410 PURE_LIVE_410`
+  - `POST /api/user/execute-order` → `410 PURE_LIVE_410`
+  - `POST /api/user/manual-trade` → `410 PURE_LIVE_410`
+  - `POST /api/user/signal/{id}/approve` → `410 PURE_LIVE_410`
+- Backend (otomatik sinyal davranışı):
+  - Signal mode sadece `AUTO` olacak şekilde sabitlendi (`DEFAULT=AUTO`).
+  - Manual approval gereksinimi devre dışı bırakıldı.
+  - Snapshot yenilemede `mode` otomatik `AUTO` normalize ediliyor.
+  - Signals listesi refresh snapshot modunda uygun sinyaller için auto-dispatch denemesi yapacak şekilde genişletildi.
+- Backend (status-contract performans/kararlılık):
+  - `/user/scanner/status-contract` içinde ağır canlı `get_exchange_readiness` çağrısı yerine connection snapshot tabanlı hızlı değerlendirme kullanıldı.
+  - Endpoint süresi ~50s bandından ~5-7s bandına düşürüldü.
+- Frontend (manuel trade UI kaldırma):
+  - `/user/trade` ve `/user/execute` route’ları `/user/signals`’a yönlendirildi.
+  - Sidebar’dan `Trade Entry` linki kaldırıldı.
+  - Signals ekranından manuel aksiyon butonları kaldırıldı (`Approve`, `Open in Execute`, `Apply Preset`, `Preview Intent`, `Follow Signal`).
+  - Signals satırlarına otomatik akış notu eklendi.
+  - Scanner sayfasında signal mode `Full Auto` sabit/locked hale getirildi.
+  - Scanner’dan trade’e manuel geçiş yerine Signals ekranına yönlendirme yapıldı.
+  - User login sonrası zorunlu redirect fallback’i eklendi (başarılı login’de login sayfasında kalma riskine karşı).
+
+### Doğrulama
+- Backend lint: PASS
+- Frontend lint: PASS
+- Backend test (deep testing): PASS (manuel endpointler 410, status-contract valid)
+- UI smoke (token bypass ile):
+  - `/user/trade` → `/user/signals` redirect doğrulandı
+  - `Trade Entry` nav görünmüyor
+  - Scanner’da `Full Auto` sabit alanı ve locked checkbox doğrulandı
+  - Signals’ta manuel aksiyon butonları görünmüyor
+
+### Bilinen durum
+- Preview ortamında login UI testlerinde aralıklı auth/navigation tutarsızlığı gözlenebiliyor (CDN/timeout kaynaklı); backend auth ve policy endpointleri stabil doğrulandı.
+
 ## 2026-04-09 — User P0 Güvenlik/Gate Düzeltmeleri (Scanner→Signal→Trade)
 
 ### İstek
