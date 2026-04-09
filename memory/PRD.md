@@ -1,3 +1,21 @@
+## 2026-04-09 — Bot Profiles Strateji Listesi Admin ile Birebir Senkron
+
+### Problem
+- `user/bot-profiles` tarafında görünen strateji ID’leri admin canonical setten farklıydı (hardcoded fallback nedeniyle).
+
+### Düzeltme
+- Backend:
+  - `tracked_core_canonical_strategies()` eklendi (`canonical_strategy_registry_service.py`).
+  - `GET /api/user/canonical-strategies` artık bu fonksiyonla adminin takip ettiği core 12 stratejiyi döndürüyor (`user_platform.py`).
+- Frontend:
+  - `BotProfilesPage.jsx` içindeki hardcoded `CORE_STRATEGY_IDS` kaldırıldı.
+  - Strateji tablosu artık tamamen `/api/user/canonical-strategies` yanıtından besleniyor.
+
+### Doğrulama
+- Frontend test agent sonucu: **PASS**
+  - User bot-profiles strategy_id listesi ile Admin `/api/admin/canonical-strategies/strategy-takip` listesi birebir eşleşiyor.
+  - Eski hardcoded ID’ler (`trend_following`, `mean_reversion` vb.) görünmüyor.
+
 ## 2026-04-09 — Bot Profiles Strategy Allocation (Checkbox + Weight + Priority)
 
 ### Yeni gereksinim
