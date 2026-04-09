@@ -216,7 +216,7 @@ export const AdminLiveGatePage = () => {
         desc: "Bu adımda blokaj koyma/kaldırma işlemi yapılır.",
         state: liveConfig?.kill_switch_enabled ? "FAIL" : "PASS",
         reason: liveConfig?.kill_switch_enabled ? "kill_switch_enabled" : "",
-        to: "/admin/live-trading-dashboard",
+        to: "/admin/universe-monitor",
       },
       {
         id: 5,
@@ -224,7 +224,7 @@ export const AdminLiveGatePage = () => {
         desc: "Execution mode LIVE ve final_status READY olmalı.",
         state: readiness?.mode === "LIVE" && readiness?.final_status === "READY" ? "PASS" : "FAIL",
         reason: readiness?.mode !== "LIVE" ? `mode=${readiness?.mode || "-"}` : readiness?.final_status !== "READY" ? `final_status=${readiness?.final_status || "-"}` : "",
-        to: "/admin/live-trading-dashboard",
+        to: "/admin/universe-monitor",
       },
       {
         id: 6,

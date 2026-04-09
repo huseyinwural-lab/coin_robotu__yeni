@@ -73,11 +73,9 @@ import UserLiveTradingDashboardPage from "@/pages/user/UserLiveTradingDashboardP
 import { AdminStrategyAllocationPage } from "@/pages/AdminStrategyAllocationPage";
 import { AdminPortfolioRiskPage } from "@/pages/AdminPortfolioRiskPage";
 import { AdminPositionsMonitorPage } from "@/pages/AdminPositionsMonitorPage";
-import { AdminStrategyIntelligencePage } from "@/pages/AdminStrategyIntelligencePage";
 import { AdminCrossDashboardConsistencyPage } from "@/pages/AdminCrossDashboardConsistencyPage";
 import { AdminCanonicalStrategyRegistryPage } from "@/pages/AdminCanonicalStrategyRegistryPage";
 import { AdminLearningPanelPage } from "@/pages/AdminLearningPanelPage";
-import { AdminLiveTradingDashboardPage } from "@/pages/AdminLiveTradingDashboardPage";
 import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
 import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
 import { AdminCommercialOpsPage } from "@/pages/AdminCommercialOpsPage";
@@ -146,7 +144,7 @@ function App() {
           >
             <Route path="dashboard" element={<AdminDashboardPage />} />
             <Route path="live-gate" element={<AdminLiveGatePage />} />
-            <Route path="live-trading-dashboard" element={<AdminLiveTradingDashboardPage />} />
+            <Route path="live-trading-dashboard" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="cross-dashboard-consistency" element={<AdminCrossDashboardConsistencyPage />} />
             <Route path="users" element={<Navigate to="/admin/kullanicilar/user-kullanicilar" replace />} />
             <Route path="commercial-ops" element={<AdminCommercialOpsPage />} />
@@ -212,7 +210,7 @@ function App() {
             <Route path="strategy/allocation" element={<AdminStrategyAllocationPage />} />
             <Route path="portfolio-risk" element={<AdminPortfolioRiskPage />} />
             <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />
-            <Route path="strategy/intelligence" element={<AdminStrategyIntelligencePage />} />
+            <Route path="strategy/intelligence" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="strategy/canonical-registry" element={<AdminCanonicalStrategyRegistryPage />} />
             <Route path="learning-panel" element={<AdminLearningPanelPage />} />
             <Route path="learning-impact-simulator" element={<Navigate to="/admin/dashboard" replace />} />
@@ -241,7 +239,7 @@ function App() {
             <Route path="core/logs" element={<AuditLogsPage />} />
 
             <Route path="strategy-allocation" element={<Navigate to="/admin/strategy/allocation" replace />} />
-            <Route path="strategy-intelligence" element={<Navigate to="/admin/strategy/intelligence" replace />} />
+            <Route path="strategy-intelligence" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="canonical-strategy-registry" element={<Navigate to="/admin/strategy/canonical-registry" replace />} />
             <Route path="execution-states" element={<Navigate to="/admin/execution/states" replace />} />
             <Route path="execution-failures" element={<Navigate to="/admin/execution/failures" replace />} />
@@ -290,6 +288,7 @@ function App() {
             <Route path="mfa-settings" element={<MfaSettingsPage />} />
             <Route path="positions" element={<UserPositionsPage />} />
             <Route path="live-trading-dashboard" element={<UserLiveTradingDashboardPage />} />
+            <Route path="strategy/intelligence" element={<Navigate to="/user/signals" replace />} />
             <Route path="exchange-mock" element={<Navigate to="/user/dashboard" replace />} />
           </Route>
 

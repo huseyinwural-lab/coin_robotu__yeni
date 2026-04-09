@@ -1,0 +1,29 @@
+{
+  "admin_endpoints": {
+    "/api/admin/decision-requests/test-id/approve": 410,
+    "/api/admin/decision-requests/test-id/reject": 410,
+    "/api/admin/decision-requests/test-id/execute": 410,
+    "/api/admin/decision-requests/bulk-action": 410,
+    "/api/admin/decision-requests/test-id/assign-owner": 410,
+    "/api/admin/decision-requests/test-id/ack": 410,
+    "/api/admin/live-trading/control-layer/scanner/restart": 410,
+    "/api/admin/live-trading/control-layer/scanner/manual-trigger": 410,
+    "/api/admin/live-trading/control-layer/scanner/symbol-universe": 410,
+    "/api/admin/live-trading/control-layer/execution-quality/retry": 410
+  },
+  "user_endpoints": {
+    "/api/user/scanner-engine/run-async": 200,
+    "/api/user/scanner/signal/{signal_id}/approve": 404,
+    "/api/user/execution/intent/preview": 422,
+    "/api/user/execution/intent/submit": 422
+  },
+  "summary": {
+    "admin_410_success_rate": "10/10",
+    "user_non_410_success_rate": "4/4",
+    "admin_pass": true,
+    "user_pass": true,
+    "overall_pass": true,
+    "critical_blocks": []
+  },
+  "timestamp": "2026-04-09T10:05:28.591954"
+}

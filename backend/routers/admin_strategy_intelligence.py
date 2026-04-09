@@ -115,6 +115,21 @@ def _role_name(user: User) -> str:
     return str(role)
 
 
+def _raise_admin_strategy_intelligence_action_moved_to_user(action_name: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": "PURE_LIVE_410",
+            "message": "Admin strategy intelligence aksiyonları user tarafına taşındı.",
+            "action": action_name,
+        },
+    )
+
+
+def _admin_strategy_intelligence_action_removed_dependency() -> None:
+    _raise_admin_strategy_intelligence_action_moved_to_user("admin_strategy_intelligence_action")
+
+
 def _require_override_write_access(user: User) -> None:
     role = _role_name(user)
     if role == "ops":
@@ -1174,7 +1189,11 @@ def list_override_approval_requests(
     return DecisionApprovalRequestsResponse(items=[_serialize_approval_row(row) for row in rows])
 
 
-@router.post("/decision-requests/conflict-resolve", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/conflict-resolve",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def create_conflict_decision_request(
     payload: DecisionRequestCreateRequest,
     current_user: User = Depends(require_admin),
@@ -1191,7 +1210,11 @@ def create_conflict_decision_request(
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
 
-@router.post("/decision-requests/hedge-apply", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/hedge-apply",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def create_hedge_decision_request(
     payload: DecisionRequestCreateRequest,
     current_user: User = Depends(require_admin),
@@ -1208,7 +1231,11 @@ def create_hedge_decision_request(
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
 
-@router.post("/decision-requests/rebalance-change", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/rebalance-change",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def create_rebalance_decision_request(
     payload: DecisionRequestCreateRequest,
     current_user: User = Depends(require_admin),
@@ -1292,7 +1319,11 @@ def list_decision_requests(
     return DecisionApprovalRequestsResponse(items=[DecisionApprovalRequestResponse(**item) for item in mapped])
 
 
-@router.post("/decision-requests/{request_id}/assign-owner", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/{request_id}/assign-owner",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def assign_decision_request_owner(
     request_id: str,
     payload: DecisionRequestAssignOwnerRequest,
@@ -1314,7 +1345,11 @@ def assign_decision_request_owner(
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
 
-@router.post("/decision-requests/{request_id}/ack", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/{request_id}/ack",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def acknowledge_decision_request(
     request_id: str,
     payload: DecisionRequestAckRequest,
@@ -1341,7 +1376,11 @@ def acknowledge_decision_request(
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
 
-@router.post("/decision-requests/bulk-action", response_model=DecisionBulkActionResponse)
+@router.post(
+    "/decision-requests/bulk-action",
+    response_model=DecisionBulkActionResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def bulk_decision_action(
     payload: DecisionBulkActionRequest,
     current_user: User = Depends(require_admin),
@@ -1390,7 +1429,11 @@ def bulk_decision_action(
     )
 
 
-@router.post("/decision-requests/{request_id}/approve", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/{request_id}/approve",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def approve_decision_request(
     request_id: str,
     payload: DecisionApprovalActionRequest,
@@ -1421,7 +1464,11 @@ def approve_decision_request(
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
 
-@router.post("/decision-requests/{request_id}/reject", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/{request_id}/reject",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def reject_decision_request(
     request_id: str,
     payload: DecisionApprovalActionRequest,
@@ -1448,7 +1495,11 @@ def reject_decision_request(
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
 
-@router.post("/decision-requests/{request_id}/execute", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/{request_id}/execute",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def execute_decision_request(
     request_id: str,
     payload: DecisionRequestExecuteRequest,
@@ -1546,7 +1597,11 @@ def execute_decision_request(
     return DecisionApprovalRequestResponse(**_build_decision_request_response(row))
 
 
-@router.post("/decision-requests/{request_id}/revert", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/{request_id}/revert",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def revert_executed_decision_request(
     request_id: str,
     payload: DecisionRequestRevertRequest,
@@ -1660,7 +1715,11 @@ def revert_executed_decision_request(
     return DecisionApprovalRequestResponse(**_build_decision_request_response(revert_row))
 
 
-@router.post("/decision-requests/{request_id}/revoke", response_model=DecisionApprovalRequestResponse)
+@router.post(
+    "/decision-requests/{request_id}/revoke",
+    response_model=DecisionApprovalRequestResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def revoke_decision_request(
     request_id: str,
     payload: DecisionApprovalActionRequest,
@@ -1930,7 +1989,11 @@ def compare_simulation_run_current(
     )
 
 
-@router.post("/override-approval-requests/{request_id}/approve", response_model=ManualOverrideSubmissionResponse)
+@router.post(
+    "/override-approval-requests/{request_id}/approve",
+    response_model=ManualOverrideSubmissionResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def approve_override_request(
     request_id: str,
     payload: DecisionApprovalActionRequest,
@@ -2013,7 +2076,11 @@ def approve_override_request(
     )
 
 
-@router.post("/override-approval-requests/{request_id}/reject", response_model=ManualOverrideSubmissionResponse)
+@router.post(
+    "/override-approval-requests/{request_id}/reject",
+    response_model=ManualOverrideSubmissionResponse,
+    dependencies=[Depends(_admin_strategy_intelligence_action_removed_dependency)],
+)
 def reject_override_request(
     request_id: str,
     payload: DecisionApprovalActionRequest,

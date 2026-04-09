@@ -104,7 +104,6 @@ const adminOnlyItems = [
     items: [
       { to: "/admin/dashboard", label: "Dashboard", icon: UserCog, testId: "nav-admin-dashboard-link" },
       { to: "/admin/live-gate", label: "Live Gate", icon: ClipboardList, testId: "nav-admin-live-gate-link" },
-      { to: "/admin/live-trading-dashboard", label: "Live Trading Dashboard", icon: Activity, testId: "nav-admin-live-trading-dashboard-link" },
       { to: "/admin/system-status", label: "System Status", icon: Activity, testId: "nav-admin-system-status-link" },
       { to: "/admin/audit-logs", label: "Logs", icon: FileText, testId: "nav-admin-logs-link" },
       { to: "/admin/universe-monitor", label: "Scanner Monitor", icon: Gauge, testId: "nav-admin-scanner-monitor-link" },
@@ -128,7 +127,6 @@ const adminOnlyItems = [
     defaultOpen: true,
     items: [
       { to: "/admin/strategy/allocation", label: "Strategy Allocation", icon: BarChart3, testId: "nav-admin-strategy-allocation-link" },
-      { to: "/admin/strategy/intelligence", label: "Strategy Intelligence", icon: BarChart3, testId: "nav-admin-strategy-intelligence-link" },
       { to: "/admin/strategy/canonical-registry", label: "Canonical Strategy Registry", icon: ClipboardList, testId: "nav-admin-strategy-canonical-registry-link" },
       { to: "/admin/strategy/execution-state-machine", label: "Execution State Machine", icon: Activity, testId: "nav-admin-strategy-execution-state-machine-link" },
     ],

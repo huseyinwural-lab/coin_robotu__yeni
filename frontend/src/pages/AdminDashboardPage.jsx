@@ -40,8 +40,8 @@ const KPI_CONFIG = [
   { key: "risk_policies", label: "Risk Policy", route: "/admin/risk-orchestrator" },
   { key: "strategy_templates", label: "Template", route: "/admin/strategies" },
   { key: "websocket_status", label: "WS Status", route: "/admin/system-status" },
-  { key: "signals_5m", label: "Signal / 5m", route: "/admin/live-trading-dashboard" },
-  { key: "paper_trades_5m", label: "Paper Trade / 5m", route: "/admin/live-trading-dashboard" },
+  { key: "signals_5m", label: "Signal / 5m", route: "/admin/universe-monitor" },
+  { key: "paper_trades_5m", label: "Paper Trade / 5m", route: "/admin/universe-monitor" },
   { key: "open_positions", label: "Open Positions", route: "/admin/positions-monitor" },
   { key: "critical_audits", label: "Critical Audit", route: "/admin/audit-logs" },
 ];
@@ -860,7 +860,7 @@ export const AdminDashboardPage = () => {
               auto-refresh(30s)
             </label>
             <Button variant="outline" onClick={() => navigate("/admin/audit-logs")} data-testid="admin-dashboard-go-audit-logs-button">Audit Logs</Button>
-            <Button variant="outline" onClick={() => navigate("/admin/live-trading-dashboard")} data-testid="admin-dashboard-go-live-control-hub-button">Live Control Hub</Button>
+            <Button variant="outline" onClick={() => navigate("/admin/universe-monitor")} data-testid="admin-dashboard-go-live-control-hub-button">Data Source Monitor</Button>
             <Button variant="outline" onClick={() => navigate("/admin/pipeline-operations")} data-testid="admin-dashboard-go-pipeline-operations-button">Unified Pipeline Ops</Button>
             <Button variant="outline" onClick={runCloseNextActions} data-testid="admin-dashboard-auto-close-run-now-button">Auto-Close Run Now</Button>
             <Button onClick={loadDashboard} data-testid="admin-dashboard-refresh-button">Yenile</Button>

@@ -1100,7 +1100,7 @@ export const PipelineOperationsPage = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2" data-testid="pipeline-operations-header-actions">
-            <Button variant="outline" onClick={() => navigate("/admin/live-trading-dashboard")} data-testid="pipeline-operations-open-live-dashboard-button">Live Dashboard</Button>
+            <Button variant="outline" onClick={() => navigate("/admin/universe-monitor")} data-testid="pipeline-operations-open-live-dashboard-button">Data Source Dashboard</Button>
             <select value={autoRefreshIntervalSec} onChange={(e) => setAutoRefreshIntervalSec(e.target.value)} className="h-9 rounded border border-slate-700 px-2 text-sm" data-testid="pipeline-operations-auto-refresh-interval-select">
               <option value="5">5s</option>
               <option value="15">15s</option>

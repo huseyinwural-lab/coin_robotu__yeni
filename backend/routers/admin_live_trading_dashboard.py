@@ -125,6 +125,21 @@ def _require_manager(current_admin: User) -> User:
     return current_admin
 
 
+def _raise_admin_live_control_action_moved_to_user(action_name: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": "PURE_LIVE_410",
+            "message": "Admin live scanner/execution aksiyonları user tarafına taşındı.",
+            "action": action_name,
+        },
+    )
+
+
+def _admin_live_control_action_removed_dependency() -> None:
+    _raise_admin_live_control_action_moved_to_user("admin_live_control_action")
+
+
 def _read_json_value(cache, key: str, default):
     raw = cache.get(key)
     if not raw:
@@ -564,7 +579,7 @@ def admin_live_trading_scanner_control_state(
     }
 
 
-@router.post("/control-layer/scanner/restart")
+@router.post("/control-layer/scanner/restart", dependencies=[Depends(_admin_live_control_action_removed_dependency)])
 def admin_live_trading_scanner_restart(
     payload: ScannerControlRequest,
     current_admin: User = Depends(require_admin),
@@ -599,7 +614,7 @@ def admin_live_trading_scanner_restart(
     return {"status": "ok", "restart_state": restart_state, "audit_log_id": audit_row.id}
 
 
-@router.post("/control-layer/scanner/manual-trigger")
+@router.post("/control-layer/scanner/manual-trigger", dependencies=[Depends(_admin_live_control_action_removed_dependency)])
 def admin_live_trading_scanner_manual_trigger(
     payload: ScannerControlRequest,
     current_admin: User = Depends(require_admin),
@@ -634,7 +649,7 @@ def admin_live_trading_scanner_manual_trigger(
     return {"status": "ok", "trigger": trigger_payload, "audit_log_id": audit_row.id}
 
 
-@router.post("/control-layer/scanner/symbol-universe")
+@router.post("/control-layer/scanner/symbol-universe", dependencies=[Depends(_admin_live_control_action_removed_dependency)])
 def admin_live_trading_scanner_symbol_universe(
     payload: ScannerSymbolUniverseRequest,
     current_admin: User = Depends(require_admin),
@@ -870,7 +885,7 @@ def admin_live_trading_failed_orders(
     }
 
 
-@router.post("/control-layer/execution-quality/retry")
+@router.post("/control-layer/execution-quality/retry", dependencies=[Depends(_admin_live_control_action_removed_dependency)])
 def admin_live_trading_retry_failed_orders(
     payload: RetryFailedOrdersRequest,
     current_admin: User = Depends(require_admin),
