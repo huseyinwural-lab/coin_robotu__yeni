@@ -10,7 +10,6 @@ Test Requirements:
 5. Signal kayıtlarında strategy_code alanının ACTIVE allocation stratejisiyle hizalı olması
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -288,7 +287,7 @@ class TestApprovalGateVerification:
         total_results = len(results_data)
         valid_bc_count = sum(bc_code_counts[code] for code in valid_bc_codes)
         
-        print(f"✓ Scanner results analysis:")
+        print("✓ Scanner results analysis:")
         print(f"  Total results: {total_results}")
         print(f"  BC01: {bc_code_counts['BC01']}")
         print(f"  BC02: {bc_code_counts['BC02']}")
@@ -347,7 +346,7 @@ class TestApprovalGateVerification:
                 if strategy_code in active_strategy_ids:
                     aligned_count += 1
         
-        print(f"✓ Signal strategy_code analysis:")
+        print("✓ Signal strategy_code analysis:")
         print(f"  Total signals with strategy_code: {total_count}")
         print(f"  Active allocation strategy IDs: {active_strategy_ids[:5]}...")
         print(f"  Strategy code distribution: {dict(list(strategy_code_counts.items())[:5])}")

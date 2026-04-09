@@ -5,7 +5,6 @@ Tests all major flows with single session approach to handle preview environment
 import os
 import pytest
 import requests
-from datetime import datetime
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://trade-trace-engine.preview.emergentagent.com").rstrip("/")
 
@@ -69,7 +68,7 @@ class TestHealthAndAuth:
         """Test /health returns 200"""
         response = requests.get(f"{BASE_URL}/api/health", timeout=15)
         assert response.status_code == 200, f"Health check failed: {response.status_code}"
-        print(f"✓ Health endpoint: 200 OK")
+        print("✓ Health endpoint: 200 OK")
     
     def test_user_login(self, user_session):
         """Test user session is valid"""
@@ -298,7 +297,7 @@ class TestAdminStrategyAllocation:
         """Test GET /admin/strategy-allocation/export?format=json returns JSON export"""
         response = admin_session.get(f"{BASE_URL}/api/admin/strategy-allocation/export", params={"format": "json"}, timeout=20)
         assert response.status_code == 200, f"Strategy allocation export JSON failed: {response.text}"
-        print(f"✓ Strategy allocation export JSON successful")
+        print("✓ Strategy allocation export JSON successful")
 
 
 class TestCriticalEndpointRegression:
@@ -330,7 +329,7 @@ class TestCriticalEndpointRegression:
                 errors.append(f"{endpoint}: {str(e)}")
         
         assert len(errors) == 0, f"5xx errors found: {errors}"
-        print(f"✓ All user endpoints returned non-5xx status")
+        print("✓ All user endpoints returned non-5xx status")
     
     def test_admin_endpoints_no_5xx(self, admin_session):
         """Test critical admin endpoints don't return 5xx"""
@@ -356,7 +355,7 @@ class TestCriticalEndpointRegression:
                 errors.append(f"{endpoint}: {str(e)}")
         
         assert len(errors) == 0, f"5xx errors found: {errors}"
-        print(f"✓ All admin endpoints returned non-5xx status")
+        print("✓ All admin endpoints returned non-5xx status")
 
 
 if __name__ == "__main__":
