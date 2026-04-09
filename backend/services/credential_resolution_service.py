@@ -1161,7 +1161,15 @@ def resolve_exchange_credentials(
 
     selected = None
     selection_reason = ""
-    if preferred_source == "admin":
+    execution_purpose = _is_execution_purpose(normalized_purpose)
+
+    if execution_purpose:
+        if user_pick is not None:
+            selected = user_pick
+            selection_reason = "execution_user_source_required"
+        else:
+            raise ValueError("user_execution_credential_required")
+    elif preferred_source == "admin":
         if admin_pick is not None:
             selected = admin_pick
             selection_reason = "preferred_admin"
@@ -1186,7 +1194,7 @@ def resolve_exchange_credentials(
     if selected is None:
         raise ValueError("credential_not_found")
 
-    if _is_execution_purpose(normalized_purpose):
+    if execution_purpose:
         from services.venue_service import check_user_venue_access
 
         access_allowed, _, _, _ = check_user_venue_access(
@@ -1198,15 +1206,8 @@ def resolve_exchange_credentials(
         )
         if not access_allowed:
             raise ValueError("venue_not_allowed")
-
-        if normalized_env == "live" and str(selected.get("source") or "").startswith("user"):
-            allow_live_user_source = _norm(os.environ.get("LIVE_USER_EXECUTION_SOURCE_ALLOWED"), default="false") in {
-                "1",
-                "true",
-                "yes",
-            }
-            if not allow_live_user_source:
-                raise ValueError("approved_credential_required")
+        if not str(selected.get("source") or "").startswith("user"):
+            raise ValueError("admin_execution_source_forbidden")
 
     response = {
         "selected_credential_id": selected["credential_id"],

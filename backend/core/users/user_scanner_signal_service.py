@@ -1269,10 +1269,9 @@ def _apply_order_precheck_failed(
     reason_codes: list[str] | None = None,
     error_detail: str = "",
 ) -> None:
-    row.execution_eligible = True
-    row.status = "pending"
-    row.current_state = "DETECTED"
-    row.blocked_reason_code = ""
+    row.execution_eligible = False
+    row.status = "blocked"
+    row.blocked_reason_code = "ORDER_PRECHECK_FAILED"
 
     base_message, base_hint = _signal_reason_details("ORDER_PRECHECK_FAILED")
     normalized_codes = [str(code).strip() for code in (reason_codes or []) if str(code).strip()]
@@ -1280,20 +1279,20 @@ def _apply_order_precheck_failed(
 
     if normalized_codes:
         compact_codes = normalized_codes[:5]
-        row.blocked_reason_message = ""
-        row.blocked_solution_hint = ""
+        row.blocked_reason_message = f"{base_message} / codes: {', '.join(compact_codes)}"[:240]
+        row.blocked_solution_hint = PRECHECK_ACTION_HINTS.get(first_failure, base_hint)
         row.decision_note = f"order_precheck_advisory:first={first_failure};codes={'|'.join(compact_codes)}"[:240]
     elif error_detail:
         compact_detail = str(error_detail).replace("\n", " ").strip()[:180]
-        row.blocked_reason_message = ""
-        row.blocked_solution_hint = ""
+        row.blocked_reason_message = f"{base_message} / detail: {compact_detail}"[:240]
+        row.blocked_solution_hint = base_hint
         row.decision_note = f"order_precheck_advisory:detail={compact_detail}"[:240]
     else:
-        row.blocked_reason_message = ""
-        row.blocked_solution_hint = ""
+        row.blocked_reason_message = base_message
+        row.blocked_solution_hint = base_hint
         row.decision_note = "order_precheck_advisory"
 
-    _set_state(row, "DETECTED")
+    _set_state(row, "BLOCKED")
 
 
 def _primary_reason_code(reason_codes: list[str]) -> str:
@@ -1320,10 +1319,6 @@ def _evaluate_signal_blockers(
     risk_policy: RiskPolicy | None,
     exchange_connection: UserExchangeConnection | None,
 ) -> tuple[list[str], bool, bool]:
-    # Advisory-only mode (live override): sinyal üretiminden execution'a geçişte
-    # hiçbir blocker trade akışını kapatmasın.
-    return [], False, True
-
     reason_codes: list[str] = []
     requires_manual = _requires_manual_approval(row.mode)
 
@@ -1376,8 +1371,6 @@ def _evaluate_signal_blockers(
     if _is_market_data_stale(row.symbol):
         reason_codes.append("MARKET_DATA_STALE")
 
-    # Advisory-only mode: signal yaşı nedeniyle trade bloklanmaz.
-
     if exchange_connection is None and live_mode_enabled:
         reason_codes.append("EXCHANGE_NOT_READY")
     elif live_mode_enabled and str(exchange_connection.environment).lower() == "live":
@@ -1393,25 +1386,14 @@ def _evaluate_signal_blockers(
             reason_codes.append("EXCHANGE_NOT_READY")
 
     deduped = list(dict.fromkeys(reason_codes))
-    # Advisory-only mode: hard blockers trade akışını kapatmasın.
-    # Sadece gerçekten süresi geçmiş sinyaller (SIGNAL_EXPIRED) yürütmeye kapalı kalır.
-    execution_eligible = "SIGNAL_EXPIRED" not in deduped
-    requires_manual = False
+    hard_blockers = [code for code in deduped if code != "MANUAL_APPROVAL_REQUIRED"]
+    execution_eligible = len(hard_blockers) == 0
     return deduped, requires_manual, execution_eligible
 
 
 def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> PendingSignal:
     if row.current_state in {"ORDER_SUBMITTED", "FILLED", "REJECTED"}:
         return row
-    from services.live_mode_service import get_or_create_live_config as _get_or_create_live_config
-
-    live_config = _get_or_create_live_config(db)
-    live_mode_enabled = bool(getattr(live_config, "live_mode_enabled", False))
-
-    if live_mode_enabled:
-        # Advisory-only mode: ORDER_PRECHECK_FAILED snapshot'u sinyali kilitlemesin.
-        pass
-
     if row.mode != "AUTO" and _has_active_bot(db, row.user_id):
         row.mode = "AUTO"
 
@@ -1437,7 +1419,7 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
         exchange_connection=exchange_connection,
     )
 
-    primary_reason = "SIGNAL_EXPIRED" if "SIGNAL_EXPIRED" in reason_codes else ""
+    primary_reason = _primary_reason_code(reason_codes)
     message, hint = _signal_reason_details(primary_reason) if primary_reason else ("", "")
 
     row.bot_profile_id = bot.id if bot else None
@@ -1455,6 +1437,18 @@ def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> Pending
         row.status = "expired"
         row.requires_manual_approval = False
         _set_state(row, "EXPIRED")
+    elif primary_reason:
+        if primary_reason == "MANUAL_APPROVAL_REQUIRED":
+            row.status = "pending"
+            row.execution_eligible = False
+            row.blocked_reason_code = ""
+            row.blocked_reason_message = ""
+            row.blocked_solution_hint = ""
+            _set_state(row, "DETECTED")
+        else:
+            row.status = "blocked"
+            row.execution_eligible = False
+            _set_state(row, "BLOCKED")
     else:
         row.status = "ready"
         row.blocked_reason_code = ""

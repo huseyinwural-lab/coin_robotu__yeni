@@ -2,6 +2,7 @@ import os
 import time
 from datetime import datetime, timezone
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from core.exchanges.binance_adapter import BinanceExecutionAdapter
@@ -358,32 +359,30 @@ def enforce_execution_guard_or_raise(
         )
         return readiness
 
-    soft_bypass_codes = list(dict.fromkeys([*reason_codes, "SOFT_BYPASS_RISK_POLICY_OUTSIDE"]))
-    allowed_readiness = dict(readiness)
-    allowed_readiness["execution_allowed"] = True
-    allowed_readiness["go_live_allowed"] = True
-    allowed_readiness["final_status"] = "READY"
-    allowed_readiness["reason_codes"] = soft_bypass_codes
-
     create_guard_audit_event(
         db,
-        event="EXECUTION_ALLOWED",
-        reason="READINESS_SOFT_BYPASS_WARNING",
+        event="EXECUTION_BLOCKED",
+        reason="READINESS_BLOCKED",
         symbol=symbol,
         user_id=user_id,
         actor_user_id=actor_user_id,
         actor_role=actor_role,
-        severity="warning",
+        severity="error",
         metadata={
             "source": source,
             "mode": mode,
-            "bypass_warning": True,
-            "original_readiness": readiness,
-            "reason_codes": soft_bypass_codes,
-            "bypassed_at": datetime.now(timezone.utc).isoformat(),
+            "reason_codes": reason_codes,
+            "blocked_at": datetime.now(timezone.utc).isoformat(),
         },
     )
-    return allowed_readiness
+    raise HTTPException(
+        status_code=status.HTTP_423_LOCKED,
+        detail={
+            "code": "execution_guard_blocked",
+            "reason_codes": reason_codes,
+            "readiness": readiness,
+        },
+    )
 
 
 def validate_order_precheck(

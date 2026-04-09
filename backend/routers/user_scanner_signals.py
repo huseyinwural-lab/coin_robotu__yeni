@@ -627,9 +627,6 @@ def _normalize_blocked_payload(*, status: str | None, blocked_reason_code: str |
     message = str(blocked_reason_message or "").strip()
     hint = str(blocked_solution_hint or "").strip()
 
-    if code.upper() == "ORDER_PRECHECK_FAILED":
-        return "", "", ""
-
     if normalized_status in {"blocked", "non_tradeable"}:
         if not code:
             code = "BLOCKED_UNSPECIFIED"
@@ -661,8 +658,6 @@ def _extract_first_precheck_failure_code(decision_note: str | None, blocked_reas
 
 def _normalize_signal_status_for_ui(*, status: str | None, blocked_reason_code: str | None) -> str:
     normalized_status = str(status or "").strip().lower()
-    if normalized_status in {"blocked", "non_tradeable"} and str(blocked_reason_code or "").strip().upper() == "ORDER_PRECHECK_FAILED":
-        return "pending"
     return normalized_status or "pending"
 
 
@@ -778,8 +773,6 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         blocking_reasons.append({"code": "WALLET_REFRESH_FAILED", "message": "Cüzdan snapshot güncel değil veya boş.", "hint": "wallet refresh tetikleyin; güncel balance olmadan trade açılmaz."})
 
     for code, count in sorted(blocked_reason_counts.items(), key=lambda item: (-item[1], item[0]))[:5]:
-        if code == "ORDER_PRECHECK_FAILED":
-            continue
         blocking_reasons.append(
             {
                 "code": f"SIGNAL_BLOCKED::{code}",
@@ -788,7 +781,7 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
             }
         )
 
-    blocking_reasons = []
+    health = "HEALTHY" if len(blocking_reasons) == 0 else "BLOCKED"
 
     return {
         "scanner_ready": bool(scanner_ready),
@@ -798,7 +791,7 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
         "symbols_ready": bool(symbols_ready),
         "exchange_ready": bool(exchange_ready),
         "bot_status": str((primary_bot or {}).get("status") or "NOT_CONFIGURED"),
-        "health": "HEALTHY",
+        "health": health,
         "blocking_reasons": blocking_reasons,
         "latest_scanner_run_at": latest_scanner_row.generated_at.isoformat() if latest_scanner_row and latest_scanner_row.generated_at else None,
         "active_bot_id": (primary_bot or {}).get("id"),

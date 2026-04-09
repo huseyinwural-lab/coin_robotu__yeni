@@ -103,6 +103,12 @@ export const UserSignalsPage = () => {
           request: () => requestWithRetry(() => apiClient.get("/user/trades", { params: { limit: 50 }, timeout: 15000 }), { retries: 1, retryDelayMs: 900 }),
         },
         { key: "bot_profiles", label: "bot_profiles", critical: true, request: () => apiClient.get("/bot-profiles", { timeout: 15000 }) },
+        {
+          key: "status_contract",
+          label: "status_contract",
+          critical: false,
+          request: () => requestWithRetry(() => apiClient.get("/user/scanner/status-contract", { timeout: 15000 }), { retries: 1, retryDelayMs: 900 }),
+        },
       ];
       const settled = await Promise.allSettled(requestDescriptors.map((item) => item.request()));
       const byKey = requestDescriptors.reduce((acc, descriptor, index) => {
@@ -114,6 +120,7 @@ export const UserSignalsPage = () => {
       const portfolioRes = byKey.portfolio;
       const tradesRes = byKey.trades;
       const botsRes = byKey.bot_profiles;
+      const statusContractRes = byKey.status_contract;
 
       let resolvedSignals = [];
       if (signalsRes?.status === "fulfilled") {
@@ -141,7 +148,11 @@ export const UserSignalsPage = () => {
         setBotProfiles(nextBots);
       }
 
-      setStatusContract(null);
+      if (statusContractRes?.status === "fulfilled") {
+        setStatusContract(statusContractRes.value?.data || null);
+      } else {
+        setStatusContract(null);
+      }
       setDecisionMap({});
 
       const inferredMode = String((resolvedSignals[0]?.mode || "AUTO")).toUpperCase();
@@ -711,7 +722,7 @@ export const UserSignalsPage = () => {
               fix-job: {bulkFixJob.status} · processed={bulkFixJob.processed || 0} · fixed={bulkFixJob.fixed || 0}
             </span>
           )}
-          <span className="text-xs text-slate-400" data-testid="user-signals-auto-refresh-indicator">Auto Refresh: 10s</span>
+          <span className="text-xs text-slate-400" data-testid="user-signals-auto-refresh-indicator">Auto Refresh: 30s</span>
         </div>
       </header>
 

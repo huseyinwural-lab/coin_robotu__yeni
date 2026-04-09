@@ -84,6 +84,7 @@ export const UserTradePage = () => {
   const [symbolOptions, setSymbolOptions] = useState(DEFAULT_SYMBOLS);
   const [connections, setConnections] = useState([]);
   const [selectedConnectionId, setSelectedConnectionId] = useState("");
+  const [queryMarketType, setQueryMarketType] = useState("");
   const [midPrice, setMidPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -136,10 +137,41 @@ export const UserTradePage = () => {
 
   useEffect(() => {
     const symbolFromQuery = String(searchParams.get("symbol") || "").trim().toUpperCase();
+    const sideFromQuery = String(searchParams.get("side") || "").trim().toLowerCase();
+    const marketTypeFromQuery = String(searchParams.get("market_type") || "").trim().toLowerCase();
+
     if (symbolFromQuery) {
       setForm((prev) => ({ ...prev, symbol: symbolFromQuery }));
     }
+
+    if (["buy", "sell"].includes(sideFromQuery)) {
+      setForm((prev) => ({ ...prev, side: sideFromQuery }));
+    } else if (sideFromQuery === "long") {
+      setForm((prev) => ({ ...prev, side: "buy" }));
+    } else if (sideFromQuery === "short") {
+      setForm((prev) => ({ ...prev, side: "sell" }));
+    }
+
+    if (["spot", "futures"].includes(marketTypeFromQuery)) {
+      setQueryMarketType(marketTypeFromQuery);
+    } else {
+      setQueryMarketType("");
+    }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!queryMarketType || connections.length === 0) {
+      return;
+    }
+    const selectedConnection = connections.find((row) => row.id === selectedConnectionId);
+    if (selectedConnection && String(selectedConnection.market_type || "").toLowerCase() === queryMarketType) {
+      return;
+    }
+    const preferredConnection = connections.find((row) => String(row.market_type || "").toLowerCase() === queryMarketType);
+    if (preferredConnection?.id) {
+      setSelectedConnectionId(preferredConnection.id);
+    }
+  }, [connections, queryMarketType, selectedConnectionId]);
 
   useEffect(() => {
     const loadBootstrap = async () => {
