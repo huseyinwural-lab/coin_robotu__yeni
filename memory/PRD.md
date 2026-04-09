@@ -1,3 +1,30 @@
+## 2026-04-09 — Admin Strategies runtime tetikleyici tahliyesi (P0)
+
+### Yapılan değişiklik
+- `/admin/strategies` ekranından runtime tetikleyiciler kaldırıldı:
+  - `Dispatch Runtime` butonu kaldırıldı.
+  - `Worker Run Once` butonu kaldırıldı.
+  - İlgili sonuç kartları kaldırıldı (`runtime dispatch/worker result cards`).
+
+### Backend güvence (410)
+- `strategy_domain.py` içindeki global admin write guard genişletildi.
+- Aşağıdaki endpointler kalıcı `410 PURE_LIVE_410`:
+  - `POST /api/strategy-domain/admin/runtime/dispatch`
+  - `POST /api/strategy-domain/admin/runtime/worker/run-once`
+
+### Korunanlar
+- `/admin/strategies` üzerinde strateji ayar/gov akışı korundu:
+  - version diff
+  - runtime read-only refresh
+  - strategy parametre/tuning lifecycle
+
+### Doğrulama
+- Frontend code validation PASS:
+  - kaldırılan 4 test-id bulunmadı,
+  - korunması gereken 2 test-id bulundu.
+- Backend code validation PASS:
+  - strategy_domain guard içinde runtime dispatch/run-once için 410 blok aktif.
+
 ## 2026-04-09 — Adım 1: Runtime Tetikleyicilerini Tahliye Et (Tamamlandı)
 
 ### Uygulanan değişiklik
