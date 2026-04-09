@@ -1,3 +1,26 @@
+## 2026-04-09 — Admin/User Scope Temizliği (Kalıntısız Ayrım)
+
+### Uygulanan Düzeltmeler
+- `admin identity users` listesine scope filtresi eklendi:
+  - Backend: `GET /api/admin/identity/users` artık `scope=admin|user` alıyor.
+  - `scope=admin` => sadece `super_admin/admin/ops`
+  - `scope=user` => sadece `user`
+- Frontend `AdminUsersPage` admin scope çağrıları `scope=admin` ile kilitlendi; admin listede user rolü karışması engellendi.
+- Admin kullanıcı filtre UI temizlendi:
+  - Admin scope role dropdown’da `user` seçeneği kaldırıldı.
+  - Role count metni admin scope’da sadece `super_admin/admin/ops` gösteriyor.
+- Admin create form temizlendi:
+  - `admin-create` role seçimi sadece `admin` olacak şekilde sabitlendi (ops/super_admin seçimi kaldırıldı).
+- Admin kullanıcı modül giriş yönlendirmesi netleştirildi:
+  - `/admin/kullanicilar`, `/admin/kullanıcılar`, `/admin/core/kullanicilar` artık `/admin/kullanicilar/kullanici-onaylar`a yönleniyor.
+- `AdminUniverseMonitorPage` governance-only moda alındı:
+  - User-level signal/trade/debug/fallback blokları görünümden kaldırıldı.
+  - Governance-only bilgilendirme kartı eklendi.
+
+### Test Durumu
+- Lint: backend + frontend dosyalarında PASS.
+- UI otomasyon testi: kod doğrulaması PASS; ancak canlı doğrulama **DB/infra kaynaklı bloklu** (`DB_POOL_TIMEOUT`, `psycopg2 SSL connection closed unexpectedly`).
+
 ## 2026-04-08 — P1/P2 Tamamlama Paketi (Health + Allocation + Realtime + Explainability)
 
 ### Uygulananlar
