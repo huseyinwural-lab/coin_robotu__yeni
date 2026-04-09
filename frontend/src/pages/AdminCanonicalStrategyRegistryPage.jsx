@@ -11,16 +11,57 @@ export const AdminCanonicalStrategyRegistryPage = () => {
   const [rows, setRows] = useState([]);
   const [familyGates, setFamilyGates] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadWarning, setLoadWarning] = useState("");
   const [savingId, setSavingId] = useState("");
   const [savingGate, setSavingGate] = useState(false);
 
+  const withTimeout = async (promise, timeoutMs = 12000) => {
+    let timer = null;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          timer = window.setTimeout(() => reject(new Error("request_timeout")), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+    }
+  };
+
   const loadRegistry = async () => {
     setLoading(true);
+    setLoadWarning("");
     try {
-      const { data } = await apiClient.get("/admin/canonical-strategies/registry", { params: { include_legacy: true } });
-      setRows(Array.isArray(data) ? data : []);
-      const gatesRes = await apiClient.get("/admin/strategy-family-gates");
-      setFamilyGates(Array.isArray(gatesRes.data) ? gatesRes.data : []);
+      const [registryRes, gatesRes] = await Promise.allSettled([
+        withTimeout(apiClient.get("/admin/canonical-strategies/registry", { params: { include_legacy: true } })),
+        withTimeout(apiClient.get("/admin/strategy-family-gates")),
+      ]);
+
+      if (registryRes.status === "fulfilled") {
+        const payload = registryRes.value?.data;
+        setRows(Array.isArray(payload) ? payload : []);
+      } else {
+        setRows([]);
+      }
+
+      if (gatesRes.status === "fulfilled") {
+        const payload = gatesRes.value?.data;
+        setFamilyGates(Array.isArray(payload) ? payload : []);
+      } else {
+        setFamilyGates([]);
+      }
+
+      if (registryRes.status === "rejected" || gatesRes.status === "rejected") {
+        setLoadWarning("Bazı registry verileri gecikmeli geldi. Yenile ile tekrar deneyin.");
+        if (registryRes.status === "rejected" && gatesRes.status === "rejected") {
+          toast.error("Canonical registry verisi geçici olarak alınamadı");
+        } else {
+          toast.warning("Registry kısmi yüklendi. Eksik bloklar için Yenile kullanın.");
+        }
+      }
     } catch (error) {
       toast.error(error?.response?.data?.detail || "Canonical registry yüklenemedi");
     } finally {
@@ -118,6 +159,12 @@ export const AdminCanonicalStrategyRegistryPage = () => {
           active={registryRows.length} legacy={legacyRows.length}
         </p>
       </div>
+
+      {loadWarning && (
+        <div className="border border-amber-700 bg-amber-950/20 p-2 text-xs text-amber-200" data-testid="admin-canonical-registry-load-warning">
+          {loadWarning}
+        </div>
+      )}
 
       {loading ? (
         <div className="border border-slate-700 bg-slate-900 p-4 text-sm" data-testid="admin-canonical-registry-loading">Yükleniyor...</div>

@@ -1,3 +1,19 @@
+## 2026-04-09 — Canonical Strategy Registry yüklenme takılması düzeltmesi
+
+### Problem
+- `/admin/strategy/canonical-registry` ekranı zaman zaman uzun DB gecikmeleri/timeout nedeniyle `Yükleniyor...` durumunda kalıyordu veya geç açılıyordu.
+
+### Uygulanan çözüm
+- Frontend `AdminCanonicalStrategyRegistryPage` yükleme akışı güçlendirildi:
+  - Registry ve family-gates istekleri paralel ve `allSettled` ile yürütülüyor.
+  - Her istek için 12 sn client timeout koruması eklendi (`withTimeout`).
+  - Kısmi başarısızlıkta sayfa tamamen bloke olmuyor; yüklenen bloklar render ediliyor.
+  - Kullanıcıya net uyarı gösteriliyor (`admin-canonical-registry-load-warning`).
+
+### Beklenen davranış
+- Tam veri gelmezse bile sayfa spinner’da takılı kalmaz.
+- “Yenile” ile yeniden deneme mümkün olur.
+
 ## 2026-04-09 — Admin Strategies runtime tetikleyici tahliyesi (P0)
 
 ### Yapılan değişiklik
