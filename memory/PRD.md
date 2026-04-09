@@ -1,3 +1,31 @@
+## 2026-04-09 — User Scanner Auto Interval (1/3/5 dk) Kontrolü
+
+### Talep
+- User Scanner tarafında auto mod için tarama süresi kullanıcı kontrolünde olsun.
+- Seçenekler: **1 dk / 3 dk / 5 dk**.
+
+### Yapılanlar
+- Frontend (`UserScannerPage.jsx`):
+  - `Auto Tarama Süresi` select eklendi (`1/3/5 dakika`).
+  - Kaydet akışında `auto_interval_minutes` backend’e gönderimi doğrulandı.
+  - Parametre kartında interval değeri dinamik gösteriliyor (`Interval: X dk`).
+  - `Next Scan time` artık `-` yerine hesaplanmış zamanı gösteriyor.
+  - Full-auto akışta interval bazlı otomatik scanner run timer eklendi (kullanıcı seçimine göre dakika bazlı).
+- Backend (`user_live_dashboard_router.py`):
+  - `GET /api/user/live/scheduler/next-run` endpointi 410 yerine kullanıcı scanner config’inden canlı hesaplanan scheduler bilgisi döndürür hale getirildi:
+    - `auto_interval_minutes`, `interval_seconds`, `last_run_at`, `next_run_at`.
+
+### Test Sonuçları
+- Backend test (subagent): PASS
+  - `auto_interval_minutes=1` -> `interval_seconds=60`
+  - `auto_interval_minutes=5` -> `interval_seconds=300`
+  - test sonrası `3 dk` restore edildi.
+- Frontend test (subagent): PASS
+  - Auto interval select görünür ve seçenekler doğru.
+  - 5 dk seçip kaydetme sonrası parametre kartı `Interval: 5 dk`.
+  - `Next Scan time` dolu.
+  - `/user/trade` -> `/user/signals` redirect bozulmamış.
+
 ## 2026-04-09 — User Pure-Live Auto Trade (Manual Trade/Approve Kapatma)
 
 ### Talep
