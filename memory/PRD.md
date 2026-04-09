@@ -1,3 +1,31 @@
+## 2026-04-10 — Status Contract 500 + Zombie Process Kalıcı Stabilizasyon
+
+### Problem
+- User tarafında aralıklı `infra_error` ve `status_contract(500)` gözlemi.
+- Sunucuda coin bot çalışma akışında zombie process birikimi riski.
+
+### Kök neden ve düzeltme
+- `user_scanner_signals.py` içinde wallet alanları okunurken `snapshot.permissions` payload'ı yanlış varsayımla `dict(...)` dönüşümüne sokuluyordu.
+  - Bazı ortamlarda `permissions` liste geldiği için bu dönüşüm `ValueError` üretip `/api/user/scanner/status-contract` endpointinde 500'e yol açabiliyordu.
+  - Düzeltme: payload tipi güvenli işlendi; wallet değerleri hem dict-şema hem de snapshot top-level alanlardan fallback ile okunur hale getirildi.
+- `/api/user/scanner/status-contract` endpointi fail-safe hale getirildi.
+  - İç hata durumunda artık 500 yerine **200 + BLOCKED** sözleşmesi dönüyor (`STATUS_CONTRACT_INTERNAL_ERROR`).
+  - Frontend tarafında `infra_error` yerine okunabilir blocker akışı korunur.
+- `core/process_guard.py` kalıcı process reaper modeliyle güncellendi.
+  - Per-process thread yerine merkezi reaper thread + aktif child takip mekanizması eklendi.
+  - Kısa ömürlü child processlerde zombie bırakma riski azaltıldı.
+
+### Doğrulama
+- Python lint: PASS
+  - `/app/backend/routers/user_scanner_signals.py`
+  - `/app/backend/core/process_guard.py`
+- API smoke: PASS
+  - `GET /api/user/scanner/status-contract?market_type=auto|spot|futures` -> 200
+- Regression smoke: PASS
+  - `pytest -q tests/test_iteration11_observability.py::TestUserScannerStatusContract::test_status_contract_returns_required_fields`
+- Process smoke: PASS
+  - `spawn_shell_and_reap` ile çoklu kısa child sonrası zombie sayısı: 0
+
 ## 2026-04-10 — Permission Drift + Admin Readiness Yanlış Negatif Düzeltmeleri
 
 ### Kapsam

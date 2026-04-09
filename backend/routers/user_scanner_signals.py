@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import ROUND_DOWN
 import hashlib
 import json
+import logging
 import time
 from uuid import uuid4
 
@@ -64,6 +65,7 @@ from routers.admin_universe_monitor import (
 )
 
 router = APIRouter(prefix="/user", tags=["user_scanner_signals"])
+logger = logging.getLogger(__name__)
 
 _FIX_ALL_BLOCKERS_ASYNC_FALLBACK: dict[str, dict] = {}
 
@@ -781,9 +783,23 @@ def _build_market_status_contract(
             or snapshot.get("updated_at")
             or getattr(selected_connection, "updated_at", None)
         )
-        perms = dict(snapshot.get("permissions") or {})
-        wallet_available_balance = perms.get("available_balance")
-        wallet_balance = perms.get("wallet_balance")
+        permissions_payload = snapshot.get("permissions")
+        if isinstance(permissions_payload, dict):
+            wallet_available_balance = permissions_payload.get("available_balance")
+            wallet_balance = permissions_payload.get("wallet_balance")
+
+        if wallet_available_balance is None:
+            wallet_available_balance = (
+                snapshot.get("available_balance")
+                or snapshot.get("free_balance")
+            )
+
+        if wallet_balance is None:
+            wallet_balance = (
+                snapshot.get("wallet_balance")
+                or snapshot.get("account_equity")
+                or snapshot.get("equity")
+            )
 
     blocked_rows = (
         db.query(PendingSignal, SignalEvent.market_type)
@@ -1463,7 +1479,48 @@ def scanner_status_contract(
 ):
     normalized_market_type = str(market_type or "auto").strip().lower()
     preferred_market = normalized_market_type if normalized_market_type in {"spot", "futures"} else None
-    return _build_user_status_contract(db, current_user.id, preferred_market=preferred_market)
+    try:
+        return _build_user_status_contract(db, current_user.id, preferred_market=preferred_market)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "scanner_status_contract_failed user_id=%s market_type=%s error=%s",
+            current_user.id,
+            normalized_market_type,
+            str(exc),
+        )
+
+        fallback_market = preferred_market or "spot"
+        fallback_market_contract = {
+            "market_type": fallback_market,
+            "scanner_ready": False,
+            "strategy_ready": False,
+            "risk_ready": False,
+            "execution_ready": False,
+            "symbols_ready": False,
+            "exchange_ready": False,
+            "bot_status": "UNKNOWN",
+            "health": "BLOCKED",
+            "blocking_reasons": [
+                {
+                    "code": "STATUS_CONTRACT_INTERNAL_ERROR",
+                    "message": "Status contract hesaplanırken iç hata oluştu.",
+                    "hint": "Backend loglarını kontrol edin ve scanner/exchange snapshot verisini doğrulayın.",
+                }
+            ],
+            "latest_scanner_run_at": None,
+            "active_bot_id": None,
+            "wallet_last_check_at": None,
+            "wallet_available_balance": None,
+            "wallet_balance": None,
+            "selected_exchange_connection_id": None,
+        }
+        return {
+            **fallback_market_contract,
+            "overall_health": "BLOCKED",
+            "preferred_market": fallback_market,
+            "market_contracts": {fallback_market: fallback_market_contract},
+            "active_bot_ids": {fallback_market: None},
+        }
 
 
 @router.get("/scanner/exchange-readiness")
