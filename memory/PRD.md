@@ -1,3 +1,37 @@
+## 2026-04-09 — Admin Strategy Takip ekranı (12 strateji / win-rate)
+
+### Uygulanan özellik
+- Yeni admin sayfası eklendi: `GET /admin/strategy/strategy-takip`
+- Menüye eklendi: `nav-admin-strategy-takip-link`
+- Kolonlar (onaylanan format):
+  1. `strategy_id`
+  2. `family`
+  3. `1 günlük başarı %`
+  4. `7 günlük başarı %`
+  5. `30 günlük başarı %`
+  6. `90 günlük başarı %`
+
+### Başarı oranı hesabı
+- Tanım: **Win rate = kârlı kapanan trade / kapanan trade**
+- Pencereler: 1g, 7g, 30g, 90g
+- O pencerede kapanan trade yoksa değer: **`0.00%`**
+
+### Kapsam
+- Liste, canonical seed’deki **12 ana strateji** ile sabitlenmiştir (legacy dahil değildir).
+
+### Teknik eklemeler
+- Backend endpoint: `GET /api/admin/canonical-strategies/strategy-takip`
+- Yeni response schema: `AdminStrategyTakipRowResponse`
+- Frontend yeni sayfa: `AdminStrategyTakipPage.jsx`
+- Route: `/admin/strategy/strategy-takip`
+
+### Doğrulama
+- Backend test: endpoint 200, **12 satır** döndü.
+- Frontend test-agent: **PASS (100%)**
+  - 6 kolon başlığı doğrulandı
+  - 12 satır doğrulandı
+  - yüzde formatı `xx.xx%` doğrulandı
+
 ## 2026-04-09 — Canonical Strategy Registry yüklenme takılması düzeltmesi
 
 ### Problem
