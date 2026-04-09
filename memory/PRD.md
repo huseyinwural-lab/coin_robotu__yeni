@@ -1,3 +1,53 @@
+## 2026-04-09 — Risk yönetimini user tarafına birleştirme (adminden taşıma)
+
+### Hedef
+- Admin risk panelindeki düzenleme davranışları kaldırılıp user tarafındaki mevcut risk oluşturma akışı ile birleştirildi.
+
+### Backend değişiklikleri
+- `schemas.py`:
+  - `UserRiskSettingsResponse` ve `UserRiskSettingsUpdate` modellerine taşınan 8 alan eklendi:
+    - `reference_equity_usd`
+    - `account_max_notional_pct`
+    - `symbol_max_notional_pct`
+    - `strategy_max_concurrent_positions`
+    - `strategy_cooldown_seconds`
+    - `max_order_frequency_per_min`
+    - `max_order_burst_per_10s`
+    - `duplicate_suppression_window_seconds`
+- `live_mode_service.py`:
+  - `resolve_user_risk_settings_payload(...)` eklendi (user risk + policy override birleşik payload üretir)
+  - `update_user_risk_settings(...)` genişletildi (yeni alanları kabul eder, user-scope risk overrides’a yazar)
+  - Risk-engine aktif anahtar eşlemeleri eklendi:
+    - `account_max_notional_pct -> max_total_exposure_pct`
+    - `symbol_max_notional_pct -> max_symbol_exposure_pct`
+    - `daily_loss_limit_pct -> max_daily_loss_pct`
+    - `strategy_cooldown_seconds -> strategy_cooldown_minutes`
+- `user_risk.py`:
+  - GET/PUT `/api/user-risk/settings` birleşik payload ile çalışacak şekilde güncellendi.
+- `strategy_domain.py`:
+  - Admin risk orchestrator write endpointleri için global 410 bloğu eklendi:
+    - `/strategy-domain/admin/risk-orchestrator` altında POST/PUT/PATCH/DELETE => `410 PURE_LIVE_410`.
+
+### Frontend değişiklikleri
+- `UserExchangeSettingsPage.jsx`:
+  - User risk formuna admin panelden taşınan 8 alan eklendi.
+  - Form validasyonları genişletildi.
+  - Save payload tüm birleşik risk alanlarını backend’e gönderiyor.
+- Admin tarafı sadeleştirme:
+  - `PanelLayout.jsx`: admin menüden `Risk Engine` kaldırıldı.
+  - `App.js`: `/admin/risk-orchestrator` ve `/admin/risk-orchestrator/analytics` dashboard’a yönlendirildi.
+  - `AdminDashboardPage.jsx`: risk orchestrator yönlendirmeleri `system-status` yönüne çekildi.
+
+### Doğrulama
+- Backend final test PASS:
+  - Admin risk apply: `410 PURE_LIVE_410`
+  - User risk GET: 8 yeni alan mevcut
+  - User risk PUT: birleşik payload kabul + update PASS
+  - User scanner/trade aksiyon endpointleri: 410 değil (aktif)
+- Frontend:
+  - Admin route/menu temizliği PASS.
+  - User exchange settings sayfasında yeni risk alanları kodda mevcut ve lint PASS.
+
 ## 2026-04-09 — Admin yalnızca veri kaynağı modeli (3. dalga)
 
 ### Yapılan son temizlik
