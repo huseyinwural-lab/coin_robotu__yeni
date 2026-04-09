@@ -1,3 +1,27 @@
+## 2026-04-09 — Adım 1: Runtime Tetikleyicilerini Tahliye Et (Tamamlandı)
+
+### Uygulanan değişiklik
+- `/admin/strategies` içindeki runtime tetikleme davranışları kaldırıldı:
+  - UI'dan kaldırıldı:
+    - `Dispatch Runtime` (`admin-runtime-dispatch-button`)
+    - `Worker Run Once` (`admin-runtime-worker-run-once-button`)
+  - Sonuç kartları da kaldırıldı:
+    - `admin-runtime-dispatch-result-card`
+    - `admin-runtime-worker-result-card`
+  - Korundu:
+    - `admin-version-diff-run-button`
+    - `admin-runtime-refresh-button`
+
+### Backend 410 tahliye
+- `strategy_domain.py` router dependency bloğu genişletildi.
+- Aşağıdaki admin runtime endpointleri artık `410 PURE_LIVE_410`:
+  - `POST /api/strategy-domain/admin/runtime/dispatch`
+  - `POST /api/strategy-domain/admin/runtime/worker/run-once`
+
+### Doğrulama
+- Frontend code validation PASS: kaldırılması istenen 4 test-id bulunmuyor, korunması istenen 2 test-id mevcut.
+- Backend code validation PASS: runtime dispatch/run-once için 410 blok mekanizması strategy_domain.py içinde aktif.
+
 ## 2026-04-09 — Risk yönetimini user tarafına birleştirme (adminden taşıma)
 
 ### Hedef
