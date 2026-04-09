@@ -3,18 +3,18 @@
   "tenants": {},
   "users": {
     "dab99b55-794f-4158-a268-a94daaea821a": {
-      "reference_equity_usd": 10001.0,
-      "account_max_notional_pct": 55.0,
-      "symbol_max_notional_pct": 25.0,
-      "strategy_max_concurrent_positions": 4,
-      "strategy_cooldown_seconds": 90,
-      "max_order_frequency_per_min": 14,
-      "max_order_burst_per_10s": 4,
+      "reference_equity_usd": 10000.0,
+      "account_max_notional_pct": 0.8,
+      "symbol_max_notional_pct": 0.2,
+      "strategy_max_concurrent_positions": 5,
+      "strategy_cooldown_seconds": 300,
+      "max_order_frequency_per_min": 10,
+      "max_order_burst_per_10s": 3,
       "duplicate_suppression_window_seconds": 60,
-      "max_total_exposure_pct": 55.0,
-      "max_symbol_exposure_pct": 25.0,
+      "max_total_exposure_pct": 0.8,
+      "max_symbol_exposure_pct": 0.2,
       "max_daily_loss_pct": 3.0,
-      "strategy_cooldown_minutes": 2
+      "strategy_cooldown_minutes": 5
     }
   }
 }
