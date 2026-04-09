@@ -57,6 +57,10 @@ def _raise_admin_signal_action_moved_to_user(action_name: str) -> None:
     )
 
 
+def _admin_strategy_signal_action_removed_dependency() -> None:
+    _raise_admin_signal_action_moved_to_user("admin_strategy_signal_action")
+
+
 def require_admin_relaxed_for_status_contract(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(status_contract_bearer),
@@ -1099,7 +1103,7 @@ def diagnose_signal_from_observability(
     }
 
 
-@router.post("/signals/approve")
+@router.post("/signals/approve", dependencies=[Depends(_admin_strategy_signal_action_removed_dependency)])
 def approve_signal(
     payload: SignalApproveRequest,
     current_admin: User = Depends(require_super_admin),
@@ -1140,7 +1144,7 @@ def approve_signal(
     }
 
 
-@router.post("/signals/reject")
+@router.post("/signals/reject", dependencies=[Depends(_admin_strategy_signal_action_removed_dependency)])
 def reject_signal(
     payload: SignalRejectRequest,
     current_admin: User = Depends(require_super_admin),
@@ -1181,7 +1185,7 @@ def reject_signal(
     }
 
 
-@router.post("/top-signals/simulate")
+@router.post("/top-signals/simulate", dependencies=[Depends(_admin_strategy_signal_action_removed_dependency)])
 def simulate_top_signals(
     payload: TopSignalsSimulateRequest,
     current_admin: User = Depends(require_admin),
@@ -1221,7 +1225,7 @@ def simulate_top_signals(
     }
 
 
-@router.post("/top-signals/execute")
+@router.post("/top-signals/execute", dependencies=[Depends(_admin_strategy_signal_action_removed_dependency)])
 def execute_top_signals(
     payload: TopSignalsExecuteRequest,
     current_admin: User = Depends(require_super_admin),
@@ -1291,7 +1295,7 @@ def execute_top_signals(
     }
 
 
-@router.post("/top-signals/bulk-simulate")
+@router.post("/top-signals/bulk-simulate", dependencies=[Depends(_admin_strategy_signal_action_removed_dependency)])
 def bulk_simulate_top_signals(
     payload: TopSignalsBulkSimulateRequest,
     current_admin: User = Depends(require_admin),
@@ -1330,7 +1334,7 @@ def bulk_simulate_top_signals(
     }
 
 
-@router.post("/top-signals/bulk-execute")
+@router.post("/top-signals/bulk-execute", dependencies=[Depends(_admin_strategy_signal_action_removed_dependency)])
 def bulk_execute_top_signals(
     payload: TopSignalsBulkExecuteRequest,
     current_admin: User = Depends(require_super_admin),

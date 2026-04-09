@@ -129,6 +129,10 @@ def _raise_admin_execution_action_moved_to_user(action_name: str) -> None:
     )
 
 
+def _admin_execution_action_removed_dependency() -> None:
+    _raise_admin_execution_action_moved_to_user("admin_execution_action")
+
+
 def _queue_control_state() -> dict:
     raw = redis_client.get(QUEUE_CONTROL_STATE_KEY)
     if raw and isinstance(raw, bytes):
@@ -576,7 +580,11 @@ def execution_queue_rejection_summary(
     }
 
 
-@router.post("/execution-queue/{intent_id}/approve", response_model=AdminExecutionQueueDecisionResponse)
+@router.post(
+    "/execution-queue/{intent_id}/approve",
+    response_model=AdminExecutionQueueDecisionResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def approve_intent(
     intent_id: str,
     payload: AdminExecutionQueueDecisionRequest,
@@ -711,7 +719,11 @@ def approve_intent(
     )
 
 
-@router.post("/execution-queue/{intent_id}/execute", response_model=AdminExecutionQueueDecisionResponse)
+@router.post(
+    "/execution-queue/{intent_id}/execute",
+    response_model=AdminExecutionQueueDecisionResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def execute_intent(
     intent_id: str,
     payload: AdminExecutionQueueDecisionRequest,
@@ -775,7 +787,7 @@ def execute_intent(
 @router.post(
     "/approve-trade",
     response_model=AdminExecutionQueueDecisionResponse,
-    dependencies=[Depends(execution_guard_admin_approve_trade_dependency)],
+    dependencies=[Depends(execution_guard_admin_approve_trade_dependency), Depends(_admin_execution_action_removed_dependency)],
 )
 def approve_trade_alias(
     payload: ApproveTradeRequest,
@@ -790,7 +802,11 @@ def approve_trade_alias(
     )
 
 
-@router.post("/execution-queue/{intent_id}/reject", response_model=AdminExecutionQueueDecisionResponse)
+@router.post(
+    "/execution-queue/{intent_id}/reject",
+    response_model=AdminExecutionQueueDecisionResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def reject_intent(
     intent_id: str,
     payload: AdminExecutionQueueDecisionRequest,
@@ -835,7 +851,11 @@ def reject_intent(
     )
 
 
-@router.post("/execution-queue/{intent_id}/retry", response_model=AdminExecutionQueueDecisionResponse)
+@router.post(
+    "/execution-queue/{intent_id}/retry",
+    response_model=AdminExecutionQueueDecisionResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def retry_intent(
     intent_id: str,
     payload: AdminExecutionQueueDecisionRequest,
@@ -877,7 +897,11 @@ def retry_intent(
     )
 
 
-@router.post("/execution-queue/{intent_id}/cancel", response_model=AdminExecutionQueueDecisionResponse)
+@router.post(
+    "/execution-queue/{intent_id}/cancel",
+    response_model=AdminExecutionQueueDecisionResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def cancel_intent_by_admin(
     intent_id: str,
     payload: AdminExecutionQueueDecisionRequest,
@@ -989,7 +1013,11 @@ def execution_intent_history(
     return items
 
 
-@router.post("/execution-queue/bulk-decision", response_model=AdminExecutionQueueBulkDecisionResponse)
+@router.post(
+    "/execution-queue/bulk-decision",
+    response_model=AdminExecutionQueueBulkDecisionResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def execution_queue_bulk_decision(
     payload: AdminExecutionQueueBulkDecisionRequest,
     current_user: User = Depends(require_admin),
@@ -1074,7 +1102,11 @@ def execution_queue_bulk_decision(
     )
 
 
-@router.post("/execution-queue/control/pause", response_model=AdminExecutionQueueControlResponse)
+@router.post(
+    "/execution-queue/control/pause",
+    response_model=AdminExecutionQueueControlResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def pause_execution_queue(
     payload: AdminExecutionQueueControlRequest,
     current_super_admin: User = Depends(require_super_admin),
@@ -1098,7 +1130,11 @@ def pause_execution_queue(
     return AdminExecutionQueueControlResponse(**state)
 
 
-@router.post("/execution-queue/control/resume", response_model=AdminExecutionQueueControlResponse)
+@router.post(
+    "/execution-queue/control/resume",
+    response_model=AdminExecutionQueueControlResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def resume_execution_queue(
     payload: AdminExecutionQueueControlRequest,
     current_super_admin: User = Depends(require_super_admin),
@@ -1121,7 +1157,11 @@ def resume_execution_queue(
     return AdminExecutionQueueControlResponse(**state)
 
 
-@router.post("/execution-queue/control/clear", response_model=AdminExecutionQueueBulkDecisionResponse)
+@router.post(
+    "/execution-queue/control/clear",
+    response_model=AdminExecutionQueueBulkDecisionResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def clear_execution_queue(
     payload: AdminExecutionQueueControlRequest,
     current_super_admin: User = Depends(require_super_admin),
@@ -1168,7 +1208,11 @@ def execution_queue_control_state(current_user: User = Depends(require_admin), d
     return AdminExecutionQueueControlResponse(**_queue_control_state())
 
 
-@router.patch("/execution-queue/{intent_id}/edit", response_model=AdminExecutionQueueEditResponse)
+@router.patch(
+    "/execution-queue/{intent_id}/edit",
+    response_model=AdminExecutionQueueEditResponse,
+    dependencies=[Depends(_admin_execution_action_removed_dependency)],
+)
 def edit_execution_queue_intent(
     intent_id: str,
     payload: AdminExecutionQueueEditRequest,

@@ -80,6 +80,10 @@ def _raise_admin_scanner_action_moved_to_user(action_name: str) -> None:
         },
     )
 
+
+def _admin_scanner_action_removed_dependency() -> None:
+    _raise_admin_scanner_action_moved_to_user("admin_scanner_action")
+
 SLA_UPDATE_PHRASE = "UPDATE SLA CONFIG"
 RESCAN_STALE_PHRASE = "RESCAN STALE"
 KPI_GENERATE_PHRASE = "GENERATE KPI RECOMMENDATION"
@@ -1583,7 +1587,7 @@ def scanner_engine_get_config(current_admin: User = Depends(require_admin)):
     return _load_scanner_engine_config()
 
 
-@router.post("/scanner-engine/config/save")
+@router.post("/scanner-engine/config/save", dependencies=[Depends(_admin_scanner_action_removed_dependency)])
 def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _raise_admin_scanner_action_moved_to_user("scanner_engine_config_save")
     manager = _super_admin_required(current_admin)
@@ -1637,7 +1641,7 @@ def scanner_engine_save_config(payload: ScannerEngineConfigSaveRequest, current_
     )
 
 
-@router.post("/scanner-engine/run")
+@router.post("/scanner-engine/run", dependencies=[Depends(_admin_scanner_action_removed_dependency)])
 def scanner_engine_run(payload: ScannerEngineRunRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _raise_admin_scanner_action_moved_to_user("scanner_engine_run")
     manager = _super_admin_required(current_admin)
@@ -1679,7 +1683,7 @@ def scanner_engine_run(payload: ScannerEngineRunRequest, current_admin: User = D
     }
 
 
-@router.post("/scanner-engine/analyze")
+@router.post("/scanner-engine/analyze", dependencies=[Depends(_admin_scanner_action_removed_dependency)])
 def scanner_engine_analyze(payload: ScannerEngineRunRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _raise_admin_scanner_action_moved_to_user("scanner_engine_analyze")
     return scanner_engine_run(payload=payload, current_admin=current_admin, db=db)
@@ -1721,7 +1725,7 @@ def scanner_engine_last_run(current_admin: User = Depends(require_admin)):
     }
 
 
-@router.post("/scanner-engine/bot/start")
+@router.post("/scanner-engine/bot/start", dependencies=[Depends(_admin_scanner_action_removed_dependency)])
 def scanner_engine_bot_start(payload: ScannerEngineStartBotRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _raise_admin_scanner_action_moved_to_user("scanner_engine_bot_start")
     manager = _super_admin_required(current_admin)
@@ -1786,7 +1790,7 @@ def scanner_engine_bot_jobs(limit: int = Query(default=30, ge=1, le=200), curren
     return {"count": len(jobs), "items": jobs}
 
 
-@router.post("/scanner/start")
+@router.post("/scanner/start", dependencies=[Depends(_admin_scanner_action_removed_dependency)])
 def scanner_start(payload: RuntimeActionRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _raise_admin_scanner_action_moved_to_user("scanner_start")
     manager = _manager_required(current_admin)
@@ -1823,7 +1827,7 @@ def scanner_start(payload: RuntimeActionRequest, current_admin: User = Depends(r
     )
 
 
-@router.post("/scanner/stop")
+@router.post("/scanner/stop", dependencies=[Depends(_admin_scanner_action_removed_dependency)])
 def scanner_stop(payload: RuntimeActionRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _raise_admin_scanner_action_moved_to_user("scanner_stop")
     manager = _manager_required(current_admin)
@@ -1860,7 +1864,7 @@ def scanner_stop(payload: RuntimeActionRequest, current_admin: User = Depends(re
     )
 
 
-@router.post("/scanner/trigger")
+@router.post("/scanner/trigger", dependencies=[Depends(_admin_scanner_action_removed_dependency)])
 def scanner_trigger(payload: ScannerTriggerRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _raise_admin_scanner_action_moved_to_user("scanner_trigger")
     manager = _manager_required(current_admin)
@@ -2478,7 +2482,7 @@ def freshness_stale_list(
     }
 
 
-@router.post("/scanner/rescan-stale")
+@router.post("/scanner/rescan-stale", dependencies=[Depends(_admin_scanner_action_removed_dependency)])
 def scanner_rescan_stale(payload: RescanStaleRequest, current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     _raise_admin_scanner_action_moved_to_user("scanner_rescan_stale")
     manager = _manager_required(current_admin)
