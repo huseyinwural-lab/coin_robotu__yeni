@@ -105,6 +105,12 @@ export const UserLoginPage = () => {
         const nextPath = adminRoles.has(normalizedRole) ? "/admin/dashboard" : "/user/dashboard";
         toast.success(`Giriş başarılı${rememberMe ? "" : " (oturum cihazda saklanmayacak)"}`);
         navigate(nextPath, { replace: true });
+        window.setTimeout(() => {
+          const currentPath = String(window.location.pathname || "").toLowerCase();
+          if (currentPath.includes("/user/login") || currentPath.includes("/admin/login")) {
+            window.location.assign(nextPath);
+          }
+        }, 180);
       }
     } catch (error) {
       const message = getErrorMessage(error, "İşlem başarısız");
@@ -135,6 +141,12 @@ export const UserLoginPage = () => {
       });
       toast.success("MFA doğrulandı");
       navigate("/user/dashboard");
+      window.setTimeout(() => {
+        const currentPath = String(window.location.pathname || "").toLowerCase();
+        if (currentPath.includes("/user/login") || currentPath.includes("/admin/login")) {
+          window.location.assign("/user/dashboard");
+        }
+      }, 180);
     } catch (error) {
       toast.error(getErrorMessage(error, "MFA doğrulaması başarısız"));
     } finally {
