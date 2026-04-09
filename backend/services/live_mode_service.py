@@ -867,16 +867,111 @@ def exchange_settings_view(settings_row: UserExchangeSetting) -> dict:
     }
 
 
+def _connection_trade_ready(connection: UserExchangeConnection | None) -> bool:
+    if connection is None:
+        return False
+
+    snapshot = dict(getattr(connection, "readiness_snapshot", {}) or {})
+    health = str(snapshot.get("connection_health") or getattr(connection, "connection_health", "unknown") or "unknown").strip().lower()
+    validation_success = snapshot.get("validation_success")
+    if validation_success is None:
+        validation_success = bool(getattr(connection, "last_validation_success", False))
+
+    can_trade_effective = snapshot.get("can_trade_effective")
+    if can_trade_effective is None:
+        can_trade_effective = snapshot.get("can_trade")
+    if can_trade_effective is None:
+        can_trade_effective = getattr(connection, "can_trade_effective", False)
+
+    if not bool(validation_success):
+        return False
+    if not bool(can_trade_effective):
+        return False
+    return health in {"online", "degraded", "unknown"}
+
+
+def _select_permission_connection(rows: list[UserExchangeConnection], market_type: str) -> UserExchangeConnection | None:
+    normalized_market = str(market_type or "spot").strip().lower()
+    scoped = [row for row in rows if str(getattr(row, "market_type", "") or "").strip().lower() == normalized_market]
+    if not scoped:
+        return None
+
+    return (
+        next((row for row in scoped if _connection_trade_ready(row)), None)
+        or next((row for row in scoped if bool(getattr(row, "is_default", False))), None)
+        or next((row for row in scoped if bool(getattr(row, "last_validation_success", False))), None)
+        or scoped[0]
+    )
+
+
 def permission_status_for_user(db: Session, user_id: str) -> dict:
-    settings_row = get_or_create_exchange_settings(db, user_id)
-    api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else None
-    api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else None
-    check = adapter.permission_check(api_key, api_secret, environment=str(settings_row.mode or "live"))
-    status = "ready" if check["status"] == "ready" else "blocked"
+    connections = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.user_id == user_id)
+        .order_by(UserExchangeConnection.updated_at.desc())
+        .all()
+    )
+
+    if not connections:
+        settings_row = get_or_create_exchange_settings(db, user_id)
+        api_key = decrypt_secret(settings_row.api_key_encrypted) if settings_row.api_key_encrypted else None
+        api_secret = decrypt_secret(settings_row.api_secret_encrypted) if settings_row.api_secret_encrypted else None
+        check = adapter.permission_check(api_key, api_secret, environment=str(settings_row.mode or "live"))
+        status = "ready" if check["status"] == "ready" else "blocked"
+        return {
+            "overall_status": "pass" if status == "ready" else "fail",
+            "live_activation": status,
+            "controls": check.get("controls", []),
+        }
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    spot_connection = _select_permission_connection(connections, "spot")
+    futures_connection = _select_permission_connection(connections, "futures")
+
+    controls: list[dict] = []
+
+    if spot_connection and _connection_trade_ready(spot_connection):
+        controls.append({"key": "can_trade", "status": "pass", "reason": "spot_trade_ready", "timestamp": now_iso})
+    elif spot_connection:
+        snapshot = dict(getattr(spot_connection, "readiness_snapshot", {}) or {})
+        reason_codes = snapshot.get("reason_codes") or getattr(spot_connection, "last_reason_codes", []) or []
+        reason = str(reason_codes[0] if reason_codes else "spot_not_trade_ready")
+        controls.append({"key": "can_trade", "status": "fail", "reason": reason, "timestamp": now_iso})
+    else:
+        controls.append({"key": "can_trade", "status": "fail", "reason": "spot_connection_missing", "timestamp": now_iso})
+
+    if futures_connection and _connection_trade_ready(futures_connection):
+        controls.append({"key": "can_futures", "status": "pass", "reason": "futures_trade_ready", "timestamp": now_iso})
+    elif futures_connection:
+        snapshot = dict(getattr(futures_connection, "readiness_snapshot", {}) or {})
+        reason_codes = snapshot.get("reason_codes") or getattr(futures_connection, "last_reason_codes", []) or []
+        reason = str(reason_codes[0] if reason_codes else "futures_not_trade_ready")
+        controls.append({"key": "can_futures", "status": "fail", "reason": reason, "timestamp": now_iso})
+    else:
+        controls.append({"key": "can_futures", "status": "fail", "reason": "futures_connection_missing", "timestamp": now_iso})
+
+    clock_drift = _clock_drift_seconds()
+    if clock_drift is None:
+        controls.append({"key": "timestamp_sync", "status": "warning", "reason": "clock_drift_unknown", "timestamp": now_iso})
+    elif clock_drift > 2:
+        controls.append({"key": "timestamp_sync", "status": "fail", "reason": f"clock_drift_{round(clock_drift, 2)}s", "timestamp": now_iso})
+    else:
+        controls.append({"key": "timestamp_sync", "status": "pass", "reason": f"clock_drift_{round(clock_drift, 2)}s", "timestamp": now_iso})
+
+    rate_limit_status = _rate_limit_health(db)
+    if rate_limit_status == "critical":
+        controls.append({"key": "rate_limit_ok", "status": "fail", "reason": "rate_limit_critical", "timestamp": now_iso})
+    elif rate_limit_status == "warning":
+        controls.append({"key": "rate_limit_ok", "status": "warning", "reason": "rate_limit_warning", "timestamp": now_iso})
+    else:
+        controls.append({"key": "rate_limit_ok", "status": "pass", "reason": f"rate_limit_{rate_limit_status}", "timestamp": now_iso})
+
+    has_fail = any(item.get("status") == "fail" for item in controls)
+    live_activation = "blocked" if has_fail else "ready"
     return {
-        "overall_status": "pass" if status == "ready" else "fail",
-        "live_activation": status,
-        "controls": check.get("controls", []),
+        "overall_status": "fail" if has_fail else "pass",
+        "live_activation": live_activation,
+        "controls": controls,
     }
 
 
@@ -953,26 +1048,55 @@ def normalize_failure_code(payload: dict | None, status_code: int | None = None,
 
 def _is_trade_capable(permissions: list[str]) -> bool:
     normalized = {item.upper() for item in permissions}
-    return bool({"SPOT", "FUTURES", "MARGIN", "TRADE"} & normalized)
+    if bool({"SPOT", "FUTURES", "MARGIN", "TRADE", "LEVERAGED"} & normalized):
+        return True
+    if any(item.startswith("TRD_GRP_") for item in normalized):
+        return True
+    return False
 
 
 def _record_permission_snapshot_and_drift(
     db: Session,
     *,
     settings_row: UserExchangeSetting,
+    connection_row: UserExchangeConnection | None,
+    market_type: str,
+    environment: str,
     can_trade: bool,
     permissions: list[str],
     validation_success: bool,
     reason_codes: list[str],
 ) -> None:
-    old_permissions = settings_row.permissions_snapshot or []
-    old_can_trade = settings_row.can_trade_snapshot
+    old_permissions: list[str] = []
+    old_can_trade = None
+    old_context_market = ""
+    old_context_environment = ""
+
+    if connection_row is not None:
+        connection_snapshot = dict(getattr(connection_row, "readiness_snapshot", {}) or {})
+        old_permissions = list(connection_snapshot.get("permissions_baseline") or connection_snapshot.get("permissions") or getattr(connection_row, "permission_snapshot", []) or [])
+        old_can_trade = connection_snapshot.get("can_trade_baseline")
+        if old_can_trade is None:
+            old_can_trade = connection_snapshot.get("can_trade_effective")
+        old_context_market = str(connection_snapshot.get("drift_context_market_type") or "").strip().lower()
+        old_context_environment = str(connection_snapshot.get("drift_context_environment") or "").strip().lower()
+    else:
+        old_permissions = settings_row.permissions_snapshot or []
+        old_can_trade = settings_row.can_trade_snapshot
+
     new_permissions = sorted({item.upper() for item in permissions})
     critical = bool(old_can_trade is True and not can_trade)
     changed = sorted(old_permissions) != new_permissions or old_can_trade != can_trade
+    normalized_market = str(market_type or "spot").strip().lower()
+    normalized_environment = str(environment or "live").strip().lower()
+
+    has_baseline = bool(old_permissions) or old_can_trade is not None
+    context_matches = bool(old_context_market and old_context_environment and old_context_market == normalized_market and old_context_environment == normalized_environment)
+    context_known = bool(old_context_market or old_context_environment)
+    emit_drift = changed and has_baseline and (context_matches if context_known else False)
 
     drift_event = None
-    if changed and (old_permissions or old_can_trade is not None):
+    if emit_drift:
         drift_event = PermissionDriftEvent(
             id=str(uuid.uuid4()),
             user_id=settings_row.user_id,
@@ -984,6 +1108,24 @@ def _record_permission_snapshot_and_drift(
             is_critical=critical,
         )
         db.add(drift_event)
+
+    if connection_row is not None:
+        connection_snapshot = dict(getattr(connection_row, "readiness_snapshot", {}) or {})
+        connection_snapshot["permissions_baseline"] = new_permissions
+        connection_snapshot["can_trade_baseline"] = bool(can_trade)
+        connection_snapshot["drift_context_market_type"] = normalized_market
+        connection_snapshot["drift_context_environment"] = normalized_environment
+        connection_snapshot["permissions"] = new_permissions
+        connection_snapshot["can_trade_effective"] = bool(can_trade)
+        connection_snapshot["validation_success"] = bool(validation_success)
+        connection_snapshot["reason_codes"] = reason_codes
+        connection_snapshot["updated_at"] = datetime.now(timezone.utc).isoformat()
+        connection_row.readiness_snapshot = connection_snapshot
+        connection_row.permission_snapshot = new_permissions
+        connection_row.can_trade_effective = bool(can_trade)
+        connection_row.last_reason_codes = reason_codes
+        connection_row.last_validation_success = bool(validation_success)
+        connection_row.updated_at = datetime.now(timezone.utc)
 
     settings_row.permissions_snapshot = new_permissions
     settings_row.can_trade_snapshot = can_trade
@@ -1138,6 +1280,7 @@ def validate_exchange_credentials_for_user(
                 "validation_success": validation_success,
                 "is_valid": is_valid,
                 "can_trade": can_trade,
+                "can_trade_effective": bool(validation_success and can_trade),
                 "status_code": status_code,
                 "last_error_reason": reason_codes[0] if reason_codes else "",
                 "validated_at": datetime.now(timezone.utc).isoformat(),
@@ -1192,6 +1335,10 @@ def validate_exchange_credentials_for_user(
         requested_connection.readiness_snapshot = snapshot
         if permissions is not None:
             requested_connection.permission_snapshot = permissions
+            snapshot["permissions"] = sorted({str(item).upper() for item in permissions})
+        requested_connection.can_trade_effective = bool(validation_success and can_trade)
+        requested_connection.last_validation_success = bool(validation_success)
+        requested_connection.last_reason_codes = reason_codes
         requested_connection.updated_at = datetime.now(timezone.utc)
 
     def _extract_account_snapshot(raw_payload: dict, market_type: str) -> dict:
@@ -1415,9 +1562,17 @@ def validate_exchange_credentials_for_user(
     else:
         can_trade = bool(payload.get("canTrade", False))
         can_withdraw = bool(payload.get("canWithdraw", False))
+    if "canTrade" not in payload:
+        can_trade = _is_trade_capable(permissions)
     trade_capable = _is_trade_capable(permissions)
     market_tag = "FUTURES" if requested_market_type == "futures" else "SPOT"
-    market_capable = market_tag in {item.upper() for item in permissions}
+    normalized_permissions = {item.upper() for item in permissions}
+    market_capable = (
+        market_tag in normalized_permissions
+        or "TRADE" in normalized_permissions
+        or any(item.startswith("TRD_GRP_") for item in normalized_permissions)
+        or (requested_market_type == "futures" and "LEVERAGED" in normalized_permissions)
+    )
 
     if not can_trade or not trade_capable or not market_capable:
         _sync_requested_connection(
@@ -1434,6 +1589,9 @@ def validate_exchange_credentials_for_user(
         _record_permission_snapshot_and_drift(
             db,
             settings_row=settings_row,
+            connection_row=requested_connection,
+            market_type=requested_market_type,
+            environment=requested_environment,
             can_trade=False,
             permissions=permissions,
             validation_success=False,
@@ -1459,6 +1617,9 @@ def validate_exchange_credentials_for_user(
     _record_permission_snapshot_and_drift(
         db,
         settings_row=settings_row,
+        connection_row=requested_connection,
+        market_type=requested_market_type,
+        environment=requested_environment,
         can_trade=True,
         permissions=permissions,
         validation_success=True,
@@ -3110,6 +3271,39 @@ def enforce_release_gate(db: Session, environment: str = "prod") -> dict:
 
 
 def _pick_latest_exchange_user(db: Session) -> User | None:
+    connection_rows = (
+        db.query(UserExchangeConnection)
+        .filter(UserExchangeConnection.api_key_encrypted != "", UserExchangeConnection.api_secret_encrypted != "")
+        .order_by(UserExchangeConnection.updated_at.desc())
+        .limit(50)
+        .all()
+    )
+
+    scored_rows: list[tuple[int, datetime, UserExchangeConnection]] = []
+    for connection_row in connection_rows:
+        readiness_snapshot = dict(getattr(connection_row, "readiness_snapshot", {}) or {})
+        can_trade_effective = readiness_snapshot.get("can_trade_effective")
+        if can_trade_effective is None:
+            can_trade_effective = readiness_snapshot.get("can_trade")
+        validation_success = readiness_snapshot.get("validation_success")
+        if validation_success is None:
+            validation_success = readiness_snapshot.get("is_valid")
+
+        score = 0
+        if bool(validation_success):
+            score += 2
+        if bool(can_trade_effective):
+            score += 1
+        scored_rows.append((score, getattr(connection_row, "updated_at", datetime.now(timezone.utc)), connection_row))
+
+    scored_rows.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    for score, _, connection_row in scored_rows:
+        if score >= 2:
+            return db.query(User).filter(User.id == connection_row.user_id).first()
+
+    if connection_rows:
+        return db.query(User).filter(User.id == connection_rows[0].user_id).first()
+
     row = (
         db.query(UserExchangeSetting)
         .filter(UserExchangeSetting.api_key_encrypted != "", UserExchangeSetting.api_secret_encrypted != "")
@@ -3177,7 +3371,11 @@ def _permission_drift_alert_active(db: Session) -> bool:
         .filter(PermissionDriftEvent.created_at >= threshold, PermissionDriftEvent.is_critical.is_(True))
         .count()
     )
-    return critical_count > 0
+    policy = db.query(AlertPolicy).first()
+    critical_threshold = int(getattr(policy, "permission_drift_critical_per_day", 5) or 5)
+    if critical_threshold < 1:
+        critical_threshold = 1
+    return critical_count >= critical_threshold
 
 
 def _clock_drift_seconds() -> float | None:
