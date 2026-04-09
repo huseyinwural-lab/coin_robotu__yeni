@@ -1,3 +1,33 @@
+## 2026-04-09 — Admin yalnızca veri kaynağı modeli (3. dalga)
+
+### Yapılan son temizlik
+- Admin menüden kaldırıldı:
+  - `Live Trading Dashboard`
+  - `Strategy Intelligence`
+- Admin route davranışı:
+  - `/admin/live-trading-dashboard` -> `/admin/dashboard`
+  - `/admin/strategy/intelligence` -> `/admin/dashboard`
+  - `/admin/strategy-intelligence` -> `/admin/dashboard`
+- User tarafına alias:
+  - `/user/strategy/intelligence` -> `/user/signals`
+
+### Admin aksiyon endpointleri kalıcı kapatma (410)
+- `admin_strategy_intelligence.py`:
+  - `decision-requests/*` aksiyonları + `override-approval-requests/*` aksiyonları 410.
+- `admin_live_trading_dashboard.py`:
+  - scanner restart/manual-trigger/symbol-universe + execution-quality retry 410.
+
+### Strateji beyin katmanı korunumu
+- `Canonical Strategy Registry` adminde aktif bırakıldı.
+- Registry satır save butonları açık (strateji ince ayarı adminde yapılır).
+- Adminde alım-satım/sinyal tetikleme aksiyonu yok; user panel bu aksiyonları yürütür.
+
+### Son doğrulama
+- Backend deep test: 21/21 PASS (admin taşınan endpointler 410, user akışları 410 değil)
+- Frontend test:
+  - Admin temizliği PASS (menü/redirect/canonical registry)
+  - Manual smoke PASS (user scanner run + signals approve/reject + trade preview/validate elemanları görünür)
+
 ## 2026-04-09 — Admin Davranışlarının User Tarafına Taşınması (2. Dalga / Kalıntısız)
 
 ### Uygulanan Kapsam
