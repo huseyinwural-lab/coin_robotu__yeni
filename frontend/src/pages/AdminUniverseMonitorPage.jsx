@@ -137,16 +137,21 @@ export const AdminUniverseMonitorPage = () => {
         setStatusContract(null);
       }
 
+      try {
+        const scannerConfigRes = await apiClient.get("/admin/universe-monitor/scanner-engine/config");
+        const configData = scannerConfigRes?.data || {};
+        setScannerEngineConfig((prev) => ({ ...prev, ...configData }));
+        setManualSymbolsInput((prev) => (prev ? prev : (configData?.manual_symbols || []).join(",")));
+      } catch {
+        // karar bileşenleri default değerlerle devam eder
+      }
+
       if (!governanceOnly) {
         try {
-          const [scannerConfigRes, scannerRunRes, scannerJobsRes] = await Promise.all([
-            apiClient.get("/admin/universe-monitor/scanner-engine/config"),
+          const [scannerRunRes, scannerJobsRes] = await Promise.all([
             apiClient.get("/admin/universe-monitor/scanner-engine/last-run"),
             apiClient.get("/admin/universe-monitor/scanner-engine/bot/jobs", { params: { limit: 20 } }),
           ]);
-          const configData = scannerConfigRes?.data || {};
-          setScannerEngineConfig((prev) => ({ ...prev, ...configData }));
-          setManualSymbolsInput((prev) => (prev ? prev : (configData?.manual_symbols || []).join(",")));
           setScannerEngineRun(scannerRunRes?.data || { status: "empty", summary: {}, top_results: [], results: [] });
           setScannerEngineJobs(scannerJobsRes?.data?.items || []);
         } catch {
@@ -378,7 +383,6 @@ export const AdminUniverseMonitorPage = () => {
         </Link>
       </div>
 
-      {!governanceOnly && (
       <article className="rounded-xl border border-cyan-700/40 bg-cyan-950/20 p-4" data-testid="admin-universe-monitor-scanner-engine-panel">
         <div className="flex flex-wrap items-end justify-between gap-3" data-testid="admin-universe-monitor-scanner-engine-header">
           <div data-testid="admin-universe-monitor-scanner-engine-title-wrap">
@@ -394,6 +398,8 @@ export const AdminUniverseMonitorPage = () => {
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="admin-universe-monitor-scanner-engine-config-grid">
+          {!governanceOnly && (
+            <>
           <label className="space-y-1" data-testid="admin-universe-monitor-scanner-engine-exchange-field">
             <span className="text-xs text-cyan-100">Market</span>
             <input
@@ -477,6 +483,8 @@ export const AdminUniverseMonitorPage = () => {
               data-testid="admin-universe-monitor-scanner-engine-manual-symbols-input"
             />
           </label>
+            </>
+          )}
 
           <div className="md:col-span-2 xl:col-span-4 grid gap-3 xl:grid-cols-2" data-testid="admin-universe-monitor-scanner-engine-decision-boxes-grid">
             <article className="rounded border border-cyan-700/30 bg-black/30 p-3 space-y-2" data-testid="admin-universe-monitor-decision-bc01-card">
@@ -558,6 +566,7 @@ export const AdminUniverseMonitorPage = () => {
             </article>
           </div>
 
+          {!governanceOnly && (
           <div className="md:col-span-2 xl:col-span-4 flex flex-wrap items-center gap-2" data-testid="admin-universe-monitor-scanner-engine-actions">
             <Button
               type="button"
@@ -587,8 +596,10 @@ export const AdminUniverseMonitorPage = () => {
               START BOT
             </Button>
           </div>
+          )}
         </div>
 
+        {!governanceOnly && (
         <div className="mt-4 grid gap-2 md:grid-cols-4" data-testid="admin-universe-monitor-scanner-engine-run-stats">
           <article className="rounded border border-cyan-700/30 bg-black/30 p-2" data-testid="admin-universe-monitor-scanner-engine-candidate-count-card">
             <p className="text-[11px] text-cyan-200">Candidate</p>
@@ -607,7 +618,9 @@ export const AdminUniverseMonitorPage = () => {
             <p className="text-base font-semibold" data-testid="admin-universe-monitor-scanner-engine-short-count-value">{scannerEngineRun?.summary?.short_signal_count ?? 0}</p>
           </article>
         </div>
+        )}
 
+        {!governanceOnly && (
         <div className="mt-4 overflow-auto rounded border border-cyan-700/30" data-testid="admin-universe-monitor-scanner-engine-results-wrapper">
           <table className="min-w-full text-left text-xs" data-testid="admin-universe-monitor-scanner-engine-results-table">
             <thead className="bg-black/40 text-cyan-100" data-testid="admin-universe-monitor-scanner-engine-results-head">
@@ -643,7 +656,9 @@ export const AdminUniverseMonitorPage = () => {
             </tbody>
           </table>
         </div>
+        )}
 
+        {!governanceOnly && (
         <div className="mt-3 space-y-2" data-testid="admin-universe-monitor-scanner-engine-jobs-panel">
           <p className="text-xs uppercase tracking-widest text-cyan-200" data-testid="admin-universe-monitor-scanner-engine-jobs-title">Scanner Jobs</p>
           {(scannerEngineJobs || []).slice(0, 8).map((job, index) => (
@@ -656,9 +671,10 @@ export const AdminUniverseMonitorPage = () => {
           ))}
           {(scannerEngineJobs || []).length === 0 && <p className="text-xs text-cyan-200" data-testid="admin-universe-monitor-scanner-engine-jobs-empty">Henüz scanner-job kaydı yok.</p>}
         </div>
+        )}
       </article>
-      )}
 
+      {!governanceOnly && (
       <Dialog open={startBotModalOpen} onOpenChange={setStartBotModalOpen}>
         <DialogContent className="max-w-2xl" data-testid="admin-universe-monitor-start-bot-modal">
           <DialogHeader data-testid="admin-universe-monitor-start-bot-modal-header">
@@ -740,6 +756,7 @@ export const AdminUniverseMonitorPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
 
       {statusContract && (
         <section className="rounded border border-emerald-700/40 bg-emerald-950/20 p-3" data-testid="admin-universe-monitor-status-contract-panel">
