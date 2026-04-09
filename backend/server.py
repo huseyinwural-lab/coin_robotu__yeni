@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+import time
+from threading import Lock
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -160,6 +162,9 @@ commercial_export_scheduler_task: asyncio.Task | None = None
 preview_smoke_gate_task: asyncio.Task | None = None
 venue_sanity_scheduler_task: asyncio.Task | None = None
 readiness_maintenance_scheduler_task: asyncio.Task | None = None
+
+_DB_ENGINE_RESET_LOCK = Lock()
+_LAST_DB_ENGINE_RESET_AT = 0.0
 execution_microstructure_runtime: ExecutionMicrostructureRuntime | None = None
 incident_intelligence_task: asyncio.Task | None = None
 PROCESS_STARTED_AT = datetime.now(timezone.utc)
@@ -269,14 +274,49 @@ def _db_pool_timeout_response(request: Request, *, error_text: str | None = None
     return JSONResponse(status_code=503, content=payload, headers={"X-Request-ID": trace_id})
 
 
+def _maybe_recover_db_engine_from_operational_error(error_text: str | None = None) -> None:
+    global _LAST_DB_ENGINE_RESET_AT
+    normalized = str(error_text or "").lower()
+    recoverable_hints = (
+        "ssl connection has been closed unexpectedly",
+        "server closed the connection unexpectedly",
+        "connection not open",
+        "connection reset by peer",
+        "could not receive data from server",
+    )
+    if not any(hint in normalized for hint in recoverable_hints):
+        return
+
+    now_monotonic = time.monotonic()
+    if now_monotonic - _LAST_DB_ENGINE_RESET_AT < 8:
+        return
+
+    with _DB_ENGINE_RESET_LOCK:
+        now_monotonic = time.monotonic()
+        if now_monotonic - _LAST_DB_ENGINE_RESET_AT < 8:
+            return
+        _LAST_DB_ENGINE_RESET_AT = now_monotonic
+        try:
+            init_db_engine(force=True)
+            verify_database_connection()
+            logger.warning("db_engine_recovered_after_operational_error")
+        except Exception as recovery_exc:  # noqa: BLE001
+            logger.error(
+                "db_engine_recovery_failed",
+                extra={"reason": str(recovery_exc)[:220]},
+            )
+
+
 @fastapi_app.exception_handler(SQLAlchemyTimeoutError)
 async def sqlalchemy_pool_timeout_exception_handler(request: Request, exc: SQLAlchemyTimeoutError):
+    _maybe_recover_db_engine_from_operational_error(str(exc))
     return _db_pool_timeout_response(request, error_text=str(exc))
 
 
 @fastapi_app.exception_handler(OperationalError)
 async def sqlalchemy_operational_exception_handler(request: Request, exc: OperationalError):
     if _is_db_pool_timeout_error(exc):
+        _maybe_recover_db_engine_from_operational_error(str(exc))
         return _db_pool_timeout_response(request, error_text=str(exc))
 
     trace_id = _resolve_trace_id(request)
