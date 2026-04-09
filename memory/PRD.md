@@ -1,3 +1,34 @@
+## 2026-04-09 — Bot Profiles Strategy Allocation (Checkbox + Weight + Priority)
+
+### Yeni gereksinim
+- `user/bot-profiles` ekranında 12 strateji tablo halinde sunulacak.
+- Kolonlar: `strategy_id`, `family`, `weight`, `priority` (+ seçim için checkbox).
+- Bot sadece checkbox ile seçilen stratejilerle oluşturulacak.
+- `weight` toplamı **1.0'ı geçmeyecek**.
+- `priority` aralığı **1–100**.
+
+### Uygulanan değişiklikler
+- Frontend (`BotProfilesPage.jsx`):
+  - 12 satırlı strateji allocation tablosu eklendi (çekirdek 12 strateji, canonical veriyle merge).
+  - Her satıra checkbox eklendi; seçili değilse weight/priority inputları disabled.
+  - Checkbox kapatılınca weight otomatik 0'a çekiliyor.
+  - Canlı toplam göstergesi eklendi (`Toplam Weight`) ve overflow durumunda submit disable.
+  - `Primary Strategy` seçilen satırlardan otomatik türetiliyor (priority asc, weight desc).
+  - Bot create/update payload'ına `strategy_allocations` eklendi.
+- Backend (`schemas.py`, `routers/bot_profiles.py`, `services/bot_runtime_service.py`):
+  - `strategy_allocations` şemaları eklendi.
+  - Doğrulamalar eklendi:
+    - en az 1 strateji seçimi zorunlu,
+    - weight 0..1 aralığı,
+    - toplam weight <= 1.0,
+    - priority 1..100,
+    - duplicate strategy_id engeli.
+  - Bot snapshot ve runtime list response'larına `strategy_allocations` + `strategy_weight_total` eklendi.
+
+### Test
+- Backend test (subagent): PASS (create, list, weight-limit 422, priority range 422, cleanup).
+- Frontend test (subagent): PASS (9/9) — 12 satır, checkbox davranışı, disabled/enable input, 1.1 overflow disable submit, 1.0 valid, uncheck->weight=0.
+
 ## 2026-04-09 — User Scanner Auto Interval (1/3/5 dk) Kontrolü
 
 ### Talep
