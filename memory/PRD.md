@@ -1,3 +1,54 @@
+## 2026-04-09 — Admin Davranışlarının User Tarafına Taşınması (2. Dalga / Kalıntısız)
+
+### Uygulanan Kapsam
+- **Admin artık alım-satım / signal / scanner aksiyonu tetiklemiyor.**
+- Kalan admin davranışları temizlendi ve **410 PURE_LIVE_410** ile kalıcı kapatıldı.
+
+### Frontend Temizliği
+- `PanelLayout.jsx`
+  - Kaldırıldı:
+    - `nav-admin-live-trading-dashboard-link`
+    - `nav-admin-strategy-intelligence-link`
+- `App.js`
+  - Redirect yapıldı:
+    - `/admin/live-trading-dashboard` -> `/admin/dashboard`
+    - `/admin/strategy/intelligence` -> `/admin/dashboard`
+    - `/admin/strategy-intelligence` -> `/admin/dashboard`
+  - User tarafına alias eklendi:
+    - `/user/strategy/intelligence` -> `/user/signals`
+- `AdminDashboardPage.jsx`
+  - live-control hub yönlendirmesi governance odaklı hale getirildi (`/admin/universe-monitor`).
+- `AdminLiveGatePage.jsx`, `PipelineOperationsPage.jsx`
+  - live trading dashboard linkleri `admin/universe-monitor` (data source monitor) olarak güncellendi.
+
+### Backend Kalıcı Kapatma (410)
+- `admin_strategy_intelligence.py`
+  - 410 dependency eklendi:
+    - `/decision-requests/*` aksiyonları (assign-owner, ack, bulk-action, approve, reject, execute, revert, revoke, conflict-resolve, hedge-apply, rebalance-change)
+    - `/override-approval-requests/{id}/approve|reject`
+- `admin_live_trading_dashboard.py`
+  - 410 dependency eklendi:
+    - `/control-layer/scanner/restart`
+    - `/control-layer/scanner/manual-trigger`
+    - `/control-layer/scanner/symbol-universe`
+    - `/control-layer/execution-quality/retry`
+
+### User Tarafı Durumu (Tekrarsız Aksiyon Akışı)
+- Scanner aksiyonu user’da aktif:
+  - `/user/scanner` + `/api/user/scanner-engine/run-async`
+- Signal aksiyonu user’da aktif:
+  - `/user/signals` + user approve/reject akışı
+- Trade aksiyonu user’da aktif:
+  - `/user/execute` + `/api/user/execution/intent/preview|submit`
+
+### Test Sonuçları
+- Backend doğrulama (deep backend test):
+  - Admin taşınan endpointler: **410 + PURE_LIVE_410 PASS**
+  - User endpointler: **410 değil, çalışır durumda PASS**
+- Frontend doğrulama (testing agent):
+  - Admin menü/route/redirect/BC-card read-only doğrulamaları PASS
+  - User auth-cookie otomasyon limiti notu mevcut; manuel smoke ile user signals/scanner/execute akışları doğrulandı.
+
 ## 2026-04-09 — Admin İşlem Aksiyonlarının User Tarafına Taşınması (Kalıntısız)
 
 ### Karar ve Kapsam (Onaylı)
