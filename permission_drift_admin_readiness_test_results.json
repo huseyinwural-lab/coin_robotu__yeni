@@ -1,0 +1,238 @@
+{
+  "overall_result": "PASS",
+  "test_results": [
+    {
+      "test": "Admin Login",
+      "status": "PASS",
+      "details": "Successfully authenticated. Token length: 601 chars",
+      "evidence": {
+        "status_code": 200,
+        "token_present": true
+      },
+      "timestamp": "2026-04-09T22:45:50.958367"
+    },
+    {
+      "test": "Admin Permission Status",
+      "status": "PASS",
+      "details": "All required controls fields present: ['can_trade', 'can_futures', 'timestamp_sync', 'rate_limit_ok']",
+      "evidence": {
+        "status_code": 200,
+        "controls": {
+          "can_trade": {
+            "key": "can_trade",
+            "status": "fail",
+            "reason": "invalid_key",
+            "timestamp": "2026-04-09T22:45:51.997470+00:00"
+          },
+          "can_futures": {
+            "key": "can_futures",
+            "status": "fail",
+            "reason": "invalid_key",
+            "timestamp": "2026-04-09T22:45:51.997470+00:00"
+          },
+          "timestamp_sync": {
+            "key": "timestamp_sync",
+            "status": "pass",
+            "reason": "clock_drift_0.18s",
+            "timestamp": "2026-04-09T22:45:51.997470+00:00"
+          },
+          "rate_limit_ok": {
+            "key": "rate_limit_ok",
+            "status": "pass",
+            "reason": "rate_limit_ok",
+            "timestamp": "2026-04-09T22:45:51.997470+00:00"
+          }
+        },
+        "required_fields_present": [
+          "can_trade",
+          "can_futures",
+          "timestamp_sync",
+          "rate_limit_ok"
+        ]
+      },
+      "timestamp": "2026-04-09T22:45:52.895246"
+    },
+    {
+      "test": "Admin Live Readiness Score",
+      "status": "PASS",
+      "details": "Successfully retrieved readiness score",
+      "evidence": {
+        "status_code": 200,
+        "response_keys": [
+          "readiness_score",
+          "permission_ready",
+          "risk_engine_pass",
+          "execution_simulation_pass",
+          "correlation_model_pass",
+          "hardening_checklist_pass",
+          "release_gate_status",
+          "live_activation",
+          "critical_blockers"
+        ],
+        "response_sample": "{'readiness_score': 60.0, 'permission_ready': False, 'risk_engine_pass': True, 'execution_simulation_pass': True, 'correlation_model_pass': True, 'hardening_checklist_pass': False, 'release_gate_statu..."
+      },
+      "timestamp": "2026-04-09T22:46:00.690033"
+    },
+    {
+      "test": "Admin Release Gate",
+      "status": "PASS",
+      "details": "Successfully retrieved release gate for prod environment",
+      "evidence": {
+        "status_code": 200,
+        "response_keys": [
+          "status",
+          "reasons",
+          "fail_reasons",
+          "warning_reasons",
+          "reason_codes",
+          "blocking_metrics",
+          "live_activation",
+          "environment",
+          "reason_code",
+          "deploy_enable_flag",
+          "override_active",
+          "override_expires_at",
+          "override_id"
+        ],
+        "response_sample": "{'status': 'PASS', 'reasons': ['permission_check_bypassed', 'kill_switch_not_tested'], 'fail_reasons': [], 'warning_reasons': ['permission_check_bypassed', 'kill_switch_not_tested'], 'reason_codes': [..."
+      },
+      "timestamp": "2026-04-09T22:46:06.777194"
+    },
+    {
+      "test": "User Login",
+      "status": "PASS",
+      "details": "Successfully authenticated. Token length: 591 chars",
+      "evidence": {
+        "status_code": 200,
+        "token_present": true
+      },
+      "timestamp": "2026-04-09T22:46:11.647922"
+    },
+    {
+      "test": "User Scanner Status Contract",
+      "status": "PASS",
+      "details": "Required fields present: market_contracts=dict, overall_health=BLOCKED",
+      "evidence": {
+        "status_code": 200,
+        "market_contracts_type": "dict",
+        "overall_health": "BLOCKED",
+        "response_keys": [
+          "market_type",
+          "scanner_ready",
+          "strategy_ready",
+          "risk_ready",
+          "execution_ready",
+          "symbols_ready",
+          "exchange_ready",
+          "bot_status",
+          "health",
+          "blocking_reasons",
+          "latest_scanner_run_at",
+          "active_bot_id",
+          "wallet_last_check_at",
+          "wallet_available_balance",
+          "wallet_balance",
+          "selected_exchange_connection_id",
+          "overall_health",
+          "preferred_market",
+          "market_contracts",
+          "active_bot_ids"
+        ]
+      },
+      "timestamp": "2026-04-09T22:46:17.537968"
+    },
+    {
+      "test": "User Scanner Status Contract (Spot)",
+      "status": "PASS",
+      "details": "Successfully retrieved spot market status",
+      "evidence": {
+        "status_code": 200,
+        "response_keys": [
+          "market_type",
+          "scanner_ready",
+          "strategy_ready",
+          "risk_ready",
+          "execution_ready",
+          "symbols_ready",
+          "exchange_ready",
+          "bot_status",
+          "health",
+          "blocking_reasons",
+          "latest_scanner_run_at",
+          "active_bot_id",
+          "wallet_last_check_at",
+          "wallet_available_balance",
+          "wallet_balance",
+          "selected_exchange_connection_id",
+          "overall_health",
+          "preferred_market",
+          "market_contracts",
+          "active_bot_ids"
+        ],
+        "response_sample": "{'market_type': 'spot', 'scanner_ready': True, 'strategy_ready': True, 'risk_ready': True, 'execution_ready': True, 'symbols_ready': True, 'exchange_ready': False, 'bot_status': 'IDLE', 'health': 'HEA..."
+      },
+      "timestamp": "2026-04-09T22:46:23.154179"
+    },
+    {
+      "test": "User Scanner Status Contract (Futures)",
+      "status": "PASS",
+      "details": "Successfully retrieved futures market status",
+      "evidence": {
+        "status_code": 200,
+        "response_keys": [
+          "market_type",
+          "scanner_ready",
+          "strategy_ready",
+          "risk_ready",
+          "execution_ready",
+          "symbols_ready",
+          "exchange_ready",
+          "bot_status",
+          "health",
+          "blocking_reasons",
+          "latest_scanner_run_at",
+          "active_bot_id",
+          "wallet_last_check_at",
+          "wallet_available_balance",
+          "wallet_balance",
+          "selected_exchange_connection_id",
+          "overall_health",
+          "preferred_market",
+          "market_contracts",
+          "active_bot_ids"
+        ],
+        "response_sample": "{'market_type': 'futures', 'scanner_ready': False, 'strategy_ready': True, 'risk_ready': True, 'execution_ready': True, 'symbols_ready': True, 'exchange_ready': False, 'bot_status': 'IDLE', 'health': ..."
+      },
+      "timestamp": "2026-04-09T22:46:28.775843"
+    },
+    {
+      "test": "Permission Drift Control",
+      "status": "PARTIAL",
+      "details": "Revalidates successful (2/2) but drift metrics not available for comparison",
+      "evidence": {
+        "connection_id": "d00edeed-6c1b-48ef-85d1-6dd2a4e3daff",
+        "revalidate_results": [
+          {
+            "attempt": 1,
+            "status_code": 200,
+            "success": true
+          },
+          {
+            "attempt": 2,
+            "status_code": 200,
+            "success": true
+          }
+        ],
+        "drift_metrics_available": false
+      },
+      "timestamp": "2026-04-09T22:47:02.632267"
+    }
+  ],
+  "summary": {
+    "total_tests": 9,
+    "passed": 8,
+    "failed": 0,
+    "partial": 1
+  },
+  "timestamp": "2026-04-09T22:47:02.632913"
+}
