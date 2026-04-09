@@ -184,6 +184,7 @@ const toStrategyAllocationRows = (canonicalOptions = [], existingRows = []) => {
           family: String(row.family || row.strategy_family || "general"),
           weight: Number(row.weight || 0),
           priority: Number(row.priority || 50),
+          selected: Boolean(row.selected) || Number(row.weight || 0) > 0,
         },
       ]),
   );
@@ -196,12 +197,13 @@ const toStrategyAllocationRows = (canonicalOptions = [], existingRows = []) => {
       family: String(existing?.family || item.strategy_family || "general"),
       weight: Number.isFinite(Number(existing?.weight)) ? Number(existing.weight) : 0,
       priority: Number.isFinite(Number(existing?.priority)) ? Number(existing.priority) : Math.min(STRATEGY_PRIORITY_MAX, index + 1),
+      selected: Boolean(existing?.selected) || Number(existing?.weight || 0) > 0,
     };
   });
 };
 
 const pickPrimaryStrategyId = (rows = [], fallback = "") => {
-  const activeRows = (rows || []).filter((row) => Number(row.weight || 0) > 0);
+  const activeRows = (rows || []).filter((row) => Boolean(row.selected) && Number(row.weight || 0) > 0);
   if (activeRows.length === 0) return String(fallback || "");
   activeRows.sort((a, b) => {
     const byPriority = Number(a.priority || 100) - Number(b.priority || 100);
@@ -392,7 +394,7 @@ export const BotProfilesPage = () => {
   );
 
   const strategyWeightTotal = useMemo(
-    () => strategyAllocationRows.reduce((sum, row) => sum + Number(row.weight || 0), 0),
+    () => strategyAllocationRows.reduce((sum, row) => sum + (Boolean(row.selected) ? Number(row.weight || 0) : 0), 0),
     [strategyAllocationRows],
   );
 
@@ -775,7 +777,7 @@ export const BotProfilesPage = () => {
     setForm((prev) => {
       const rows = toStrategyAllocationRows(canonicalStrategyOptions, prev.strategy_allocations).map((row) => (
         row.strategy_id === strategyId
-          ? { ...row, weight: Number(nextWeight.toFixed(6)) }
+          ? { ...row, weight: Number(nextWeight.toFixed(6)), selected: nextWeight > 0 ? true : row.selected }
           : row
       ));
       return {
@@ -797,6 +799,24 @@ export const BotProfilesPage = () => {
           ? { ...row, priority: normalizedPriority }
           : row
       ));
+      return {
+        ...prev,
+        strategy_allocations: rows,
+        strategy_type: pickPrimaryStrategyId(rows, prev.strategy_type),
+      };
+    });
+  };
+
+  const toggleStrategyAllocationSelection = (strategyId, checked) => {
+    setForm((prev) => {
+      const rows = toStrategyAllocationRows(canonicalStrategyOptions, prev.strategy_allocations).map((row) => {
+        if (row.strategy_id !== strategyId) return row;
+        if (!checked) {
+          return { ...row, selected: false, weight: 0 };
+        }
+        const nextWeight = Number(row.weight || 0) > 0 ? Number(row.weight || 0) : 0.05;
+        return { ...row, selected: true, weight: Number(nextWeight.toFixed(6)) };
+      });
       return {
         ...prev,
         strategy_allocations: rows,
@@ -832,7 +852,7 @@ export const BotProfilesPage = () => {
       nextErrors.strategy_type = "Canonical strateji seçimi zorunlu.";
     }
     const selectedStrategyAllocations = strategyAllocationRows
-      .filter((row) => Number(row.weight || 0) > 0)
+      .filter((row) => Boolean(row.selected))
       .map((row) => ({
         strategy_id: String(row.strategy_id),
         family: String(row.family || "general"),
@@ -840,8 +860,13 @@ export const BotProfilesPage = () => {
         priority: Math.max(STRATEGY_PRIORITY_MIN, Math.min(STRATEGY_PRIORITY_MAX, Number(row.priority || 50))),
       }));
 
+    const hasZeroWeightSelection = selectedStrategyAllocations.some((row) => Number(row.weight || 0) <= 0);
+
     if (selectedStrategyAllocations.length === 0) {
-      nextErrors.strategy_allocations = "En az bir stratejiye weight verin.";
+      nextErrors.strategy_allocations = "En az bir stratejiyi checkbox ile seçin.";
+    }
+    if (hasZeroWeightSelection) {
+      nextErrors.strategy_allocations = "Seçili stratejilerin weight değeri 0'dan büyük olmalı.";
     }
     if (hasStrategyWeightOverflow) {
       nextErrors.strategy_allocations = "Weight toplamı 1.0 değerini geçemez.";
@@ -1192,12 +1217,13 @@ export const BotProfilesPage = () => {
 
         <div className="form-group md:col-span-2" data-testid="bot-form-group-strategy-allocations">
           <label className="form-label" data-testid="bot-form-strategy-allocations-label">Strateji Ağırlık Dağılımı (12)</label>
-          <p className="form-helper-text" data-testid="bot-form-strategy-allocations-helper">Kolonlar: strategy_id, family, weight, priority. Weight toplamı 1.0 değerini geçemez. Priority aralığı 1-100.</p>
+          <p className="form-helper-text" data-testid="bot-form-strategy-allocations-helper">Önce checkbox ile stratejiyi seçin. Sonra weight/priority girin. Weight toplamı 1.0 değerini geçemez. Priority aralığı 1-100.</p>
 
           <div className="overflow-x-auto rounded border border-slate-700/70" data-testid="bot-form-strategy-allocations-table-wrap">
             <Table data-testid="bot-form-strategy-allocations-table">
               <TableHeader>
                 <TableRow>
+                  <TableHead data-testid="bot-form-strategy-col-selected">seç</TableHead>
                   <TableHead data-testid="bot-form-strategy-col-strategy-id">strategy_id</TableHead>
                   <TableHead data-testid="bot-form-strategy-col-family">family</TableHead>
                   <TableHead data-testid="bot-form-strategy-col-weight">weight</TableHead>
@@ -1207,6 +1233,15 @@ export const BotProfilesPage = () => {
               <TableBody>
                 {strategyAllocationRows.map((row) => (
                   <TableRow key={row.strategy_id} data-testid={`bot-form-strategy-row-${row.strategy_id}`}>
+                    <TableCell data-testid={`bot-form-strategy-selected-cell-${row.strategy_id}`}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(row.selected)}
+                        onChange={(event) => toggleStrategyAllocationSelection(row.strategy_id, event.target.checked)}
+                        data-testid={`bot-form-strategy-selected-checkbox-${row.strategy_id}`}
+                        aria-label={`${row.strategy_id} selected`}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-xs" data-testid={`bot-form-strategy-id-${row.strategy_id}`}>{row.strategy_id}</TableCell>
                     <TableCell className="text-xs" data-testid={`bot-form-strategy-family-${row.strategy_id}`}>{row.family}</TableCell>
                     <TableCell>
@@ -1217,6 +1252,7 @@ export const BotProfilesPage = () => {
                         max="1"
                         value={row.weight}
                         onChange={(event) => updateStrategyAllocationWeight(row.strategy_id, event.target.value)}
+                        disabled={!row.selected}
                         data-testid={`bot-form-strategy-weight-input-${row.strategy_id}`}
                         aria-label={`${row.strategy_id} weight`}
                       />
@@ -1229,6 +1265,7 @@ export const BotProfilesPage = () => {
                         max={String(STRATEGY_PRIORITY_MAX)}
                         value={row.priority}
                         onChange={(event) => updateStrategyAllocationPriority(row.strategy_id, event.target.value)}
+                        disabled={!row.selected}
                         data-testid={`bot-form-strategy-priority-input-${row.strategy_id}`}
                         aria-label={`${row.strategy_id} priority`}
                       />
@@ -1243,6 +1280,7 @@ export const BotProfilesPage = () => {
             <p className={`text-sm ${hasStrategyWeightOverflow ? "text-rose-300" : "text-emerald-300"}`} data-testid="bot-form-strategy-weight-total">
               Toplam Weight: {strategyWeightTotal.toFixed(4)} / {STRATEGY_WEIGHT_LIMIT.toFixed(1)}
             </p>
+            <p className="text-sm text-slate-300" data-testid="bot-form-strategy-selected-count">Seçili Strateji: <strong>{strategyAllocationRows.filter((row) => Boolean(row.selected)).length}</strong></p>
             <p className="text-sm text-slate-300" data-testid="bot-form-strategy-primary-id">Primary Strategy: <strong>{primaryStrategyType || "-"}</strong></p>
           </div>
 
