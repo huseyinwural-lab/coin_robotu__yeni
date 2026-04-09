@@ -37,6 +37,46 @@ def _safe_int(value, default: int = 0) -> int:
         return default
 
 
+def _extract_strategy_allocations(snapshot: dict | None) -> tuple[list[dict], float]:
+    snapshot = snapshot or {}
+    rows = list(snapshot.get("strategy_allocations") or [])
+    normalized: list[dict] = []
+    total = 0.0
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        strategy_id = str(row.get("strategy_id") or "").strip()
+        family = str(row.get("family") or "general").strip().lower() or "general"
+        try:
+            weight = float(row.get("weight") or 0)
+        except (TypeError, ValueError):
+            weight = 0.0
+        priority = _safe_int(row.get("priority"), 50)
+        if not strategy_id or weight <= 0:
+            continue
+        if priority < 1:
+            priority = 1
+        if priority > 100:
+            priority = 100
+        normalized_weight = round(weight, 6)
+        total += normalized_weight
+        normalized.append(
+            {
+                "strategy_id": strategy_id,
+                "family": family,
+                "weight": normalized_weight,
+                "priority": priority,
+            }
+        )
+    normalized.sort(key=lambda item: (int(item.get("priority") or 100), -float(item.get("weight") or 0), str(item.get("strategy_id") or "")))
+    total_from_snapshot = snapshot.get("strategy_weight_total")
+    try:
+        total_safe = round(float(total_from_snapshot), 6)
+    except (TypeError, ValueError):
+        total_safe = round(total, 6)
+    return normalized, total_safe
+
+
 def _connection_trade_snapshot(row: UserExchangeConnection | None) -> tuple[str, bool]:
     if row is None:
         return "unknown", False
@@ -57,6 +97,7 @@ def _is_trade_ready_connection(row: UserExchangeConnection | None) -> bool:
 
 def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
     snapshot = getattr(bot, "symbol_resolution_snapshot", {}) or {}
+    strategy_allocations, strategy_weight_total = _extract_strategy_allocations(snapshot)
     strategy_template_ids = [
         str(value).strip()
         for value in list(snapshot.get("strategy_template_ids") or [])
@@ -70,6 +111,8 @@ def _fallback_bot_runtime_summary(bot: BotProfile, reason: str) -> dict:
         "strategy_type": bot.strategy_type,
         "strategy_template_id": getattr(bot, "strategy_template_id", None),
         "strategy_template_ids": strategy_template_ids,
+        "strategy_allocations": strategy_allocations,
+        "strategy_weight_total": strategy_weight_total,
         "risk_adaptive_confirmed": bool(snapshot.get("risk_adaptive_confirmed")),
         "symbols": list(bot.symbols or []),
         "leverage": _safe_int(getattr(bot, "leverage", 1), 1),
@@ -536,6 +579,7 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         for value in list(snapshot.get("strategy_template_ids") or [])
         if str(value).strip()
     ]
+    strategy_allocations, strategy_weight_total = _extract_strategy_allocations(snapshot)
     strategy_binding, risk_binding, execution_binding, binding_validation, compatibility = _build_binding_blocks(db, bot, runtime, symbol_resolution)
     positions = db.query(PaperPosition).filter(PaperPosition.user_id == bot.user_id, PaperPosition.status == "open", PaperPosition.symbol.in_(list(bot.symbols or []))).all()
     resolved_symbols = list(symbol_resolution.get("symbols") or list(bot.symbols or []))
@@ -588,6 +632,8 @@ def build_bot_runtime_summary(db, bot: BotProfile) -> dict:
         "strategy_type": bot.strategy_type,
         "strategy_template_id": getattr(bot, "strategy_template_id", None),
         "strategy_template_ids": strategy_template_ids,
+        "strategy_allocations": strategy_allocations,
+        "strategy_weight_total": strategy_weight_total,
         "risk_adaptive_confirmed": bool(snapshot.get("risk_adaptive_confirmed")),
         "symbols": list(bot.symbols or []),
         "leverage": _safe_int(getattr(bot, "leverage", 1), 1),

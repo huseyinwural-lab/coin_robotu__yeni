@@ -321,6 +321,13 @@ class BotProfileBase(BaseModel):
     is_enabled: bool = True
 
 
+class BotStrategyAllocation(BaseModel):
+    strategy_id: str
+    family: str = "general"
+    weight: float = Field(gt=0, le=1)
+    priority: int = Field(default=50, ge=1, le=100)
+
+
 class BotProfileCreate(BotProfileBase):
     exchange_connection_id: str | None = None
     risk_policy_id: str | None = None
@@ -328,6 +335,7 @@ class BotProfileCreate(BotProfileBase):
     mode: str | None = "live_ready"
     strategy_template_ids: list[str] = Field(default_factory=list)
     risk_adaptive_confirmed: bool = False
+    strategy_allocations: list[BotStrategyAllocation] = Field(default_factory=list)
 
 
 class BotProfileUpdate(BaseModel):
@@ -349,6 +357,7 @@ class BotProfileUpdate(BaseModel):
     is_enabled: bool
     mode: str | None = "live_ready"
     risk_adaptive_confirmed: bool = False
+    strategy_allocations: list[BotStrategyAllocation] = Field(default_factory=list)
 
 
 class BotProfileResponse(BotProfileBase):
@@ -387,6 +396,8 @@ class BotRuntimeStatusResponse(BaseModel):
     strategy_type: str | None = None
     strategy_template_id: str | None = None
     strategy_template_ids: list[str] = Field(default_factory=list)
+    strategy_allocations: list[BotStrategyAllocation] = Field(default_factory=list)
+    strategy_weight_total: float = 0
     risk_adaptive_confirmed: bool = False
     symbols: list[str] = Field(default_factory=list)
     leverage: int | None = None

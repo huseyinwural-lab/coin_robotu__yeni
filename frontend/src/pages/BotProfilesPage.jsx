@@ -28,6 +28,7 @@ const initialForm = {
   template_id: "",
   strategy_template_ids: [],
   risk_adaptive_confirmed: false,
+  strategy_allocations: [],
 };
 
 const EXCHANGE_OPTIONS = [
@@ -52,6 +53,23 @@ const SYMBOL_PRESET_OPTIONS = [
 ];
 
 const LEGACY_TOP_FORM = true;
+const STRATEGY_PRIORITY_MIN = 1;
+const STRATEGY_PRIORITY_MAX = 100;
+const STRATEGY_WEIGHT_LIMIT = 1;
+const CORE_STRATEGY_IDS = [
+  "trend_following",
+  "mean_reversion",
+  "volatility_breakout",
+  "low_vol_scalping",
+  "momentum_ignition",
+  "volume_profile_reclaim",
+  "range_rotation",
+  "funding_rate_carry",
+  "basis_arbitrage",
+  "orderflow_imbalance",
+  "news_sentiment_reaction",
+  "scalping",
+];
 
 const toNum = (value) => {
   const num = Number(value);
@@ -68,6 +86,9 @@ const parseApiErrorMessage = (error, fallback) => {
     if (code === "mock_mode_removed_live_ready_required") return "MOCK/PAPER kaldırıldı. Sadece LIVE-READY kullanılabilir.";
     if (code === "authentication required" || code === "not authenticated") return "Oturum doğrulaması düştü. Lütfen tekrar giriş yapın.";
     if (code === "session_device_mismatch") return "Oturum cihaz doğrulaması uyuşmadı. Lütfen tekrar giriş yapın.";
+    if (code === "strategy_allocation_required") return "En az bir strateji için weight girin.";
+    if (code === "strategy_allocation_weight_limit_exceeded") return "Weight toplamı 1.0 değerini geçemez.";
+    if (code === "strategy_allocation_priority_out_of_range") return "Priority 1 ile 100 arasında olmalıdır.";
     return "";
   };
 
@@ -135,19 +156,61 @@ const getConnectionRanking = (connection) => {
 };
 
 const toCanonicalStrategyOptions = (items = []) => {
-  return (items || [])
-    .filter((item) => Boolean(item?.is_enabled) && Boolean(item?.in_production_path))
-    .sort((a, b) => Number(a?.priority || 999) - Number(b?.priority || 999))
-    .slice(0, 12)
-    .map((item, idx) => ({
+  const enabledRows = (items || [])
+    .filter((item) => Boolean(item?.is_enabled) && Boolean(item?.in_production_path));
+  const byId = new Map(enabledRows.map((item) => [String(item.strategy_id || ""), item]));
+
+  return CORE_STRATEGY_IDS.slice(0, 12).map((strategyId, idx) => {
+    const item = byId.get(strategyId) || {};
+    return {
       id: String(item.strategy_id || `canonical-${idx}`),
-      strategy_id: String(item.strategy_id || `canonical_${idx}`),
-      name: String(item.strategy_id || `canonical_${idx}`).replaceAll("_", " "),
+      strategy_id: strategyId,
+      name: String(item.strategy_id || strategyId).replaceAll("_", " "),
       strategy_family: String(item.strategy_family || "general"),
       market_regime: String(item.market_regime || "mixed"),
       entry_long: item.entry_long || {},
       exit_long: item.exit_long || {},
-    }));
+    };
+  });
+};
+
+const toStrategyAllocationRows = (canonicalOptions = [], existingRows = []) => {
+  const existingMap = new Map(
+    (existingRows || [])
+      .filter((row) => row && row.strategy_id)
+      .map((row) => [
+        String(row.strategy_id),
+        {
+          family: String(row.family || row.strategy_family || "general"),
+          weight: Number(row.weight || 0),
+          priority: Number(row.priority || 50),
+        },
+      ]),
+  );
+
+  return (canonicalOptions || []).slice(0, 12).map((item, index) => {
+    const strategyId = String(item.strategy_id || `strategy_${index + 1}`);
+    const existing = existingMap.get(strategyId);
+    return {
+      strategy_id: strategyId,
+      family: String(existing?.family || item.strategy_family || "general"),
+      weight: Number.isFinite(Number(existing?.weight)) ? Number(existing.weight) : 0,
+      priority: Number.isFinite(Number(existing?.priority)) ? Number(existing.priority) : Math.min(STRATEGY_PRIORITY_MAX, index + 1),
+    };
+  });
+};
+
+const pickPrimaryStrategyId = (rows = [], fallback = "") => {
+  const activeRows = (rows || []).filter((row) => Number(row.weight || 0) > 0);
+  if (activeRows.length === 0) return String(fallback || "");
+  activeRows.sort((a, b) => {
+    const byPriority = Number(a.priority || 100) - Number(b.priority || 100);
+    if (byPriority !== 0) return byPriority;
+    const byWeight = Number(b.weight || 0) - Number(a.weight || 0);
+    if (byWeight !== 0) return byWeight;
+    return String(a.strategy_id || "").localeCompare(String(b.strategy_id || ""));
+  });
+  return String(activeRows[0]?.strategy_id || fallback || "");
 };
 
 export const BotProfilesPage = () => {
@@ -323,9 +386,21 @@ export const BotProfilesPage = () => {
     [riskPolicyOptions, form.risk_policy_id],
   );
 
-  const selectedCanonicalStrategy = useMemo(
-    () => canonicalStrategyOptions.find((item) => item.strategy_id === form.strategy_type) || null,
-    [canonicalStrategyOptions, form.strategy_type],
+  const strategyAllocationRows = useMemo(
+    () => toStrategyAllocationRows(canonicalStrategyOptions, form.strategy_allocations),
+    [canonicalStrategyOptions, form.strategy_allocations],
+  );
+
+  const strategyWeightTotal = useMemo(
+    () => strategyAllocationRows.reduce((sum, row) => sum + Number(row.weight || 0), 0),
+    [strategyAllocationRows],
+  );
+
+  const hasStrategyWeightOverflow = strategyWeightTotal > STRATEGY_WEIGHT_LIMIT + 0.0000001;
+
+  const primaryStrategyType = useMemo(
+    () => pickPrimaryStrategyId(strategyAllocationRows, form.strategy_type),
+    [strategyAllocationRows, form.strategy_type],
   );
 
   const scopedConnections = useMemo(() => {
@@ -482,10 +557,14 @@ export const BotProfilesPage = () => {
 
     if (!activeTemplateOptions.length && !canonicalStrategyOptions.length) return;
     setForm((prev) => {
+      const mergedAllocations = toStrategyAllocationRows(canonicalStrategyOptions, prev.strategy_allocations);
+      const primaryFromAllocations = pickPrimaryStrategyId(mergedAllocations, "");
       const firstCanonical = canonicalStrategyOptions[0]?.strategy_id || "";
       const firstTemplate = activeTemplateOptions[0] || null;
 
       const nextStrategyType =
+        primaryFromAllocations
+        ||
         (queryStrategyExists && queryStrategyId)
         || prev.strategy_type
         || firstCanonical
@@ -495,7 +574,14 @@ export const BotProfilesPage = () => {
       const matchedTemplate = activeTemplateOptions.find((item) => item.strategy_type === nextStrategyType);
       const nextTemplateId = prev.template_id || matchedTemplate?.id || firstTemplate?.id || "";
 
-      if (nextStrategyType === prev.strategy_type && nextTemplateId === prev.template_id && (prev.strategy_template_ids || []).length > 0) {
+      const hasAllocationsChanged = JSON.stringify(mergedAllocations) !== JSON.stringify(prev.strategy_allocations || []);
+
+      if (
+        nextStrategyType === prev.strategy_type
+        && nextTemplateId === prev.template_id
+        && (prev.strategy_template_ids || []).length > 0
+        && !hasAllocationsChanged
+      ) {
         return prev;
       }
 
@@ -504,6 +590,7 @@ export const BotProfilesPage = () => {
         strategy_type: nextStrategyType,
         template_id: nextTemplateId,
         strategy_template_ids: nextTemplateId ? [nextTemplateId] : prev.strategy_template_ids,
+        strategy_allocations: mergedAllocations,
       };
     });
   }, [activeTemplateOptions, canonicalStrategyOptions, location.search]);
@@ -582,7 +669,9 @@ export const BotProfilesPage = () => {
     }
   };
 
-  const ensureStrategyTemplateId = async () => {
+  const ensureStrategyTemplateId = async (effectiveStrategyType) => {
+    const normalizedStrategyType = String(effectiveStrategyType || "").trim();
+
     if (form.use_template && form.template_id) {
       return form.template_id;
     }
@@ -591,11 +680,12 @@ export const BotProfilesPage = () => {
       return null;
     }
 
-    const matchedTemplate = activeTemplateOptions.find((item) => item.strategy_type === form.strategy_type);
+    const matchedTemplate = activeTemplateOptions.find((item) => item.strategy_type === normalizedStrategyType);
     if (matchedTemplate?.id) {
       return matchedTemplate.id;
     }
 
+    const selectedCanonicalStrategy = canonicalStrategyOptions.find((item) => item.strategy_id === normalizedStrategyType) || null;
     if (!selectedCanonicalStrategy) {
       return null;
     }
@@ -679,6 +769,42 @@ export const BotProfilesPage = () => {
     }
   }, [form.custom_watchlist_id, form.exchange, form.market_type, form.symbol_preset, watchlists]);
 
+  const updateStrategyAllocationWeight = (strategyId, value) => {
+    const numericValue = Number(value);
+    const nextWeight = Number.isFinite(numericValue) ? Math.max(0, Math.min(1, numericValue)) : 0;
+    setForm((prev) => {
+      const rows = toStrategyAllocationRows(canonicalStrategyOptions, prev.strategy_allocations).map((row) => (
+        row.strategy_id === strategyId
+          ? { ...row, weight: Number(nextWeight.toFixed(6)) }
+          : row
+      ));
+      return {
+        ...prev,
+        strategy_allocations: rows,
+        strategy_type: pickPrimaryStrategyId(rows, prev.strategy_type),
+      };
+    });
+  };
+
+  const updateStrategyAllocationPriority = (strategyId, value) => {
+    const numericValue = Number(value);
+    const normalizedPriority = Number.isFinite(numericValue)
+      ? Math.max(STRATEGY_PRIORITY_MIN, Math.min(STRATEGY_PRIORITY_MAX, Math.round(numericValue)))
+      : 50;
+    setForm((prev) => {
+      const rows = toStrategyAllocationRows(canonicalStrategyOptions, prev.strategy_allocations).map((row) => (
+        row.strategy_id === strategyId
+          ? { ...row, priority: normalizedPriority }
+          : row
+      ));
+      return {
+        ...prev,
+        strategy_allocations: rows,
+        strategy_type: pickPrimaryStrategyId(rows, prev.strategy_type),
+      };
+    });
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -705,6 +831,27 @@ export const BotProfilesPage = () => {
     if (!String(form.strategy_type || "").trim()) {
       nextErrors.strategy_type = "Canonical strateji seçimi zorunlu.";
     }
+    const selectedStrategyAllocations = strategyAllocationRows
+      .filter((row) => Number(row.weight || 0) > 0)
+      .map((row) => ({
+        strategy_id: String(row.strategy_id),
+        family: String(row.family || "general"),
+        weight: Number(Number(row.weight || 0).toFixed(6)),
+        priority: Math.max(STRATEGY_PRIORITY_MIN, Math.min(STRATEGY_PRIORITY_MAX, Number(row.priority || 50))),
+      }));
+
+    if (selectedStrategyAllocations.length === 0) {
+      nextErrors.strategy_allocations = "En az bir stratejiye weight verin.";
+    }
+    if (hasStrategyWeightOverflow) {
+      nextErrors.strategy_allocations = "Weight toplamı 1.0 değerini geçemez.";
+    }
+
+    const effectiveStrategyType = pickPrimaryStrategyId(selectedStrategyAllocations, form.strategy_type);
+    if (!String(effectiveStrategyType || "").trim()) {
+      nextErrors.strategy_type = "Primary strategy belirlenemedi.";
+    }
+
     if (String(form.mode || "live_ready") === "live_ready" && liveReadyBlockedReason) {
       nextErrors.mode = liveReadyBlockedReason;
     }
@@ -715,7 +862,7 @@ export const BotProfilesPage = () => {
     }
 
     try {
-      const strategyTemplateId = await ensureStrategyTemplateId();
+      const strategyTemplateId = await ensureStrategyTemplateId(effectiveStrategyType);
       if (form.use_template && !strategyTemplateId) {
         toast.error("Template seçimi zorunlu");
         return;
@@ -735,7 +882,8 @@ export const BotProfilesPage = () => {
         symbol_source_type: LEGACY_TOP_FORM ? 'scanner' : (form.symbol_source_type || 'manual'),
         scanner_id: LEGACY_TOP_FORM ? (form.scanner_id || 'default') : (form.symbol_source_type === 'scanner' ? (form.scanner_id || null) : null),
         symbols: parsedSymbols,
-        strategy_type: form.strategy_type,
+        strategy_type: effectiveStrategyType,
+        strategy_allocations: selectedStrategyAllocations,
         strategy_template_id: strategyTemplateId,
         strategy_template_ids: form.use_template && strategyTemplateId ? [strategyTemplateId] : [],
         timeframe: form.timeframe || "15m",
@@ -777,6 +925,9 @@ export const BotProfilesPage = () => {
   };
 
   const onEdit = (item) => {
+    const existingAllocations = Array.isArray(item?.strategy_allocations) ? item.strategy_allocations : [];
+    const mergedAllocations = toStrategyAllocationRows(canonicalStrategyOptions, existingAllocations);
+    const derivedStrategyType = pickPrimaryStrategyId(mergedAllocations, item.strategy_type);
     setEditingId(item.id);
     setForm({
       ...initialForm,
@@ -788,6 +939,8 @@ export const BotProfilesPage = () => {
       scanner_id: item.scanner_id || item.symbol_source_summary?.scanner_id || "default",
       template_id: item.strategy_template_id || item.template_id || "",
       strategy_template_ids: item.strategy_template_ids || (item.strategy_template_id ? [item.strategy_template_id] : []),
+      strategy_allocations: mergedAllocations,
+      strategy_type: derivedStrategyType,
       use_template: Boolean(item.strategy_template_id),
       risk_adaptive_confirmed: false,
       risk_policy_id: item.selected_risk_policy_id || item.risk_policy_id || "",
@@ -1037,33 +1190,63 @@ export const BotProfilesPage = () => {
           {formErrors.scanner_id && <p className="form-error-text" data-testid="bot-form-scanner-id-error">{formErrors.scanner_id}</p>}
         </div>}
 
-        <div className="form-group" data-testid="bot-form-group-strategy">
-          <label className="form-label" htmlFor="bot-form-strategy-select" data-testid="bot-form-strategy-label">Strategy</label>
-          <select
-            id="bot-form-strategy-select"
-            value={form.strategy_type}
-            onChange={(event) => {
-              const strategyId = event.target.value;
-              const matchedTemplate = activeTemplateOptions.find((item) => item.strategy_type === strategyId);
-              setForm((prev) => ({
-                ...prev,
-                strategy_type: strategyId,
-                template_id: matchedTemplate?.id || "",
-                strategy_template_ids: matchedTemplate?.id ? [matchedTemplate.id] : [],
-              }));
-            }}
-            className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-            data-testid="bot-form-strategy-select"
-            aria-label="Strategy"
-            aria-describedby="bot-form-strategy-helper"
-            required
-          >
-            <option value="">Strateji seçin</option>
-            {canonicalStrategyOptions.map((item) => (
-              <option key={item.strategy_id || item} value={item.strategy_id || item}>{item.name || item}</option>
-            ))}
-          </select>
-          <p className="form-helper-text" id="bot-form-strategy-helper" data-testid="bot-form-strategy-helper">Admin panelde aktif olan stratejiler listelenir.</p>
+        <div className="form-group md:col-span-2" data-testid="bot-form-group-strategy-allocations">
+          <label className="form-label" data-testid="bot-form-strategy-allocations-label">Strateji Ağırlık Dağılımı (12)</label>
+          <p className="form-helper-text" data-testid="bot-form-strategy-allocations-helper">Kolonlar: strategy_id, family, weight, priority. Weight toplamı 1.0 değerini geçemez. Priority aralığı 1-100.</p>
+
+          <div className="overflow-x-auto rounded border border-slate-700/70" data-testid="bot-form-strategy-allocations-table-wrap">
+            <Table data-testid="bot-form-strategy-allocations-table">
+              <TableHeader>
+                <TableRow>
+                  <TableHead data-testid="bot-form-strategy-col-strategy-id">strategy_id</TableHead>
+                  <TableHead data-testid="bot-form-strategy-col-family">family</TableHead>
+                  <TableHead data-testid="bot-form-strategy-col-weight">weight</TableHead>
+                  <TableHead data-testid="bot-form-strategy-col-priority">priority</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {strategyAllocationRows.map((row) => (
+                  <TableRow key={row.strategy_id} data-testid={`bot-form-strategy-row-${row.strategy_id}`}>
+                    <TableCell className="font-mono text-xs" data-testid={`bot-form-strategy-id-${row.strategy_id}`}>{row.strategy_id}</TableCell>
+                    <TableCell className="text-xs" data-testid={`bot-form-strategy-family-${row.strategy_id}`}>{row.family}</TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="1"
+                        value={row.weight}
+                        onChange={(event) => updateStrategyAllocationWeight(row.strategy_id, event.target.value)}
+                        data-testid={`bot-form-strategy-weight-input-${row.strategy_id}`}
+                        aria-label={`${row.strategy_id} weight`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        step="1"
+                        min={String(STRATEGY_PRIORITY_MIN)}
+                        max={String(STRATEGY_PRIORITY_MAX)}
+                        value={row.priority}
+                        onChange={(event) => updateStrategyAllocationPriority(row.strategy_id, event.target.value)}
+                        data-testid={`bot-form-strategy-priority-input-${row.strategy_id}`}
+                        aria-label={`${row.strategy_id} priority`}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-3" data-testid="bot-form-strategy-allocations-summary">
+            <p className={`text-sm ${hasStrategyWeightOverflow ? "text-rose-300" : "text-emerald-300"}`} data-testid="bot-form-strategy-weight-total">
+              Toplam Weight: {strategyWeightTotal.toFixed(4)} / {STRATEGY_WEIGHT_LIMIT.toFixed(1)}
+            </p>
+            <p className="text-sm text-slate-300" data-testid="bot-form-strategy-primary-id">Primary Strategy: <strong>{primaryStrategyType || "-"}</strong></p>
+          </div>
+
+          {formErrors.strategy_allocations && <p className="form-error-text" data-testid="bot-form-strategy-allocations-error">{formErrors.strategy_allocations}</p>}
           {formErrors.strategy_type && <p className="form-error-text" data-testid="bot-form-strategy-error">{formErrors.strategy_type}</p>}
         </div>
 
@@ -1138,7 +1321,7 @@ export const BotProfilesPage = () => {
         </div>}
 
         <div className="flex gap-2 md:col-span-2">
-          <Button className="bg-orange-500 text-black hover:bg-orange-600" type="submit" data-testid="bot-form-submit-button" disabled={Boolean(liveReadyBlockedReason)} title={liveReadyBlockedReason || ""}>
+          <Button className="bg-orange-500 text-black hover:bg-orange-600" type="submit" data-testid="bot-form-submit-button" disabled={Boolean(liveReadyBlockedReason) || hasStrategyWeightOverflow} title={liveReadyBlockedReason || (hasStrategyWeightOverflow ? "Weight toplamı 1.0 değerini geçemez" : "")}>
             {editingId ? "Güncelle" : "Oluştur"}
           </Button>
           {liveReadyBlockedReason && (
@@ -1171,6 +1354,7 @@ export const BotProfilesPage = () => {
               <TableHead data-testid="bot-table-head-name">Ad</TableHead>
               <TableHead data-testid="bot-table-head-market">Market</TableHead>
               <TableHead data-testid="bot-table-head-strategy">Strateji</TableHead>
+              <TableHead data-testid="bot-table-head-strategy-weights">Weight/Priority</TableHead>
               <TableHead data-testid="bot-table-head-status">Status</TableHead>
               <TableHead data-testid="bot-table-head-mode">Mode</TableHead>
               <TableHead data-testid="bot-table-head-symbols">Semboller</TableHead>
@@ -1190,6 +1374,14 @@ export const BotProfilesPage = () => {
                 <TableCell data-testid={`bot-table-name-${item.id}`}>{item.name}</TableCell>
                 <TableCell data-testid={`bot-table-market-${item.id}`}>{item.market_type}</TableCell>
                 <TableCell data-testid={`bot-table-strategy-${item.id}`}>{item.strategy_id || item.strategy_type}</TableCell>
+                <TableCell className="text-xs" data-testid={`bot-table-strategy-weights-${item.id}`}>
+                  {Array.isArray(item.strategy_allocations) && item.strategy_allocations.length > 0
+                    ? item.strategy_allocations
+                        .slice(0, 3)
+                        .map((row) => `${row.strategy_id}:${Number(row.weight || 0).toFixed(2)}@${row.priority}`)
+                        .join(" | ")
+                    : "-"}
+                </TableCell>
                 <TableCell data-testid={`bot-table-status-${item.id}`}>{item.status || (item.is_running ? "RUNNING" : "IDLE")}</TableCell>
                 <TableCell data-testid={`bot-table-mode-${item.id}`}>{item.mode || "live_ready"}</TableCell>
                 <TableCell className="font-mono text-xs" data-testid={`bot-table-symbols-${item.id}`}>

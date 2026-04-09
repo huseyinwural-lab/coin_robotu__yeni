@@ -23,6 +23,64 @@ from services.bot_runtime_service import (
 router = APIRouter(prefix="/bot-profiles", tags=["bot_profiles"])
 
 
+def _normalize_strategy_allocations(raw_allocations: list[dict] | None) -> tuple[list[dict], float]:
+    if raw_allocations is None:
+        raw_allocations = []
+    if not isinstance(raw_allocations, list):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocations_invalid")
+
+    normalized: list[dict] = []
+    seen_strategy_ids: set[str] = set()
+    weight_total = 0.0
+
+    for row in raw_allocations:
+        if not isinstance(row, dict):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocation_row_invalid")
+
+        strategy_id = str(row.get("strategy_id") or "").strip()
+        family = str(row.get("family") or "general").strip().lower() or "general"
+        try:
+            weight = float(row.get("weight") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocation_weight_invalid") from None
+        try:
+            priority = int(row.get("priority") or 50)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocation_priority_invalid") from None
+
+        if not strategy_id:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocation_strategy_id_required")
+        if strategy_id in seen_strategy_ids:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocation_duplicate_strategy_id")
+        if priority < 1 or priority > 100:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocation_priority_out_of_range")
+        if weight < 0 or weight > 1:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocation_weight_out_of_range")
+
+        seen_strategy_ids.add(strategy_id)
+        if weight <= 0:
+            continue
+
+        normalized_weight = round(weight, 6)
+        weight_total += normalized_weight
+        normalized.append(
+            {
+                "strategy_id": strategy_id,
+                "family": family,
+                "weight": normalized_weight,
+                "priority": priority,
+            }
+        )
+
+    if weight_total > 1.0000001:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocation_weight_limit_exceeded")
+    if len(normalized) == 0:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="strategy_allocation_required")
+
+    normalized.sort(key=lambda item: (int(item.get("priority") or 100), -float(item.get("weight") or 0), str(item.get("strategy_id") or "")))
+    return normalized, round(weight_total, 6)
+
+
 def _authorized_bot_query(db: Session, bot_id: str, current_user: User):
     query = db.query(BotProfile).filter(BotProfile.id == bot_id, BotProfile.is_deleted.is_(False))
     if not is_admin_role(current_user.role):
@@ -46,6 +104,8 @@ def create_bot_profile(
     exchange_connection_id = str(payload_data.pop("exchange_connection_id", "") or "").strip()
     risk_policy_id = str(payload_data.pop("risk_policy_id", "") or "").strip() or None
     risk_policy_snapshot = payload_data.pop("risk_policy_snapshot", {}) or {}
+    strategy_allocations_raw = payload_data.pop("strategy_allocations", []) or []
+    strategy_allocations, strategy_weight_total = _normalize_strategy_allocations(strategy_allocations_raw)
     preferred_mode = str(payload_data.pop("mode", "live_ready") or "live_ready").strip().lower()
     selected_template_ids = [
         str(value).strip()
@@ -55,6 +115,7 @@ def create_bot_profile(
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
     # Sistem genelinde tek mod: live_ready
     preferred_mode = "live_ready"
+    payload_data["strategy_type"] = str(strategy_allocations[0].get("strategy_id") or payload_data.get("strategy_type") or "").strip()
 
 
 
@@ -98,6 +159,8 @@ def create_bot_profile(
         "selected_risk_policy_id": risk_policy_id,
         "selected_risk_policy_name": risk_policy_snapshot.get("name") if isinstance(risk_policy_snapshot, dict) else None,
         "risk_policy_snapshot": risk_policy_snapshot if isinstance(risk_policy_snapshot, dict) else {},
+        "strategy_allocations": strategy_allocations,
+        "strategy_weight_total": strategy_weight_total,
     }
     db.add(bot_profile)
     db.commit()
@@ -130,6 +193,8 @@ def update_bot_profile(
     exchange_connection_id = str(payload_data.pop("exchange_connection_id", "") or "").strip()
     risk_policy_id = str(payload_data.pop("risk_policy_id", "") or "").strip() or None
     risk_policy_snapshot = payload_data.pop("risk_policy_snapshot", {}) or {}
+    strategy_allocations_raw = payload_data.pop("strategy_allocations", []) or []
+    strategy_allocations, strategy_weight_total = _normalize_strategy_allocations(strategy_allocations_raw)
     preferred_mode = str(payload_data.pop("mode", "live_ready") or "live_ready").strip().lower()
     selected_template_ids = [
         str(value).strip()
@@ -139,6 +204,7 @@ def update_bot_profile(
     risk_adaptive_confirmed = bool(payload_data.pop("risk_adaptive_confirmed", False))
     # Sistem genelinde tek mod: live_ready
     preferred_mode = "live_ready"
+    payload_data["strategy_type"] = str(strategy_allocations[0].get("strategy_id") or payload_data.get("strategy_type") or bot_profile.strategy_type or "").strip()
 
 
 
@@ -187,6 +253,8 @@ def update_bot_profile(
         "selected_risk_policy_id": risk_policy_id,
         "selected_risk_policy_name": risk_policy_snapshot.get("name") if isinstance(risk_policy_snapshot, dict) else None,
         "risk_policy_snapshot": risk_policy_snapshot if isinstance(risk_policy_snapshot, dict) else {},
+        "strategy_allocations": strategy_allocations,
+        "strategy_weight_total": strategy_weight_total,
     }
 
     db.commit()
