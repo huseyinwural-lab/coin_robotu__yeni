@@ -1,3 +1,44 @@
+## 2026-04-09 — Admin İşlem Aksiyonlarının User Tarafına Taşınması (Kalıntısız)
+
+### Karar ve Kapsam (Onaylı)
+- Admin panelde alım-satım/sinyal/pozisyon/işlem aksiyonu olmayacak.
+- İlgili admin route’ları kaldırıldı (frontend yönlendirme) ve API seviyesinde 410 ile kalıcı kapatıldı.
+
+### Frontend Değişiklikleri
+- `App.js`:
+  - `/admin/execution-queue` -> `/admin/dashboard` yönlendirmesi
+  - `/admin/strategy/observability*` -> `/admin/dashboard` yönlendirmesi
+  - `strategy-observability` alias route’u dashboard’a yönlendirildi
+- `PanelLayout.jsx`:
+  - Admin menüden kaldırıldı:
+    - `nav-admin-execution-queue-link`
+    - `nav-admin-strategy-observability-link`
+- `AdminDashboardPage.jsx`:
+  - `execution-queue` referansları kaldırıldı; runtime-recovery yönlendirmelerine çekildi.
+- `AdminUniverseMonitorPage.jsx`:
+  - Governance-only korunurken BC01..BC04 kartları görünür kaldı.
+  - BC kartlarındaki edit/save aksiyonları gizlendi.
+
+### Backend Değişiklikleri (Kalıcı 410)
+- `admin_execution.py`:
+  - execution queue aksiyon endpointleri 410 (PURE_LIVE_410): approve/execute/reject/retry/cancel/bulk/edit/pause/resume/clear ve approve-trade alias.
+- `admin_strategy_observability.py`:
+  - sinyal/execute endpointleri 410 (PURE_LIVE_410): signals approve/reject, top-signals simulate/execute/bulk-simulate/bulk-execute.
+- `admin_universe_monitor.py`:
+  - scanner aksiyon endpointleri 410 (PURE_LIVE_410): scanner-engine config-save/run/analyze/bot-start + scanner start/stop/trigger/rescan-stale.
+
+### Taşınan Davranışlar (User Tarafında Aktif)
+- User scanner akışı: `/user/scanner-engine/run-async`
+- User sinyal/intent akışı: `/user/execution/intent/preview`, `/user/execution/intent/submit`
+- User ekranları: `/user/scanner`, `/user/signals`, `/user/trades`
+
+### Test Sonuçları
+- Backend doğrulama (deep backend test):
+  - Hedeflenen kalan 8 endpointin tamamı 410 döndü (8/8 PASS).
+- Frontend doğrulama (UI test):
+  - Menü/route/BC kartları/gizli edit-save kontrolleri kod seviyesinde PASS.
+  - Not: Playwright auth-cookie limitasyonu nedeniyle bazı canlı oturum adımları manuel browser’da teyit gerektirebilir.
+
 ## 2026-04-09 — Admin/User Scope Temizliği (Kalıntısız Ayrım)
 
 ### Uygulanan Düzeltmeler
