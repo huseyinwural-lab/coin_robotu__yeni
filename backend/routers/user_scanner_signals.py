@@ -10,7 +10,6 @@ from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from core.users.user_scanner_signal_service import (
-    approve_pending_signal,
     bulk_fix_blocked_signals,
     diagnose_pending_signal,
     get_or_create_signal_mode,
@@ -103,9 +102,7 @@ def user_scanner_engine_save_config(payload: dict, current_user: User = Depends(
     if auto_interval not in {1, 3, 5}:
         auto_interval = 3
 
-    signal_mode = str(payload.get("signal_mode") or previous.get("signal_mode") or "manual").lower().strip()
-    if signal_mode not in {"manual", "auto"}:
-        signal_mode = "manual"
+    signal_mode = "auto"
 
     merged_decision_boxes = payload.get("decision_boxes") if isinstance(payload.get("decision_boxes"), dict) else (previous.get("decision_boxes") or {})
 
@@ -490,6 +487,7 @@ def _load_user_scanner_engine_config(user_id: str) -> dict:
     return {
         **defaults,
         **saved,
+        "signal_mode": "auto",
         "manual_symbols": _normalize_symbols(saved.get("manual_symbols") or defaults.get("manual_symbols") or []),
         "market_scope": {"spot_mode": "all", "futures_mode": "all"},
         "decision_boxes": _admin_sanitize_decision_boxes(saved.get("decision_boxes") or defaults.get("decision_boxes") or {}),
@@ -1748,32 +1746,12 @@ def approve_signal(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    try:
-        row = approve_pending_signal(db, current_user.id, signal_id, note=payload.note)
-    except ValueError as exc:
-        message = str(exc)
-        if message == "pending_signal_not_found":
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message) from exc
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message) from exc
-
-    create_audit_log(
-        db,
-        action="user_pending_signal_approved",
-        entity_type="pending_signal",
-        entity_id=row.id,
-        actor_user_id=current_user.id,
-        actor_role=current_user.role.value,
-        details={"order_position_id": row.order_position_id},
-    )
-    return UserSignalDecisionResponse(
-        id=row.id,
-        status=row.status,
-        order_position_id=row.order_position_id,
-        decided_at=row.decided_at,
-        decision_note=row.decision_note,
-        current_state=row.current_state,
-        blocked_reason_code=row.blocked_reason_code,
-        created_order_intent_id=row.created_order_intent_id,
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": "PURE_LIVE_410",
+            "message": "manuel_approve_kaldirildi_auto_signal_execution_aktif",
+        },
     )
 
 

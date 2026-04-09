@@ -18,7 +18,6 @@ import {
   ShieldAlert,
   TrendingUp,
   UserCog,
-  Wrench,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -46,7 +45,6 @@ const userMenuGroups = [
       { to: "/user/scanner", label: "Scanner", icon: Gauge, testId: "nav-user-scanner-link" },
       { to: "/user/indicator-screener", label: "Indicator Screener", icon: LineChart, testId: "nav-user-indicator-screener-link" },
       { to: "/user/signals", label: "Signal", icon: Radio, testId: "nav-user-signals-link" },
-      { to: "/user/trade", label: "Trade Entry", icon: Wrench, testId: "nav-user-trade-entry-link" },
     ],
   },
   {

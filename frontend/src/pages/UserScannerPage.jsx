@@ -7,7 +7,6 @@ import { ScannerResultsTable } from "@/components/ScannerResultsTable";
 import { Button } from "@/components/ui/button";
 import { apiClient, classifyApiError } from "@/lib/api";
 import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
-import { saveExecutionContext } from "@/lib/userFlowContext";
 import { DecisionCard } from "@/pages/user/components/DecisionCard";
 import { ExplainabilityDrawer } from "@/pages/user/components/ExplainabilityDrawer";
 
@@ -301,7 +300,7 @@ const deriveRequestHealth = (events) => {
 export const UserScannerPage = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [mode, setMode] = useState("ASSISTED");
+  const [mode, setMode] = useState("AUTO");
   const [marketType, setMarketType] = useState("spot");
   const [overview, setOverview] = useState(null);
   const [scannerResults, setScannerResults] = useState([]);
@@ -367,7 +366,7 @@ export const UserScannerPage = () => {
       spot_mode: "all",
       futures_mode: "all",
     },
-    signal_mode: "manual",
+    signal_mode: "auto",
     auto_interval_minutes: 3,
     scan_limit: 2000,
     top_n: 20,
@@ -441,7 +440,7 @@ export const UserScannerPage = () => {
       .map(([key, value]) => ({ key, label: `${mapping[key]}: ${value}` }));
   }, [minimalFilters]);
 
-  const activeModeLabel = String(overview?.mode || mode || "ASSISTED").toUpperCase();
+  const activeModeLabel = String(overview?.mode || mode || "AUTO").toUpperCase();
   const scannerRunType = activeAutomation?.auto_enabled ? "OTOMATİK TARAMA" : "MANUEL TARAMA";
   const scannerRunTypeDetail = activeAutomation?.auto_enabled
     ? `Zamanlayıcı aktif · ${Number(activeAutomation?.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS)} sn aralık`
@@ -449,9 +448,7 @@ export const UserScannerPage = () => {
   const executionPathLabel =
     activeModeLabel === "AUTO"
       ? "BOT_AUTO_ACTIVE"
-      : activeModeLabel === "ASSISTED"
-        ? "SEMI_AUTO_ACTIVE"
-        : "MANUAL_REVIEW_FLOW";
+      : "BOT_AUTO_PENDING";
 
   const requestHealthBadgeClass =
     requestHealth.health === "HEALTHY"
@@ -463,9 +460,6 @@ export const UserScannerPage = () => {
           : "border-slate-700 bg-slate-950 text-slate-300";
 
   const scannerEngineNextRunAt = useMemo(() => {
-    if (String(scannerEngineConfig?.signal_mode || "manual") !== "auto") {
-      return schedulerState?.next_run_at || activeAutomation?.next_run_at || null;
-    }
     const baseRaw = scannerEngineRun?.generated_at || activeAutomation?.last_run_at || overview?.latest_generated_at;
     if (!baseRaw) {
       return null;
@@ -981,7 +975,7 @@ export const UserScannerPage = () => {
           await apiClient.post(
             "/user/scanner/run-async",
             {
-              mode: mode || "ASSISTED",
+              mode: mode || "AUTO",
               max_results: 40,
               symbol_source: symbolSource || "crypto",
               market_type: marketType || "spot",
@@ -1074,7 +1068,7 @@ export const UserScannerPage = () => {
       window.localStorage.setItem(
         SCANNER_RUN_SETTINGS_KEY,
         JSON.stringify({
-          mode: String(mode || "ASSISTED").toUpperCase(),
+          mode: String(mode || "AUTO").toUpperCase(),
           marketType: String(marketType || "spot").toLowerCase(),
           watchlistOnly: Boolean(watchlistOnly),
         }),
@@ -1317,7 +1311,7 @@ export const UserScannerPage = () => {
           spot_mode: spotMode,
           futures_mode: futuresMode,
         },
-        signal_mode: scannerEngineConfig.signal_mode || "manual",
+        signal_mode: "auto",
         auto_interval_minutes: [1, 3, 5].includes(Number(scannerEngineConfig.auto_interval_minutes))
           ? Number(scannerEngineConfig.auto_interval_minutes)
           : 3,
@@ -1405,21 +1399,8 @@ export const UserScannerPage = () => {
   }
 
   const openExecuteFromScanner = (item) => {
-    const side = item.signal === "short" ? "sell" : "buy";
-    const marketType = item.market_type || "spot";
-    saveExecutionContext({
-      source: "scanner",
-      symbol: item.symbol,
-      market_type: marketType,
-      side,
-      strategy_code: item.strategy_code,
-      confidence: item.confidence,
-      signal: item.signal,
-      score: item.signal_score,
-      timestamp: new Date().toISOString(),
-      intent_payload: buildIntentPayload(item),
-    });
-    navigate(`/user/trade?source=scanner&symbol=${encodeURIComponent(item.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(marketType)}&preset=spot_basic`);
+    toast.info(`${item.symbol} sinyali otomatik execution akışında işlenecek.`);
+    navigate("/user/signals");
   };
 
   const switchScannerSection = (nextSection) => {
@@ -1428,35 +1409,6 @@ export const UserScannerPage = () => {
     nextParams.set("section", nextSection === "screener" ? "screener" : "results");
     setSearchParams(nextParams, { replace: true });
   };
-
-  const buildIntentPayload = (item) => ({
-    source_type: "scanner",
-    source_ref_id: item.id,
-    market_type: "spot",
-    symbol: item.symbol,
-    side: item.signal === "short" ? "sell" : "buy",
-    order_type: "market",
-    position_size_mode: "fixed_notional",
-    position_size_value: 30,
-    take_profit_mode: "percent",
-    take_profit_value: 2,
-    stop_loss_mode: "percent",
-    stop_loss_value: 1,
-    live_route: "signal_follow",
-    signal: item.signal,
-    score: item.signal_score,
-    strategy: item.strategy_code,
-    confidence: item.confidence,
-    timestamp: new Date().toISOString(),
-    scanner_signal_snapshot: {
-      symbol: item.symbol,
-      signal: item.signal,
-      score: item.signal_score,
-      strategy: item.strategy_code,
-      confidence: item.confidence,
-      timestamp: new Date().toISOString(),
-    },
-  });
 
   const onSelectDecisionCard = async (symbol) => {
     setSelectedDecisionSymbol(symbol);
@@ -1847,17 +1799,17 @@ export const UserScannerPage = () => {
           <div className="space-y-2" data-testid="user-scanner-engine-signal-mode-field">
             <span className="text-xs uppercase tracking-widest text-slate-500">Tarama Modu</span>
             <div className="flex h-10 items-center gap-3 border border-slate-700 bg-slate-950 px-3 py-2" data-testid="user-scanner-engine-signal-mode-checkbox-wrap">
-              <label className="flex items-center gap-1 text-xs" data-testid="user-scanner-engine-signal-mode-manual-label">
+              <label className="flex items-center gap-1 text-xs" data-testid="user-scanner-engine-signal-mode-auto-label">
                 <input
                   type="checkbox"
-                  checked={String(scannerEngineConfig.signal_mode || "manual") === "manual"}
-                  onChange={() => setScannerEngineConfig((prev) => ({ ...prev, signal_mode: "manual" }))}
-                  disabled={scannerEngineBusy}
-                  data-testid="user-scanner-engine-signal-mode-manual-checkbox"
+                  checked
+                  readOnly
+                  disabled
+                  data-testid="user-scanner-engine-signal-mode-auto-checkbox"
                 />
-                Manuel
+                Full Auto
               </label>
-              <span className="ml-auto text-[11px] text-cyan-200" data-testid="user-scanner-engine-signal-mode-fixed-note">Pure Live: AUTO/Scheduler switching kaldırıldı</span>
+              <span className="ml-auto text-[11px] text-cyan-200" data-testid="user-scanner-engine-signal-mode-fixed-note">Pure Live: manuel onay ve manuel trade kapalı, uygun sinyal otomatik işlenir</span>
             </div>
           </div>
 
@@ -1882,7 +1834,7 @@ export const UserScannerPage = () => {
         <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-parameters-title">Çalışma Parametreleri</p>
         <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="user-scanner-parameters-grid">
           <p className="text-sm" data-testid="user-scanner-parameters-market">Market: <span className="font-semibold">{String(marketType || "spot").toUpperCase()}</span></p>
-          <p className="text-sm" data-testid="user-scanner-parameters-mode">Signal Mode: <span className="font-semibold">{String(mode || "ASSISTED").toUpperCase()}</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-mode">Signal Mode: <span className="font-semibold">{String(mode || "AUTO").toUpperCase()}</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-auto">Automation: <span className="font-semibold">REMOVED</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-interval">Interval: <span className="font-semibold">-</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-selected-count">Selected Symbols: <span className="font-semibold">{selectedSymbols.length}</span></p>

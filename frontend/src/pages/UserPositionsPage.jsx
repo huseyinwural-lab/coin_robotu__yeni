@@ -83,7 +83,7 @@ export const UserPositionsPage = () => {
           <div className="mt-3 flex flex-wrap gap-2" data-testid="user-positions-empty-state-actions">
             <Button variant="outline" onClick={() => navigate("/user/scanner")} data-testid="user-positions-empty-go-scanner-button">Scanner’a Git</Button>
             <Button variant="outline" onClick={() => navigate("/user/signals")} data-testid="user-positions-empty-go-signals-button">Signals’a Git</Button>
-            <Button variant="outline" onClick={() => navigate("/user/trade")} data-testid="user-positions-empty-go-trade-button">Trade Paneline Git</Button>
+            <Button variant="outline" onClick={() => navigate("/user/signals")} data-testid="user-positions-empty-go-trade-button">Signals’a Git</Button>
           </div>
         </section>
       )}

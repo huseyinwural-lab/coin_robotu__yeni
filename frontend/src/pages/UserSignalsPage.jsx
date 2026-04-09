@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 import { Button } from "@/components/ui/button";
 import { apiClient, classifyApiError } from "@/lib/api";
-import { saveExecutionContext } from "@/lib/userFlowContext";
 
 const SIGNAL_POLL_INTERVAL_MS = 30000;
 const TOAST_DEDUPE_WINDOW_MS = 8000;
@@ -28,13 +26,11 @@ const resolveLoadErrorMessage = (error, fallback) => {
 };
 
 export const UserSignalsPage = () => {
-  const navigate = useNavigate();
   const [signals, setSignals] = useState([]);
   const [signalMode, setSignalMode] = useState({ mode: "AUTO" });
   const [botProfiles, setBotProfiles] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
   const [trades, setTrades] = useState([]);
-  const [busyId, setBusyId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [compactMode, setCompactMode] = useState(false);
   const [selectedSignalId, setSelectedSignalId] = useState("");
@@ -324,8 +320,8 @@ export const UserSignalsPage = () => {
       acc[code] = (acc[code] || 0) + 1;
       return acc;
     }, {});
-    if ((blockedByCode.MANUAL_APPROVAL_REQUIRED || 0) > 5) {
-      return "MANUAL mode yoğun onay bekliyor; hızlı aksiyon için Semi-Auto düşünebilirsiniz.";
+    if ((blockedByCode.MANUAL_APPROVAL_REQUIRED || 0) > 0) {
+      return "Sistem full-auto çalışır; bekleyen manuel onay sinyalleri otomatik temizlenmeli.";
     }
     if ((blockedByCode.BOT_NOT_RUNNING || 0) > 0) {
       return "Bazı sinyaller BOT_NOT_RUNNING nedeniyle bloklu; satırdaki Auto Diagnose + Auto Fix ile toparlayın.";
@@ -418,20 +414,12 @@ export const UserSignalsPage = () => {
 
   const gridSignals = useMemo(() => signalRows, [signalRows]);
 
-  const resolveSignalSide = (signal) => {
-    const raw = String(signal.signal || signal.signal_direction || "").toLowerCase();
-    return raw === "short" || raw === "sell" ? "sell" : "buy";
-  };
-
   const modeLabelFromRaw = (rawMode) => {
-    const normalized = String(rawMode || "ASSISTED").toUpperCase();
-    if (normalized === "MANUAL") {
-      return "Manual";
-    }
+    const normalized = String(rawMode || "AUTO").toUpperCase();
     if (normalized === "AUTO") {
       return "Full Auto";
     }
-    return "Semi-Auto";
+    return "Full Auto";
   };
 
   const statusBadgeClass = (status, isAnimated = false) => {
@@ -460,40 +448,6 @@ export const UserSignalsPage = () => {
     return value.charAt(0).toUpperCase() + value.slice(1);
   };
 
-  const decideSignal = async (signalId, action) => {
-    setBusyId(signalId);
-    try {
-      await apiClient.post(`/user/signal/${signalId}/${action}`, { note: `${action}_from_ui` });
-      await load();
-      toast.success(action === "approve" ? "Signal approve edildi" : "Signal reject edildi");
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Signal kararı kaydedilemedi");
-    } finally {
-      setBusyId("");
-    }
-  };
-
-  const openExecuteFromSignal = (signal) => {
-    const side = resolveSignalSide(signal);
-    const marketType = signal.market_type || "spot";
-    saveExecutionContext({
-      source: "signal",
-      symbol: signal.symbol,
-      market_type: marketType,
-      side,
-      signal_id: signal.signal_id,
-      strategy_code: signal.strategy_code,
-      blocked_reason_code: signal.blocked_reason_code,
-    });
-    navigate(
-      `/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(marketType)}&preset=spot_basic`,
-    );
-  };
-
-  const applyPresetFromSignal = (signal) => {
-    const side = resolveSignalSide(signal);
-    navigate(`/user/execute?source=signal&symbol=${encodeURIComponent(signal.symbol)}&side=${encodeURIComponent(side)}&market_type=${encodeURIComponent(signal.market_type || "spot")}&preset=spot_basic`);
-  };
 
   const runDiagnose = async (signalId, autoFix = false) => {
     setDiagnoseBusyId(signalId);
@@ -578,14 +532,12 @@ export const UserSignalsPage = () => {
 
 
   const controlPanelState = useMemo(() => {
-    const rawMode = String(signalMode?.mode || "ASSISTED").toUpperCase();
+    const rawMode = String(signalMode?.mode || "AUTO").toUpperCase();
     const latestSignal = gridSignals[0] || null;
     const currentBlocker = gridSignals.find((item) => ["blocked", "non_tradeable"].includes(String(item.status || "").toLowerCase()) && item.blocked_reason_code) || null;
-    let executionPath = "MANUAL_FLOW";
+    let executionPath = "BOT_AUTO_PENDING";
     if (rawMode === "AUTO" && activeBotCount > 0) {
       executionPath = "BOT_AUTO_ACTIVE";
-    } else if (rawMode === "ASSISTED") {
-      executionPath = "SEMI_AUTO_ACTIVE";
     }
     return {
       rawMode,
@@ -597,50 +549,6 @@ export const UserSignalsPage = () => {
     };
   }, [activeBotCount, gridSignals, signalMode?.mode]);
 
-  const buildIntentPayload = (signal) => ({
-    source_type: "signal",
-    source_ref_id: signal.signal_id,
-    market_type: signal.market_type || "spot",
-    symbol: signal.symbol,
-    side: resolveSignalSide(signal),
-    order_type: "market",
-    position_size_mode: "fixed_notional",
-    position_size_value: 30,
-    take_profit_mode: "percent",
-    take_profit_value: 2,
-    stop_loss_mode: "percent",
-    stop_loss_value: 1,
-    live_route: "signal_follow",
-    strategy_binding: signal.strategy_code,
-    signal_confidence: signal.confidence,
-    exchange_connection_id: signal.exchange_connection_id || null,
-  });
-
-  const previewIntentFromSignal = async (signal) => {
-    try {
-      const { data } = await apiClient.post("/user/execution/intent/preview", buildIntentPayload(signal));
-      toast.success(`Preview: ${data.validation_status}`);
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Preview başarısız");
-    }
-  };
-
-  const followSignalToQueue = async (signal) => {
-    try {
-      const { data } = await apiClient.post("/user/execution/intent/preview", buildIntentPayload(signal));
-      if (data.validation_status !== "valid") {
-        toast.error("Signal policy tarafından reddedildi");
-        return;
-      }
-      await apiClient.post("/user/execution/intent/submit", {
-        intent_token: data.intent_token,
-        preview_hash: data.preview_hash,
-      });
-      toast.success("Follow Signal kuyruğa eklendi");
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Follow signal başarısız");
-    }
-  };
 
   const openSignalExplain = async (signal) => {
     setSelectedSignalId(signal.id);
@@ -694,7 +602,7 @@ export const UserSignalsPage = () => {
         <div className="flex flex-wrap items-center justify-between gap-3" data-testid="user-signals-header-controls">
           <div>
             <h2 className="text-4xl font-black uppercase tracking-tight" data-testid="user-signals-title">Signals</h2>
-            <p className="mt-2 text-sm text-slate-400" data-testid="user-signals-description">ASSISTED queue + responsive card/table layout + compact mode.</p>
+            <p className="mt-2 text-sm text-slate-400" data-testid="user-signals-description">Full-auto signal queue + responsive card/table layout + compact mode.</p>
           </div>
           <Button type="button" variant="outline" onClick={() => setCompactMode((previous) => !previous)} data-testid="user-signals-compact-mode-toggle" aria-label="Compact mode aç/kapat">
             {compactMode ? "Compact: ON" : "Compact: OFF"}
@@ -758,7 +666,7 @@ export const UserSignalsPage = () => {
           <p className="text-sm" data-testid="user-signals-live-control-execution-path">Execution Path: {controlPanelState.executionPath}</p>
           <p className="text-sm" data-testid="user-signals-live-control-latest-signal-state">Last Signal State: {controlPanelState.latestSignalState}</p>
           <p className="text-sm" data-testid="user-signals-live-control-current-blocker">Current Blocker: {controlPanelState.currentBlocker}</p>
-          <p className="text-sm" data-testid="user-signals-live-control-note">Not: ORDER_PRECHECK_FAILED durumunda sinyal NON_TRADEABLE olarak işaretlenir.</p>
+          <p className="text-sm" data-testid="user-signals-live-control-note">Not: Uygun sinyaller bot tarafından doğrudan trade hattına gönderilir.</p>
         </div>
 
         {statusContract && (
@@ -904,16 +812,9 @@ export const UserSignalsPage = () => {
               <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-mobile-why-button-${signal.id}`}>Why this signal?</Button>
               {(["pending", "ready", "blocked", "non_tradeable"].includes(String(signal.status || "").toLowerCase())) && (
                 <>
-                  {(["pending", "ready"].includes(String(signal.status || "").toLowerCase())) && (
-                    <>
-                      <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-mobile-approve-${signal.id}`}>Approve</Button>
-                      <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-mobile-reject-${signal.id}`}>Reject</Button>
-                    </>
-                  )}
-                  <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid={`user-signals-mobile-open-execute-${signal.id}`}>Execute</Button>
-                  <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid={`user-signals-mobile-apply-preset-${signal.id}`}>Apply Preset</Button>
-                  <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid={`user-signals-mobile-preview-intent-${signal.id}`}>Preview Intent</Button>
-                  <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid={`user-signals-mobile-follow-signal-${signal.id}`}>Follow Signal</Button>
+                  <span className="inline-flex items-center rounded border border-emerald-700 bg-emerald-950/30 px-2 py-1 text-[11px] text-emerald-200" data-testid={`user-signals-mobile-auto-execution-note-${signal.id}`}>
+                    Uygun sinyaller bot tarafından otomatik işlenir
+                  </span>
                   <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, false)} data-testid={`user-signals-mobile-diagnose-${signal.id}`}>Diagnose</Button>
                   {signal.blocked_reason_code === "RISK_POLICY_MISSING" && (
                     <Button className="bg-amber-500 text-black hover:bg-amber-600" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-mobile-risk-policy-autofix-${signal.id}`}>
@@ -1001,16 +902,9 @@ export const UserSignalsPage = () => {
                     <Button variant="outline" onClick={() => openSignalExplain(signal)} data-testid={`user-signals-why-button-${signal.id}`}>Why this signal?</Button>
                     {(["pending", "ready", "blocked", "non_tradeable"].includes(String(signal.status || "").toLowerCase())) ? (
                       <>
-                        {(["pending", "ready"].includes(String(signal.status || "").toLowerCase())) && (
-                          <>
-                            <Button className="bg-emerald-500 text-black hover:bg-emerald-400" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "approve")} data-testid={`user-signals-approve-button-${signal.id}`}>Approve</Button>
-                            <Button variant="outline" disabled={busyId === signal.id} onClick={() => decideSignal(signal.id, "reject")} data-testid={`user-signals-reject-button-${signal.id}`}>Reject</Button>
-                          </>
-                        )}
-                        <Button variant="outline" onClick={() => openExecuteFromSignal(signal)} data-testid={`user-signals-open-execute-button-${signal.id}`}>Open in Execute</Button>
-                        <Button variant="outline" onClick={() => applyPresetFromSignal(signal)} data-testid={`user-signals-apply-preset-button-${signal.id}`}>Apply Preset</Button>
-                        <Button variant="outline" onClick={() => previewIntentFromSignal(signal)} data-testid={`user-signals-preview-intent-button-${signal.id}`}>Preview Intent</Button>
-                        <Button variant="outline" onClick={() => followSignalToQueue(signal)} data-testid={`user-signals-follow-signal-button-${signal.id}`}>Follow Signal</Button>
+                        <span className="inline-flex items-center rounded border border-emerald-700 bg-emerald-950/30 px-2 py-1 text-[11px] text-emerald-200" data-testid={`user-signals-auto-execution-note-${signal.id}`}>
+                          Uygun sinyaller bot tarafından otomatik işlenir
+                        </span>
                         <Button variant="outline" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, false)} data-testid={`user-signals-diagnose-button-${signal.id}`}>Diagnose</Button>
                         {signal.blocked_reason_code === "RISK_POLICY_MISSING" && (
                           <Button className="bg-amber-500 text-black hover:bg-amber-600" disabled={diagnoseBusyId === signal.id} onClick={() => runDiagnose(signal.id, true)} data-testid={`user-signals-risk-policy-autofix-button-${signal.id}`}>

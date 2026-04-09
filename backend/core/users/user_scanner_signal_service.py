@@ -45,8 +45,8 @@ from services.scanner_observability_service import (
 )
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
-ALLOWED_SIGNAL_MODES = {"ASSISTED", "AUTO", "MANUAL"}
-DEFAULT_SIGNAL_MODE = "MANUAL"
+ALLOWED_SIGNAL_MODES = {"AUTO"}
+DEFAULT_SIGNAL_MODE = "AUTO"
 ALLOWED_SCANNER_SOURCES = {"crypto", "stock"}
 ALLOWED_SCANNER_SELECTION_MODES = {"all_market_symbols", "top_volume", "manual_selection"}
 ALLOWED_SCANNER_MARKET_TYPES = {"spot", "futures", "all"}
@@ -62,10 +62,6 @@ BC_MAX_SCORE = 161.0
 AUTO_EXECUTION_MAX_PER_RUN = 5
 
 SIGNAL_PENDING_REASON_HINTS = {
-    "MANUAL_APPROVAL_REQUIRED": (
-        "Sinyal manuel onay bekliyor.",
-        "Signals satırından Approve veya Fix All Blockers ile AUTO moda geçirip devam edin.",
-    ),
     "BOT_NOT_RUNNING": ("Bot runtime çalışmıyor.", "Bot profilini başlatın (is_running=true)."),
     "RISK_POLICY_MISSING": ("Risk policy tanımlı değil.", "Signals satırından Auto-Fix veya Risk Policy ekranından policy oluşturun."),
     "RISK_LIMIT_BLOCKED": ("Risk limiti engeli oluştu.", "Risk limitlerini veya mevcut pozisyon riskini kontrol edin."),
@@ -96,7 +92,6 @@ SIGNAL_REASON_PRIORITY = [
     "SYMBOL_NOT_ALLOWED",
     "EXECUTION_DISABLED",
     "ORDER_PRECHECK_FAILED",
-    "MANUAL_APPROVAL_REQUIRED",
 ]
 
 PRECHECK_FAILURE_PRIORITY = [
@@ -681,15 +676,13 @@ def _default_bot_for_user(db: Session, user_id: str, symbols: list[str], market_
 
 def _execution_mode_label(mode: str | None) -> str:
     normalized = _normalize_mode(mode)
-    if normalized == "MANUAL":
-        return "Manual"
     if normalized == "AUTO":
         return "Full Auto"
-    return "Semi-Auto"
+    return "Full Auto"
 
 
 def _requires_manual_approval(mode: str | None) -> bool:
-    return _normalize_mode(mode) in {"MANUAL", "ASSISTED"}
+    return False
 
 
 def _base_strategy_code(strategy_code: str | None) -> str:
@@ -1394,7 +1387,7 @@ def _evaluate_signal_blockers(
 def _refresh_pending_signal_snapshot(db: Session, row: PendingSignal) -> PendingSignal:
     if row.current_state in {"ORDER_SUBMITTED", "FILLED", "REJECTED"}:
         return row
-    if row.mode != "AUTO" and _has_active_bot(db, row.user_id):
+    if row.mode != "AUTO":
         row.mode = "AUTO"
 
     signal = db.query(SignalEvent).filter(SignalEvent.id == row.signal_id, SignalEvent.user_id == row.user_id).first()
@@ -1667,6 +1660,12 @@ def get_or_create_signal_mode(db: Session, user_id: str) -> UserSignalMode:
 
     row = db.query(UserSignalMode).filter(UserSignalMode.user_id == user_id).first()
     if row:
+        normalized_mode = _normalize_mode(row.mode)
+        if row.mode != normalized_mode:
+            row.mode = normalized_mode
+            row.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(row)
         return row
 
     default_mode = "AUTO" if _has_active_bot(db, user_id) else DEFAULT_SIGNAL_MODE
@@ -1679,7 +1678,7 @@ def get_or_create_signal_mode(db: Session, user_id: str) -> UserSignalMode:
 
 def update_signal_mode(db: Session, user_id: str, mode: str) -> UserSignalMode:
     row = get_or_create_signal_mode(db, user_id)
-    row.mode = _normalize_mode(mode)
+    row.mode = "AUTO"
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
@@ -1713,13 +1712,14 @@ def list_user_signals(
 
     signal_ids = [row.signal_id for row in rows if row.signal_id]
     signal_rows = (
-        db.query(SignalEvent.id, SignalEvent.market_type)
+        db.query(SignalEvent)
         .filter(SignalEvent.id.in_(signal_ids))
         .all()
         if signal_ids
         else []
     )
-    signal_market_type_map = {str(signal_id): str(market_type or "spot").lower() for signal_id, market_type in signal_rows}
+    signal_map = {str(item.id): item for item in signal_rows}
+    signal_market_type_map = {str(item.id): str(item.market_type or "spot").lower() for item in signal_rows}
 
     mutated = False
     for row in rows:
@@ -1742,6 +1742,31 @@ def list_user_signals(
             )
             if before != after:
                 mutated = True
+
+            if (
+                row.status in {"pending", "ready"}
+                and bool(row.execution_eligible)
+                and not str(row.created_order_intent_id or "").strip()
+            ):
+                signal = signal_map.get(str(row.signal_id))
+                if signal is not None:
+                    try:
+                        exchange_connection = _resolve_exchange_connection_for_market(
+                            db,
+                            row.user_id,
+                            str(signal.market_type or "spot").lower(),
+                        )
+                        _dispatch_signal_to_execution(
+                            db,
+                            row=row,
+                            signal=signal,
+                            exchange_connection=exchange_connection,
+                            actor_user_id=row.user_id,
+                        )
+                        mutated = True
+                    except Exception:
+                        # auto-dispatch denemesi başarısızsa snapshot durumu korunur
+                        pass
         row.execution_mode_label = _execution_mode_label(row.mode)
 
     if refresh_snapshot and mutated:
@@ -1770,9 +1795,9 @@ def run_user_scanner(
     mode = _normalize_mode(requested_mode or mode_row.mode)
     warning_set: set[str] = set()
 
-    if mode != "AUTO" and _has_active_bot(db, user_id):
+    if mode != "AUTO":
         mode = "AUTO"
-        warning_set.add("signal_mode_auto_enforced_for_active_bot")
+        warning_set.add("signal_mode_auto_enforced")
 
     if mode_row.mode != mode:
         mode_row.mode = mode

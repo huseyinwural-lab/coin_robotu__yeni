@@ -643,35 +643,10 @@ def validate_order(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    result = validate_order_precheck(
-        db,
-        user_id=current_user.id,
-        symbol=payload.symbol,
-        market_type=payload.market_type,
-        order_type=payload.order_type,
-        side=payload.side,
-        price=payload.price,
-        size=payload.size,
-        leverage=payload.leverage,
-        margin_mode=payload.margin_mode,
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={"code": "PURE_LIVE_410", "message": "manuel_order_validation_kapatildi_signal_auto_execution_kullan"},
     )
-    create_audit_log(
-        db,
-        action="USER_ORDER_PRECHECK",
-        entity_type="order_validation",
-        entity_id=current_user.id,
-        actor_user_id=current_user.id,
-        actor_role=current_user.role.value,
-        severity="warning" if not result.get("valid") else "info",
-        details={
-            "symbol": payload.symbol,
-            "market_type": payload.market_type,
-            "valid": bool(result.get("valid")),
-            "violations": result.get("violations") or [],
-            "execution_mode": result.get("execution_mode"),
-        },
-    )
-    return OrderValidationResponse(**result)
 
 
 @router.post(
@@ -684,7 +659,10 @@ def open_position(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_open_position")
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={"code": "PURE_LIVE_410", "message": "manuel_trade_kapatildi_signal_auto_execution_kullan"},
+    )
 
 
 @router.post(
@@ -697,7 +675,10 @@ def execute_order(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_execute_order")
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={"code": "PURE_LIVE_410", "message": "manuel_trade_kapatildi_signal_auto_execution_kullan"},
+    )
 
 
 @router.post(
@@ -710,7 +691,10 @@ def manual_trade(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    return _submit_trade_with_guard(payload=payload, current_user=current_user, db=db, source="user_manual_trade")
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={"code": "PURE_LIVE_410", "message": "manuel_trade_kapatildi_signal_auto_execution_kullan"},
+    )
 
 
 @router.get("/portfolio", response_model=UserPortfolioSnapshotResponse)

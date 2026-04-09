@@ -86,6 +86,11 @@ def preview_trading(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={"code": "PURE_LIVE_410", "message": "manuel_preview_kapatildi_signal_auto_execution_kullan"},
+    )
+
     allowed, retry_after_seconds, remaining_tokens = consume_exchange_rate_limit("binance", tokens=1.0)
     if not allowed:
         raise HTTPException(
@@ -224,6 +229,11 @@ def execute_trading(
     current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={"code": "PURE_LIVE_410", "message": "manuel_execute_kapatildi_signal_auto_execution_kullan"},
+    )
+
     readiness = enforce_execution_guard_or_raise(
         db,
         user_id=current_user.id,

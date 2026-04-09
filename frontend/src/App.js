@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { AuthProvider, useAuth } from "@/context/AuthContext";
@@ -62,7 +62,6 @@ import { UserIndicatorScreenerPage } from "@/pages/UserIndicatorScreenerPage";
 import { UserSignalsPage } from "@/pages/UserSignalsPage";
 import { UserSymbolDecisionDetailPage } from "@/pages/UserSymbolDecisionDetailPage";
 import { UserReportsPage } from "@/pages/UserReportsPage";
-import { UserTradePage } from "@/pages/UserTradePage";
 import { UserChartPage } from "@/pages/UserChartPage";
 import { UserPositionsPage } from "@/pages/UserPositionsPage";
 import { ForgotPasswordPage } from "@/pages/ForgotPasswordPage";
@@ -108,9 +107,7 @@ const HomeRedirect = () => {
 };
 
 const ExecuteToTradeRedirect = () => {
-  const location = useLocation();
-  const search = String(location?.search || "");
-  return <Navigate to={`/user/trade${search}`} replace />;
+  return <Navigate to="/user/signals" replace />;
 };
 
 function App() {
@@ -270,8 +267,8 @@ function App() {
             <Route path="symbol/:symbol" element={<UserSymbolDecisionDetailPage />} />
             <Route path="reports" element={<Navigate to="/user/portfolio?tab=reports" replace />} />
             <Route path="execute" element={<ExecuteToTradeRedirect />} />
-            <Route path="trade" element={<UserTradePage />} />
-            <Route path="trade-entry" element={<Navigate to="/user/trade" replace />} />
+            <Route path="trade" element={<Navigate to="/user/signals" replace />} />
+            <Route path="trade-entry" element={<Navigate to="/user/signals" replace />} />
             <Route path="chart" element={<UserChartPage />} />
             <Route path="bot-profiles" element={<BotProfilesPage />} />
             <Route path="pro-bot-profiles" element={<BotProfilesPage />} />
