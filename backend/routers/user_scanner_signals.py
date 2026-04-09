@@ -692,7 +692,6 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
     )
 
     binding_validation = dict((primary_bot or {}).get("binding_validation") or {})
-    resolved_symbols = list(binding_validation.get("resolved_symbols") or [])
     strategy_ready = bool(binding_validation.get("strategy_bound"))
     risk_ready = bool(binding_validation.get("risk_bound"))
     execution_ready = bool(binding_validation.get("execution_bound"))
@@ -719,16 +718,26 @@ def _build_user_status_contract(db: Session, user_id: str) -> dict:
     wallet_available_balance = None
     wallet_balance = None
     if selected_connection is not None:
-        readiness = get_exchange_readiness(
-            db,
-            connection_id=selected_connection.id,
-            market_type=str((primary_bot or {}).get("market_type") or "spot"),
-            symbol=(resolved_symbols[0] if resolved_symbols else None),
+        snapshot = dict(getattr(selected_connection, "readiness_snapshot", None) or {})
+        connection_health = str(snapshot.get("connection_health") or getattr(selected_connection, "connection_health", "unknown") or "unknown").lower()
+        can_trade_effective = bool(
+            snapshot.get("can_trade_effective")
+            if "can_trade_effective" in snapshot
+            else getattr(selected_connection, "can_trade_effective", False)
         )
-        exchange_ready = bool(readiness.get("is_ready"))
-        exchange_reason_code = str(readiness.get("reason_code") or "ready")
-        wallet_last_check_at = readiness.get("last_check_at")
-        perms = dict(readiness.get("permissions") or {})
+        exchange_ready = can_trade_effective and connection_health in {"online", "degraded"}
+        exchange_reason_code = str(
+            snapshot.get("reason_code")
+            or snapshot.get("connection_health_reason")
+            or getattr(selected_connection, "connection_health_reason", "ready")
+            or "ready"
+        )
+        wallet_last_check_at = (
+            snapshot.get("checked_at")
+            or snapshot.get("updated_at")
+            or getattr(selected_connection, "updated_at", None)
+        )
+        perms = dict(snapshot.get("permissions") or {})
         wallet_available_balance = perms.get("available_balance")
         wallet_balance = perms.get("wallet_balance")
 
