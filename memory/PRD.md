@@ -1,3 +1,24 @@
+## 2026-04-09 — Admin Live Gate Adım6 kaldırımı
+
+### İstek
+- `/admin/live-gate` alanındaki **Adım 6 / Canlı Akış İzleme** işlevini yitirdiği için kaldırıldı.
+
+### Uygulanan değişiklik
+- `AdminLiveGatePage.jsx` içinde wizard step listesinden Adım 6 tamamen çıkarıldı.
+- `proxy-health` çağrısı ve bu adıma bağlı state/dependency temizlendi.
+- Progress metni sabit `/6` yerine dinamik hale getirildi: `/{wizardSteps.length}`.
+
+### Son durum
+- Live Gate artık 5 adım gösteriyor (1..5).
+- Adım6 kaynaklı yüklenme/blokaj ilişkisi kaldırıldı.
+
+### Doğrulama
+- Frontend test-agent PASS:
+  - Adım6 görünmüyor
+  - 5 adım kartı mevcut
+  - Progress `/5` görünüyor
+  - Adım6 kaynaklı hata/blokaj yok
+
 ## 2026-04-09 — Canonical Registry: admin weight/priority/cooldown kaldırımı
 
 ### İstek
