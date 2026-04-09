@@ -2219,6 +2219,9 @@ class UserExchangeConnectionResponse(BaseModel):
     global_activation_flag_key: str | None = None
     global_activation_active: bool = False
     effective_source: str = "unresolved"
+    routing_source: str | None = None
+    routing_reason: str | None = None
+    routing_fallback_enabled: bool | None = None
     routing_preview: dict = Field(default_factory=dict)
     environment_valid: bool = False
     created_at: datetime

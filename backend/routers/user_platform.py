@@ -164,6 +164,9 @@ def _with_routing_metadata(*, row: dict, user_id: str, db: Session) -> dict:
         "global_activation_flag_key": activation_flag_key,
         "global_activation_active": activation_active,
         "effective_source": preview.get("effective_source", "unresolved"),
+        "routing_source": preview.get("effective_source", "unresolved"),
+        "routing_reason": str((preview.get("routing_preview") or {}).get("selection_reason") or ""),
+        "routing_fallback_enabled": False,
         "routing_preview": preview.get("routing_preview", {}),
         "environment_valid": bool(preview.get("environment_valid", False)),
     }

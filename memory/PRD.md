@@ -1,3 +1,47 @@
+## 2026-04-09 — User P0 Güvenlik/Gate Düzeltmeleri (Scanner→Signal→Trade)
+
+### İstek
+- User tarafındaki Scanner→Signal→Trade hattında strict ayrım ve hard gate uygulaması başlatıldı.
+- Öncelik: Admin credential fallback kaldırımı, execution guard strict davranış, status-contract doğruluğu ve query-context tutarlılığı.
+
+### Uygulanan değişiklikler
+- Backend (`credential_resolution_service.py`):
+  - Execution purpose için kaynak **zorunlu user credential** yapıldı.
+  - `user_missing_fallback_admin` execution hattında fiilen kapatıldı.
+  - Live user-source bloklayan env kapısı kaldırıldı; admin source execution için yasaklandı.
+- Backend (`execution_readiness_service.py`):
+  - Soft bypass akışı kaldırıldı.
+  - Readiness fail durumunda `HTTP 423` + `execution_guard_blocked` dönülecek şekilde strict block uygulandı.
+- Backend (`user_scanner_signal_service.py`):
+  - Advisory erken dönüş kaldırıldı, gerçek blocker değerlendirmesi aktive edildi.
+  - `ORDER_PRECHECK_FAILED` sinyali blocked/state=BLOCKED olacak şekilde sertleştirildi.
+  - Snapshot refresh içinde primary blocker kodu uygulanır hale getirildi.
+- Backend (`user_scanner_signals.py`):
+  - `blocking_reasons` zorla boşaltma kaldırıldı.
+  - Status contract `health` alanı blocker var/yok durumuna göre hesaplanıyor.
+  - ORDER_PRECHECK için UI normalizasyonunda forced-clear/forced-pending davranışı kaldırıldı.
+- Backend (`schemas.py`, `user_platform.py`):
+  - `UserExchangeConnectionResponse` içine `routing_source`, `routing_reason`, `routing_fallback_enabled` eklendi.
+  - Routing metadata response’a açıkça yazdırıldı.
+- Frontend (`UserSignalsPage.jsx`):
+  - `/user/scanner/status-contract` fetch’i load pipeline’a eklendi.
+  - Status Contract state artık gerçek backend payload’ı ile set ediliyor.
+  - Auto-refresh etiketi 30s ile gerçek poll interval’e eşitlendi.
+- Frontend (`UserTradePage.jsx`):
+  - Query’den `side` + `market_type` okunup form/context prefill yapılıyor.
+  - `market_type` query’ye göre uygun connection seçimi otomatikleniyor.
+
+### Doğrulama
+- Python lint: PASS (`credential_resolution_service.py`, `execution_readiness_service.py`, `user_scanner_signal_service.py`, `user_scanner_signals.py`, `schemas.py`, `user_platform.py`)
+- JS lint: PASS (`UserSignalsPage.jsx`, `UserTradePage.jsx`)
+- API doğrulama (preview URL):
+  - `GET /api/user/scanner/status-contract` → `health=BLOCKED`, `blocking_reasons` dolu (zorla boş değil)
+  - `GET /api/user/exchange-connections` → `routing_source=user`, `routing_reason=execution_user_source_required`
+  - `POST /api/v1/user/trading/preview` → mevcut user exchange key invalid ise `rejected/invalid_key` (admin fallback kullanılmıyor)
+
+### Not
+- Preview ortamında aralıklı CDN timeout gözlendi (bilinen platform limiti); tekrar denemede endpoint doğrulamaları alındı.
+
 ## 2026-04-09 — Admin Live Gate Adım6 kaldırımı
 
 ### İstek
