@@ -87,9 +87,6 @@ export const AdminCanonicalStrategyRegistryPage = () => {
         direction: row.direction,
         market_regime: row.market_regime,
         is_enabled: row.is_enabled,
-        priority: Number(row.priority || 100),
-        cooldown_policy: row.cooldown_policy,
-        weight: Number(row.weight || 1),
         risk_profile: row.risk_profile,
         forced_disable_reason: row.forced_disable_reason || "",
       };
@@ -171,7 +168,7 @@ export const AdminCanonicalStrategyRegistryPage = () => {
       ) : (
         <>
           <div className="overflow-x-auto border border-slate-700" data-testid="admin-canonical-registry-table-wrapper">
-            <table className="min-w-[1800px] text-sm" data-testid="admin-canonical-registry-table">
+            <table className="min-w-[1460px] text-sm" data-testid="admin-canonical-registry-table">
               <thead className="bg-slate-900 text-left">
                 <tr>
                   <th className="px-3 py-2">strategy_id</th>
@@ -179,9 +176,6 @@ export const AdminCanonicalStrategyRegistryPage = () => {
                   <th className="px-3 py-2">enabled</th>
                   <th className="px-3 py-2">direction</th>
                   <th className="px-3 py-2">regime</th>
-                  <th className="px-3 py-2">weight</th>
-                  <th className="px-3 py-2">priority</th>
-                  <th className="px-3 py-2">cooldown</th>
                   <th className="px-3 py-2">quality(50)</th>
                   <th className="px-3 py-2">false_allow</th>
                   <th className="px-3 py-2">false_reject</th>
@@ -224,35 +218,6 @@ export const AdminCanonicalStrategyRegistryPage = () => {
                           <option key={option} value={option}>{option}</option>
                         ))}
                       </select>
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value={row.weight}
-                        onChange={(event) => updateLocal(row.strategy_id, { weight: event.target.value })}
-                        className="w-20 bg-transparent"
-                        data-testid={`admin-canonical-registry-weight-input-${row.strategy_id}`}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        value={row.priority}
-                        onChange={(event) => updateLocal(row.strategy_id, { priority: event.target.value })}
-                        className="w-20 bg-transparent"
-                        data-testid={`admin-canonical-registry-priority-input-${row.strategy_id}`}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        value={row.cooldown_policy || "symbol:180s"}
-                        onChange={(event) => updateLocal(row.strategy_id, { cooldown_policy: event.target.value })}
-                        className="w-28 bg-transparent"
-                        data-testid={`admin-canonical-registry-cooldown-input-${row.strategy_id}`}
-                      />
                     </td>
                     <td className="px-3 py-2" data-testid={`admin-canonical-registry-quality-${row.strategy_id}`}>{row.last_50_signal_quality}</td>
                     <td className="px-3 py-2" data-testid={`admin-canonical-registry-false-allow-${row.strategy_id}`}>{row.false_allow_rate}</td>

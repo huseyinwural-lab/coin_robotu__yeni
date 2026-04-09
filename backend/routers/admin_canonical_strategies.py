@@ -67,9 +67,9 @@ def put_canonical_registry(
         direction=payload.direction,
         market_regime=payload.market_regime,
         is_enabled=payload.is_enabled,
-        priority=payload.priority,
-        cooldown_policy=payload.cooldown_policy,
-        weight=payload.weight,
+        priority=None,
+        cooldown_policy=None,
+        weight=None,
         risk_profile=payload.risk_profile,
         forced_disable_reason=payload.forced_disable_reason,
     )
@@ -88,8 +88,9 @@ def put_canonical_registry(
             "is_enabled": row.is_enabled,
             "direction": row.direction,
             "market_regime": row.market_regime,
-            "priority": row.priority,
-            "weight": row.weight,
+            "priority_locked": True,
+            "weight_locked": True,
+            "cooldown_locked": True,
         },
     )
     return CanonicalStrategyRegistryResponse.model_validate(row)

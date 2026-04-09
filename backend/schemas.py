@@ -4701,9 +4701,6 @@ class CanonicalStrategyRegistryUpdateRequest(BaseModel):
     direction: str | None = None
     market_regime: str | None = None
     is_enabled: bool | None = None
-    priority: int | None = None
-    cooldown_policy: str | None = None
-    weight: float | None = Field(default=None, ge=0)
     risk_profile: str | None = None
     forced_disable_reason: str | None = None
 
