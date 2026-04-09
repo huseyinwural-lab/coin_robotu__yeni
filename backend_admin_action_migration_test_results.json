@@ -1,0 +1,37 @@
+[
+  {
+    "test": "Admin Authentication",
+    "status": "PASS",
+    "details": "Admin login successful, token length: 601",
+    "timestamp": "2026-04-09T01:38:31.734920",
+    "response_data": null
+  },
+  {
+    "test": "User Authentication",
+    "status": "PASS",
+    "details": "User login successful, token length: 591",
+    "timestamp": "2026-04-09T01:38:36.576197",
+    "response_data": null
+  },
+  {
+    "test": "Admin Action Endpoints 410",
+    "status": "FAIL",
+    "details": "410 endpoints: 13/21 passed (61.9%)",
+    "timestamp": "2026-04-09T01:38:49.065944",
+    "response_data": null
+  },
+  {
+    "test": "Admin Read-Only Endpoints",
+    "status": "PASS",
+    "details": "Read-only endpoints: 2/2 passed (100.0%)",
+    "timestamp": "2026-04-09T01:38:51.115331",
+    "response_data": null
+  },
+  {
+    "test": "User Flow Endpoints",
+    "status": "PASS",
+    "details": "User endpoints: 3/3 accessible (100.0%)",
+    "timestamp": "2026-04-09T01:38:53.878855",
+    "response_data": null
+  }
+]
