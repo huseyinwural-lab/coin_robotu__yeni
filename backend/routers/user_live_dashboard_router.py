@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from datetime import datetime, timedelta, timezone
+
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
-from db import get_db
+from db import get_db, redis_client
 from deps import require_user
 from models import User
+from services.pipeline.cache_store import get_json
 from services.user_live_dashboard_service import (
     build_user_live_daily_report,
     build_user_live_execution_quality,
@@ -20,6 +23,26 @@ from services.user_live_dashboard_service import (
 )
 
 router = APIRouter(prefix="/user/live", tags=["user_live_dashboard"])
+
+
+def _safe_parse_iso(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
+def _scanner_engine_config_key(user_id: str) -> str:
+    return f"user:scanner_engine:config:{user_id}"
+
+
+def _scanner_engine_last_run_key(user_id: str) -> str:
+    return f"user:scanner_engine:last_run:{user_id}"
 
 
 @router.get("/summary")
@@ -147,4 +170,29 @@ def user_strategy_performance(
 
 @router.get("/scheduler/next-run")
 def user_scheduler_next_run(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
-    raise HTTPException(status_code=status.HTTP_410_GONE, detail={"code": "PURE_LIVE_410", "message": "scheduler automation kaldırıldı"})
+    config = get_json(redis_client, _scanner_engine_config_key(current_user.id))
+    if not isinstance(config, dict):
+        config = {}
+
+    last_run_payload = get_json(redis_client, _scanner_engine_last_run_key(current_user.id))
+    if not isinstance(last_run_payload, dict):
+        last_run_payload = {}
+
+    auto_interval_minutes = int(config.get("auto_interval_minutes") or 3)
+    if auto_interval_minutes not in {1, 3, 5}:
+        auto_interval_minutes = 3
+
+    interval_seconds = auto_interval_minutes * 60
+    last_run_at = str(last_run_payload.get("generated_at") or "").strip() or None
+    parsed_last_run = _safe_parse_iso(last_run_at)
+    next_run_at = (parsed_last_run + timedelta(seconds=interval_seconds)).isoformat() if parsed_last_run else None
+
+    return {
+        "source": "user_scanner_engine_config",
+        "auto_enabled": True,
+        "signal_mode": "auto",
+        "auto_interval_minutes": auto_interval_minutes,
+        "interval_seconds": interval_seconds,
+        "last_run_at": last_run_at,
+        "next_run_at": next_run_at,
+    }

@@ -17,6 +17,7 @@ const PROFILE_INTERVAL_OPTIONS = [
   { value: 90, label: "1.5 dakika" },
   { value: 120, label: "2 dakika" },
 ];
+const AUTO_INTERVAL_MINUTE_OPTIONS = [1, 3, 5];
 
 const SIMPLE_SCANNER_V2 = true;
 const PURE_LIVE_DISABLE_AUTOMATION = true;
@@ -441,10 +442,11 @@ export const UserScannerPage = () => {
   }, [minimalFilters]);
 
   const activeModeLabel = String(overview?.mode || mode || "AUTO").toUpperCase();
-  const scannerRunType = activeAutomation?.auto_enabled ? "OTOMATİK TARAMA" : "MANUEL TARAMA";
-  const scannerRunTypeDetail = activeAutomation?.auto_enabled
-    ? `Zamanlayıcı aktif · ${Number(activeAutomation?.interval_seconds || AUTO_SCAN_INTERVAL_SECONDS)} sn aralık`
-    : "Run butonuyla manuel tetikleme";
+  const selectedAutoIntervalMinutes = AUTO_INTERVAL_MINUTE_OPTIONS.includes(Number(scannerEngineConfig?.auto_interval_minutes))
+    ? Number(scannerEngineConfig?.auto_interval_minutes)
+    : 3;
+  const scannerRunType = "OTOMATİK TARAMA";
+  const scannerRunTypeDetail = `Kullanıcı kontrolü aktif · ${selectedAutoIntervalMinutes} dk aralık`;
   const executionPathLabel =
     activeModeLabel === "AUTO"
       ? "BOT_AUTO_ACTIVE"
@@ -460,6 +462,14 @@ export const UserScannerPage = () => {
           : "border-slate-700 bg-slate-950 text-slate-300";
 
   const scannerEngineNextRunAt = useMemo(() => {
+    const schedulerNextRunAt = String(schedulerState?.next_run_at || "").trim();
+    if (schedulerNextRunAt) {
+      const schedulerNextDate = new Date(schedulerNextRunAt);
+      if (!Number.isNaN(schedulerNextDate.getTime())) {
+        return schedulerNextDate.toISOString();
+      }
+    }
+
     const baseRaw = scannerEngineRun?.generated_at || activeAutomation?.last_run_at || overview?.latest_generated_at;
     if (!baseRaw) {
       return null;
@@ -468,17 +478,15 @@ export const UserScannerPage = () => {
     if (Number.isNaN(baseDate.getTime())) {
       return null;
     }
-    const minutes = [1, 3, 5].includes(Number(scannerEngineConfig?.auto_interval_minutes))
-      ? Number(scannerEngineConfig?.auto_interval_minutes)
-      : 3;
+    const minutes = selectedAutoIntervalMinutes;
     return new Date(baseDate.getTime() + (minutes * 60 * 1000)).toISOString();
   }, [
     activeAutomation?.last_run_at,
     activeAutomation?.next_run_at,
     overview?.latest_generated_at,
     scannerEngineConfig?.auto_interval_minutes,
-    scannerEngineConfig?.signal_mode,
     scannerEngineRun?.generated_at,
+    selectedAutoIntervalMinutes,
     schedulerState?.next_run_at,
   ]);
 
@@ -1335,17 +1343,22 @@ export const UserScannerPage = () => {
     }
   };
 
-  const runScannerEngine = async () => {
+  const runScannerEngine = useCallback(async ({ silentSuccess = false, silentError = false, reason = "user_scanner_engine_run" } = {}) => {
+    if (scannerEngineBusy) {
+      return;
+    }
     setScannerEngineBusy(true);
     try {
       const { data: queued } = await apiClient.post("/user/scanner-engine/run-async", {
         force_refresh: false,
-        reason: "user_scanner_engine_run",
+        reason,
       }, { timeout: 12000 });
 
       if (queued?.status === "completed_cached") {
         await load({ silent: true });
-        toast.success(`Önceki sonuç kullanıldı: ${queued?.summary?.scored_count || 0} sembol skorlandı`);
+        if (!silentSuccess) {
+          toast.success(`Önceki sonuç kullanıldı: ${queued?.summary?.scored_count || 0} sembol skorlandı`);
+        }
         return;
       }
 
@@ -1361,7 +1374,9 @@ export const UserScannerPage = () => {
         const status = String(statusData?.status || "").toLowerCase();
         if (status === "completed") {
           await load({ silent: true });
-          toast.success(`Scanner tamamlandı: ${statusData?.summary?.scored_count || 0} sembol skorlandı`);
+          if (!silentSuccess) {
+            toast.success(`Scanner tamamlandı: ${statusData?.summary?.scored_count || 0} sembol skorlandı`);
+          }
           return;
         }
         if (status === "failed") {
@@ -1371,11 +1386,36 @@ export const UserScannerPage = () => {
 
       throw new Error("scanner_engine_run_async_timeout");
     } catch (error) {
-      toast.error(toApiErrorMessage(error, "Scanner Engine run başarısız"));
+      if (!silentError) {
+        toast.error(toApiErrorMessage(error, "Scanner Engine run başarısız"));
+      }
     } finally {
       setScannerEngineBusy(false);
     }
-  };
+  }, [load, scannerEngineBusy]);
+
+  useEffect(() => {
+    if (!selectionHydrated) {
+      return;
+    }
+    const intervalMinutes = AUTO_INTERVAL_MINUTE_OPTIONS.includes(Number(scannerEngineConfig?.auto_interval_minutes))
+      ? Number(scannerEngineConfig?.auto_interval_minutes)
+      : 3;
+    const intervalMs = intervalMinutes * 60_000;
+
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+      runScannerEngine({
+        silentSuccess: true,
+        silentError: true,
+        reason: "user_scanner_engine_auto_interval_tick",
+      });
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [runScannerEngine, scannerEngineConfig?.auto_interval_minutes, selectionHydrated]);
 
   useEffect(() => {
     if (SIMPLE_SCANNER_V2) {
@@ -1813,6 +1853,26 @@ export const UserScannerPage = () => {
             </div>
           </div>
 
+          <label className="space-y-1" data-testid="user-scanner-engine-auto-interval-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Auto Tarama Süresi</span>
+            <select
+              value={selectedAutoIntervalMinutes}
+              onChange={(event) => setScannerEngineConfig((prev) => ({
+                ...prev,
+                auto_interval_minutes: AUTO_INTERVAL_MINUTE_OPTIONS.includes(Number(event.target.value))
+                  ? Number(event.target.value)
+                  : 3,
+              }))}
+              disabled={scannerEngineBusy}
+              className="h-10 w-full border border-slate-700 bg-slate-950 px-2 text-sm"
+              data-testid="user-scanner-engine-auto-interval-select"
+            >
+              <option value={1} data-testid="user-scanner-engine-auto-interval-option-1m">1 dakika</option>
+              <option value={3} data-testid="user-scanner-engine-auto-interval-option-3m">3 dakika</option>
+              <option value={5} data-testid="user-scanner-engine-auto-interval-option-5m">5 dakika</option>
+            </select>
+          </label>
+
           <div className="space-y-1" data-testid="user-scanner-engine-save-action-wrap">
             <span className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-engine-save-label">Kaydet</span>
             <Button type="button" variant="outline" onClick={saveScannerEngineConfig} disabled={scannerEngineBusy} className="h-10 w-full" data-testid="user-scanner-engine-save-button">Kaydet</Button>
@@ -1826,7 +1886,7 @@ export const UserScannerPage = () => {
 
         <div className="grid gap-2 rounded border border-slate-800 bg-slate-950 p-3 md:grid-cols-2" data-testid="user-scanner-live-scan-timer-section">
           <p className="text-sm" data-testid="user-scanner-last-scan-value">Last Scan time: {formatDateLabel(scannerEngineRun?.generated_at || activeAutomation?.last_run_at || overview?.latest_generated_at)}</p>
-          <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan time: -</p>
+          <p className="text-sm" data-testid="user-scanner-next-scan-value">Next Scan time: {formatDateLabel(scannerEngineNextRunAt)}</p>
         </div>
       </section>
 
@@ -1835,8 +1895,8 @@ export const UserScannerPage = () => {
         <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="user-scanner-parameters-grid">
           <p className="text-sm" data-testid="user-scanner-parameters-market">Market: <span className="font-semibold">{String(marketType || "spot").toUpperCase()}</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-mode">Signal Mode: <span className="font-semibold">{String(mode || "AUTO").toUpperCase()}</span></p>
-          <p className="text-sm" data-testid="user-scanner-parameters-auto">Automation: <span className="font-semibold">REMOVED</span></p>
-          <p className="text-sm" data-testid="user-scanner-parameters-interval">Interval: <span className="font-semibold">-</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-auto">Automation: <span className="font-semibold">USER_CONTROLLED</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-interval">Interval: <span className="font-semibold">{selectedAutoIntervalMinutes} dk</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-selected-count">Selected Symbols: <span className="font-semibold">{selectedSymbols.length}</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-max-results">Max Results: <span className="font-semibold">{SIMPLE_SCANNER_V2 ? 120 : 25}</span></p>
           <p className="text-sm md:col-span-3" data-testid="user-scanner-parameters-selected-sample">
