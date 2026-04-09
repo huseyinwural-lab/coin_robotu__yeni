@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ export const AdminCanonicalStrategyRegistryPage = () => {
   const [savingId, setSavingId] = useState("");
   const [savingGate, setSavingGate] = useState(false);
 
-  const withTimeout = async (promise, timeoutMs = 12000) => {
+  const withTimeout = useCallback(async (promise, timeoutMs = 12000) => {
     let timer = null;
     try {
       return await Promise.race([
@@ -29,9 +29,9 @@ export const AdminCanonicalStrategyRegistryPage = () => {
         window.clearTimeout(timer);
       }
     }
-  };
+  }, []);
 
-  const loadRegistry = async () => {
+  const loadRegistry = useCallback(async () => {
     setLoading(true);
     setLoadWarning("");
     try {
@@ -67,11 +67,11 @@ export const AdminCanonicalStrategyRegistryPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [withTimeout]);
 
   useEffect(() => {
     loadRegistry();
-  }, []);
+  }, [loadRegistry]);
 
   const registryRows = useMemo(() => rows.filter((item) => !item.is_legacy_candidate), [rows]);
   const legacyRows = useMemo(() => rows.filter((item) => item.is_legacy_candidate), [rows]);

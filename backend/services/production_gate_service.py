@@ -12,7 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from db import SessionLocal, redis_client
+from db import SessionLocal
 from models import AuditLog, BrandSetting, ReleaseGateOverride, UserExchangeConnection
 from services.audit_service import create_audit_log
 from services.exchange_adapter.execution_adapter import ExchangeExecutionAdapter

@@ -482,9 +482,7 @@ export const UserScannerPage = () => {
     return new Date(baseDate.getTime() + (minutes * 60 * 1000)).toISOString();
   }, [
     activeAutomation?.last_run_at,
-    activeAutomation?.next_run_at,
     overview?.latest_generated_at,
-    scannerEngineConfig?.auto_interval_minutes,
     scannerEngineRun?.generated_at,
     selectedAutoIntervalMinutes,
     schedulerState?.next_run_at,

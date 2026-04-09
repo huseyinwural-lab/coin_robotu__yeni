@@ -38,7 +38,6 @@ from services.pipeline.cache_store import get_json, incr_counter, set_json
 from services.pipeline.universe_engine import apply_scanner_mode, build_effective_universe, normalize_scanner_mode
 from services.quote_asset_policy import extract_quote_asset, filter_allowed_quote_symbols
 from services.scanner_observability_service import (
-    get_rollout_state,
     record_fallback_event,
     record_scanner_perf_snapshot,
     resolve_fallback_mode,

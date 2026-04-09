@@ -60,7 +60,6 @@ from services.execution_readiness_service import get_exchange_readiness
 from routers.admin_universe_monitor import (
     _default_scanner_engine_config as _admin_default_scanner_engine_config,
     _sanitize_decision_boxes as _admin_sanitize_decision_boxes,
-    _sanitize_market_scope as _admin_sanitize_market_scope,
     _run_scanner_engine as _admin_run_scanner_engine,
 )
 

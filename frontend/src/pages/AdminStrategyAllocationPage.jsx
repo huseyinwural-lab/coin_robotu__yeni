@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
@@ -205,14 +205,12 @@ export const AdminStrategyAllocationPage = () => {
     });
   };
 
-  const loadHealthSnapshot = async ({ silent = false } = {}) => {
+  const loadHealthSnapshot = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setIsHealthLoading(true);
     try {
       const { data } = await apiClient.get("/admin/strategy-allocation/health");
       setHealthSnapshot(data || null);
-      if (!wsLastMessageAt) {
-        setWsLastMessageAt(new Date().toISOString());
-      }
+      setWsLastMessageAt((prev) => prev || new Date().toISOString());
     } catch (error) {
       const message = getApiDetailMessage(error, "Health verisi alınamadı");
       if (!silent) {
@@ -221,7 +219,7 @@ export const AdminStrategyAllocationPage = () => {
     } finally {
       if (!silent) setIsHealthLoading(false);
     }
-  };
+  }, []);
 
   const loadExplainability = async (strategyId, { silent = false } = {}) => {
     const key = String(strategyId || "").trim();
@@ -245,7 +243,7 @@ export const AdminStrategyAllocationPage = () => {
     }
   };
 
-  const closeRealtimeSocket = () => {
+  const closeRealtimeSocket = useCallback(() => {
     if (wsReconnectTimerRef.current) {
       window.clearTimeout(wsReconnectTimerRef.current);
       wsReconnectTimerRef.current = null;
@@ -258,9 +256,9 @@ export const AdminStrategyAllocationPage = () => {
       }
       wsRef.current = null;
     }
-  };
+  }, []);
 
-  const connectRealtimeSocket = () => {
+  const connectRealtimeSocket = useCallback(() => {
     const headerToken = String(apiClient?.defaults?.headers?.common?.Authorization || "").replace(/^Bearer\s+/i, "").trim();
     const token = headerToken || window.localStorage.getItem("access_token");
     if (!token) {
@@ -323,7 +321,7 @@ export const AdminStrategyAllocationPage = () => {
         connectRealtimeSocket();
       }, Math.floor(nextDelay));
     };
-  };
+  }, [selectedExplainStrategyId]);
 
   const showRevisionConflict = (detail) => {
     const message = detail?.message || "Veri güncel değil. Lütfen en güncel halini yükleyin.";
@@ -380,7 +378,7 @@ export const AdminStrategyAllocationPage = () => {
     }
   };
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setIsLoading(true);
     setLoadError("");
     setGlobalActionError("");
@@ -429,11 +427,11 @@ export const AdminStrategyAllocationPage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [loadHealthSnapshot]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     if (!selectedExplainStrategyId) return;
@@ -448,7 +446,7 @@ export const AdminStrategyAllocationPage = () => {
       wsManualCloseRef.current = true;
       closeRealtimeSocket();
     };
-  }, [selectedExplainStrategyId]);
+  }, [closeRealtimeSocket, connectRealtimeSocket, selectedExplainStrategyId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -457,7 +455,7 @@ export const AdminStrategyAllocationPage = () => {
       }
     }, 20000);
     return () => window.clearInterval(timer);
-  }, [wsConnectionStatus]);
+  }, [loadHealthSnapshot, wsConnectionStatus]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setRequestAgeTick(Date.now()), 60000);

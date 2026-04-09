@@ -43,7 +43,6 @@ from services.execution_safety_p1_service import (
     get_auto_remediation_policy,
     get_correlation_drilldown,
     get_operator_center_snapshot,
-    run_execution_simulation,
     set_auto_remediation_tenant_opt_in,
     stream_analytics_csv,
     update_auto_remediation_policy,
