@@ -136,7 +136,6 @@ const adminOnlyItems = [
     label: "RISK & EXECUTION",
     defaultOpen: true,
     items: [
-      { to: "/admin/risk-orchestrator", label: "Risk Engine", icon: ShieldAlert, testId: "nav-admin-risk-engine-link" },
       { to: "/admin/execution-readiness", label: "Execution Readiness", icon: Activity, testId: "nav-admin-execution-readiness-link" },
       { to: "/admin/execution/operator-center", label: "Operator Center", icon: Activity, testId: "nav-admin-execution-operator-center-link" },
       { to: "/admin/incident-intelligence", label: "Incident Intelligence", icon: ShieldAlert, testId: "nav-admin-incident-intelligence-link" },

@@ -49,7 +49,7 @@ from models import (
 from services.artifact_service import verify_manifest_chain
 from services.connection_reliability_service import get_connection_reliability_policy
 from services.execution_safety_service import ExecutionSafetyViolation, enforce_execution_open_allowed_or_raise
-from services.risk_engine_service import resolve_effective_config_for_user
+from services.risk_engine_service import get_policy_overrides, resolve_effective_config_for_user, upsert_policy_overrides
 from services.risk_orchestrator_service import get_or_create_policy
 from services.system_alert_service import create_system_alert
 from services.pipeline.cache_store import read_candles
@@ -1557,6 +1557,37 @@ def get_or_create_user_risk_settings(db: Session, user_id: str) -> UserRiskSetti
     return row
 
 
+def resolve_user_risk_settings_payload(db: Session, user_id: str) -> dict:
+    settings_row = get_or_create_user_risk_settings(db, user_id)
+    policy = get_or_create_policy(db)
+    effective = resolve_effective_config_for_user(redis_client, user_id=user_id)
+    overrides = get_policy_overrides()
+    user_overrides = (overrides.get("users") or {}).get(str(user_id), {}) if isinstance(overrides, dict) else {}
+
+    cooldown_seconds = int(
+        user_overrides.get("strategy_cooldown_seconds")
+        or (int(float(effective.get("strategy_cooldown_minutes") or 0)) * 60)
+        or policy.strategy_cooldown_seconds
+        or 0
+    )
+
+    return {
+        "allocation_pct": settings_row.allocation_pct,
+        "trade_risk_pct": settings_row.trade_risk_pct,
+        "daily_loss_limit_pct": settings_row.daily_loss_limit_pct,
+        "compounding_enabled": settings_row.compounding_enabled,
+        "base_capital": settings_row.base_capital,
+        "reference_equity_usd": float(user_overrides.get("reference_equity_usd") or settings_row.base_capital or policy.reference_equity_usd),
+        "account_max_notional_pct": float(user_overrides.get("account_max_notional_pct") or effective.get("max_total_exposure_pct") or policy.account_max_notional_pct),
+        "symbol_max_notional_pct": float(user_overrides.get("symbol_max_notional_pct") or effective.get("max_symbol_exposure_pct") or policy.symbol_max_notional_pct),
+        "strategy_max_concurrent_positions": int(user_overrides.get("strategy_max_concurrent_positions") or policy.strategy_max_concurrent_positions or 1),
+        "strategy_cooldown_seconds": cooldown_seconds,
+        "max_order_frequency_per_min": int(user_overrides.get("max_order_frequency_per_min") or policy.max_order_frequency_per_min or 1),
+        "max_order_burst_per_10s": int(user_overrides.get("max_order_burst_per_10s") or policy.max_order_burst_per_10s or 1),
+        "duplicate_suppression_window_seconds": int(user_overrides.get("duplicate_suppression_window_seconds") or policy.duplicate_suppression_window_seconds or 10),
+    }
+
+
 def update_user_risk_settings(
     db: Session,
     *,
@@ -1565,6 +1596,14 @@ def update_user_risk_settings(
     trade_risk_pct: float,
     daily_loss_limit_pct: float,
     compounding_enabled: bool,
+    reference_equity_usd: float | None = None,
+    account_max_notional_pct: float | None = None,
+    symbol_max_notional_pct: float | None = None,
+    strategy_max_concurrent_positions: int | None = None,
+    strategy_cooldown_seconds: int | None = None,
+    max_order_frequency_per_min: int | None = None,
+    max_order_burst_per_10s: int | None = None,
+    duplicate_suppression_window_seconds: int | None = None,
 ) -> UserRiskSetting:
     if not 1 <= allocation_pct <= 50:
         raise ValueError("İşleme ayrılan ana para 1-50 aralığında olmalı")
@@ -1578,9 +1617,38 @@ def update_user_risk_settings(
     row.trade_risk_pct = trade_risk_pct
     row.daily_loss_limit_pct = daily_loss_limit_pct
     row.compounding_enabled = compounding_enabled
+    if reference_equity_usd is not None:
+        row.base_capital = max(float(reference_equity_usd), 1.0)
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
+
+    overrides = get_policy_overrides()
+    user_scope = (overrides.get("users") or {}) if isinstance(overrides, dict) else {}
+    existing = user_scope.get(str(user_id), {}) if isinstance(user_scope, dict) else {}
+    cooldown_seconds = (
+        int(strategy_cooldown_seconds)
+        if strategy_cooldown_seconds is not None
+        else int(existing.get("strategy_cooldown_seconds") or 0)
+    )
+    merged = {
+        **(existing or {}),
+        "reference_equity_usd": float(reference_equity_usd) if reference_equity_usd is not None else float(existing.get("reference_equity_usd") or row.base_capital),
+        "account_max_notional_pct": float(account_max_notional_pct) if account_max_notional_pct is not None else float(existing.get("account_max_notional_pct") or existing.get("max_total_exposure_pct") or 90),
+        "symbol_max_notional_pct": float(symbol_max_notional_pct) if symbol_max_notional_pct is not None else float(existing.get("symbol_max_notional_pct") or existing.get("max_symbol_exposure_pct") or 35),
+        "strategy_max_concurrent_positions": int(strategy_max_concurrent_positions) if strategy_max_concurrent_positions is not None else int(existing.get("strategy_max_concurrent_positions") or 3),
+        "strategy_cooldown_seconds": cooldown_seconds,
+        "max_order_frequency_per_min": int(max_order_frequency_per_min) if max_order_frequency_per_min is not None else int(existing.get("max_order_frequency_per_min") or 12),
+        "max_order_burst_per_10s": int(max_order_burst_per_10s) if max_order_burst_per_10s is not None else int(existing.get("max_order_burst_per_10s") or 3),
+        "duplicate_suppression_window_seconds": int(duplicate_suppression_window_seconds) if duplicate_suppression_window_seconds is not None else int(existing.get("duplicate_suppression_window_seconds") or 45),
+        # risk-engine aktif alan eşlemeleri
+        "max_total_exposure_pct": float(account_max_notional_pct) if account_max_notional_pct is not None else float(existing.get("max_total_exposure_pct") or existing.get("account_max_notional_pct") or 90),
+        "max_symbol_exposure_pct": float(symbol_max_notional_pct) if symbol_max_notional_pct is not None else float(existing.get("max_symbol_exposure_pct") or existing.get("symbol_max_notional_pct") or 35),
+        "max_daily_loss_pct": float(daily_loss_limit_pct),
+        "strategy_cooldown_minutes": max(int(round(cooldown_seconds / 60)), 0),
+    }
+    upsert_policy_overrides(scope="users", key=str(user_id), values=merged)
+
     return row
 
 

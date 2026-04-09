@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
@@ -190,7 +190,27 @@ from services.unified_risk_core_service import (
 )
 
 
-router = APIRouter(prefix="/strategy-domain", tags=["strategy_domain"])
+
+def _block_admin_risk_orchestrator_writes(request: Request) -> None:
+    path = str(request.url.path or "")
+    if request.method.upper() not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return
+    if "/strategy-domain/admin/risk-orchestrator" not in path:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": "PURE_LIVE_410",
+            "message": "Admin risk orchestrator yazma aksiyonları user tarafına taşındı.",
+        },
+    )
+
+
+router = APIRouter(
+    prefix="/strategy-domain",
+    tags=["strategy_domain"],
+    dependencies=[Depends(_block_admin_risk_orchestrator_writes)],
+)
 
 
 def _build_reject_payload(context_payload: dict, *, strategy_version_id: str, reason_codes: list[str]) -> dict:

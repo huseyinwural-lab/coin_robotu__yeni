@@ -893,6 +893,30 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
     if (!Number(riskSettings.daily_loss_limit_pct) || Number(riskSettings.daily_loss_limit_pct) <= 0) {
       nextErrors.daily_loss_limit_pct = "Max Daily Loss % 0'dan büyük olmalı";
     }
+    if (!Number(riskSettings.reference_equity_usd) || Number(riskSettings.reference_equity_usd) <= 0) {
+      nextErrors.reference_equity_usd = "Reference Equity 0'dan büyük olmalı";
+    }
+    if (!Number(riskSettings.account_max_notional_pct) || Number(riskSettings.account_max_notional_pct) <= 0 || Number(riskSettings.account_max_notional_pct) > 100) {
+      nextErrors.account_max_notional_pct = "Account Max Notional % 1-100 aralığında olmalı";
+    }
+    if (!Number(riskSettings.symbol_max_notional_pct) || Number(riskSettings.symbol_max_notional_pct) <= 0 || Number(riskSettings.symbol_max_notional_pct) > 100) {
+      nextErrors.symbol_max_notional_pct = "Symbol Max Notional % 1-100 aralığında olmalı";
+    }
+    if (!Number(riskSettings.strategy_max_concurrent_positions) || Number(riskSettings.strategy_max_concurrent_positions) < 1) {
+      nextErrors.strategy_max_concurrent_positions = "Strategy Max Concurrent en az 1 olmalı";
+    }
+    if (Number(riskSettings.strategy_cooldown_seconds) < 0) {
+      nextErrors.strategy_cooldown_seconds = "Strategy Cooldown 0 veya pozitif olmalı";
+    }
+    if (!Number(riskSettings.max_order_frequency_per_min) || Number(riskSettings.max_order_frequency_per_min) < 1) {
+      nextErrors.max_order_frequency_per_min = "Max Order Frequency en az 1 olmalı";
+    }
+    if (!Number(riskSettings.max_order_burst_per_10s) || Number(riskSettings.max_order_burst_per_10s) < 1) {
+      nextErrors.max_order_burst_per_10s = "Max Order Burst en az 1 olmalı";
+    }
+    if (!Number(riskSettings.duplicate_suppression_window_seconds) || Number(riskSettings.duplicate_suppression_window_seconds) < 1) {
+      nextErrors.duplicate_suppression_window_seconds = "Duplicate Suppression Window en az 1 olmalı";
+    }
     setRiskFormErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       toast.error("Risk form alanlarını kontrol edin");
@@ -905,6 +929,14 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
         trade_risk_pct: Number(riskSettings.trade_risk_pct),
         daily_loss_limit_pct: Number(riskSettings.daily_loss_limit_pct),
         compounding_enabled: Boolean(riskSettings.compounding_enabled),
+        reference_equity_usd: Number(riskSettings.reference_equity_usd),
+        account_max_notional_pct: Number(riskSettings.account_max_notional_pct),
+        symbol_max_notional_pct: Number(riskSettings.symbol_max_notional_pct),
+        strategy_max_concurrent_positions: Number(riskSettings.strategy_max_concurrent_positions),
+        strategy_cooldown_seconds: Number(riskSettings.strategy_cooldown_seconds),
+        max_order_frequency_per_min: Number(riskSettings.max_order_frequency_per_min),
+        max_order_burst_per_10s: Number(riskSettings.max_order_burst_per_10s),
+        duplicate_suppression_window_seconds: Number(riskSettings.duplicate_suppression_window_seconds),
       });
       setRiskSettings(data);
       setRiskFormErrors({});
@@ -1607,6 +1639,136 @@ export const UserExchangeSettingsPage = ({ embedded = false, mode = "management"
               <Input id="user-risk-daily-loss-input" type="number" min={1} max={10} value={riskSettings?.daily_loss_limit_pct ?? 3} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), daily_loss_limit_pct: event.target.value }))} data-testid="user-risk-daily-loss-input" aria-label="Max Daily Loss (%)" aria-describedby="user-risk-daily-loss-helper user-risk-daily-loss-error" />
               <p className="form-helper-text" id="user-risk-daily-loss-helper" data-testid="user-risk-daily-loss-helper">Günlük maksimum kayıp limiti.</p>
               {riskFormErrors.daily_loss_limit_pct && <p className="form-error-text" id="user-risk-daily-loss-error" data-testid="user-risk-daily-loss-error">{riskFormErrors.daily_loss_limit_pct}</p>}
+            </div>
+
+            <div className="form-group" data-testid="user-risk-reference-equity-group">
+              <label className="form-label" htmlFor="user-risk-reference-equity-input" data-testid="user-risk-reference-equity-label">Reference Equity (USDT)</label>
+              <Input
+                id="user-risk-reference-equity-input"
+                type="number"
+                min={1}
+                value={riskSettings?.reference_equity_usd ?? riskSettings?.base_capital ?? 10000}
+                onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), reference_equity_usd: event.target.value }))}
+                data-testid="user-risk-reference-equity-input"
+                aria-label="Reference Equity (USDT)"
+                aria-describedby="user-risk-reference-equity-helper user-risk-reference-equity-error"
+              />
+              <p className="form-helper-text" id="user-risk-reference-equity-helper" data-testid="user-risk-reference-equity-helper">Admin risk panelinden taşınan ana referans equity değeri.</p>
+              {riskFormErrors.reference_equity_usd && <p className="form-error-text" id="user-risk-reference-equity-error" data-testid="user-risk-reference-equity-error">{riskFormErrors.reference_equity_usd}</p>}
+            </div>
+
+            <div className="form-group" data-testid="user-risk-account-max-notional-group">
+              <label className="form-label" htmlFor="user-risk-account-max-notional-input" data-testid="user-risk-account-max-notional-label">Account Max Notional (%)</label>
+              <Input
+                id="user-risk-account-max-notional-input"
+                type="number"
+                min={1}
+                max={100}
+                value={riskSettings?.account_max_notional_pct ?? 90}
+                onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), account_max_notional_pct: event.target.value }))}
+                data-testid="user-risk-account-max-notional-input"
+                aria-label="Account Max Notional (%)"
+                aria-describedby="user-risk-account-max-notional-helper user-risk-account-max-notional-error"
+              />
+              <p className="form-helper-text" id="user-risk-account-max-notional-helper" data-testid="user-risk-account-max-notional-helper">Toplam hesap notional maruziyet üst limiti.</p>
+              {riskFormErrors.account_max_notional_pct && <p className="form-error-text" id="user-risk-account-max-notional-error" data-testid="user-risk-account-max-notional-error">{riskFormErrors.account_max_notional_pct}</p>}
+            </div>
+
+            <div className="form-group" data-testid="user-risk-symbol-max-notional-group">
+              <label className="form-label" htmlFor="user-risk-symbol-max-notional-input" data-testid="user-risk-symbol-max-notional-label">Symbol Max Notional (%)</label>
+              <Input
+                id="user-risk-symbol-max-notional-input"
+                type="number"
+                min={1}
+                max={100}
+                value={riskSettings?.symbol_max_notional_pct ?? 35}
+                onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), symbol_max_notional_pct: event.target.value }))}
+                data-testid="user-risk-symbol-max-notional-input"
+                aria-label="Symbol Max Notional (%)"
+                aria-describedby="user-risk-symbol-max-notional-helper user-risk-symbol-max-notional-error"
+              />
+              <p className="form-helper-text" id="user-risk-symbol-max-notional-helper" data-testid="user-risk-symbol-max-notional-helper">Tek sembol için notional maruziyet limiti.</p>
+              {riskFormErrors.symbol_max_notional_pct && <p className="form-error-text" id="user-risk-symbol-max-notional-error" data-testid="user-risk-symbol-max-notional-error">{riskFormErrors.symbol_max_notional_pct}</p>}
+            </div>
+
+            <div className="form-group" data-testid="user-risk-strategy-max-concurrent-group">
+              <label className="form-label" htmlFor="user-risk-strategy-max-concurrent-input" data-testid="user-risk-strategy-max-concurrent-label">Strategy Max Concurrent</label>
+              <Input
+                id="user-risk-strategy-max-concurrent-input"
+                type="number"
+                min={1}
+                value={riskSettings?.strategy_max_concurrent_positions ?? 3}
+                onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), strategy_max_concurrent_positions: event.target.value }))}
+                data-testid="user-risk-strategy-max-concurrent-input"
+                aria-label="Strategy Max Concurrent"
+                aria-describedby="user-risk-strategy-max-concurrent-helper user-risk-strategy-max-concurrent-error"
+              />
+              <p className="form-helper-text" id="user-risk-strategy-max-concurrent-helper" data-testid="user-risk-strategy-max-concurrent-helper">Aynı strateji için eşzamanlı açık pozisyon limiti.</p>
+              {riskFormErrors.strategy_max_concurrent_positions && <p className="form-error-text" id="user-risk-strategy-max-concurrent-error" data-testid="user-risk-strategy-max-concurrent-error">{riskFormErrors.strategy_max_concurrent_positions}</p>}
+            </div>
+
+            <div className="form-group" data-testid="user-risk-strategy-cooldown-group">
+              <label className="form-label" htmlFor="user-risk-strategy-cooldown-input" data-testid="user-risk-strategy-cooldown-label">Strategy Cooldown (sec)</label>
+              <Input
+                id="user-risk-strategy-cooldown-input"
+                type="number"
+                min={0}
+                value={riskSettings?.strategy_cooldown_seconds ?? 60}
+                onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), strategy_cooldown_seconds: event.target.value }))}
+                data-testid="user-risk-strategy-cooldown-input"
+                aria-label="Strategy Cooldown (sec)"
+                aria-describedby="user-risk-strategy-cooldown-helper user-risk-strategy-cooldown-error"
+              />
+              <p className="form-helper-text" id="user-risk-strategy-cooldown-helper" data-testid="user-risk-strategy-cooldown-helper">Aynı strateji için işlem arası bekleme süresi.</p>
+              {riskFormErrors.strategy_cooldown_seconds && <p className="form-error-text" id="user-risk-strategy-cooldown-error" data-testid="user-risk-strategy-cooldown-error">{riskFormErrors.strategy_cooldown_seconds}</p>}
+            </div>
+
+            <div className="form-group" data-testid="user-risk-max-order-frequency-group">
+              <label className="form-label" htmlFor="user-risk-max-order-frequency-input" data-testid="user-risk-max-order-frequency-label">Max Order Frequency (/min)</label>
+              <Input
+                id="user-risk-max-order-frequency-input"
+                type="number"
+                min={1}
+                value={riskSettings?.max_order_frequency_per_min ?? 12}
+                onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), max_order_frequency_per_min: event.target.value }))}
+                data-testid="user-risk-max-order-frequency-input"
+                aria-label="Max Order Frequency (/min)"
+                aria-describedby="user-risk-max-order-frequency-helper user-risk-max-order-frequency-error"
+              />
+              <p className="form-helper-text" id="user-risk-max-order-frequency-helper" data-testid="user-risk-max-order-frequency-helper">Dakikadaki maksimum emir adedi.</p>
+              {riskFormErrors.max_order_frequency_per_min && <p className="form-error-text" id="user-risk-max-order-frequency-error" data-testid="user-risk-max-order-frequency-error">{riskFormErrors.max_order_frequency_per_min}</p>}
+            </div>
+
+            <div className="form-group" data-testid="user-risk-max-order-burst-group">
+              <label className="form-label" htmlFor="user-risk-max-order-burst-input" data-testid="user-risk-max-order-burst-label">Max Order Burst (/10s)</label>
+              <Input
+                id="user-risk-max-order-burst-input"
+                type="number"
+                min={1}
+                value={riskSettings?.max_order_burst_per_10s ?? 3}
+                onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), max_order_burst_per_10s: event.target.value }))}
+                data-testid="user-risk-max-order-burst-input"
+                aria-label="Max Order Burst (/10s)"
+                aria-describedby="user-risk-max-order-burst-helper user-risk-max-order-burst-error"
+              />
+              <p className="form-helper-text" id="user-risk-max-order-burst-helper" data-testid="user-risk-max-order-burst-helper">10 saniyede maksimum emir adedi.</p>
+              {riskFormErrors.max_order_burst_per_10s && <p className="form-error-text" id="user-risk-max-order-burst-error" data-testid="user-risk-max-order-burst-error">{riskFormErrors.max_order_burst_per_10s}</p>}
+            </div>
+
+            <div className="form-group" data-testid="user-risk-duplicate-suppression-window-group">
+              <label className="form-label" htmlFor="user-risk-duplicate-suppression-window-input" data-testid="user-risk-duplicate-suppression-window-label">Duplicate Suppression Window (sec)</label>
+              <Input
+                id="user-risk-duplicate-suppression-window-input"
+                type="number"
+                min={1}
+                value={riskSettings?.duplicate_suppression_window_seconds ?? 45}
+                onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), duplicate_suppression_window_seconds: event.target.value }))}
+                data-testid="user-risk-duplicate-suppression-window-input"
+                aria-label="Duplicate Suppression Window (sec)"
+                aria-describedby="user-risk-duplicate-suppression-window-helper user-risk-duplicate-suppression-window-error"
+              />
+              <p className="form-helper-text" id="user-risk-duplicate-suppression-window-helper" data-testid="user-risk-duplicate-suppression-window-helper">Aynı emir tekrarlarını engelleyen pencere süresi.</p>
+              {riskFormErrors.duplicate_suppression_window_seconds && <p className="form-error-text" id="user-risk-duplicate-suppression-window-error" data-testid="user-risk-duplicate-suppression-window-error">{riskFormErrors.duplicate_suppression_window_seconds}</p>}
             </div>
             <label className="flex items-center gap-2 text-sm" data-testid="user-risk-compounding-toggle-row">
               <input type="checkbox" checked={Boolean(riskSettings?.compounding_enabled)} onChange={(event) => setRiskSettings((prev) => ({ ...(prev || {}), compounding_enabled: event.target.checked }))} data-testid="user-risk-compounding-toggle" />

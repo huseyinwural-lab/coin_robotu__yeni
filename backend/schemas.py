@@ -1344,6 +1344,14 @@ class UserRiskSettingsResponse(BaseModel):
     daily_loss_limit_pct: float
     compounding_enabled: bool
     base_capital: float
+    reference_equity_usd: float
+    account_max_notional_pct: float
+    symbol_max_notional_pct: float
+    strategy_max_concurrent_positions: int
+    strategy_cooldown_seconds: int
+    max_order_frequency_per_min: int
+    max_order_burst_per_10s: int
+    duplicate_suppression_window_seconds: int
 
 
 class UserRiskSettingsUpdate(BaseModel):
@@ -1351,6 +1359,14 @@ class UserRiskSettingsUpdate(BaseModel):
     trade_risk_pct: float
     daily_loss_limit_pct: float
     compounding_enabled: bool
+    reference_equity_usd: float | None = None
+    account_max_notional_pct: float | None = None
+    symbol_max_notional_pct: float | None = None
+    strategy_max_concurrent_positions: int | None = None
+    strategy_cooldown_seconds: int | None = None
+    max_order_frequency_per_min: int | None = None
+    max_order_burst_per_10s: int | None = None
+    duplicate_suppression_window_seconds: int | None = None
 
 
 class UserRiskPreviewResponse(BaseModel):

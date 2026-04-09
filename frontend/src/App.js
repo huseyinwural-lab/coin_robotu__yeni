@@ -19,8 +19,6 @@ import { AdminFuturesMicrostructureGuardPage } from "@/pages/AdminFuturesMicrost
 import { AdminFuturesLiveControlPage } from "@/pages/AdminFuturesLiveControlPage";
 import { AdminProofsPage } from "@/pages/AdminProofsPage";
 import { AdminReportsArchivePage } from "@/pages/AdminReportsArchivePage";
-import { AdminRiskOrchestratorPage } from "@/pages/AdminRiskOrchestratorPage";
-import { AdminRiskOrchestratorAnalyticsPage } from "@/pages/AdminRiskOrchestratorAnalyticsPage";
 import { AdminRuntimeQuarantinePage } from "@/pages/AdminRuntimeQuarantinePage";
 import { AdminRuntimeRecoveryPage } from "@/pages/AdminRuntimeRecoveryPage";
 import { AdminStrategiesPage } from "@/pages/AdminStrategiesPage";
@@ -188,8 +186,8 @@ function App() {
             <Route path="proofs" element={<AdminProofsPage />} />
             <Route path="reports/archive" element={<AdminReportsArchivePage />} />
             <Route path="strategies" element={<AdminStrategiesPage />} />
-            <Route path="risk-orchestrator" element={<AdminRiskOrchestratorPage />} />
-            <Route path="risk-orchestrator/analytics" element={<AdminRiskOrchestratorAnalyticsPage />} />
+            <Route path="risk-orchestrator" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="risk-orchestrator/analytics" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="runtime/quarantine" element={<AdminRuntimeQuarantinePage />} />
             <Route path="runtime/recovery" element={<AdminRuntimeRecoveryPage />} />
             <Route path="market-universe" element={<MarketUniversePage />} />

@@ -37,7 +37,7 @@ const DRILLDOWN_METRICS = [
 const KPI_CONFIG = [
   { key: "users", label: "Kullanıcı", route: "/admin/users/customers" },
   { key: "running_bots", label: "Running Bot", route: "/admin/strategies" },
-  { key: "risk_policies", label: "Risk Policy", route: "/admin/risk-orchestrator" },
+  { key: "risk_policies", label: "Risk Policy", route: "/admin/system-status" },
   { key: "strategy_templates", label: "Template", route: "/admin/strategies" },
   { key: "websocket_status", label: "WS Status", route: "/admin/system-status" },
   { key: "signals_5m", label: "Signal / 5m", route: "/admin/universe-monitor" },
@@ -624,7 +624,7 @@ export const AdminDashboardPage = () => {
       return;
     }
     if (actionKey === "go_risk_orchestrator") {
-      navigate("/admin/risk-orchestrator");
+      navigate("/admin/system-status");
       return;
     }
     navigateToAuditContext({

@@ -11,7 +11,7 @@ from schemas import (
     UserRiskSettingsUpdate,
 )
 from services.live_mode_service import (
-    get_or_create_user_risk_settings,
+    resolve_user_risk_settings_payload,
     update_user_risk_settings,
     user_portfolio_overview,
     user_risk_preview,
@@ -22,14 +22,8 @@ router = APIRouter(prefix="/user-risk", tags=["user_risk"])
 
 @router.get("/settings", response_model=UserRiskSettingsResponse)
 def get_risk_settings(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    row = get_or_create_user_risk_settings(db, current_user.id)
-    return UserRiskSettingsResponse(
-        allocation_pct=row.allocation_pct,
-        trade_risk_pct=row.trade_risk_pct,
-        daily_loss_limit_pct=row.daily_loss_limit_pct,
-        compounding_enabled=row.compounding_enabled,
-        base_capital=row.base_capital,
-    )
+    payload = resolve_user_risk_settings_payload(db, current_user.id)
+    return UserRiskSettingsResponse(**payload)
 
 
 @router.put("/settings", response_model=UserRiskSettingsResponse)
@@ -46,17 +40,21 @@ def put_risk_settings(
             trade_risk_pct=payload.trade_risk_pct,
             daily_loss_limit_pct=payload.daily_loss_limit_pct,
             compounding_enabled=payload.compounding_enabled,
+            reference_equity_usd=payload.reference_equity_usd,
+            account_max_notional_pct=payload.account_max_notional_pct,
+            symbol_max_notional_pct=payload.symbol_max_notional_pct,
+            strategy_max_concurrent_positions=payload.strategy_max_concurrent_positions,
+            strategy_cooldown_seconds=payload.strategy_cooldown_seconds,
+            max_order_frequency_per_min=payload.max_order_frequency_per_min,
+            max_order_burst_per_10s=payload.max_order_burst_per_10s,
+            duplicate_suppression_window_seconds=payload.duplicate_suppression_window_seconds,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    return UserRiskSettingsResponse(
-        allocation_pct=row.allocation_pct,
-        trade_risk_pct=row.trade_risk_pct,
-        daily_loss_limit_pct=row.daily_loss_limit_pct,
-        compounding_enabled=row.compounding_enabled,
-        base_capital=row.base_capital,
-    )
+    _ = row
+    merged = resolve_user_risk_settings_payload(db, current_user.id)
+    return UserRiskSettingsResponse(**merged)
 
 
 @router.get("/preview", response_model=UserRiskPreviewResponse)
