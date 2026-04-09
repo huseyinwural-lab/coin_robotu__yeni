@@ -133,8 +133,6 @@ export const AdminStrategiesPage = () => {
   const [versionForm, setVersionForm] = useState(versionSeed);
   const [decisionResult, setDecisionResult] = useState(null);
   const [kernelContextText, setKernelContextText] = useState(JSON.stringify(kernelContextSeed(), null, 2));
-  const [runtimeDispatchResult, setRuntimeDispatchResult] = useState(null);
-  const [workerResult, setWorkerResult] = useState(null);
   const [runtimeIntents, setRuntimeIntents] = useState([]);
   const [hotTraces, setHotTraces] = useState([]);
   const [coldTraces, setColdTraces] = useState([]);
@@ -987,36 +985,6 @@ export const AdminStrategiesPage = () => {
     loadVersionObservability();
   }, [loadVersionObservability]);
 
-  const dispatchRuntime = async () => {
-    if (!selectedStrategyId) {
-      toast.error("Önce strategy seçin");
-      return;
-    }
-    try {
-      const contextPayload = JSON.parse(kernelContextText);
-      const { data } = await apiClient.post("/strategy-domain/admin/runtime/dispatch", {
-        strategy_id: selectedStrategyId,
-        decision_context: contextPayload,
-      });
-      setRuntimeDispatchResult(data);
-      toast.success("Decision runtime bus’a dispatch edildi");
-      await loadRuntimeViews();
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Runtime dispatch başarısız");
-    }
-  };
-
-  const runWorkerOnce = async () => {
-    try {
-      const { data } = await apiClient.post("/strategy-domain/admin/runtime/worker/run-once");
-      setWorkerResult(data);
-      toast.success("Worker run-once çalıştı");
-      await loadRuntimeViews();
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Worker run-once başarısız");
-    }
-  };
-
   const createRegimeBinding = async () => {
     if (!selectedActiveVersion) {
       toast.error("Aktif strategy version seçilmedi");
@@ -1259,8 +1227,6 @@ export const AdminStrategiesPage = () => {
           <Button variant="outline" className="border-slate-500 text-slate-100" onClick={runVersionDiff} data-testid="admin-version-diff-run-button">Run Version Diff</Button>
         </div>
         <div className="flex flex-wrap gap-2" data-testid="admin-runtime-actions-row">
-          <Button className="bg-emerald-500 text-black hover:bg-emerald-600" onClick={dispatchRuntime} data-testid="admin-runtime-dispatch-button">Dispatch Runtime</Button>
-          <Button variant="outline" className="border-slate-500 text-slate-200" onClick={runWorkerOnce} data-testid="admin-runtime-worker-run-once-button">Worker Run Once</Button>
           <Button variant="outline" className="border-slate-500 text-slate-200" onClick={loadRuntimeViews} data-testid="admin-runtime-refresh-button">Refresh Runtime Views</Button>
         </div>
 
@@ -1317,19 +1283,6 @@ export const AdminStrategiesPage = () => {
           </div>
         )}
 
-        {runtimeDispatchResult && (
-          <div className="border border-slate-700 p-3" data-testid="admin-runtime-dispatch-result-card">
-            <p className="text-sm" data-testid="admin-runtime-dispatch-intent-id">intent_id: {runtimeDispatchResult?.execution_intent?.intent_id || "-"}</p>
-            <p className="text-sm" data-testid="admin-runtime-dispatch-events-count">emitted_events: {(runtimeDispatchResult?.emitted_events || []).length}</p>
-          </div>
-        )}
-
-        {workerResult && (
-          <div className="border border-slate-700 p-3" data-testid="admin-runtime-worker-result-card">
-            <p className="text-sm" data-testid="admin-runtime-worker-result-status">status: {workerResult.status}</p>
-            <p className="text-xs text-slate-400" data-testid="admin-runtime-worker-result-event-id">event_id: {workerResult.event_id || "-"}</p>
-          </div>
-        )}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-strategy-explainability-grid">

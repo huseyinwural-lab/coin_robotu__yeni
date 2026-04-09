@@ -196,6 +196,14 @@ def _block_admin_risk_orchestrator_writes(request: Request) -> None:
     if request.method.upper() not in {"POST", "PUT", "PATCH", "DELETE"}:
         return
     if "/strategy-domain/admin/risk-orchestrator" not in path:
+        if "/strategy-domain/admin/runtime/dispatch" in path or "/strategy-domain/admin/runtime/worker/run-once" in path:
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail={
+                    "code": "PURE_LIVE_410",
+                    "message": "Admin runtime tetikleme aksiyonları user tarafına taşındı.",
+                },
+            )
         return
     raise HTTPException(
         status_code=status.HTTP_410_GONE,
