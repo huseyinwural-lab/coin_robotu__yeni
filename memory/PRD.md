@@ -1,3 +1,28 @@
+## 2026-04-09 — Canonical Registry: admin weight/priority/cooldown kaldırımı
+
+### İstek
+- `/admin/strategy/canonical-registry` formunda adminin `weight`, `priority`, `cooldown` düzenleme davranışı kaldırıldı.
+- Karar/tuning tarafı user akışına bırakıldı.
+
+### Uygulanan değişiklikler
+- Frontend (`AdminCanonicalStrategyRegistryPage.jsx`):
+  - Tablo kolonlarından kaldırıldı: `weight`, `priority`, `cooldown`
+  - İlgili inputlar kaldırıldı.
+  - Save payload’dan çıkarıldı: `weight`, `priority`, `cooldown_policy`
+- Backend (`admin_canonical_strategies.py`):
+  - PUT `/admin/canonical-strategies/registry/{strategy_id}` çağrısında bu alanlar zorla `None` veriliyor (güncellenmiyor).
+  - Audit detayına kilit bilgisi eklendi (`priority_locked`, `weight_locked`, `cooldown_locked`).
+- Backend schema (`schemas.py`):
+  - `CanonicalStrategyRegistryUpdateRequest` içinden `priority`, `cooldown_policy`, `weight` alanları çıkarıldı.
+
+### Doğrulama
+- Backend doğrulama: update payload’a bu alanlar zorla gönderilse bile değerler değişmedi (önce/sonra aynı).
+- Frontend test-agent doğrulama: PASS (4/4)
+  - weight/priority/cooldown kolonları görünmüyor
+  - ilgili input test-id’leri yok
+  - direction/regime/enabled/save aktif
+  - save işlemi başarılı
+
 ## 2026-04-09 — Admin Strategy Takip ekranı (12 strateji / win-rate)
 
 ### Uygulanan özellik
