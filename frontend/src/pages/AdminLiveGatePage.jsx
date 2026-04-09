@@ -24,7 +24,6 @@ export const AdminLiveGatePage = () => {
   const [gate, setGate] = useState(null);
   const [readiness, setReadiness] = useState(null);
   const [liveConfig, setLiveConfig] = useState(null);
-  const [proxyHealth, setProxyHealth] = useState(null);
   const [manualComplete, setManualComplete] = useState({});
   const [error, setError] = useState("");
 
@@ -32,18 +31,16 @@ export const AdminLiveGatePage = () => {
     setLoading(true);
     setError("");
     try {
-      const [gateResp, readinessResp, configResp, proxyResp, progressResp] = await Promise.allSettled([
+      const [gateResp, readinessResp, configResp, progressResp] = await Promise.allSettled([
         apiClient.get("/phase4/admin/production-gate?refresh_checks=false"),
         apiClient.get("/admin/execution-readiness"),
         apiClient.get("/phase4/live-config"),
-        apiClient.get("/runtime/exchange/proxy-health"),
         apiClient.get("/phase4/admin/live-gate/wizard-progress"),
       ]);
 
       setGate(gateResp.status === "fulfilled" ? gateResp.value.data : null);
       setReadiness(readinessResp.status === "fulfilled" ? readinessResp.value.data : null);
       setLiveConfig(configResp.status === "fulfilled" ? configResp.value.data : null);
-      setProxyHealth(proxyResp.status === "fulfilled" ? proxyResp.value.data : null);
 
       if (progressResp.status === "fulfilled") {
         const ids = progressResp.value.data?.completed_step_ids || [];
@@ -179,9 +176,6 @@ export const AdminLiveGatePage = () => {
   };
 
   const steps = useMemo(() => {
-    const proxySpot = proxyHealth?.result?.spot || {};
-    const proxyFutures = proxyHealth?.result?.futures || {};
-
     const reasons = readiness?.reason_codes || [];
     const gateReasons = gate?.blocked_reason_codes || [];
 
@@ -226,19 +220,8 @@ export const AdminLiveGatePage = () => {
         reason: readiness?.mode !== "LIVE" ? `mode=${readiness?.mode || "-"}` : readiness?.final_status !== "READY" ? `final_status=${readiness?.final_status || "-"}` : "",
         to: "/admin/universe-monitor",
       },
-      {
-        id: 6,
-        title: "Canlı Akış İzleme",
-        desc: "Proxy health, execution readiness ve gate sürekli izlenmeli.",
-        state: proxySpot?.proxy_token_set && proxySpot?.base_url_set && proxyFutures?.proxy_token_set && proxyFutures?.base_url_set ? "PASS" : "FAIL",
-        reason:
-          proxySpot?.proxy_token_set && proxySpot?.base_url_set && proxyFutures?.proxy_token_set && proxyFutures?.base_url_set
-            ? ""
-            : "proxy_missing_or_token_missing",
-        to: "/admin/execution-readiness",
-      },
     ];
-  }, [gate, readiness, liveConfig, proxyHealth]);
+  }, [gate, readiness, liveConfig]);
 
   const wizardSteps = useMemo(() => {
     return steps.map((step, index) => {
@@ -307,7 +290,7 @@ export const AdminLiveGatePage = () => {
             </Button>
           </div>
         </div>
-        <p className="mt-3 text-sm text-slate-300" data-testid="admin-live-gate-progress-text">Wizard İlerlemesi: <strong>{doneCount}/6</strong></p>
+        <p className="mt-3 text-sm text-slate-300" data-testid="admin-live-gate-progress-text">Wizard İlerlemesi: <strong>{doneCount}/{wizardSteps.length}</strong></p>
         {error ? <p className="mt-3 text-sm text-amber-300" data-testid="admin-live-gate-error-text">{error}</p> : null}
       </div>
 
