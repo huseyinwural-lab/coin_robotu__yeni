@@ -1,12 +1,13 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import require_admin
-from models import User
+from models import CanonicalStrategyRegistry, User, UserTradeProjection
 from schemas import (
+    AdminStrategyTakipRowResponse,
     BlockedReasonTimelineEnvelopeResponse,
     CanonicalStrategyRegistryResponse,
     CanonicalStrategyRegistryUpdateRequest,
@@ -15,6 +16,7 @@ from schemas import (
 )
 from services.audit_service import create_audit_log
 from services.canonical_strategy_registry_service import (
+    CANONICAL_STRATEGIES,
     list_registry,
     refresh_registry_metrics,
     update_registry_entry,
@@ -24,6 +26,21 @@ from models import UserDecisionTrace
 
 
 router = APIRouter(prefix="/admin/canonical-strategies", tags=["admin_canonical_strategies"])
+TRACKED_STRATEGY_IDS = list(CANONICAL_STRATEGIES.keys())
+
+
+def _resolve_trade_strategy_id(row: UserTradeProjection, strategy_set: set[str]) -> str | None:
+    meta = row.meta_json if isinstance(row.meta_json, dict) else {}
+    candidates = [
+        str(row.strategy_name or "").strip(),
+        str(meta.get("strategy_id") or "").strip(),
+        str(meta.get("canonical_strategy_id") or "").strip(),
+        str(row.strategy_template_id or "").strip(),
+    ]
+    for item in candidates:
+        if item and item in strategy_set:
+            return item
+    return None
 
 
 @router.get("/registry", response_model=list[CanonicalStrategyRegistryResponse])
@@ -117,6 +134,77 @@ def put_strategy_family_gates(
         details={"updated_families": [item.family for item in payload.items]},
     )
     return [StrategyFamilyGateResponse(**strategy_family_gate_payload(row)) for row in rows]
+
+
+@router.get("/strategy-takip", response_model=list[AdminStrategyTakipRowResponse])
+def get_strategy_takip(current_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    _ = current_admin
+    strategy_ids = TRACKED_STRATEGY_IDS
+    strategy_set = set(strategy_ids)
+
+    family_by_strategy = {
+        strategy_id: str((CANONICAL_STRATEGIES.get(strategy_id) or {}).get("strategy_family") or "unknown")
+        for strategy_id in strategy_ids
+    }
+    registry_rows = db.query(CanonicalStrategyRegistry).filter(CanonicalStrategyRegistry.strategy_id.in_(strategy_ids)).all()
+    for row in registry_rows:
+        family_by_strategy[row.strategy_id] = str(row.strategy_family or family_by_strategy.get(row.strategy_id) or "unknown")
+
+    now = datetime.now(timezone.utc)
+    window_starts = {
+        1: now - timedelta(days=1),
+        7: now - timedelta(days=7),
+        30: now - timedelta(days=30),
+        90: now - timedelta(days=90),
+    }
+    stats = {
+        strategy_id: {
+            1: {"wins": 0, "total": 0},
+            7: {"wins": 0, "total": 0},
+            30: {"wins": 0, "total": 0},
+            90: {"wins": 0, "total": 0},
+        }
+        for strategy_id in strategy_ids
+    }
+
+    trade_rows = (
+        db.query(UserTradeProjection)
+        .filter(UserTradeProjection.closed_at.is_not(None), UserTradeProjection.closed_at >= window_starts[90])
+        .all()
+    )
+    for row in trade_rows:
+        strategy_id = _resolve_trade_strategy_id(row, strategy_set)
+        if not strategy_id:
+            continue
+        closed_at = row.closed_at
+        if closed_at is None:
+            continue
+        if closed_at.tzinfo is None:
+            closed_at = closed_at.replace(tzinfo=timezone.utc)
+        pnl = float(row.realized_pnl or 0)
+        for days, start in window_starts.items():
+            if closed_at < start:
+                continue
+            stats[strategy_id][days]["total"] += 1
+            if pnl > 0:
+                stats[strategy_id][days]["wins"] += 1
+
+    def _pct(sid: str, days: int) -> float:
+        total = int(stats[sid][days]["total"])
+        wins = int(stats[sid][days]["wins"])
+        return round((wins / total) * 100, 2) if total > 0 else 0.0
+
+    return [
+        AdminStrategyTakipRowResponse(
+            strategy_id=sid,
+            family=family_by_strategy.get(sid, "unknown"),
+            success_1d_pct=_pct(sid, 1),
+            success_7d_pct=_pct(sid, 7),
+            success_30d_pct=_pct(sid, 30),
+            success_90d_pct=_pct(sid, 90),
+        )
+        for sid in strategy_ids
+    ]
 
 
 @router.get("/blocked-reason-timeline/{symbol}", response_model=BlockedReasonTimelineEnvelopeResponse)

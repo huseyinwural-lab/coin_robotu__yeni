@@ -73,6 +73,7 @@ import { AdminPortfolioRiskPage } from "@/pages/AdminPortfolioRiskPage";
 import { AdminPositionsMonitorPage } from "@/pages/AdminPositionsMonitorPage";
 import { AdminCrossDashboardConsistencyPage } from "@/pages/AdminCrossDashboardConsistencyPage";
 import { AdminCanonicalStrategyRegistryPage } from "@/pages/AdminCanonicalStrategyRegistryPage";
+import { AdminStrategyTakipPage } from "@/pages/AdminStrategyTakipPage";
 import { AdminLearningPanelPage } from "@/pages/AdminLearningPanelPage";
 import { AdminUniverseMonitorPage } from "@/pages/AdminUniverseMonitorPage";
 import { AdminFreshnessHeatmapPage } from "@/pages/AdminFreshnessHeatmapPage";
@@ -210,6 +211,7 @@ function App() {
             <Route path="positions-monitor" element={<AdminPositionsMonitorPage />} />
             <Route path="strategy/intelligence" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="strategy/canonical-registry" element={<AdminCanonicalStrategyRegistryPage />} />
+            <Route path="strategy/strategy-takip" element={<AdminStrategyTakipPage />} />
             <Route path="learning-panel" element={<AdminLearningPanelPage />} />
             <Route path="learning-impact-simulator" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="universe-monitor" element={<AdminUniverseMonitorPage />} />

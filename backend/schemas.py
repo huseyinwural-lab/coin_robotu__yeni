@@ -4743,6 +4743,15 @@ class StrategyFamilyGateBulkUpdateRequest(BaseModel):
     items: list[StrategyFamilyGateUpdateItem] = Field(default_factory=list)
 
 
+class AdminStrategyTakipRowResponse(BaseModel):
+    strategy_id: str
+    family: str
+    success_1d_pct: float
+    success_7d_pct: float
+    success_30d_pct: float
+    success_90d_pct: float
+
+
 class DecisionCardStrategyContribution(BaseModel):
     strategy_id: str
     family: str

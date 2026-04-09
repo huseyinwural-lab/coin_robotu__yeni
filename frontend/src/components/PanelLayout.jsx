@@ -128,6 +128,7 @@ const adminOnlyItems = [
     items: [
       { to: "/admin/strategy/allocation", label: "Strategy Allocation", icon: BarChart3, testId: "nav-admin-strategy-allocation-link" },
       { to: "/admin/strategy/canonical-registry", label: "Canonical Strategy Registry", icon: ClipboardList, testId: "nav-admin-strategy-canonical-registry-link" },
+      { to: "/admin/strategy/strategy-takip", label: "Strategy Takip", icon: LineChart, testId: "nav-admin-strategy-takip-link" },
       { to: "/admin/strategy/execution-state-machine", label: "Execution State Machine", icon: Activity, testId: "nav-admin-strategy-execution-state-machine-link" },
     ],
   },
