@@ -89,6 +89,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
 
       const { data } = await apiClient.get("/admin/identity/users", {
         params: {
+          scope: isAdminScope ? "admin" : "user",
           search: filters.search || undefined,
           role: roleValue,
           status: filters.status,
@@ -781,7 +782,7 @@ export const AdminUsersPage = ({ scope = "user" }) => {
             {adminRoleOptions.map((role) => (
               <option key={role} value={role}>{role}</option>
             ))}
-            <option value="user">user</option>
+            {!isAdminScope && <option value="user">user</option>}
           </select>
 
           <select
@@ -893,7 +894,9 @@ export const AdminUsersPage = ({ scope = "user" }) => {
             Toplam kullanıcı: {pagination.total}
           </p>
           <p className="text-sm text-black" data-testid="admin-users-role-counts-text">
-            super_admin:{roleCounts.super_admin || 0} · admin:{roleCounts.admin || 0} · ops:{roleCounts.ops || 0} · user:{roleCounts.user || 0}
+            {isAdminScope
+              ? `super_admin:${roleCounts.super_admin || 0} · admin:${roleCounts.admin || 0} · ops:${roleCounts.ops || 0}`
+              : `user:${roleCounts.user || 0}`}
           </p>
           <p className="text-xs text-black/80" data-testid="admin-users-selected-count-text">Seçili: {selectedUserIds.length}</p>
           {bulkExecutionResult && (
@@ -928,12 +931,10 @@ export const AdminUsersPage = ({ scope = "user" }) => {
             <select
               className="border border-black/40 bg-white px-3 py-2 text-sm"
               value={createForm.role}
-              onChange={(event) => setCreateForm((prev) => ({ ...prev, role: event.target.value }))}
+              onChange={() => setCreateForm((prev) => ({ ...prev, role: "admin" }))}
               data-testid="admin-users-create-role-select"
             >
               <option value="admin">admin</option>
-              <option value="ops">ops</option>
-              {canCreateSuperAdmin && <option value="super_admin">super_admin</option>}
             </select>
             <Button
               className="border border-black bg-black text-orange-400 hover:bg-zinc-800"

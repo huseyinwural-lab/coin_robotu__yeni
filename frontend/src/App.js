@@ -161,13 +161,13 @@ function App() {
             <Route path="users/admins" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
             <Route path="users/customers" element={<Navigate to="/admin/kullanicilar/user-kullanicilar" replace />} />
             <Route path="user-approvals" element={<Navigate to="/admin/kullanicilar/kullanici-onaylar" replace />} />
-            <Route path="kullanicilar" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
-            <Route path="kullanıcılar" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
+            <Route path="kullanicilar" element={<Navigate to="/admin/kullanicilar/kullanici-onaylar" replace />} />
+            <Route path="kullanıcılar" element={<Navigate to="/admin/kullanicilar/kullanici-onaylar" replace />} />
             <Route path="kullanicilar/admin-kullanicilar" element={<AdminUsersPage scope="admin" />} />
             <Route path="kullanicilar/user-kullanicilar" element={<AdminUserUsersPage />} />
             <Route path="kullanicilar/kullanici-onaylar" element={<AdminUserApprovalsPage />} />
             <Route path="kullanicilar/kullanici-ekonomisi" element={<AdminUserEconomicsPage />} />
-            <Route path="core/kullanicilar" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
+            <Route path="core/kullanicilar" element={<Navigate to="/admin/kullanicilar/kullanici-onaylar" replace />} />
             <Route path="core/kullanicilar/admin-kullanicilar" element={<Navigate to="/admin/kullanicilar/admin-kullanicilar" replace />} />
             <Route path="core/kullanicilar/user-kullanicilar" element={<Navigate to="/admin/kullanicilar/user-kullanicilar" replace />} />
             <Route path="core/kullanicilar/kullanici-onaylar" element={<Navigate to="/admin/kullanicilar/kullanici-onaylar" replace />} />

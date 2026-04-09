@@ -18,7 +18,8 @@ export const AdminUniverseMonitorPage = () => {
   const { user } = useAuth();
   const isSuperAdmin = String(user?.role || "").toLowerCase() === "super_admin";
   const isProductionEnv = String(process.env.REACT_APP_ENV || "").toLowerCase() === "production";
-  const canShowDebug = isSuperAdmin && !isProductionEnv;
+  const governanceOnly = true;
+  const canShowDebug = !governanceOnly && isSuperAdmin && !isProductionEnv;
   const [mode, setMode] = useState("ALL_MARKET_SYMBOLS");
   const [windowSize, setWindowSize] = useState("24h");
   const [loading, setLoading] = useState(true);
@@ -107,11 +108,11 @@ export const AdminUniverseMonitorPage = () => {
       const [summaryRes, trendRes, breakdownRes, heatmapRes, rolloutRes, fallbackEventsRes, runtimeSummaryRes] = await Promise.all([
         apiClient.get("/admin/universe-monitor", { params: { market_type: "spot", scanner_mode: mode, top_n: 200 } }),
         apiClient.get("/admin/universe-monitor/trends", { params: { window: windowSize } }),
-        apiClient.get("/admin/universe-monitor/breakdown", { params: { window: windowSize } }),
-        apiClient.get("/admin/universe-monitor/freshness-heatmap", { params: { window: windowSize } }),
+        governanceOnly ? Promise.resolve({ data: { user_breakdown: [], regime_breakdown: [] } }) : apiClient.get("/admin/universe-monitor/breakdown", { params: { window: windowSize } }),
+        governanceOnly ? Promise.resolve({ data: { items: [] } }) : apiClient.get("/admin/universe-monitor/freshness-heatmap", { params: { window: windowSize } }),
         apiClient.get("/admin/universe-monitor/rollout/status"),
-        apiClient.get("/admin/universe-monitor/fallback-events", { params: { limit: 80 } }),
-        apiClient.get("/admin/universe/runtime-summary", { params: { scanner_mode: mode, top_n: 200 } }),
+        governanceOnly ? Promise.resolve({ data: { items: [] } }) : apiClient.get("/admin/universe-monitor/fallback-events", { params: { limit: 80 } }),
+        governanceOnly ? Promise.resolve({ data: null }) : apiClient.get("/admin/universe/runtime-summary", { params: { scanner_mode: mode, top_n: 200 } }),
       ]);
       let debugRes = { data: null };
       if (canShowDebug) {
@@ -136,19 +137,21 @@ export const AdminUniverseMonitorPage = () => {
         setStatusContract(null);
       }
 
-      try {
-        const [scannerConfigRes, scannerRunRes, scannerJobsRes] = await Promise.all([
-          apiClient.get("/admin/universe-monitor/scanner-engine/config"),
-          apiClient.get("/admin/universe-monitor/scanner-engine/last-run"),
-          apiClient.get("/admin/universe-monitor/scanner-engine/bot/jobs", { params: { limit: 20 } }),
-        ]);
-        const configData = scannerConfigRes?.data || {};
-        setScannerEngineConfig((prev) => ({ ...prev, ...configData }));
-        setManualSymbolsInput((prev) => (prev ? prev : (configData?.manual_symbols || []).join(",")));
-        setScannerEngineRun(scannerRunRes?.data || { status: "empty", summary: {}, top_results: [], results: [] });
-        setScannerEngineJobs(scannerJobsRes?.data?.items || []);
-      } catch {
-        // scanner engine panel'i, monitor ana akışını bozmadan sessizce fallback eder
+      if (!governanceOnly) {
+        try {
+          const [scannerConfigRes, scannerRunRes, scannerJobsRes] = await Promise.all([
+            apiClient.get("/admin/universe-monitor/scanner-engine/config"),
+            apiClient.get("/admin/universe-monitor/scanner-engine/last-run"),
+            apiClient.get("/admin/universe-monitor/scanner-engine/bot/jobs", { params: { limit: 20 } }),
+          ]);
+          const configData = scannerConfigRes?.data || {};
+          setScannerEngineConfig((prev) => ({ ...prev, ...configData }));
+          setManualSymbolsInput((prev) => (prev ? prev : (configData?.manual_symbols || []).join(",")));
+          setScannerEngineRun(scannerRunRes?.data || { status: "empty", summary: {}, top_results: [], results: [] });
+          setScannerEngineJobs(scannerJobsRes?.data?.items || []);
+        } catch {
+          // scanner engine panel'i, monitor ana akışını bozmadan sessizce fallback eder
+        }
       }
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -157,7 +160,7 @@ export const AdminUniverseMonitorPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [mode, windowSize, canShowDebug]);
+  }, [mode, windowSize, canShowDebug, governanceOnly]);
 
   useEffect(() => {
     load();
@@ -326,6 +329,15 @@ export const AdminUniverseMonitorPage = () => {
         </p>
       </header>
 
+      {governanceOnly && (
+        <article className="rounded border border-emerald-800/50 bg-emerald-950/20 p-3" data-testid="admin-universe-monitor-governance-only-note">
+          <p className="text-xs uppercase tracking-widest text-emerald-300" data-testid="admin-universe-monitor-governance-only-note-title">Governance Scope</p>
+          <p className="mt-1 text-xs text-emerald-100" data-testid="admin-universe-monitor-governance-only-note-text">
+            Bu ekranda user-level signal/trade/debug blokları kaldırıldı. Sadece yönetim KPI ve rollout görünür.
+          </p>
+        </article>
+      )}
+
       <div className="flex flex-wrap items-end gap-2" data-testid="admin-universe-monitor-toolbar">
         <label className="space-y-1" data-testid="admin-universe-monitor-mode-field">
           <span className="text-xs text-slate-400">Scanner Mode</span>
@@ -366,6 +378,7 @@ export const AdminUniverseMonitorPage = () => {
         </Link>
       </div>
 
+      {!governanceOnly && (
       <article className="rounded-xl border border-cyan-700/40 bg-cyan-950/20 p-4" data-testid="admin-universe-monitor-scanner-engine-panel">
         <div className="flex flex-wrap items-end justify-between gap-3" data-testid="admin-universe-monitor-scanner-engine-header">
           <div data-testid="admin-universe-monitor-scanner-engine-title-wrap">
@@ -644,6 +657,7 @@ export const AdminUniverseMonitorPage = () => {
           {(scannerEngineJobs || []).length === 0 && <p className="text-xs text-cyan-200" data-testid="admin-universe-monitor-scanner-engine-jobs-empty">Henüz scanner-job kaydı yok.</p>}
         </div>
       </article>
+      )}
 
       <Dialog open={startBotModalOpen} onOpenChange={setStartBotModalOpen}>
         <DialogContent className="max-w-2xl" data-testid="admin-universe-monitor-start-bot-modal">
@@ -780,6 +794,7 @@ export const AdminUniverseMonitorPage = () => {
         ))}
       </div>
 
+      {!governanceOnly && (
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" data-testid="admin-runtime-risk-overview-grid">
         {[
           ["portfolio_exposure", runtimeSummary?.risk_overview?.portfolio_exposure, "admin-runtime-risk-portfolio-exposure"],
@@ -800,7 +815,9 @@ export const AdminUniverseMonitorPage = () => {
           </article>
         ))}
       </div>
+      )}
 
+      {!governanceOnly && (
       <div className="grid gap-3 md:grid-cols-2" data-testid="admin-runtime-observability-trend-grid">
         <article className="rounded border border-slate-700 bg-slate-900 p-3" data-testid="admin-runtime-observability-latency-trend-card">
           <p className="text-xs uppercase tracking-widest text-slate-300">execution latency trend</p>
@@ -845,6 +862,7 @@ export const AdminUniverseMonitorPage = () => {
           </div>
         </article>
       </div>
+      )}
 
       <div className="grid gap-3 md:grid-cols-2" data-testid="admin-universe-monitor-rollout-panels">
         <article className="rounded border border-emerald-800/50 bg-emerald-950/20 p-3" data-testid="admin-universe-monitor-rollout-status-panel">
@@ -897,6 +915,7 @@ export const AdminUniverseMonitorPage = () => {
         </article>
       </div>
 
+      {!governanceOnly && (
       <div className="grid gap-3 md:grid-cols-2" data-testid="admin-universe-monitor-breakdown-panels">
         <article className="rounded border border-fuchsia-800/50 bg-fuchsia-950/20 p-3" data-testid="admin-universe-monitor-user-breakdown-panel">
           <p className="text-xs uppercase tracking-widest text-fuchsia-300" data-testid="admin-universe-monitor-user-breakdown-title">User/Profile Breakdown</p>
@@ -920,7 +939,9 @@ export const AdminUniverseMonitorPage = () => {
           </div>
         </article>
       </div>
+      )}
 
+      {!governanceOnly && (
       <article className="rounded border border-rose-800/50 bg-rose-950/20 p-3" data-testid="admin-universe-monitor-freshness-heatmap-widget">
         <p className="text-xs uppercase tracking-widest text-rose-300" data-testid="admin-universe-monitor-freshness-heatmap-title">Freshness SLA Breach Heatmap (Embedded)</p>
         <div className="mt-2 max-h-56 space-y-1 overflow-auto" data-testid="admin-universe-monitor-freshness-heatmap-list">
@@ -932,7 +953,9 @@ export const AdminUniverseMonitorPage = () => {
           {(heatmap?.items || []).length === 0 && <p className="text-xs text-rose-200" data-testid="admin-universe-monitor-freshness-heatmap-empty">Heatmap verisi yok.</p>}
         </div>
       </article>
+      )}
 
+      {!governanceOnly && (
       <article className="rounded border border-amber-800/50 bg-amber-950/20 p-3" data-testid="admin-universe-monitor-fallback-events-panel">
         <p className="text-xs uppercase tracking-widest text-amber-300" data-testid="admin-universe-monitor-fallback-events-title">Fallback Timeline</p>
         <div className="mt-2 max-h-64 space-y-1 overflow-auto" data-testid="admin-universe-monitor-fallback-events-list">
@@ -948,6 +971,7 @@ export const AdminUniverseMonitorPage = () => {
           {fallbackEvents.length === 0 && <p className="text-xs text-amber-200" data-testid="admin-universe-monitor-fallback-events-empty">Fallback event kaydı yok.</p>}
         </div>
       </article>
+      )}
 
       {canShowDebug && (
         <div className="grid gap-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-universe-monitor-debug-panel">

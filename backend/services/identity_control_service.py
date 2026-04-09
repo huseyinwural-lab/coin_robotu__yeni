@@ -1676,6 +1676,7 @@ def list_identity_users(
     *,
     search: str | None,
     role: str | None,
+    scope: str | None = None,
     status: str | None,
     risk_level: str | None,
     trading_enabled: bool | None,
@@ -1685,6 +1686,12 @@ def list_identity_users(
     page_size: int,
 ) -> dict:
     query = db.query(User)
+    normalized_scope = str(scope or "").strip().lower()
+    if normalized_scope == "admin":
+        query = query.filter(User.role.in_([UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS]))
+    elif normalized_scope == "user":
+        query = query.filter(User.role == UserRole.USER)
+
     if search:
         search_value = f"%{search.strip()}%"
         query = query.filter(or_(User.email.ilike(search_value), User.id.ilike(search_value)))

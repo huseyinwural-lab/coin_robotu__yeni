@@ -374,6 +374,7 @@ def _build_approval_impact_delta(db: Session, *, row: IdentityApprovalRequest) -
 def admin_identity_users(
     search: str | None = Query(default=None),
     role: str | None = Query(default=None),
+    scope: str | None = Query(default=None),
     status_filter: str | None = Query(default=None, alias="status"),
     risk_level: str | None = Query(default=None),
     trading_enabled: bool | None = Query(default=None),
@@ -389,6 +390,7 @@ def admin_identity_users(
         db,
         search=search,
         role=role,
+        scope=scope,
         status=status_filter,
         risk_level=risk_level,
         trading_enabled=trading_enabled,
