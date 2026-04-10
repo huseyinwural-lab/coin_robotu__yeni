@@ -1,0 +1,91 @@
+{
+  "verdict": "NO_GO",
+  "total_tests": 5,
+  "passed": 3,
+  "failed": 2,
+  "success_rate": 60.0,
+  "blockers": [
+    "Market data appears to be mock/static",
+    "Scanner analysis endpoint unavailable",
+    "Scale test failed - low success rate"
+  ],
+  "results": {
+    "1_advisory_mode": {
+      "status": "PASS",
+      "details": [
+        "Manual trading disabled (410): {\"detail\":{\"code\":\"PURE_LIVE_410\",\"message\":\"manuel_order_validation_kapatildi_signal_auto_execution_kullan\"}}"
+      ],
+      "blockers": []
+    },
+    "2_mock_static_data": {
+      "status": "FAIL",
+      "details": [
+        "Market ticker price: 0",
+        "Environment: live",
+        "Timestamp: 2026-04-10T17:59:02.400516+00:00",
+        "\u26a0\ufe0f Price may be mock/static",
+        "\u26a0\ufe0f Scanner analysis endpoint not found",
+        "Market data lag: 1691.81ms",
+        "\u26a0\ufe0f High lag detected"
+      ],
+      "blockers": [
+        "Market data appears to be mock/static",
+        "Scanner analysis endpoint unavailable"
+      ]
+    },
+    "3_scanner_idempotency": {
+      "status": "PASS",
+      "details": [
+        "Concurrent calls: 5",
+        "Success (200): 5",
+        "Already running: 4",
+        "Errors: 0",
+        "\u2705 Idempotency working correctly",
+        "Scanner run concurrent success: 0/3"
+      ],
+      "blockers": []
+    },
+    "4_scale_test_1000": {
+      "status": "FAIL",
+      "details": [
+        "Initial CPU: 17.4%",
+        "Initial Memory: 55.0%",
+        "Generated 1000 symbols for testing",
+        "Batch 1 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Batch 2 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Batch 3 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Batch 4 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Batch 5 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Batch 6 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Batch 7 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Batch 8 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Batch 9 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Batch 10 error: HTTPSConnectionPool(host='trade-trace-engine.preview.emergentagent.com', port=443): Read timed out. (read timeout=30)",
+        "Test duration: 324.40s",
+        "Successful batches: 0/10",
+        "Final CPU: 30.9%",
+        "Final Memory: 58.1%",
+        "CPU delta: 13.5%",
+        "Memory delta: 3.1%",
+        "\u26a0\ufe0f Low success rate in scale test"
+      ],
+      "blockers": [
+        "Scale test failed - low success rate"
+      ]
+    },
+    "5_auth_persistence": {
+      "status": "PASS",
+      "details": [
+        "\u2705 Refresh token working",
+        "New access token length: 591",
+        "New refresh token length: 531",
+        "\u2705 New access token working",
+        "Device mismatch test: 200",
+        "\u26a0\ufe0f Device mismatch not enforced",
+        "Session persistence: 5/5",
+        "\u2705 Session persistence working"
+      ],
+      "blockers": []
+    }
+  }
+}
