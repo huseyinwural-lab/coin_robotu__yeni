@@ -46,6 +46,26 @@ const fallbackDecisionFromStrategyCode = (strategyCode) => {
   return "KARAR3(BC03)";
 };
 
+const resolveFinalDecision = (item) => {
+  const raw = String(item?.payload?.final_decision || item?.signal || "").trim().toUpperCase();
+  if (raw === "LONG" || raw === "SHORT") {
+    return raw;
+  }
+  return "NO_TRADE";
+};
+
+const resolveAllocationGate = (item) => {
+  const state = String(item?.payload?.allocation_gate?.state || "").trim().toUpperCase();
+  if (state) {
+    return state;
+  }
+  const reasons = Array.isArray(item?.reason_codes) ? item.reason_codes.map((value) => String(value || "").toLowerCase()) : [];
+  if (reasons.includes("allocation_strategy_missing")) {
+    return "BLOCKED";
+  }
+  return "PASS";
+};
+
 export const ScannerResultsTable = ({
   results,
   compactMode,
@@ -122,6 +142,12 @@ export const ScannerResultsTable = ({
             <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-tradeable-${item.id}`}>
               tradeable: <span className={`font-semibold ${item.tradeable ? "text-emerald-300" : "text-rose-300"}`}>{String(Boolean(item.tradeable)).toUpperCase()}</span>
             </p>
+            <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-final-decision-${item.id}`}>
+              final_decision: <span className="font-semibold">{resolveFinalDecision(item)}</span>
+            </p>
+            <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-allocation-gate-${item.id}`}>
+              allocation_gate: <span className={`font-semibold ${resolveAllocationGate(item) === "BLOCKED" ? "text-rose-300" : "text-emerald-300"}`}>{resolveAllocationGate(item)}</span>
+            </p>
             <p className="text-xs text-slate-400" data-testid={`scanner-results-mobile-first-precheck-failure-${item.id}`}>
               first_precheck_failure_code: <span className="font-semibold text-rose-200">{item.first_precheck_failure_code || "-"}</span>
             </p>
@@ -154,6 +180,7 @@ export const ScannerResultsTable = ({
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-tradeable">Tradeable</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-first-precheck-failure">First Precheck Failure</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-strategy">Strategy</th>
+              <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-decision-allocation">Decision / Allocation</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-policy">Strategy Policy</th>
               <th className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid="scanner-results-head-actions">Actions</th>
             </tr>
@@ -192,6 +219,16 @@ export const ScannerResultsTable = ({
                       <span className="text-xs text-rose-200">{item.first_precheck_failure_code || "-"}</span>
                     </td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-strategy-${item.id}`}>{resolveDecisionStrategyLabel(item)}</td>
+                    <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-decision-allocation-${item.id}`}>
+                      <div className="space-y-1" data-testid={`scanner-results-row-decision-allocation-wrap-${item.id}`}>
+                        <span className="inline-flex rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-xs text-cyan-100" data-testid={`scanner-results-row-final-decision-${item.id}`}>
+                          {resolveFinalDecision(item)}
+                        </span>
+                        <span className={`inline-flex rounded px-2 py-0.5 text-xs font-semibold ${resolveAllocationGate(item) === "BLOCKED" ? "bg-rose-500/20 text-rose-300" : "bg-emerald-500/20 text-emerald-300"}`} data-testid={`scanner-results-row-allocation-gate-${item.id}`}>
+                          {resolveAllocationGate(item)}
+                        </span>
+                      </div>
+                    </td>
                     <td className={compactMode ? "px-2 py-1" : "px-3 py-2"} data-testid={`scanner-results-row-policy-${item.id}`}>
                       {unsupported ? "UNSUPPORTED" : "SUPPORTED"}
                     </td>
@@ -205,7 +242,7 @@ export const ScannerResultsTable = ({
                   </tr>
                   {expanded && (
                     <tr className="border-t border-slate-800 bg-slate-950/60" data-testid={`scanner-results-explainability-row-${item.id}`}>
-                      <td colSpan={10} className="px-3 py-2" data-testid={`scanner-results-explainability-cell-${item.id}`}>
+                      <td colSpan={11} className="px-3 py-2" data-testid={`scanner-results-explainability-cell-${item.id}`}>
                         <div className="grid gap-2 md:grid-cols-4" data-testid={`scanner-results-explainability-grid-${item.id}`}>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-volume-spike-${item.id}`}>volume spike: {snapshot?.volume_spike ?? snapshot?.relative_volume ?? "-"}</p>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-rsi-${item.id}`}>RSI: {snapshot?.rsi ?? snapshot?.rsi14 ?? snapshot?.indicator_snapshot?.rsi14 ?? "-"}</p>
@@ -213,6 +250,10 @@ export const ScannerResultsTable = ({
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-market-volatility-${item.id}`}>market volatility: {snapshot?.market_volatility ?? snapshot?.atr_pct ?? "-"}</p>
                           <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-precheck-tradeable-${item.id}`}>precheck tradeable: {String(Boolean(snapshot?.tradeable)).toUpperCase()}</p>
                           <p className="text-xs text-rose-200" data-testid={`scanner-results-explainability-precheck-first-failure-${item.id}`}>first_precheck_failure_code: {snapshot?.first_precheck_failure_code || "-"}</p>
+                          <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-run-id-${item.id}`}>run_id: {item?.run_id || "-"}</p>
+                          <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-engine-version-${item.id}`}>engine_version: {snapshot?.engine_version || "v1"}</p>
+                          <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-final-decision-${item.id}`}>final_decision: {resolveFinalDecision(item)}</p>
+                          <p className="text-xs text-slate-300" data-testid={`scanner-results-explainability-allocation-gate-${item.id}`}>allocation_gate: {resolveAllocationGate(item)}</p>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2" data-testid={`scanner-results-explain-list-${item.id}`}>
                           {(item.explain || []).map((entry, index) => (

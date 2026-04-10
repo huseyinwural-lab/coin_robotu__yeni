@@ -90,6 +90,18 @@ const SCANNER_ANOMALY_SOUND_PREF_KEY = "scanner-anomaly-sound-enabled-v1";
 const SCANNER_RUN_SETTINGS_KEY = "user-scanner-run-settings-v1";
 const SCANNER_TOAST_DEDUPE_WINDOW_MS = 8000;
 
+const DECISION_LABEL_BY_CODE = {
+  BC01: "KARAR1 (BC01)",
+  BC02: "KARAR2 (BC02)",
+  BC03: "KARAR3 (BC03)",
+  BC04: "KARAR4 (BC04)",
+};
+
+const decisionLabelFromStrategyCode = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  return DECISION_LABEL_BY_CODE[normalized] || normalized || "KARAR_SETI_BELIRSIZ";
+};
+
 const isAnomalyEligibleEvent = (item) => {
   if (!item) {
     return false;
@@ -506,6 +518,125 @@ export const UserScannerPage = () => {
     });
     return map;
   }, [scannerEngineDecisionMap, scannerEngineRun?.results]);
+
+  const scannerEngineVersionLabel = useMemo(() => {
+    const value =
+      scannerEngineRun?.config?.engine_version
+      || scannerEngineConfig?.engine_version
+      || scannerResults?.[0]?.payload?.engine_version
+      || "v1";
+    return String(value || "v1").toLowerCase();
+  }, [scannerEngineConfig?.engine_version, scannerEngineRun?.config?.engine_version, scannerResults]);
+
+  const scannerEngineLastRunId = String(scannerEngineRun?.run_id || overview?.latest_run_id || "-");
+
+  const scannerDecisionModeSummary = useMemo(() => {
+    const candidates = Array.from(new Set((scannerResults || [])
+      .map((row) => String(row?.strategy_code || "").trim().toUpperCase())
+      .filter(Boolean)));
+    if (candidates.length === 0) {
+      return "KARAR1-4 (CANLI)";
+    }
+    return candidates.slice(0, 4).map((code) => decisionLabelFromStrategyCode(code)).join(" · ");
+  }, [scannerResults]);
+
+  const scannerFeatureTelemetry = useMemo(() => {
+    const rows = Array.isArray(scannerResults) ? scannerResults : [];
+    const samples = rows
+      .map((row) => Number(row?.payload?.indicator_snapshot_age_sec))
+      .filter((value) => Number.isFinite(value));
+    const staleCount = rows.filter((row) => {
+      const age = Number(row?.payload?.indicator_snapshot_age_sec);
+      const threshold = Number(row?.payload?.freshness_sla_seconds || 0);
+      if (!Number.isFinite(age) || !Number.isFinite(threshold) || threshold <= 0) {
+        return false;
+      }
+      return age > threshold;
+    }).length;
+
+    const averageAge = samples.length > 0
+      ? Number((samples.reduce((total, value) => total + value, 0) / samples.length).toFixed(1))
+      : null;
+
+    return {
+      sampleCount: samples.length,
+      averageAge,
+      staleCount,
+      freshnessRatio: rows.length > 0 ? Number((((rows.length - staleCount) / rows.length) * 100).toFixed(1)) : 100,
+    };
+  }, [scannerResults]);
+
+  const scannerSignalTradeAlignment = useMemo(() => {
+    const rows = Array.isArray(scannerResults) ? scannerResults : [];
+    let longCount = 0;
+    let shortCount = 0;
+    let noTradeCount = 0;
+    let allocationBlockedCount = 0;
+    let tradeableCount = 0;
+
+    rows.forEach((row) => {
+      const finalDecision = String(row?.payload?.final_decision || row?.signal || "").toUpperCase();
+      if (finalDecision === "LONG") {
+        longCount += 1;
+      } else if (finalDecision === "SHORT") {
+        shortCount += 1;
+      } else {
+        noTradeCount += 1;
+      }
+
+      const allocationState = String(row?.payload?.allocation_gate?.state || "").toLowerCase();
+      const reasonCodes = Array.isArray(row?.reason_codes) ? row.reason_codes.map((value) => String(value || "").toLowerCase()) : [];
+      if (allocationState === "blocked" || reasonCodes.includes("allocation_strategy_missing")) {
+        allocationBlockedCount += 1;
+      }
+
+      const precheckTradeable = row?.payload?.candidate_precheck?.tradeable;
+      if (typeof precheckTradeable === "boolean") {
+        if (precheckTradeable) {
+          tradeableCount += 1;
+        }
+      } else if (Boolean(row?.tradeable)) {
+        tradeableCount += 1;
+      }
+    });
+
+    return {
+      total: rows.length,
+      longCount,
+      shortCount,
+      noTradeCount,
+      allocationBlockedCount,
+      tradeableCount,
+    };
+  }, [scannerResults]);
+
+  const scannerRunSourceLabel = useMemo(() => {
+    const source = String(lastRunEnvelope?.source || "").toLowerCase();
+    if (source === "cache") {
+      return "CACHE_FIRST";
+    }
+    if (source === "live") {
+      return "LIVE_REFRESH";
+    }
+    return "BACKGROUND_REFRESH";
+  }, [lastRunEnvelope?.source]);
+
+  const scannerLatencyBreakdown = useMemo(() => {
+    const summary = scannerEngineRun?.summary || {};
+    const queue = Number(summary.queue_latency_ms);
+    const feature = Number(summary.feature_calc_ms || summary.feature_latency_ms);
+    const score = Number(summary.score_merge_ms || summary.scoring_latency_ms);
+    const total = Number(summary.total_latency_ms || summary.scan_duration_ms || summary.cycle_duration_ms);
+
+    const asLabel = (value) => (Number.isFinite(value) && value >= 0 ? `${value.toFixed(0)}ms` : "-");
+
+    return {
+      queueLabel: asLabel(queue),
+      featureLabel: asLabel(feature),
+      scoreLabel: asLabel(score),
+      totalLabel: asLabel(total),
+    };
+  }, [scannerEngineRun?.summary]);
 
   const requestTrendPolylinePoints = useMemo(() => {
     const width = 160;
@@ -1410,6 +1541,12 @@ export const UserScannerPage = () => {
       }, { timeout: 12000 });
 
       if (queued?.status === "completed_cached") {
+        setLastRunEnvelope({
+          source: "cache",
+          status: "completed_cached",
+          run_id: queued?.run_id || scannerEngineRun?.run_id || null,
+          at: new Date().toISOString(),
+        });
         await load({ silent: true });
         if (!silentSuccess) {
           toast.success(`Önceki sonuç kullanıldı: ${queued?.summary?.scored_count || 0} sembol skorlandı`);
@@ -1428,6 +1565,12 @@ export const UserScannerPage = () => {
         const { data: statusData } = await apiClient.get(`/user/scanner-engine/run-async/${jobId}`, { timeout: 10000 });
         const status = String(statusData?.status || "").toLowerCase();
         if (status === "completed") {
+          setLastRunEnvelope({
+            source: "live",
+            status: "completed",
+            run_id: statusData?.run_id || jobId,
+            at: new Date().toISOString(),
+          });
           await load({ silent: true });
           if (!silentSuccess) {
             toast.success(`Scanner tamamlandı: ${statusData?.summary?.scored_count || 0} sembol skorlandı`);
@@ -1435,19 +1578,31 @@ export const UserScannerPage = () => {
           return;
         }
         if (status === "failed") {
+          setLastRunEnvelope({
+            source: "live",
+            status: "failed",
+            run_id: statusData?.run_id || jobId,
+            at: new Date().toISOString(),
+          });
           throw new Error(String(statusData?.error || "scanner_engine_run_async_failed"));
         }
       }
 
       throw new Error("scanner_engine_run_async_timeout");
     } catch (error) {
+      setLastRunEnvelope((prev) => ({
+        source: prev?.source || "live",
+        status: "failed",
+        run_id: prev?.run_id || null,
+        at: new Date().toISOString(),
+      }));
       if (!silentError) {
         toast.error(toApiErrorMessage(error, "Scanner Engine run başarısız"));
       }
     } finally {
       setScannerEngineBusy(false);
     }
-  }, [load, scannerEngineBusy]);
+  }, [load, scannerEngineBusy, scannerEngineRun?.run_id]);
 
   useEffect(() => {
     if (!selectionHydrated) {
@@ -1808,16 +1963,83 @@ export const UserScannerPage = () => {
         />
       )}
 
+      <section className="order-4 col-span-12 rounded border border-cyan-800/40 bg-cyan-950/10 p-4" data-testid="user-scanner-engine-workflow-panel">
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="user-scanner-engine-workflow-header">
+          <div data-testid="user-scanner-engine-workflow-title-wrap">
+            <p className="text-xs uppercase tracking-widest text-cyan-300" data-testid="user-scanner-engine-workflow-kicker">Scanner Engine Workflow</p>
+            <h3 className="text-base font-semibold" data-testid="user-scanner-engine-workflow-title">Contract-Safe · Cache-First · Karar01-04 Uyumlu Akış</h3>
+          </div>
+          <p className="text-xs text-cyan-100" data-testid="user-scanner-engine-workflow-readonly-note">Backend contract sabit · Engine version readonly</p>
+        </div>
+
+        <div className="mt-3 grid gap-3 xl:grid-cols-4" data-testid="user-scanner-engine-workflow-cards-grid">
+          <article className="rounded border border-slate-700 bg-slate-950 p-3" data-testid="user-scanner-engine-contract-card">
+            <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-engine-contract-card-title">1) API Contract</p>
+            <p className="mt-1 text-sm" data-testid="user-scanner-engine-contract-version">engine_version: <span className="font-semibold">{scannerEngineVersionLabel}</span></p>
+            <p className="text-sm" data-testid="user-scanner-engine-contract-run-source">run_source: <span className="font-semibold">{scannerRunSourceLabel}</span></p>
+            <p className="text-xs text-slate-400" data-testid="user-scanner-engine-contract-run-id">run_id: {scannerEngineLastRunId}</p>
+          </article>
+
+          <article className="rounded border border-slate-700 bg-slate-950 p-3" data-testid="user-scanner-engine-runtime-card">
+            <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-engine-runtime-card-title">2-3) Runtime + Delta</p>
+            <p className="mt-1 text-sm" data-testid="user-scanner-engine-runtime-decision-mode">Karar Seti: <span className="font-semibold">{scannerDecisionModeSummary}</span></p>
+            <p className="text-sm" data-testid="user-scanner-engine-runtime-signal-mode">Signal Mode: <span className="font-semibold">AUTO</span></p>
+            <p className="text-xs text-slate-400" data-testid="user-scanner-engine-runtime-next-run">next_run: {formatDateLabel(scannerEngineNextRunAt)}</p>
+          </article>
+
+          <article className="rounded border border-slate-700 bg-slate-950 p-3" data-testid="user-scanner-engine-feature-card">
+            <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-engine-feature-card-title">4) Feature Layer</p>
+            <p className="mt-1 text-sm" data-testid="user-scanner-engine-feature-freshness">freshness: <span className="font-semibold">{scannerFeatureTelemetry.freshnessRatio}%</span></p>
+            <p className="text-sm" data-testid="user-scanner-engine-feature-average-age">avg_snapshot_age: <span className="font-semibold">{scannerFeatureTelemetry.averageAge ?? "-"}s</span></p>
+            <p className="text-xs text-slate-400" data-testid="user-scanner-engine-feature-stale">stale/sample: {scannerFeatureTelemetry.staleCount}/{scannerFeatureTelemetry.sampleCount}</p>
+          </article>
+
+          <article className="rounded border border-slate-700 bg-slate-950 p-3" data-testid="user-scanner-engine-signal-trade-card">
+            <p className="text-xs uppercase tracking-widest text-slate-400" data-testid="user-scanner-engine-signal-trade-card-title">5-6) Signal → Trade</p>
+            <p className="mt-1 text-sm" data-testid="user-scanner-engine-signal-trade-decisions">long/short/no_trade: <span className="font-semibold">{scannerSignalTradeAlignment.longCount}/{scannerSignalTradeAlignment.shortCount}/{scannerSignalTradeAlignment.noTradeCount}</span></p>
+            <p className="text-sm" data-testid="user-scanner-engine-signal-trade-alignment">allocation_blocked: <span className="font-semibold">{scannerSignalTradeAlignment.allocationBlockedCount}</span></p>
+            <p className="text-xs text-slate-400" data-testid="user-scanner-engine-signal-trade-tradeable">tradeable/total: {scannerSignalTradeAlignment.tradeableCount}/{scannerSignalTradeAlignment.total}</p>
+          </article>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-4" data-testid="user-scanner-engine-latency-breakdown-grid">
+          <p className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs" data-testid="user-scanner-engine-latency-queue">queue_ms: <span className="font-semibold">{scannerLatencyBreakdown.queueLabel}</span></p>
+          <p className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs" data-testid="user-scanner-engine-latency-feature">feature_ms: <span className="font-semibold">{scannerLatencyBreakdown.featureLabel}</span></p>
+          <p className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs" data-testid="user-scanner-engine-latency-score">score_ms: <span className="font-semibold">{scannerLatencyBreakdown.scoreLabel}</span></p>
+          <p className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-xs" data-testid="user-scanner-engine-latency-total">total_ms: <span className="font-semibold">{scannerLatencyBreakdown.totalLabel}</span></p>
+        </div>
+      </section>
+
       <section className="order-5 col-span-12 space-y-4 rounded border border-slate-800 bg-slate-900 p-4" data-testid="user-scanner-control-section">
         <div data-testid="user-scanner-control-header">
           <p className="text-xs uppercase tracking-widest text-slate-500" data-testid="user-scanner-control-kicker">Scanner Engine</p>
           <h3 className="text-base font-semibold" data-testid="user-scanner-control-title">Short/Long Decoupled Scanner</h3>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-7 xl:items-start" data-testid="user-scanner-engine-config-grid">
+        <div className="grid gap-3 xl:grid-cols-9 xl:items-start" data-testid="user-scanner-engine-config-grid">
           <label className="space-y-1" data-testid="user-scanner-engine-market-field">
             <span className="text-xs uppercase tracking-widest text-slate-500">Market</span>
             <input value="BINANCE" disabled className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm" data-testid="user-scanner-engine-market-input" />
+          </label>
+
+          <label className="space-y-1" data-testid="user-scanner-engine-version-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Engine Version (Readonly)</span>
+            <input
+              value={scannerEngineVersionLabel}
+              disabled
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-engine-version-input"
+            />
+          </label>
+
+          <label className="space-y-1" data-testid="user-scanner-engine-decision-mode-field">
+            <span className="text-xs uppercase tracking-widest text-slate-500">Karar Modu (Canlı)</span>
+            <input
+              value={scannerDecisionModeSummary}
+              disabled
+              className="h-10 border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              data-testid="user-scanner-engine-decision-mode-input"
+            />
           </label>
 
           <div className="space-y-2 xl:col-span-2" data-testid="user-scanner-engine-market-types-field">
@@ -1950,7 +2172,7 @@ export const UserScannerPage = () => {
         <div className="mt-2 grid gap-2 md:grid-cols-3" data-testid="user-scanner-parameters-grid">
           <p className="text-sm" data-testid="user-scanner-parameters-market">Market: <span className="font-semibold">{String(marketType || "spot").toUpperCase()}</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-mode">Signal Mode: <span className="font-semibold">{String(mode || "AUTO").toUpperCase()}</span></p>
-          <p className="text-sm" data-testid="user-scanner-parameters-auto">Automation: <span className="font-semibold">USER_CONTROLLED</span></p>
+          <p className="text-sm" data-testid="user-scanner-parameters-auto">Automation: <span className="font-semibold">AUTO_DISPATCH</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-interval">Interval: <span className="font-semibold">{selectedAutoIntervalMinutes} dk</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-selected-count">Selected Symbols: <span className="font-semibold">{selectedSymbols.length}</span></p>
           <p className="text-sm" data-testid="user-scanner-parameters-max-results">Max Results: <span className="font-semibold">{SIMPLE_SCANNER_V2 ? 120 : 25}</span></p>
