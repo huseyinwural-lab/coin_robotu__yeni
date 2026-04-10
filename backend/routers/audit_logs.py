@@ -278,6 +278,25 @@ def _serialize_admin_log_feed_item(row: AuditLog) -> dict:
         or ""
     )
     is_error = _is_error_log_entry(row, details=details)
+    route = details.get("route")
+    status_code = _extract_status_code(details)
+    error_class = _derive_error_class(row, details=details)
+    event_type = _derive_event_type({"action": row.action}, details)
+    service_source = _derive_service_source(
+        {"route": route, "action": row.action},
+        details,
+    )
+    rca_tag = _derive_rca_tag(
+        route=str(route or ""),
+        action=str(row.action or ""),
+        entity_type=str(row.entity_type or ""),
+        event_type=event_type,
+        service_source=service_source,
+        details=details,
+        status_code=status_code,
+        error_message=str(error_message or ""),
+        error_class=error_class,
+    )
     return {
         "id": row.id,
         "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -287,14 +306,17 @@ def _serialize_admin_log_feed_item(row: AuditLog) -> dict:
         "entity_type": row.entity_type,
         "entity_id": row.entity_id,
         "severity": row.severity,
-        "route": details.get("route"),
+        "route": route,
         "method": details.get("method"),
         "request_id": details.get("request_id"),
         "session_id": details.get("session_id"),
-        "status_code": _extract_status_code(details),
+        "status_code": status_code,
         "is_error": is_error,
-        "error_class": _derive_error_class(row, details=details),
+        "error_class": error_class,
         "error_message": str(error_message or ""),
+        "event_type": event_type,
+        "service_source": service_source,
+        "rca_tag": rca_tag,
         "details": details,
     }
 
@@ -380,6 +402,136 @@ def _derive_event_type(item: dict, details: dict) -> str:
         if text:
             return text
     return "unknown_event"
+
+
+def _is_scanner_exchange_related_event(*, route: str, action: str, entity_type: str, event_type: str, service_source: str) -> bool:
+    combined = " ".join([
+        str(route or "").lower(),
+        str(action or "").lower(),
+        str(entity_type or "").lower(),
+        str(event_type or "").lower(),
+        str(service_source or "").lower(),
+    ])
+    related_tokens = (
+        "scanner",
+        "screener",
+        "signal",
+        "decision_card",
+        "exchange",
+        "status-contract",
+        "run-async",
+        "permission_drift",
+        "readiness",
+        "scheduler",
+        "symbol-selection",
+    )
+    return any(token in combined for token in related_tokens)
+
+
+def _derive_rca_tag(
+    *,
+    route: str,
+    action: str,
+    entity_type: str,
+    event_type: str,
+    service_source: str,
+    details: dict,
+    status_code: int | None,
+    error_message: str,
+    error_class: str,
+) -> str:
+    if not _is_scanner_exchange_related_event(
+        route=route,
+        action=action,
+        entity_type=entity_type,
+        event_type=event_type,
+        service_source=service_source,
+    ):
+        return "-"
+
+    reason_codes_raw = details.get("reason_codes") or []
+    if not isinstance(reason_codes_raw, list):
+        reason_codes_raw = [reason_codes_raw]
+    reason_codes = [str(code or "").lower() for code in reason_codes_raw]
+
+    text_blob = " ".join([
+        str(error_message or ""),
+        str(details.get("error") or ""),
+        str(details.get("error_code") or ""),
+        str(details.get("detail") or ""),
+        str(details.get("message") or ""),
+        str(details.get("reason") or ""),
+    ]).lower()
+
+    schema_tokens = (
+        "validationerror",
+        "validation error",
+        "field required",
+        "schema",
+        "pydantic",
+        "jsondecodeerror",
+        "typeerror",
+        "keyerror",
+        "attributeerror",
+        "not json serializable",
+    )
+    if any(token in text_blob for token in schema_tokens):
+        return "SCHEMA_MISMATCH"
+
+    credential_reason_tokens = {
+        "invalid_key",
+        "missing_trade_permission",
+        "permission_restricted",
+        "auth_failed",
+        "invalid_api_key",
+        "invalid_signature",
+        "api_key_invalid",
+    }
+    credential_text_tokens = (
+        "unauthorized",
+        "forbidden",
+        "invalid api-key",
+        "invalid api key",
+        "signature",
+        "credential",
+        "permission",
+        "auth",
+    )
+    if (
+        status_code in {401, 403}
+        or any(code in credential_reason_tokens for code in reason_codes)
+        or any(token in text_blob for token in credential_text_tokens)
+    ):
+        return "CREDENTIAL"
+
+    network_reason_tokens = {
+        "timeout",
+        "network_error",
+        "exchange_unreachable",
+        "exchange_http_error",
+        "gateway_timeout",
+        "service_unavailable",
+        "connection_error",
+        "dns_error",
+    }
+    network_text_tokens = (
+        "timeout",
+        "gateway",
+        "service unavailable",
+        "connection reset",
+        "network",
+        "econnreset",
+        "dns",
+    )
+    if (
+        (status_code is not None and status_code >= 500)
+        or str(error_class or "").lower() == "infra_error"
+        or any(code in network_reason_tokens for code in reason_codes)
+        or any(token in text_blob for token in network_text_tokens)
+    ):
+        return "NETWORK"
+
+    return "UNKNOWN"
 
 
 def _mask_ip(value: str) -> str:
@@ -496,6 +648,17 @@ def _build_error_table_row(item: dict) -> dict:
     severity_level = _derive_severity_level(item, status_code=normalized_status, error_class=error_class)
     correlation_id = _derive_correlation_id(item, details)
     event_type = _derive_event_type(item, details)
+    rca_tag = _derive_rca_tag(
+        route=str(endpoint or ""),
+        action=str(item.get("action") or ""),
+        entity_type=str(item.get("entity_type") or ""),
+        event_type=event_type,
+        service_source=service_source,
+        details=details,
+        status_code=normalized_status,
+        error_message=str(item.get("error_message") or ""),
+        error_class=error_class,
+    )
     client_context = _derive_client_context(details)
     security_mask = _derive_security_mask(details)
 
@@ -521,6 +684,7 @@ def _build_error_table_row(item: dict) -> dict:
         "severity_level": severity_level,
         "correlation_id": correlation_id,
         "event_type": event_type,
+        "rca_tag": rca_tag,
         "client_context": client_context,
         "security_mask": bool(security_mask),
     }
@@ -545,6 +709,7 @@ def _build_error_table_export_workbook(rows: list[dict]):
         "Severity/Level",
         "Correlation ID",
         "Event Type",
+        "RCA Etiketi",
         "Client Context",
         "Security Mask",
     ])
@@ -563,6 +728,7 @@ def _build_error_table_export_workbook(rows: list[dict]):
             row.get("severity_level") or "",
             row.get("correlation_id") or "",
             row.get("event_type") or "",
+            row.get("rca_tag") or "-",
             json.dumps(client_context, ensure_ascii=False),
             "true" if row.get("security_mask") else "false",
         ])
@@ -931,6 +1097,7 @@ def admin_error_table_report(
             "severity_level",
             "correlation_id",
             "event_type",
+            "rca_tag",
             "client_context",
             "security_mask",
         ],

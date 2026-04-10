@@ -414,6 +414,8 @@ export const UserScannerPage = () => {
   const anomalyAlertArmedRef = useRef(false);
   const scannerToastTrackerRef = useRef(new Map());
   const initialFullLoadDoneRef = useRef(false);
+  const loadRequestSequenceRef = useRef(0);
+  const activeLoadAbortControllerRef = useRef(null);
 
   const activeProfile = useMemo(() => {
     if (!automationProfiles.length) {
@@ -799,13 +801,26 @@ export const UserScannerPage = () => {
   };
 
   const load = useCallback(async ({ hydrateSelection = false, silent = false, notifyAutoRuns = false } = {}) => {
+    const currentRequestSequence = loadRequestSequenceRef.current + 1;
+    loadRequestSequenceRef.current = currentRequestSequence;
+
+    if (activeLoadAbortControllerRef.current) {
+      activeLoadAbortControllerRef.current.abort();
+    }
+
+    const abortController = new AbortController();
+    activeLoadAbortControllerRef.current = abortController;
+
     if (!silent) {
       setIsLoading(true);
     }
+
+    const requestConfig = (timeout) => ({ timeout, signal: abortController.signal });
+
     try {
       const requestDescriptors = SIMPLE_SCANNER_V2
         ? [
-            { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 12000 }) },
+            { key: "scanner_overview", request: apiClient.get("/user/scanner", requestConfig(12000)) },
             {
               key: "scanner_results",
               request: apiClient.get("/screener", {
@@ -813,18 +828,18 @@ export const UserScannerPage = () => {
                   limit: 120,
                   filters: JSON.stringify(compactMinimalFilters(minimalFiltersRef.current)),
                 },
-                timeout: 12000,
+                ...requestConfig(12000),
               }),
             },
-            { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 15000 }) },
-            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 12000 }) },
-            { key: "scanner_engine_config", request: apiClient.get("/user/scanner-engine/config", { timeout: 12000 }) },
-            { key: "scanner_engine_last_run", request: apiClient.get("/user/scanner-engine/last-run", { timeout: 15000 }) },
-            { key: "scanner_engine_decision_map", request: apiClient.get("/user/scanner-engine/decision-map", { timeout: 12000 }) },
-            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
+            { key: "strategy_templates", request: apiClient.get("/strategy-templates", requestConfig(15000)) },
+            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, ...requestConfig(12000) }) },
+            { key: "scanner_engine_config", request: apiClient.get("/user/scanner-engine/config", requestConfig(12000)) },
+            { key: "scanner_engine_last_run", request: apiClient.get("/user/scanner-engine/last-run", requestConfig(15000)) },
+            { key: "scanner_engine_decision_map", request: apiClient.get("/user/scanner-engine/decision-map", requestConfig(12000)) },
+            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", requestConfig(12000)) },
           ]
         : [
-            { key: "scanner_overview", request: apiClient.get("/user/scanner", { timeout: 12000 }) },
+            { key: "scanner_overview", request: apiClient.get("/user/scanner", requestConfig(12000)) },
             {
               key: "scanner_results",
               request: apiClient.get("/screener", {
@@ -832,31 +847,44 @@ export const UserScannerPage = () => {
                   limit: 80,
                   filters: JSON.stringify(compactMinimalFilters(minimalFiltersRef.current)),
                 },
-                timeout: 10000,
+                ...requestConfig(10000),
               }),
             },
-            { key: "strategy_templates", request: apiClient.get("/strategy-templates", { timeout: 15000 }) },
-            { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 }, timeout: 12000 }) },
-            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, timeout: 12000 }) },
-            { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", { timeout: 12000 }) },
-            { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" }, timeout: 12000 }) },
-            { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, timeout: 12000 }) },
-            { key: "scanner_engine_config", request: apiClient.get("/user/scanner-engine/config", { timeout: 12000 }) },
-            { key: "scanner_engine_last_run", request: apiClient.get("/user/scanner-engine/last-run", { timeout: 15000 }) },
-            { key: "scanner_engine_decision_map", request: apiClient.get("/user/scanner-engine/decision-map", { timeout: 12000 }) },
-            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", { timeout: 12000 }) },
+            { key: "strategy_templates", request: apiClient.get("/strategy-templates", requestConfig(15000)) },
+            { key: "decision_cards", request: apiClient.get("/user/decision-cards", { params: { limit: 60 }, ...requestConfig(12000) }) },
+            { key: "symbol_selection", request: apiClient.get("/user/scanner/symbol-selection", { params: { scanner_id: "default" }, ...requestConfig(12000) }) },
+            { key: "runtime_snapshot", request: apiClient.get("/user/scanner/runtime/snapshot", requestConfig(12000)) },
+            { key: "live_readiness", request: apiClient.get("/user/scanner/runtime/live-readiness", { params: { window: "24h" }, ...requestConfig(12000) }) },
+            { key: "daily_report", request: apiClient.get("/user/scanner/runtime/daily-report", { params: { window: "24h" }, ...requestConfig(12000) }) },
+            { key: "scanner_engine_config", request: apiClient.get("/user/scanner-engine/config", requestConfig(12000)) },
+            { key: "scanner_engine_last_run", request: apiClient.get("/user/scanner-engine/last-run", requestConfig(15000)) },
+            { key: "scanner_engine_decision_map", request: apiClient.get("/user/scanner-engine/decision-map", requestConfig(12000)) },
+            { key: "scheduler_next_run", request: apiClient.get("/user/live/scheduler/next-run", requestConfig(12000)) },
           ];
       const responses = await Promise.allSettled(requestDescriptors.map((entry) => entry.request));
+
+      if (currentRequestSequence !== loadRequestSequenceRef.current || abortController.signal.aborted) {
+        return;
+      }
+
       const responsesWithEndpointMeta = responses.map((entry, index) => ({
         ...entry,
         endpoint: requestDescriptors[index]?.key,
       }));
 
-      updateRequestHealthWindow(responsesWithEndpointMeta);
+      const nonCanceledResponses = responsesWithEndpointMeta.filter((entry) => !(
+        entry.status === "rejected"
+        && String(entry?.reason?.code || "").toUpperCase() === "ERR_CANCELED"
+      ));
+
+      updateRequestHealthWindow(nonCanceledResponses);
 
       const failedIndexes = responses
         .map((item, index) => ({ item, index }))
-        .filter(({ item }) => item.status === "rejected")
+        .filter(({ item }) => (
+          item.status === "rejected"
+          && String(item?.reason?.code || "").toUpperCase() !== "ERR_CANCELED"
+        ))
         .map(({ index }) => index);
 
       const failedEntries = failedIndexes
@@ -1036,7 +1064,11 @@ export const UserScannerPage = () => {
         setSelectionHydrated(true);
       }
     } finally {
-      if (!silent) {
+      const isCurrentRequest = currentRequestSequence === loadRequestSequenceRef.current;
+      if (isCurrentRequest && activeLoadAbortControllerRef.current === abortController) {
+        activeLoadAbortControllerRef.current = null;
+      }
+      if (!silent && isCurrentRequest && !abortController.signal.aborted) {
         setIsLoading(false);
       }
     }
@@ -1050,6 +1082,15 @@ export const UserScannerPage = () => {
     symbolSource,
     updateRequestHealthWindow,
   ]);
+
+  useEffect(() => {
+    return () => {
+      if (activeLoadAbortControllerRef.current) {
+        activeLoadAbortControllerRef.current.abort();
+        activeLoadAbortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {

@@ -42,6 +42,14 @@ const severityLevelBadgeClass = {
   INFO: "bg-slate-800 text-slate-200 border border-slate-600",
 };
 
+const rcaTagBadgeClass = {
+  SCHEMA_MISMATCH: "bg-fuchsia-900/40 text-fuchsia-200 border border-fuchsia-700",
+  CREDENTIAL: "bg-rose-900/40 text-rose-200 border border-rose-700",
+  NETWORK: "bg-cyan-900/40 text-cyan-200 border border-cyan-700",
+  UNKNOWN: "bg-slate-800 text-slate-200 border border-slate-600",
+  "-": "bg-slate-900 text-slate-400 border border-slate-700",
+};
+
 const formatClientContextDisplay = (value) => {
   if (!value) return "-";
   if (typeof value === "string") return value;
@@ -1458,6 +1466,7 @@ export const AuditLogsPage = () => {
                     <TableHead data-testid="audit-linked-incidents-error-report-header-severity-level">Severity/Level</TableHead>
                     <TableHead data-testid="audit-linked-incidents-error-report-header-correlation-id">Correlation ID</TableHead>
                     <TableHead data-testid="audit-linked-incidents-error-report-header-event-type">Event Type</TableHead>
+                    <TableHead data-testid="audit-linked-incidents-error-report-header-rca-tag">RCA Etiketi</TableHead>
                     <TableHead data-testid="audit-linked-incidents-error-report-header-client-context">Client Context</TableHead>
                     <TableHead data-testid="audit-linked-incidents-error-report-header-security-mask">Security Mask</TableHead>
                   </TableRow>
@@ -1465,13 +1474,13 @@ export const AuditLogsPage = () => {
                 <TableBody>
                   {linkedErrorReportLoading && linkedErrorRows.length === 0 ? (
                     <TableRow data-testid="audit-linked-incidents-error-report-loading-row">
-                      <TableCell colSpan={14} className="text-center text-slate-300" data-testid="audit-linked-incidents-error-report-loading-cell">
+                      <TableCell colSpan={15} className="text-center text-slate-300" data-testid="audit-linked-incidents-error-report-loading-cell">
                         hata raporu yükleniyor...
                       </TableCell>
                     </TableRow>
                   ) : linkedErrorRows.length === 0 ? (
                     <TableRow data-testid="audit-linked-incidents-error-report-empty-row">
-                      <TableCell colSpan={14} className="text-center text-slate-400" data-testid="audit-linked-incidents-error-report-empty-cell">
+                      <TableCell colSpan={15} className="text-center text-slate-400" data-testid="audit-linked-incidents-error-report-empty-cell">
                         seçili aralıkta hata kaydı yok
                       </TableCell>
                     </TableRow>
@@ -1496,6 +1505,11 @@ export const AuditLogsPage = () => {
                         </TableCell>
                         <TableCell className="font-mono text-xs" data-testid={`audit-linked-incidents-error-report-correlation-id-${index}`}>{row.correlation_id || "-"}</TableCell>
                         <TableCell data-testid={`audit-linked-incidents-error-report-event-type-${index}`}>{row.event_type || "unknown_event"}</TableCell>
+                        <TableCell data-testid={`audit-linked-incidents-error-report-rca-tag-${index}`}>
+                          <span className={`rounded px-2 py-1 text-xs font-semibold ${rcaTagBadgeClass[String(row.rca_tag || "-").toUpperCase()] || rcaTagBadgeClass.UNKNOWN}`}>
+                            {String(row.rca_tag || "-").toUpperCase()}
+                          </span>
+                        </TableCell>
                         <TableCell className="max-w-[260px] truncate" title={formatClientContextDisplay(row.client_context)} data-testid={`audit-linked-incidents-error-report-client-context-${index}`}>
                           {formatClientContextDisplay(row.client_context)}
                         </TableCell>
@@ -1546,6 +1560,9 @@ export const AuditLogsPage = () => {
                     <p className="text-sm text-rose-100" data-testid={`audit-error-item-id-${idx}`}>{row.id}</p>
                     <p className="text-xs text-rose-200/90" data-testid={`audit-error-item-meta-${idx}`}>
                       {String(row.severity || "-").toUpperCase()} • {row.error_class || "trade_blocker"} • {row.created_at || "tarih_yok"}
+                    </p>
+                    <p className="text-xs text-rose-100/90" data-testid={`audit-error-item-rca-${idx}`}>
+                      RCA: {String(row.rca_tag || "-").toUpperCase()}
                     </p>
                     <p className="mt-1 text-xs text-rose-100" data-testid={`audit-error-item-action-${idx}`}>action: {row.action || "-"}</p>
                     <p className="text-xs text-rose-100/90" data-testid={`audit-error-item-message-${idx}`}>

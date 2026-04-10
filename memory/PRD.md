@@ -1,3 +1,36 @@
+## 2026-04-10 — Scanner Polling Race Guard + Audit Logs RCA Etiketi
+
+### Kapsam
+- User Scanner tarafında polling kaynaklı race-condition riskini düşürmek için request cancellation + sequence guard eklendi.
+- Admin Audit Logs tarafında scanner/exchange ile ilişkili hata kayıtlarına tek satır RCA etiketi eklendi.
+
+### Uygulanan değişiklikler
+- `frontend/src/pages/UserScannerPage.jsx`
+  - `load` akışına `AbortController` tabanlı iptal mekanizması eklendi.
+  - Yeni load başladığında önceki load otomatik iptal edilir.
+  - Sequence guard (`loadRequestSequenceRef`) ile eski yanıtların yeni state’i ezmesi engellendi.
+  - `ERR_CANCELED` sonuçları health/anomali metriklerinden dışlandı (false degrade azaltıldı).
+  - Component unmount cleanup ile aktif istek iptal ediliyor.
+
+- `backend/routers/audit_logs.py`
+  - Scanner/exchange ilgili event tespiti + RCA etiketleyici eklendi.
+  - Yeni alan: `rca_tag` (SCHEMA_MISMATCH | CREDENTIAL | NETWORK | UNKNOWN | -)
+  - `admin/log-feed` ve `admin/error-table-report` çıktısına `rca_tag` dahil edildi.
+  - JSON/XLSX error report export kolonlarına `RCA Etiketi` eklendi.
+
+- `frontend/src/pages/AuditLogsPage.jsx`
+  - Linked incidents hata raporu tablosuna `RCA Etiketi` kolonu eklendi.
+  - Error list kartlarında `RCA: ...` satırı eklendi.
+  - Yeni alanlar için gerekli `data-testid` eklendi.
+
+### Doğrulama
+- Lint PASS (JS + Python)
+- API PASS:
+  - `/api/audit-logs/admin/error-table-report` -> `columns` içinde `rca_tag` var
+  - `/api/audit-logs/admin/log-feed` -> item'larda `rca_tag` var
+- UI smoke:
+  - Admin shell yükleniyor doğrulandı (preview ortamında panel-shell timeout/dinamik yükleme gecikmesi devam edebilir)
+
 ## 2026-04-10 — Status Contract 500 + Zombie Process Kalıcı Stabilizasyon
 
 ### Problem
