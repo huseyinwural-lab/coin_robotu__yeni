@@ -1,3 +1,48 @@
+## 2026-04-10 — P0 Stabilizasyon Uygulaması (Auth + Scanner + Risk + Exchange)
+
+### Uygulanan P0 düzeltmeler
+
+1) **Auth Refresh (`refresh_device_mismatch`) hardening**
+- Dosya: `backend/routers/auth.py`
+- Refresh akışında canonical `device_id` kontrolü güçlendirildi.
+- Header/cookie taşınmayan isteklerde (proxy/CDN kaynaklı false mismatch) refresh token içindeki beklenen cihaz kimliği kullanılarak yanlış 401 azaltıldı.
+- Güvenlik korunarak gerçek mismatch durumunda hata devam ediyor.
+
+2) **Scanner async race/stuck guard**
+- Dosya: `backend/routers/user_scanner_signals.py`
+- User scanner run için ayrı aktif lock eklendi (`user:scanner:run_active`).
+- Eşzamanlı `run-async` çağrılarında ilk job `queued/running`, diğerleri `already_running` + aynı `job_id` döndürür hale getirildi.
+- Job completion/failure sonunda lock serbest bırakma (`finally`) eklendi.
+- Kısa run sonrası yeni run'ın yeniden kuyruğa alınabildiği doğrulandı.
+
+3) **Risk settings 500 fix**
+- Dosya: `backend/routers/user_platform.py`
+- `/user/risk-settings` endpointleri eski dar serializer yerine `live_mode_service` içindeki geniş payload akışına taşındı:
+  - `resolve_user_risk_settings_payload`
+  - `update_user_risk_settings`
+- Böylece `UserRiskSettingsResponse` için gerekli tüm alanlar sağlandı; GET/PUT 500 kalktı.
+
+4) **Exchange connections 500 fix (FK cleanup yan etkisi)**
+- Dosya: `backend/core/users/user_exchange_connections.py`
+- `_cleanup_auto_default_profiles` non-destructive hale getirildi.
+- Listeleme sırasında FK referanslı satır silinmesinden doğan `ForeignKeyViolation` kaynaklı 500 engellendi.
+
+### Doğrulama kanıtı
+
+- Lokal/preview auth refresh:
+  - `POST /api/auth/refresh` => **200** (önceki `refresh_device_mismatch` üretilemedi)
+- Risk settings:
+  - `GET /api/user/risk-settings` => **200**
+  - `PUT /api/user/risk-settings` (%30 allocation dahil) => **200**
+- Scanner concurrency:
+  - Aynı anda 5 çağrı => 1 `queued`, 4 `already_running` (aynı job_id)
+- Scanner lock release:
+  - kısa run completed sonrası ikinci run tekrar `queued` => PASS
+- Exchange connections:
+  - Admin token ile `/api/user/exchange-connections` => **200**
+
+- Bağımsız backend doğrulama agent sonucu: **5/5 PASS**
+
 ## 2026-04-10 — Final Go/No-Go Test (User Side, Rapor-Only)
 
 ### Kullanıcı onayıyla test kapsamı
