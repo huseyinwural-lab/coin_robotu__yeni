@@ -1,3 +1,47 @@
+## 2026-04-10 — Scanner Engine UI Workflow Modernizasyonu (Contract-Safe)
+
+### Uygulanan kapsam (onaylanan 3 madde)
+- Sadece `User Scanner` görsel iş akışı güncellendi (backend contract korunarak).
+- Backend endpoint/response contract'ı değiştirilmedi.
+- `engine_version` readonly gösterildi; değer yoksa `v1` fallback uygulanıyor.
+
+### Frontend değişiklikleri
+- `frontend/src/pages/UserScannerPage.jsx`
+  - Yeni `Scanner Engine Workflow` paneli eklendi:
+    - API Contract kartı
+    - Runtime + Delta kartı
+    - Feature Layer kartı
+    - Signal → Trade kartı
+  - Latency breakdown satırı eklendi (`queue_ms`, `feature_ms`, `score_ms`, `total_ms`) ve veri yoksa `-` fallback.
+  - Scanner Engine config bölümüne readonly alanlar eklendi:
+    - `engine_version` (readonly)
+    - `karar modu` özet alanı (readonly)
+  - `runScannerEngine` akışına `lastRunEnvelope` telemetry state güncellemesi eklendi (cache/live kaynak etiketi).
+
+- `frontend/src/components/ScannerResultsTable.jsx`
+  - Yeni kolon: `Decision / Allocation`
+  - Satır bazında `final_decision` + `allocation_gate` badge gösterimi.
+  - Expand detayına trace görünürlüğü eklendi:
+    - `run_id`
+    - `engine_version`
+    - `final_decision`
+    - `allocation_gate`
+
+### Karar01-04 ve 12 strateji uyumu
+- UI katmanında karar seti görünürlüğü artırıldı (BC01-BC04/Karar01-04).
+- Allocation gate görünürlüğü eklendi; bu sayede karar üretimi ve strateji/uygunluk blokajı ayrık izlenebilir.
+- Karar mantığına dokunulmadı; sadece görselleştirme/telemetry güçlendirildi.
+
+### Doğrulama
+- Lint PASS:
+  - `UserScannerPage.jsx`
+  - `ScannerResultsTable.jsx`
+- Screenshot smoke PASS:
+  - `user-scanner-engine-workflow-panel`, `engine_version` readonly alanı, `decision mode` readonly alanı görünür.
+- Frontend test agent sonucu:
+  - Kod doğrulaması PASS
+  - Playwright oturum/cookie limitasyonu nedeniyle tam UI otomasyon bloklandı (bilinen preview testi limiti).
+
 ## 2026-04-10 — Scanner Loading Flicker / Skeleton Lock Fix
 
 ### Sorun
