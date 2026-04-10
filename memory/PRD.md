@@ -1,3 +1,61 @@
+## 2026-04-10 — Scanner Worker Execution (Minimum Patch, No Refactor)
+
+### Uygulanan kapsam
+- Scanner ve scanner-engine `run-async` akışları request içi uzun çalışmadan çıkarıldı.
+- Mevcut endpoint sözleşmeleri korundu (`/run-async`, status endpointleri).
+- Mevcut job status/payload yapısı korunup progress alanları genişletildi.
+
+### Backend değişiklikleri
+
+#### 1) Worker çalışma modeli (minimal)
+- Dosya: `backend/routers/user_scanner_signals.py`
+- Yeni worker runtime eklendi:
+  - `ensure_scanner_worker_runtime_started()`
+  - `_enqueue_scanner_worker_job(...)`
+  - `_scanner_worker_loop()`
+- `run-async` endpointleri artık işi worker kuyruğuna bırakıyor; API hızlı `queued` dönüyor.
+- Queue tarafında Redis varsa kullanılabilir, limit/erişim sorunu durumunda local queue fallback aktif.
+- `server.py` startup içinde worker bootstrap çağrısı eklendi.
+
+#### 2) Progress/state genişletmesi
+- `scanner-engine run-async` status payload:
+  - `current_batch`, `total_batches`, `processed_symbols`, `scored_count`, `warnings`, `errors`
+- `scanner run-async` status payload aynı progress alanlarını dönecek şekilde genişletildi.
+- Status key geçici bulunamazsa active lock üzerinden `running` fallback döndürülerek false-fail azaltıldı.
+
+#### 3) Scanner engine scope & limit bug fix paketi
+- Dosya: `backend/routers/admin_universe_monitor.py`
+  - `market_scope` artık gerçekten uygulanıyor (`all/manual/topN`)
+  - `manual_symbols` market mode `manual` iken gerçek filtre olarak uygulanıyor
+  - `scan_limit` gerçek candidate listesine uygulanıyor
+  - Sequential batch işleme eklendi (`batch_size`, default 25)
+  - Progress callback desteği eklendi
+- Dosya: `backend/routers/user_scanner_signals.py`
+  - Config save/load tarafında artık `signal_mode`, `market_scope`, `scan_limit`, `manual_symbols`, `batch_size` zorla overwrite edilmiyor.
+
+#### 4) signal_mode auto force fix
+- Dosya: `backend/core/users/user_scanner_signal_service.py`
+  - `ALLOWED_SIGNAL_MODES` genişletildi: `AUTO`, `MANUAL`, `ASSISTED`
+  - `update_signal_mode` artık gelen mode'u normalize edip saklıyor (zorla AUTO yok)
+  - `run_user_scanner` içindeki `signal_mode_auto_enforced` davranışı kaldırıldı
+  - Manual/assisted için `requires_manual_approval` tekrar anlamlı hale getirildi
+
+### Test doğrulama
+- Python lint PASS:
+  - `user_scanner_signals.py`
+  - `admin_universe_monitor.py`
+  - `user_scanner_signal_service.py`
+  - `server.py`
+- Backend curl testleri:
+  - Scanner-engine config save/load: `signal_mode/manual_symbols/scan_limit/market_scope` korunuyor
+  - Scanner-engine run-async: hızlı `queued`, status progress alanları dönüyor
+  - Scanner run-async: hızlı `queued`, status flow `running -> completed` çalışıyor
+  - Duplicate run: aynı kullanıcıda `already_running` fail-closed davranışı doğrulandı
+- Backend deep test agent:
+  - 5/6 PASS (ana hedefler geçti, senkron run performans notu raporlandı)
+- Frontend smoke test agent:
+  - PASS (queued/running/completed akışı, false-fail gözlenmedi)
+
 ## 2026-04-10 — P0 Stabilizasyon Uygulaması (Auth + Scanner + Risk + Exchange)
 
 ### Uygulanan P0 düzeltmeler
