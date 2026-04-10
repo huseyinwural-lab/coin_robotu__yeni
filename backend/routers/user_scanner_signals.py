@@ -3,6 +3,8 @@ from decimal import ROUND_DOWN
 import hashlib
 import json
 import logging
+import queue
+import threading
 import time
 from uuid import uuid4
 
@@ -103,23 +105,27 @@ def user_scanner_engine_save_config(payload: dict, current_user: User = Depends(
     if auto_interval not in {1, 3, 5}:
         auto_interval = 3
 
-    signal_mode = "auto"
+    signal_mode = str(payload.get("signal_mode") or previous.get("signal_mode") or "manual").strip().lower()
+    if signal_mode not in {"auto", "manual"}:
+        signal_mode = "manual"
 
     merged_decision_boxes = payload.get("decision_boxes") if isinstance(payload.get("decision_boxes"), dict) else (previous.get("decision_boxes") or {})
 
     incoming_manual_symbols = payload.get("manual_symbols") if "manual_symbols" in payload else (previous.get("manual_symbols") or [])
+    incoming_market_scope = payload.get("market_scope") if isinstance(payload.get("market_scope"), dict) else (previous.get("market_scope") or {})
 
     config = {
         **previous,
         "exchange": "binance",
         "include_spot": include_spot,
         "include_futures": include_futures,
-        "market_scope": {"spot_mode": "all", "futures_mode": "all"},
+        "market_scope": _sanitize_user_market_scope(incoming_market_scope),
         "signal_mode": signal_mode,
         "auto_interval_minutes": auto_interval,
-        "scan_limit": max(_safe_int(payload.get("scan_limit"), int(previous.get("scan_limit") or 2000)), 2000),
+        "scan_limit": _clamp_user_scan_limit(_safe_int(payload.get("scan_limit"), int(previous.get("scan_limit") or 80))),
         "top_n": _safe_int(payload.get("top_n"), int(previous.get("top_n") or 20)),
         "manual_symbols": _normalize_symbols(incoming_manual_symbols or []),
+        "batch_size": _clamp_user_batch_size(_safe_int(payload.get("batch_size"), int(previous.get("batch_size") or 25))),
         "weights": {
             "trend": trend,
             "volume": volume,
@@ -231,9 +237,9 @@ def user_scanner_engine_analyze(payload: dict, current_user: User = Depends(requ
 @router.post("/scanner-engine/run-async")
 def user_scanner_engine_run_async(
     payload: dict,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_user),
 ):
+    ensure_scanner_worker_runtime_started()
     config = _normalize_scanner_engine_config_for_runtime(_load_user_scanner_engine_config(current_user.id))
     config_fingerprint = _config_fingerprint(config)
     force_refresh = bool(payload.get("force_refresh", False))
@@ -272,17 +278,26 @@ def user_scanner_engine_run_async(
             "status": "queued",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "config_fingerprint": config_fingerprint,
+            "current_batch": 0,
+            "total_batches": 0,
+            "processed_symbols": 0,
+            "scored_count": 0,
+            "warnings": [],
+            "errors": [],
         },
     )
 
-    background_tasks.add_task(
-        _run_scanner_engine_async_job,
-        user_id=current_user.id,
-        job_id=job_id,
-        job_key=job_key,
-        config=config,
-        force_refresh=force_refresh,
-        reason=reason,
+    _enqueue_scanner_worker_job(
+        {
+            "job_type": "scanner_engine_async",
+            "user_id": current_user.id,
+            "job_id": job_id,
+            "job_key": job_key,
+            "config": config,
+            "force_refresh": force_refresh,
+            "reason": reason,
+            "enqueued_at": datetime.now(timezone.utc).isoformat(),
+        }
     )
 
     return {
@@ -296,6 +311,19 @@ def user_scanner_engine_run_async(
 def user_scanner_engine_run_async_status(job_id: str, current_user: User = Depends(require_user)):
     payload = get_json(redis_client, _user_scanner_engine_async_job_key(current_user.id, job_id))
     if not isinstance(payload, dict):
+        active_run = get_json(redis_client, _user_scanner_engine_active_run_key(current_user.id))
+        if isinstance(active_run, dict) and str(active_run.get("job_id") or "") == str(job_id):
+            return {
+                "job_id": job_id,
+                "status": "running",
+                "message": "scanner_engine_run_still_processing",
+                "current_batch": 0,
+                "total_batches": 0,
+                "processed_symbols": 0,
+                "scored_count": 0,
+                "warnings": [],
+                "errors": [],
+            }
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="scanner_engine_run_async_job_not_found")
     return payload
 
@@ -350,6 +378,13 @@ USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX = "user:scanner_engine:last_run"
 USER_SCANNER_ENGINE_ASYNC_JOB_KEY_PREFIX = "user:scanner_engine:run_async"
 USER_SCANNER_ENGINE_ACTIVE_RUN_KEY_PREFIX = "user:scanner_engine:run_active"
 USER_SCANNER_ACTIVE_RUN_KEY_PREFIX = "user:scanner:run_active"
+USER_SCANNER_WORKER_QUEUE_KEY = "user:scanner:worker:queue"
+USER_SCANNER_WORKER_HEARTBEAT_KEY = "user:scanner:worker:heartbeat"
+
+_SCANNER_WORKER_THREAD: threading.Thread | None = None
+_SCANNER_WORKER_LOCK = threading.Lock()
+_SCANNER_WORKER_LOCAL_QUEUE: queue.Queue[dict] = queue.Queue()
+_SCANNER_WORKER_REDIS_DISABLED_UNTIL = 0.0
 
 
 def _user_scanner_engine_config_key(user_id: str) -> str:
@@ -381,6 +416,98 @@ def _set_json_with_ttl(key: str, payload: dict, ttl_seconds: int) -> None:
         pass
 
 
+def _enqueue_scanner_worker_job(payload: dict) -> None:
+    global _SCANNER_WORKER_REDIS_DISABLED_UNTIL
+
+    _SCANNER_WORKER_LOCAL_QUEUE.put(dict(payload or {}))
+
+    if time.time() < _SCANNER_WORKER_REDIS_DISABLED_UNTIL:
+        return
+
+    serialized = json.dumps(payload, ensure_ascii=False, default=str)
+    if hasattr(redis_client, "rpush"):
+        try:
+            redis_client.rpush(USER_SCANNER_WORKER_QUEUE_KEY, serialized)
+            return
+        except Exception:  # noqa: BLE001
+            _SCANNER_WORKER_REDIS_DISABLED_UNTIL = time.time() + 60
+
+
+def _dequeue_scanner_worker_job(*, timeout_seconds: int = 5) -> dict | None:
+    global _SCANNER_WORKER_REDIS_DISABLED_UNTIL
+
+    try:
+        return _SCANNER_WORKER_LOCAL_QUEUE.get(timeout=max(0.2, float(timeout_seconds)))
+    except Exception:  # noqa: BLE001
+        pass
+
+    if time.time() < _SCANNER_WORKER_REDIS_DISABLED_UNTIL:
+        return None
+    if not hasattr(redis_client, "blpop"):
+        return None
+    try:
+        item = redis_client.blpop(USER_SCANNER_WORKER_QUEUE_KEY, timeout=timeout_seconds)
+    except Exception:  # noqa: BLE001
+        _SCANNER_WORKER_REDIS_DISABLED_UNTIL = time.time() + 60
+        return None
+
+    if not item:
+        return None
+    _, raw_value = item
+    if isinstance(raw_value, bytes):
+        raw_value = raw_value.decode("utf-8", errors="ignore")
+    try:
+        payload = json.loads(raw_value)
+        return payload if isinstance(payload, dict) else None
+    except Exception:  # noqa: BLE001
+        logger.warning("scanner_worker_invalid_payload")
+        return None
+
+
+def _scanner_worker_loop() -> None:
+    while True:
+        try:
+            job = _dequeue_scanner_worker_job(timeout_seconds=5)
+            if not job:
+                continue
+
+            job_type = str(job.get("job_type") or "").strip().lower()
+            if job_type == "scanner_engine_async":
+                _run_scanner_engine_async_job(
+                    user_id=str(job.get("user_id") or ""),
+                    job_id=str(job.get("job_id") or ""),
+                    job_key=str(job.get("job_key") or ""),
+                    config=dict(job.get("config") or {}),
+                    force_refresh=bool(job.get("force_refresh")),
+                    reason=str(job.get("reason") or "user_scanner_engine_run_async"),
+                )
+            elif job_type == "scanner_async":
+                _run_scanner_async_job(
+                    job_key=str(job.get("job_key") or ""),
+                    user_id=str(job.get("user_id") or ""),
+                    mode=str(job.get("mode") or "AUTO"),
+                    max_results=int(job.get("max_results") or 20),
+                    symbol_source=str(job.get("symbol_source") or "crypto"),
+                    market_type=str(job.get("market_type") or "all"),
+                    selected_symbols=list(job.get("selected_symbols") or []),
+                    symbol_selection_mode=str(job.get("symbol_selection_mode") or "all_market_symbols"),
+                )
+            else:
+                logger.warning("scanner_worker_unknown_job_type", extra={"job_type": job_type, "job": job})
+        except Exception:  # noqa: BLE001
+            logger.exception("scanner_worker_loop_unhandled_error")
+            time.sleep(1.5)
+
+
+def ensure_scanner_worker_runtime_started() -> None:
+    global _SCANNER_WORKER_THREAD
+    with _SCANNER_WORKER_LOCK:
+        if _SCANNER_WORKER_THREAD is not None and _SCANNER_WORKER_THREAD.is_alive():
+            return
+        _SCANNER_WORKER_THREAD = threading.Thread(target=_scanner_worker_loop, daemon=True, name="scanner-worker")
+        _SCANNER_WORKER_THREAD.start()
+
+
 def _config_fingerprint(config: dict) -> str:
     raw = json.dumps(config or {}, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:20]
@@ -405,6 +532,36 @@ def _normalize_symbols(values) -> list[str]:
     return sorted({str(item).strip().upper() for item in values if str(item).strip()})
 
 
+def _clamp_user_scan_limit(value: int | None) -> int:
+    parsed = _safe_int(value, 80)
+    return max(25, min(parsed, 5000))
+
+
+def _clamp_user_batch_size(value: int | None) -> int:
+    parsed = _safe_int(value, 25)
+    return max(5, min(parsed, 100))
+
+
+def _sanitize_user_market_scope(input_scope: dict) -> dict:
+    scope = dict(input_scope or {})
+
+    def _normalize_mode(value: str | None, fallback: str = "all") -> str:
+        raw = str(value or "").strip().lower()
+        if raw in {"all", "manual", "top50", "top100"}:
+            return raw
+        if raw.startswith("top"):
+            tail = raw[3:]
+            if tail.isdigit():
+                parsed = max(1, min(int(tail), 500))
+                return f"top{parsed}"
+        return fallback
+
+    return {
+        "spot_mode": _normalize_mode(scope.get("spot_mode"), "all"),
+        "futures_mode": _normalize_mode(scope.get("futures_mode"), "all"),
+    }
+
+
 def _user_scanner_engine_default_config() -> dict:
     return _admin_default_scanner_engine_config()
 
@@ -423,13 +580,15 @@ def _normalize_scanner_engine_config_for_runtime(config: dict) -> dict:
     if not include_spot and not include_futures:
         include_spot = True
 
-    requested_scan_limit = _safe_int(base.get("scan_limit"), 2000)
+    requested_scan_limit = _clamp_user_scan_limit(base.get("scan_limit"))
     return {
         **base,
         "include_spot": include_spot,
         "include_futures": include_futures,
-        "market_scope": {"spot_mode": "all", "futures_mode": "all"},
-        "scan_limit": max(requested_scan_limit, 2000),
+        "market_scope": _sanitize_user_market_scope(base.get("market_scope") or {}),
+        "signal_mode": str(base.get("signal_mode") or "manual").strip().lower(),
+        "scan_limit": requested_scan_limit,
+        "batch_size": _clamp_user_batch_size(base.get("batch_size")),
         "manual_symbols": _normalize_symbols(base.get("manual_symbols") or []),
     }
 
@@ -534,12 +693,13 @@ def _load_user_scanner_engine_config(user_id: str) -> dict:
     return {
         **defaults,
         **saved,
-        "signal_mode": "auto",
+        "signal_mode": str(saved.get("signal_mode") or defaults.get("signal_mode") or "manual").strip().lower(),
         "manual_symbols": _normalize_symbols(saved.get("manual_symbols") or defaults.get("manual_symbols") or []),
-        "market_scope": {"spot_mode": "all", "futures_mode": "all"},
+        "market_scope": _sanitize_user_market_scope(saved.get("market_scope") or defaults.get("market_scope") or {}),
         "decision_boxes": _admin_sanitize_decision_boxes(saved.get("decision_boxes") or defaults.get("decision_boxes") or {}),
         "auto_interval_minutes": auto_interval,
-        "scan_limit": max(_safe_int(saved.get("scan_limit"), _safe_int(defaults.get("scan_limit"), 2000)), 2000),
+        "scan_limit": _clamp_user_scan_limit(_safe_int(saved.get("scan_limit"), _safe_int(defaults.get("scan_limit"), 80))),
+        "batch_size": _clamp_user_batch_size(_safe_int(saved.get("batch_size"), _safe_int(defaults.get("batch_size"), 25))),
     }
 
 
@@ -564,7 +724,45 @@ def _run_scanner_engine_async_job(
     started_at = datetime.now(timezone.utc)
     config_fingerprint = _config_fingerprint(config)
     try:
-        run_payload = _admin_run_scanner_engine(config, force_refresh=force_refresh)
+        _set_scanner_engine_async_payload(
+            job_key,
+            {
+                "job_id": job_id,
+                "status": "running",
+                "started_at": started_at.isoformat(),
+                "config_fingerprint": config_fingerprint,
+                "current_batch": 0,
+                "total_batches": 0,
+                "processed_symbols": 0,
+                "scored_count": 0,
+                "warnings": [],
+                "errors": [],
+            },
+        )
+
+        def _progress_update(progress_payload: dict) -> None:
+            _set_scanner_engine_async_payload(
+                job_key,
+                {
+                    "job_id": job_id,
+                    "status": "running",
+                    "started_at": started_at.isoformat(),
+                    "config_fingerprint": config_fingerprint,
+                    "current_batch": int(progress_payload.get("current_batch") or 0),
+                    "total_batches": int(progress_payload.get("total_batches") or 0),
+                    "processed_symbols": int(progress_payload.get("processed_symbols") or 0),
+                    "scored_count": int(progress_payload.get("scored_count") or 0),
+                    "warnings": list(progress_payload.get("warnings") or []),
+                    "errors": list(progress_payload.get("errors") or []),
+                },
+            )
+
+        run_payload = _admin_run_scanner_engine(
+            config,
+            force_refresh=force_refresh,
+            batch_size=int(config.get("batch_size") or 25),
+            progress_callback=_progress_update,
+        )
         run_payload = {
             **(run_payload or {}),
             "config": config,
@@ -582,6 +780,12 @@ def _run_scanner_engine_async_job(
                 "run_id": run_payload.get("run_id"),
                 "summary": run_payload.get("summary") or {},
                 "config_fingerprint": config_fingerprint,
+                "current_batch": int((run_payload.get("summary") or {}).get("total_batches") or 0),
+                "total_batches": int((run_payload.get("summary") or {}).get("total_batches") or 0),
+                "processed_symbols": int((run_payload.get("summary") or {}).get("candidate_count") or 0),
+                "scored_count": int((run_payload.get("summary") or {}).get("scored_count") or 0),
+                "warnings": list((run_payload.get("summary") or {}).get("warnings") or []),
+                "errors": list(run_payload.get("errors") or []),
             },
         )
 
@@ -614,6 +818,8 @@ def _run_scanner_engine_async_job(
                 "failed_at": datetime.now(timezone.utc).isoformat(),
                 "error": str(exc)[:500],
                 "config_fingerprint": config_fingerprint,
+                "warnings": [],
+                "errors": [str(exc)[:500]],
             },
         )
     finally:
@@ -1038,6 +1244,12 @@ def _run_scanner_async_job(
             "chunk_strategy": "market+symbol",
             "chunk_base_size": 150,
             "timeout_policy": "adaptive",
+            "current_batch": 0,
+            "total_batches": 0,
+            "processed_symbols": 0,
+            "scored_count": 0,
+            "warnings": [],
+            "errors": [],
         },
     )
     try:
@@ -1058,6 +1270,12 @@ def _run_scanner_async_job(
                 "started_at": started_at.isoformat(),
                 "completed_at": datetime.now(timezone.utc).isoformat(),
                 "result": jsonable_encoder(result),
+                "current_batch": int((result.get("scanner_perf") or {}).get("chunk_cursor_end") or 0),
+                "total_batches": int((result.get("scanner_perf") or {}).get("total_ranked_symbols") or 0),
+                "processed_symbols": int((result.get("scanner_perf") or {}).get("processed_chunk_symbols") or 0),
+                "scored_count": int(result.get("result_count") or 0),
+                "warnings": list(result.get("warnings") or []),
+                "errors": list(result.get("errors") or []),
             },
         )
     except Exception as exc:  # noqa: BLE001
@@ -1072,6 +1290,7 @@ def _run_scanner_async_job(
                 "started_at": started_at.isoformat(),
                 "failed_at": datetime.now(timezone.utc).isoformat(),
                 "error": str(exc),
+                "errors": [str(exc)[:500]],
             },
         )
     finally:
@@ -1103,6 +1322,12 @@ def _run_scanner_async_dual_market_job(
             "chunk_strategy": "market+symbol",
             "chunk_base_size": 150,
             "timeout_policy": "adaptive",
+            "current_batch": 0,
+            "total_batches": 0,
+            "processed_symbols": 0,
+            "scored_count": 0,
+            "warnings": [],
+            "errors": [],
         },
     )
     run_items: list[dict] = []
@@ -1188,6 +1413,12 @@ def _run_scanner_async_dual_market_job(
                     "selected_symbols": selected_symbols,
                     "symbol_selection_mode": symbol_selection_mode,
                 },
+                "current_batch": 0,
+                "total_batches": 0,
+                "processed_symbols": 0,
+                "scored_count": int(total_result_count),
+                "warnings": [],
+                "errors": [str(item.get("error") or "")[:500] for item in run_items if item.get("status") == "failed"],
             },
         )
     finally:
@@ -1443,9 +1674,9 @@ def scanner_analyze(
 @router.post("/scanner/run-async")
 def scanner_run_async(
     payload: UserScannerRunRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_user),
 ):
+    ensure_scanner_worker_runtime_started()
     selected_symbols = payload.selected_symbols or []
     valid_symbols = filter_allowed_quote_symbols(selected_symbols)
     if payload.symbol_selection_mode == "manual_selection" and len(valid_symbols) == 0:
@@ -1484,19 +1715,28 @@ def scanner_run_async(
             "market_type": payload.market_type,
             "selected_count": len(valid_symbols),
             "request_fingerprint": request_fingerprint,
+            "current_batch": 0,
+            "total_batches": 0,
+            "processed_symbols": 0,
+            "scored_count": 0,
+            "warnings": [],
+            "errors": [],
         },
     )
 
-    background_tasks.add_task(
-        _run_scanner_async_job,
-        job_key=job_key,
-        user_id=current_user.id,
-        mode=payload.mode,
-        max_results=payload.max_results,
-        symbol_source=payload.symbol_source,
-        market_type=payload.market_type,
-        selected_symbols=valid_symbols,
-        symbol_selection_mode=payload.symbol_selection_mode,
+    _enqueue_scanner_worker_job(
+        {
+            "job_type": "scanner_async",
+            "job_key": job_key,
+            "user_id": current_user.id,
+            "mode": payload.mode,
+            "max_results": payload.max_results,
+            "symbol_source": payload.symbol_source,
+            "market_type": payload.market_type,
+            "selected_symbols": valid_symbols,
+            "symbol_selection_mode": payload.symbol_selection_mode,
+            "enqueued_at": datetime.now(timezone.utc).isoformat(),
+        }
     )
 
     return {
@@ -1515,6 +1755,17 @@ def scanner_run_async_status(
     job_key = _scanner_async_job_key(current_user.id, job_id)
     payload = get_json(redis_client, job_key)
     if not payload:
+        active_run = get_json(redis_client, _user_scanner_active_run_key(current_user.id))
+        if isinstance(active_run, dict) and str(active_run.get("job_id") or "") == str(job_id):
+            return {
+                "job_id": job_id,
+                "status": "running",
+                "message": "scanner_run_still_processing",
+                "current_batch": 0,
+                "total_batches": 0,
+                "processed_symbols": 0,
+                "scored_count": 0,
+            }
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="scanner_run_async_job_not_found")
     return payload
 
@@ -1522,9 +1773,9 @@ def scanner_run_async_status(
 @router.post("/scanner/run-async-both")
 def scanner_run_async_both(
     payload: UserScannerRunRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_user),
 ):
+    ensure_scanner_worker_runtime_started()
     selected_symbols = payload.selected_symbols or []
     valid_symbols = filter_allowed_quote_symbols(selected_symbols)
     if payload.symbol_selection_mode == "manual_selection" and len(valid_symbols) == 0:
@@ -1564,18 +1815,28 @@ def scanner_run_async_both(
             "selected_count": len(valid_symbols),
             "job_type": "dual_market",
             "request_fingerprint": request_fingerprint,
+            "current_batch": 0,
+            "total_batches": 0,
+            "processed_symbols": 0,
+            "scored_count": 0,
+            "warnings": [],
+            "errors": [],
         },
     )
 
-    background_tasks.add_task(
-        _run_scanner_async_dual_market_job,
-        job_key=job_key,
-        user_id=current_user.id,
-        mode=payload.mode,
-        max_results=payload.max_results,
-        symbol_source=payload.symbol_source,
-        selected_symbols=valid_symbols,
-        symbol_selection_mode=payload.symbol_selection_mode,
+    _enqueue_scanner_worker_job(
+        {
+            "job_type": "scanner_async",
+            "job_key": job_key,
+            "user_id": current_user.id,
+            "mode": payload.mode,
+            "max_results": payload.max_results,
+            "symbol_source": payload.symbol_source,
+            "market_type": "both",
+            "selected_symbols": valid_symbols,
+            "symbol_selection_mode": payload.symbol_selection_mode,
+            "enqueued_at": datetime.now(timezone.utc).isoformat(),
+        }
     )
 
     return {

@@ -47,7 +47,7 @@ from services.venue_service import check_user_venue_access, seed_binance_venue_r
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_SIGNAL_MODES = {"AUTO"}
+ALLOWED_SIGNAL_MODES = {"AUTO", "MANUAL", "ASSISTED"}
 DEFAULT_SIGNAL_MODE = "AUTO"
 ALLOWED_SCANNER_SOURCES = {"crypto", "stock"}
 ALLOWED_SCANNER_SELECTION_MODES = {"all_market_symbols", "top_volume", "manual_selection"}
@@ -761,11 +761,12 @@ def _execution_mode_label(mode: str | None) -> str:
     normalized = _normalize_mode(mode)
     if normalized == "AUTO":
         return "Full Auto"
-    return "Full Auto"
+    return "Assisted"
 
 
 def _requires_manual_approval(mode: str | None) -> bool:
-    return False
+    normalized = _normalize_mode(mode)
+    return normalized != "AUTO"
 
 
 def _base_strategy_code(strategy_code: str | None) -> str:
@@ -1802,7 +1803,7 @@ def get_or_create_signal_mode(db: Session, user_id: str) -> UserSignalMode:
 
 def update_signal_mode(db: Session, user_id: str, mode: str) -> UserSignalMode:
     row = get_or_create_signal_mode(db, user_id)
-    row.mode = "AUTO"
+    row.mode = _normalize_mode(mode)
     row.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
@@ -1928,10 +1929,6 @@ def run_user_scanner(
     mode_row = get_or_create_signal_mode(db, user_id)
     mode = _normalize_mode(requested_mode or mode_row.mode)
     warning_set: set[str] = set()
-
-    if mode != "AUTO":
-        mode = "AUTO"
-        warning_set.add("signal_mode_auto_enforced")
 
     if mode_row.mode != mode:
         mode_row.mode = mode

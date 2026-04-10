@@ -4,9 +4,9 @@ import io
 import math
 import re
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path as FilePath
+from typing import Callable
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Path as FastAPIPath, Query, Response, status
 from fastapi.responses import FileResponse
@@ -744,11 +744,49 @@ def _save_scanner_engine_config(config: dict):
 
 
 def _sanitize_market_scope(input_scope: dict) -> dict:
-    _ = input_scope
+    scope = dict(input_scope or {})
+
+    def _normalize_mode(value: str | None, fallback: str) -> str:
+        raw = str(value or "").strip().lower()
+        if raw in {"all", "manual", "top50", "top100"}:
+            return raw
+        if raw.startswith("top"):
+            tail = raw[3:]
+            if tail.isdigit():
+                parsed = max(1, min(int(tail), 500))
+                return f"top{parsed}"
+        return fallback
+
     return {
-        "spot_mode": "all",
-        "futures_mode": "all",
+        "spot_mode": _normalize_mode(scope.get("spot_mode"), "all"),
+        "futures_mode": _normalize_mode(scope.get("futures_mode"), "all"),
     }
+
+
+def _resolve_top_limit(mode: str | None, *, default: int = 50) -> int:
+    raw = str(mode or "").strip().lower()
+    if not raw.startswith("top"):
+        return default
+    digits = raw[3:]
+    if digits.isdigit():
+        return max(1, min(int(digits), 500))
+    return default
+
+
+def _apply_market_mode(
+    rows: list[dict],
+    *,
+    mode: str,
+    manual_symbols: set[str],
+) -> list[dict]:
+    normalized_mode = str(mode or "all").strip().lower()
+    if normalized_mode == "manual":
+        if not manual_symbols:
+            return []
+        return [item for item in rows if str(item.get("symbol") or "").upper() in manual_symbols]
+    if normalized_mode.startswith("top"):
+        return rows[: _resolve_top_limit(normalized_mode)]
+    return list(rows)
 
 
 def _sanitize_decision_boxes(input_boxes: dict) -> dict:
@@ -1311,7 +1349,13 @@ def _score_candidate_symbol(candidate: dict, config: dict, force_refresh: bool) 
     }
 
 
-def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
+def _run_scanner_engine(
+    config: dict,
+    *,
+    force_refresh: bool = False,
+    batch_size: int | None = None,
+    progress_callback: Callable[[dict], None] | None = None,
+) -> dict:
     universe = scanner_market_data_provider.get_tradable_symbols_parallel(
         exchange="binance",
         include_spot=bool(config.get("include_spot", True)),
@@ -1331,32 +1375,37 @@ def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
     futures_rows.sort(key=lambda item: _to_float(item.get("volume_24h")), reverse=True)
 
     scoped_rows: list[dict] = []
+    manual_symbols = set(_normalize_symbols(config.get("manual_symbols") or []))
+
     if bool(config.get("include_spot", True)):
-        scoped_rows.extend(spot_rows)
+        scoped_rows.extend(_apply_market_mode(spot_rows, mode=spot_mode, manual_symbols=manual_symbols))
     if bool(config.get("include_futures", True)):
-        scoped_rows.extend(futures_rows)
+        scoped_rows.extend(_apply_market_mode(futures_rows, mode=futures_mode, manual_symbols=manual_symbols))
 
     rows = scoped_rows
 
-    manual_symbols = set(_normalize_symbols(config.get("manual_symbols") or []))
     if str(config.get("signal_mode") or "manual") == "manual" and manual_symbols:
         rows = [item for item in rows if str(item.get("symbol") or "").upper() in manual_symbols]
 
     rows.sort(key=lambda item: _to_float(item.get("volume_24h")), reverse=True)
-    candidates = rows
+
+    scan_limit = max(1, min(int(config.get("scan_limit") or SCANNER_ENGINE_DEFAULT_SCAN_LIMIT), 5000))
+    candidates = rows[:scan_limit]
 
     scored: list[dict] = []
     errors: list[dict] = []
+    resolved_batch_size = max(1, min(int(batch_size or 25), 200))
+    total_batches = int(math.ceil(len(candidates) / resolved_batch_size)) if candidates else 0
+
     if candidates:
-        with ThreadPoolExecutor(max_workers=min(10, max(2, len(candidates)))) as executor:
-            future_map = {
-                executor.submit(_score_candidate_symbol, candidate, config, force_refresh): candidate
-                for candidate in candidates
-            }
-            for future in as_completed(future_map):
-                candidate = future_map[future]
+        for batch_index in range(total_batches):
+            batch_start = batch_index * resolved_batch_size
+            batch_end = min(len(candidates), batch_start + resolved_batch_size)
+            batch_rows = candidates[batch_start:batch_end]
+
+            for candidate in batch_rows:
                 try:
-                    scored_item = future.result()
+                    scored_item = _score_candidate_symbol(candidate, config, force_refresh)
                     if scored_item:
                         scored.append(scored_item)
                 except Exception as exc:
@@ -1367,6 +1416,17 @@ def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
                             "error": str(exc)[:320],
                         }
                     )
+
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "current_batch": batch_index + 1,
+                        "total_batches": total_batches,
+                        "processed_symbols": batch_end,
+                        "scored_count": len(scored),
+                        "error_count": len(errors),
+                    }
+                )
 
     scored.sort(key=_score_sort_key)
     run_id = str(uuid.uuid4())
@@ -1395,6 +1455,9 @@ def _run_scanner_engine(config: dict, *, force_refresh: bool = False) -> dict:
             "candidate_count": len(candidates),
             "scored_count": len(scored),
             "error_count": len(errors),
+            "scan_limit": scan_limit,
+            "batch_size": resolved_batch_size,
+            "total_batches": total_batches,
             "strong_long_count": strong_long_count,
             "strong_short_count": strong_short_count,
             "long_signal_count": long_signal_count,

@@ -927,6 +927,11 @@ async def startup_event():
         in {"1", "true", "yes"}
     )
 
+    try:
+        user_scanner_signals.ensure_scanner_worker_runtime_started()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("SCANNER_WORKER_START_FAILED", extra={"detail": str(exc)[:240]})
+
     global weekly_report_task, exchange_health_task, backup_scheduler_task, commercial_export_scheduler_task, preview_smoke_gate_task, venue_sanity_scheduler_task, readiness_maintenance_scheduler_task, execution_microstructure_runtime, incident_intelligence_task
     if STARTUP_RUNTIME_STATE["database_ready"] and background_loops_enabled:
         from db import SessionLocal
