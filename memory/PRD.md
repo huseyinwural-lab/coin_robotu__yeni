@@ -1,3 +1,23 @@
+## 2026-04-10 — Scanner Loading Flicker / Skeleton Lock Fix
+
+### Sorun
+- `/user/scanner` ekranında zaman zaman skeleton/loading state'inde takılma ve yanıp sönme gözlemi.
+
+### Kök neden
+- `UserScannerPage.jsx` içindeki request cancellation guard, yeni `silent` polling çağrısında aktif `non-silent` ilk yüklemeyi abort edebiliyordu.
+- İlk yükleme abort edilince `isLoading=false` geçişi kaçabiliyor ve ekran loading'de kalabiliyordu.
+
+### Uygulanan düzeltme
+- Aktif istek `non-silent` ise yeni `silent` polling çağrısı artık bu isteği abort etmiyor (skip).
+- Aktif yükleme tipi (`silent/non-silent`) ref ile takip ediliyor.
+- `finally` bloğunda current `non-silent` istek için `isLoading` kapanışı güvenli şekilde garanti edildi.
+- Polling timer'ına `isLoading` kontrolü eklendi; bootstrap yüklemesi sürerken yeni silent load tetiklenmiyor.
+- Unmount cleanup'ta controller + silent state temizliği korundu.
+
+### Doğrulama
+- Lint PASS: `frontend/src/pages/UserScannerPage.jsx`
+- Playwright smoke: Scanner route açılışında sürekli loading skeleton tekrarı gözlenmedi.
+
 ## 2026-04-10 — Scanner Polling Race Guard + Audit Logs RCA Etiketi
 
 ### Kapsam
