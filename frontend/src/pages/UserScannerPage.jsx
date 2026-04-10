@@ -416,6 +416,8 @@ export const UserScannerPage = () => {
   const initialFullLoadDoneRef = useRef(false);
   const loadRequestSequenceRef = useRef(0);
   const activeLoadAbortControllerRef = useRef(null);
+  const activeLoadIsSilentRef = useRef(false);
+  const isLoadingRef = useRef(true);
 
   const activeProfile = useMemo(() => {
     if (!automationProfiles.length) {
@@ -801,15 +803,20 @@ export const UserScannerPage = () => {
   };
 
   const load = useCallback(async ({ hydrateSelection = false, silent = false, notifyAutoRuns = false } = {}) => {
-    const currentRequestSequence = loadRequestSequenceRef.current + 1;
-    loadRequestSequenceRef.current = currentRequestSequence;
-
     if (activeLoadAbortControllerRef.current) {
+      const previousWasSilent = Boolean(activeLoadIsSilentRef.current);
+      if (silent && !previousWasSilent) {
+        return;
+      }
       activeLoadAbortControllerRef.current.abort();
     }
 
+    const currentRequestSequence = loadRequestSequenceRef.current + 1;
+    loadRequestSequenceRef.current = currentRequestSequence;
+
     const abortController = new AbortController();
     activeLoadAbortControllerRef.current = abortController;
+    activeLoadIsSilentRef.current = Boolean(silent);
 
     if (!silent) {
       setIsLoading(true);
@@ -1067,8 +1074,9 @@ export const UserScannerPage = () => {
       const isCurrentRequest = currentRequestSequence === loadRequestSequenceRef.current;
       if (isCurrentRequest && activeLoadAbortControllerRef.current === abortController) {
         activeLoadAbortControllerRef.current = null;
+        activeLoadIsSilentRef.current = false;
       }
-      if (!silent && isCurrentRequest && !abortController.signal.aborted) {
+      if (!silent && isCurrentRequest) {
         setIsLoading(false);
       }
     }
@@ -1084,11 +1092,16 @@ export const UserScannerPage = () => {
   ]);
 
   useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  useEffect(() => {
     return () => {
       if (activeLoadAbortControllerRef.current) {
         activeLoadAbortControllerRef.current.abort();
         activeLoadAbortControllerRef.current = null;
       }
+      activeLoadIsSilentRef.current = false;
     };
   }, []);
 
@@ -1136,6 +1149,9 @@ export const UserScannerPage = () => {
     const intervalMs = SIMPLE_SCANNER_V2 ? 30_000 : 10_000;
     const timer = setInterval(() => {
       if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+      if (isLoadingRef.current) {
         return;
       }
       load({ silent: true, notifyAutoRuns: true });
