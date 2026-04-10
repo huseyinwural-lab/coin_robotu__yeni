@@ -443,9 +443,17 @@ def refresh_access_token(payload: AuthRefreshRequest, request: Request, response
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh_user_not_found")
 
     expected_device_id = str(stored.get("device_id") or claims.get("device_id") or "").strip()
-    device_id, _ = resolve_or_create_device_id(request)
+    device_id, generated_new_device = resolve_or_create_device_id(request)
     if expected_device_id and device_id != expected_device_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh_device_mismatch")
+        incoming_device_header = str(request.headers.get("x-session-device") or "").strip()
+        incoming_device_cookie = str(request.cookies.get("device_id") or "").strip()
+
+        # Proxy/CDN veya header/cookie taşınmayan isteklerde yanlış pozitifleri azalt.
+        # İstemci geçerli bir device-id göndermediyse refresh token içindeki canonical device-id kullanılır.
+        if generated_new_device or (not incoming_device_header and not incoming_device_cookie):
+            device_id = expected_device_id
+        else:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="refresh_device_mismatch")
 
     step_up_scope = [str(item).strip().lower() for item in (stored.get("step_up_scope") or claims.get("step_up_scope") or ["auth_login"]) if str(item).strip()]
     if not step_up_scope:

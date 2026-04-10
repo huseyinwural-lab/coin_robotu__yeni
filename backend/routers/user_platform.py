@@ -23,15 +23,14 @@ from core.users.user_portfolio_engine import (
     build_user_portfolio_snapshot,
 )
 from core.users.user_portfolio_mapper import map_user_portfolio
-from core.users.user_risk_settings import (
-    apply_user_risk_settings,
-    get_or_create_user_risk_settings,
-    serialize_user_risk_settings,
-)
 from db import get_db, redis_client
 from deps import require_step_up_for, require_user
 from models import BotProfile, PendingSignal, RiskPolicy, StrategyTemplate, User, UserExecutionIntent, UserExchangeConnection
-from services.live_mode_service import validate_exchange_credentials_for_user
+from services.live_mode_service import (
+    resolve_user_risk_settings_payload,
+    update_user_risk_settings,
+    validate_exchange_credentials_for_user,
+)
 from services.credential_resolution_service import build_user_routing_preview
 from schemas import (
     ExecutionIntentSubmitRequest,
@@ -604,8 +603,8 @@ def map_portfolio(
 
 @router.get("/risk-settings", response_model=UserRiskSettingsResponse)
 def get_risk_settings(current_user: User = Depends(require_user), db: Session = Depends(get_db)):
-    row = get_or_create_user_risk_settings(db, current_user.id)
-    return UserRiskSettingsResponse(**serialize_user_risk_settings(row))
+    payload = resolve_user_risk_settings_payload(db, current_user.id)
+    return UserRiskSettingsResponse(**payload)
 
 
 @router.put("/risk-settings", response_model=UserRiskSettingsResponse)
@@ -615,16 +614,26 @@ def apply_risk_settings(
     db: Session = Depends(get_db),
 ):
     try:
-        row = apply_user_risk_settings(
+        row = update_user_risk_settings(
             db,
             user_id=current_user.id,
             allocation_pct=payload.allocation_pct,
             trade_risk_pct=payload.trade_risk_pct,
             daily_loss_limit_pct=payload.daily_loss_limit_pct,
             compounding_enabled=payload.compounding_enabled,
+            reference_equity_usd=payload.reference_equity_usd,
+            account_max_notional_pct=payload.account_max_notional_pct,
+            symbol_max_notional_pct=payload.symbol_max_notional_pct,
+            strategy_max_concurrent_positions=payload.strategy_max_concurrent_positions,
+            strategy_cooldown_seconds=payload.strategy_cooldown_seconds,
+            max_order_frequency_per_min=payload.max_order_frequency_per_min,
+            max_order_burst_per_10s=payload.max_order_burst_per_10s,
+            duplicate_suppression_window_seconds=payload.duplicate_suppression_window_seconds,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    merged = resolve_user_risk_settings_payload(db, current_user.id)
 
     create_audit_log(
         db,
@@ -633,9 +642,9 @@ def apply_risk_settings(
         entity_id=row.id,
         actor_user_id=current_user.id,
         actor_role=current_user.role.value,
-        details=serialize_user_risk_settings(row),
+        details=merged,
     )
-    return UserRiskSettingsResponse(**serialize_user_risk_settings(row))
+    return UserRiskSettingsResponse(**merged)
 
 
 @router.post("/validate-order", response_model=OrderValidationResponse)

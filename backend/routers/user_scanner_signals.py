@@ -343,11 +343,13 @@ SCANNER_ASYNC_JOB_TTL_SECONDS = 60 * 30
 SCANNER_ENGINE_ASYNC_JOB_TTL_SECONDS = 60 * 45
 SCANNER_ENGINE_REUSE_WINDOW_SECONDS = 180
 SCANNER_ENGINE_RUN_LOCK_SECONDS = 900
+SCANNER_RUN_LOCK_SECONDS = 600
 SCANNER_ENGINE_LAST_RUN_CACHE_KEY = "universe:scanner_engine:last_run"
 USER_SCANNER_ENGINE_CONFIG_KEY_PREFIX = "user:scanner_engine:config"
 USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX = "user:scanner_engine:last_run"
 USER_SCANNER_ENGINE_ASYNC_JOB_KEY_PREFIX = "user:scanner_engine:run_async"
 USER_SCANNER_ENGINE_ACTIVE_RUN_KEY_PREFIX = "user:scanner_engine:run_active"
+USER_SCANNER_ACTIVE_RUN_KEY_PREFIX = "user:scanner:run_active"
 
 
 def _user_scanner_engine_config_key(user_id: str) -> str:
@@ -364,6 +366,10 @@ def _user_scanner_engine_async_job_key(user_id: str, job_id: str) -> str:
 
 def _user_scanner_engine_active_run_key(user_id: str) -> str:
     return f"{USER_SCANNER_ENGINE_ACTIVE_RUN_KEY_PREFIX}:{user_id}"
+
+
+def _user_scanner_active_run_key(user_id: str) -> str:
+    return f"{USER_SCANNER_ACTIVE_RUN_KEY_PREFIX}:{user_id}"
 
 
 def _set_json_with_ttl(key: str, payload: dict, ttl_seconds: int) -> None:
@@ -467,6 +473,46 @@ def _release_scanner_engine_run_lock(user_id: str) -> None:
     try:
         if hasattr(redis_client, "delete"):
             redis_client.delete(_user_scanner_engine_active_run_key(user_id))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _scanner_request_fingerprint(*, mode: str, market_type: str, symbol_source: str, symbol_selection_mode: str, selected_symbols: list[str]) -> str:
+    payload = {
+        "mode": str(mode or "AUTO").upper(),
+        "market_type": str(market_type or "all").lower(),
+        "symbol_source": str(symbol_source or "crypto").lower(),
+        "symbol_selection_mode": str(symbol_selection_mode or "all_market_symbols").lower(),
+        "selected_symbols": sorted({str(symbol).upper() for symbol in (selected_symbols or []) if str(symbol).strip()}),
+    }
+    return _config_fingerprint(payload)
+
+
+def _acquire_scanner_run_lock(*, user_id: str, job_id: str, request_fingerprint: str) -> dict:
+    lock_key = _user_scanner_active_run_key(user_id)
+    now = datetime.now(timezone.utc)
+    existing = get_json(redis_client, lock_key)
+    if isinstance(existing, dict) and str(existing.get("status") or "") == "running":
+        started_at = _parse_iso_datetime(existing.get("started_at"))
+        if started_at is not None:
+            age_seconds = (now - started_at).total_seconds()
+            if age_seconds <= SCANNER_RUN_LOCK_SECONDS:
+                return {"acquired": False, "existing": existing, "lock_key": lock_key}
+
+    payload = {
+        "job_id": job_id,
+        "status": "running",
+        "started_at": now.isoformat(),
+        "request_fingerprint": request_fingerprint,
+    }
+    _set_json_with_ttl(lock_key, payload, SCANNER_RUN_LOCK_SECONDS)
+    return {"acquired": True, "existing": payload, "lock_key": lock_key}
+
+
+def _release_scanner_run_lock(user_id: str) -> None:
+    try:
+        if hasattr(redis_client, "delete"):
+            redis_client.delete(_user_scanner_active_run_key(user_id))
     except Exception:  # noqa: BLE001
         pass
 
@@ -1030,6 +1076,7 @@ def _run_scanner_async_job(
         )
     finally:
         db.close()
+        _release_scanner_run_lock(user_id)
 
 
 def _run_scanner_async_dual_market_job(
@@ -1145,6 +1192,7 @@ def _run_scanner_async_dual_market_job(
         )
     finally:
         db.close()
+        _release_scanner_run_lock(user_id)
 
 
 def _run_fix_all_blockers_async_job(*, job_key: str, user_id: str, total_limit: int) -> None:
@@ -1403,7 +1451,28 @@ def scanner_run_async(
     if payload.symbol_selection_mode == "manual_selection" and len(valid_symbols) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_allowed_quote_notice())
 
+    request_fingerprint = _scanner_request_fingerprint(
+        mode=payload.mode,
+        market_type=payload.market_type,
+        symbol_source=payload.symbol_source,
+        symbol_selection_mode=payload.symbol_selection_mode,
+        selected_symbols=valid_symbols,
+    )
     job_id = str(uuid4())
+    lock_result = _acquire_scanner_run_lock(
+        user_id=current_user.id,
+        job_id=job_id,
+        request_fingerprint=request_fingerprint,
+    )
+    if not lock_result.get("acquired"):
+        existing = lock_result.get("existing") or {}
+        return {
+            "job_id": existing.get("job_id"),
+            "status": "already_running",
+            "selected_count": len(valid_symbols),
+            "market_type": payload.market_type,
+        }
+
     job_key = _scanner_async_job_key(current_user.id, job_id)
     _set_scanner_async_payload(
         job_key,
@@ -1414,6 +1483,7 @@ def scanner_run_async(
             "mode": payload.mode,
             "market_type": payload.market_type,
             "selected_count": len(valid_symbols),
+            "request_fingerprint": request_fingerprint,
         },
     )
 
@@ -1460,7 +1530,28 @@ def scanner_run_async_both(
     if payload.symbol_selection_mode == "manual_selection" and len(valid_symbols) == 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_allowed_quote_notice())
 
+    request_fingerprint = _scanner_request_fingerprint(
+        mode=payload.mode,
+        market_type="both",
+        symbol_source=payload.symbol_source,
+        symbol_selection_mode=payload.symbol_selection_mode,
+        selected_symbols=valid_symbols,
+    )
     job_id = str(uuid4())
+    lock_result = _acquire_scanner_run_lock(
+        user_id=current_user.id,
+        job_id=job_id,
+        request_fingerprint=request_fingerprint,
+    )
+    if not lock_result.get("acquired"):
+        existing = lock_result.get("existing") or {}
+        return {
+            "job_id": existing.get("job_id"),
+            "status": "already_running",
+            "selected_count": len(valid_symbols),
+            "market_type": "both",
+        }
+
     job_key = _scanner_async_job_key(current_user.id, job_id)
     _set_scanner_async_payload(
         job_key,
@@ -1472,6 +1563,7 @@ def scanner_run_async_both(
             "market_type": "both",
             "selected_count": len(valid_symbols),
             "job_type": "dual_market",
+            "request_fingerprint": request_fingerprint,
         },
     )
 

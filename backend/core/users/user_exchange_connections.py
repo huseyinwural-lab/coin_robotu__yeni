@@ -76,18 +76,12 @@ def _cleanup_auto_default_profiles(db: Session, *, user_id: str) -> None:
     if not rows:
         return
 
-    removable = [row for row in rows if _is_auto_default_profile(row)]
-    if removable:
-        for row in removable:
-            db.delete(row)
-        db.commit()
-
-    remaining = (
-        db.query(UserExchangeConnection)
-        .filter(UserExchangeConnection.user_id == user_id)
-        .order_by(UserExchangeConnection.updated_at.desc())
-        .all()
-    )
+    # NOTE:
+    # Geçmişte burada auto-default profiller doğrudan siliniyordu.
+    # Ancak PendingSignal.exchange_connection_id gibi FK referansları nedeniyle
+    # listeleme akışında ForeignKeyViolation üretebiliyor.
+    # P0 hardening kapsamında cleanup non-destructive hale getirildi.
+    remaining = rows
     if not remaining:
         return
 
