@@ -62,6 +62,11 @@ SCANNER_ENGINE_LAST_RUN_CACHE_KEY = "universe:scanner_engine:last_run"
 USER_SCANNER_ENGINE_LAST_RUN_KEY_PREFIX = "user:scanner_engine:last_run"
 BC_MAX_SCORE = 161.0
 AUTO_EXECUTION_MAX_PER_RUN = 5
+SCANNER_CHUNK_BASE_SIZE = 150
+SCANNER_CHUNK_MIN_SIZE = 60
+SCANNER_CHUNK_MAX_SIZE = 240
+SCANNER_CHUNK_TIMEOUT_BASE_SECONDS = 35
+SCANNER_CHUNK_TIMEOUT_MAX_SECONDS = 90
 
 SIGNAL_PENDING_REASON_HINTS = {
     "BOT_NOT_RUNNING": ("Bot runtime çalışmıyor.", "Bot profilini başlatın (is_running=true)."),
@@ -298,6 +303,82 @@ def _clamp_scanner_max_results(max_results: int | None) -> int:
     except (TypeError, ValueError):
         value = 25
     return max(5, min(100, value))
+
+
+def _clamp_scanner_chunk_size(chunk_size: int) -> int:
+    return max(SCANNER_CHUNK_MIN_SIZE, min(SCANNER_CHUNK_MAX_SIZE, int(chunk_size)))
+
+
+def _resolve_adaptive_chunk_size(
+    *,
+    queue_backlog: int,
+    cycle_latency_ms: float,
+    stale_rate: float,
+    requested_max_results: int,
+) -> int:
+    chunk_size = SCANNER_CHUNK_BASE_SIZE
+    if queue_backlog >= 20 or cycle_latency_ms >= 5000:
+        chunk_size = int(chunk_size * 0.55)
+    elif queue_backlog >= 10 or cycle_latency_ms >= 2800:
+        chunk_size = int(chunk_size * 0.72)
+    elif queue_backlog <= 3 and cycle_latency_ms <= 1200 and stale_rate <= 0.03:
+        chunk_size = int(chunk_size * 1.12)
+
+    if stale_rate >= 0.08:
+        chunk_size = int(chunk_size * 0.85)
+
+    if requested_max_results > 0:
+        chunk_size = min(chunk_size, int(requested_max_results))
+
+    return _clamp_scanner_chunk_size(chunk_size)
+
+
+def _resolve_adaptive_chunk_timeout_seconds(
+    *,
+    queue_backlog: int,
+    cycle_latency_ms: float,
+    stale_rate: float,
+) -> int:
+    timeout_seconds = SCANNER_CHUNK_TIMEOUT_BASE_SECONDS
+    if queue_backlog >= 20 or cycle_latency_ms >= 5000:
+        timeout_seconds += 30
+    elif queue_backlog >= 10 or cycle_latency_ms >= 2800:
+        timeout_seconds += 18
+    elif queue_backlog <= 3 and cycle_latency_ms <= 1200 and stale_rate <= 0.03:
+        timeout_seconds -= 6
+
+    if stale_rate >= 0.08:
+        timeout_seconds += 8
+
+    timeout_seconds = max(20, min(SCANNER_CHUNK_TIMEOUT_MAX_SECONDS, timeout_seconds))
+    return int(timeout_seconds)
+
+
+def _scanner_chunk_cursor_key(user_id: str, market_type: str) -> str:
+    return f"scanner:chunk_cursor:{user_id}:{market_type}"
+
+
+def _slice_ranked_symbols_chunk(
+    ranked_rows: list[dict],
+    *,
+    cursor: int,
+    chunk_size: int,
+) -> tuple[list[dict], int, int, int]:
+    if not ranked_rows:
+        return [], 0, 0, 0
+
+    total = len(ranked_rows)
+    safe_cursor = max(0, int(cursor)) % total
+    safe_chunk_size = max(1, int(chunk_size))
+
+    if total <= safe_chunk_size:
+        return list(ranked_rows), 0, total, 0
+
+    chunk_start = safe_cursor
+    chunk_end = min(total, chunk_start + safe_chunk_size)
+    chunk_rows = list(ranked_rows[chunk_start:chunk_end])
+    next_cursor = 0 if chunk_end >= total else chunk_end
+    return chunk_rows, chunk_start, chunk_end, next_cursor
 
 
 def _clamp_interval_seconds(interval_seconds: int | None) -> int:
@@ -2064,6 +2145,50 @@ def run_user_scanner(
         warning_set.add("scanner_scope_unavailable_using_last_bc_run")
 
     selected = ranked
+    total_ranked_symbols = len(selected)
+    chunk_size = _resolve_adaptive_chunk_size(
+        queue_backlog=queue_backlog,
+        cycle_latency_ms=latest_cycle_latency,
+        stale_rate=stale_rate,
+        requested_max_results=max_results,
+    )
+    chunk_timeout_budget_seconds = _resolve_adaptive_chunk_timeout_seconds(
+        queue_backlog=queue_backlog,
+        cycle_latency_ms=latest_cycle_latency,
+        stale_rate=stale_rate,
+    )
+    chunk_mode_active = False
+    chunk_cursor_start = 0
+    chunk_cursor_end = 0
+
+    if selected:
+        chunk_cursor_key = _scanner_chunk_cursor_key(user_id, normalized_market_type)
+        chunk_cursor_state = get_json(redis_client, chunk_cursor_key) or {}
+        previous_cursor = int(chunk_cursor_state.get("cursor") or 0)
+        chunk_rows, chunk_start, chunk_end, next_cursor = _slice_ranked_symbols_chunk(
+            selected,
+            cursor=previous_cursor,
+            chunk_size=chunk_size,
+        )
+        chunk_mode_active = len(selected) > len(chunk_rows)
+        chunk_cursor_start = int(chunk_start)
+        chunk_cursor_end = int(chunk_end)
+        selected = chunk_rows
+
+        set_json(
+            redis_client,
+            chunk_cursor_key,
+            {
+                "cursor": int(next_cursor),
+                "chunk_size": int(chunk_size),
+                "total_ranked_symbols": int(total_ranked_symbols),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+        if chunk_mode_active:
+            warning_set.add("scanner_chunk_processing_enabled")
+
     selected_symbols = [str(item.get("symbol") or "").upper() for item in selected if str(item.get("symbol") or "").strip()]
     if len(selected) == 0:
         warning_set.add("scanner_no_bc_match")
@@ -2696,6 +2821,13 @@ def run_user_scanner(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "user_id": user_id,
         "run_id": run_id,
+        "total_ranked_symbols": int(total_ranked_symbols),
+        "processed_chunk_symbols": int(len(selected)),
+        "chunk_mode_active": bool(chunk_mode_active),
+        "chunk_size": int(chunk_size),
+        "chunk_cursor_start": int(chunk_cursor_start),
+        "chunk_cursor_end": int(chunk_cursor_end),
+        "chunk_timeout_budget_seconds": int(chunk_timeout_budget_seconds),
         "total_active_symbols": len(scanner_scope),
         "decision_scope_symbols": len(candidate_tiers.get("decision_scope") or []),
         "candidate_high": len(candidate_tiers.get("candidate_high") or []),

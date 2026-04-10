@@ -966,6 +966,19 @@ def _run_scanner_async_job(
     selected_symbols: list[str],
     symbol_selection_mode: str,
 ) -> None:
+    normalized_market_type = str(market_type or "all").strip().lower()
+    if normalized_market_type in {"all", "both"}:
+        _run_scanner_async_dual_market_job(
+            job_key=job_key,
+            user_id=user_id,
+            mode=mode,
+            max_results=max_results,
+            symbol_source=symbol_source,
+            selected_symbols=selected_symbols,
+            symbol_selection_mode=symbol_selection_mode,
+        )
+        return
+
     db = SessionLocal()
     started_at = datetime.now(timezone.utc)
     _set_scanner_async_payload(
@@ -974,8 +987,11 @@ def _run_scanner_async_job(
             "status": "running",
             "started_at": started_at.isoformat(),
             "mode": mode,
-            "market_type": market_type,
+            "market_type": normalized_market_type,
             "selected_count": len(selected_symbols),
+            "chunk_strategy": "market+symbol",
+            "chunk_base_size": 150,
+            "timeout_policy": "adaptive",
         },
     )
     try:
@@ -985,7 +1001,7 @@ def _run_scanner_async_job(
             requested_mode=mode,
             max_results=max_results,
             symbol_source=symbol_source,
-            market_type=market_type,
+            market_type=normalized_market_type,
             selected_symbols=selected_symbols,
             symbol_selection_mode=symbol_selection_mode,
         )
@@ -1037,6 +1053,9 @@ def _run_scanner_async_dual_market_job(
             "market_type": "both",
             "selected_count": len(selected_symbols),
             "job_type": "dual_market",
+            "chunk_strategy": "market+symbol",
+            "chunk_base_size": 150,
+            "timeout_policy": "adaptive",
         },
     )
     run_items: list[dict] = []
@@ -1105,6 +1124,10 @@ def _run_scanner_async_dual_market_job(
                 "status": "completed",
                 "started_at": started_at.isoformat(),
                 "completed_at": datetime.now(timezone.utc).isoformat(),
+                "job_type": "dual_market",
+                "chunk_strategy": "market+symbol",
+                "chunk_base_size": 150,
+                "timeout_policy": "adaptive",
                 "result": {
                     "mode": mode,
                     "market_type": "both",
