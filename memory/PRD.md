@@ -1,3 +1,45 @@
+## 2026-04-10 — Scanner Timeout Çözümü: Hibrit Chunk (Market + Symbol) + Adaptif Timeout
+
+### Kullanıcı onayıyla uygulanan strateji
+- Chunk stratejisi: **Hibrit (market + symbol)**
+- Timeout politikası: **Adaptif**
+- Başlangıç chunk boyutu: **150**
+
+### Yapılan backend değişiklikleri
+- `backend/core/users/user_scanner_signal_service.py`
+  - Yeni chunk sabitleri eklendi:
+    - `SCANNER_CHUNK_BASE_SIZE=150`
+    - `SCANNER_CHUNK_MIN_SIZE=60`
+    - `SCANNER_CHUNK_MAX_SIZE=240`
+  - Adaptif hesaplayıcılar eklendi:
+    - `_resolve_adaptive_chunk_size(...)`
+    - `_resolve_adaptive_chunk_timeout_seconds(...)`
+  - Cursor tabanlı chunk slicing eklendi:
+    - `_scanner_chunk_cursor_key(...)`
+    - `_slice_ranked_symbols_chunk(...)`
+  - `run_user_scanner(...)` içinde ranked sonuçlar artık chunklanarak işleniyor.
+  - Scanner perf payload genişletildi:
+    - `chunk_mode_active`, `chunk_size`, `processed_chunk_symbols`, `total_ranked_symbols`, `chunk_timeout_budget_seconds`, `chunk_cursor_start/end`.
+
+- `backend/routers/user_scanner_signals.py`
+  - `run-async` içinde `market_type in {all,both}` istekleri otomatik olarak dual-market worker’a yönlendirildi.
+  - Async payload’a metadata eklendi:
+    - `job_type=dual_market`
+    - `chunk_strategy=market+symbol`
+    - `chunk_base_size=150`
+    - `timeout_policy=adaptive`
+
+### Doğrulama
+- Python lint PASS:
+  - `user_scanner_signal_service.py`
+  - `user_scanner_signals.py`
+- Lokal API testleri PASS:
+  - `POST /api/user/scanner/run-async` (`market_type=all`) -> completed
+  - Final payload -> `job_type/chunk_strategy/chunk_base_size/timeout_policy` alanları mevcut
+  - `result.runs` içinde spot ve futures leg status mevcut
+  - Spot run sonuçlarında `scanner_perf` chunk alanları mevcut
+- Deep backend validation agent sonucu: **4/4 PASS**
+
 ## 2026-04-10 — Go/No-Go Öncesi Son Test Raporu (RAPOR-ONLY)
 
 ### Kapsam
