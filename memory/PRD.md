@@ -1,3 +1,30 @@
+## 2026-04-10 — Go/No-Go Öncesi Son Test Raporu (RAPOR-ONLY)
+
+### Kapsam
+- Kullanıcı talebiyle kod değişikliği yapılmadan User tarafı odaklı son testler çalıştırıldı.
+- Test başlıkları: Advisory/blocked kuralları, mock kontrolü, scanner idempotency/crash-state, 1000 sembol ölçek etkisi, auth persistence, UI stabilite.
+
+### Öne çıkan bulgular
+- Advisory mode: `NON_TRADEABLE_REASON_CODES` boş (hard non-tradeable kod seti kapalı).
+- Auth refresh: `POST /api/auth/refresh` çağrısında `refresh_device_mismatch` gözlendi (401).
+- Scanner Engine last-run: manuel tetik sonrası sonuç üretimi var (örnek `scored_count=588`), fakat market dağılımı yalnız spot görüldü.
+- `run-async-both` testi: spot bacağı `partial_failed` / futures bacağı 0 sonuç (uyarılar: fallback/top_volume vb.).
+- `run-async` spot tekli iş: uzun süre `running` durumunda kalabildi (uzayan işlem riski).
+- `GET /api/user/exchange-connections`: anlık testlerde 200; geçmiş loglarda FK violation kaynaklı 500 kayıtları mevcut (intermittent risk geçmişi).
+- `GET /api/user/risk-settings`: Pydantic validation hatası ile 500 (risk ayarı endpointinde şema tutarsızlığı).
+
+### Performans/ölçek notu (tek kullanıcı)
+- Scanner-engine async çalışırken uvicorn prosesinde düşük CPU/MEM gözlendi (yaklaşık `%CPU ~1.1`, `%MEM ~0.4`, RSS ~156MB).
+- Ancak bazı job'larda uzun süreli `queued/running` davranışı görüldüğü için throughput yalnız kaynak tüketimiyle değerlendirilemez.
+
+### Geçiş kararı
+- Sonuç: **CONDITIONAL GO**
+- Canlıya çıkıştan önce P0 düzeyinde netleştirilmesi gerekenler:
+  1) `auth refresh` device mismatch davranışı
+  2) scanner async job state tutarlılığı (uzayan `running/queued`, partial_failed senaryosu)
+  3) user risk-settings 500 şema hatası
+  4) market ayrımı doğrulaması (both çalışırken futures üretim kalitesi)
+
 ## 2026-04-10 — Scanner Engine UI Workflow Modernizasyonu (Contract-Safe)
 
 ### Uygulanan kapsam (onaylanan 3 madde)
