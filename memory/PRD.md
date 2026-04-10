@@ -1,3 +1,40 @@
+## 2026-04-10 — Final Go/No-Go Test (User Side, Rapor-Only)
+
+### Kullanıcı onayıyla test kapsamı
+- Test modu: yalnız rapor (kod değişikliği yok)
+- Binance key doğrulaması: verilen keylerle canlı doğrulama
+- Yük testi: 1000 sembol tek kullanıcı senaryosu
+- Çıktı: Go/No-Go + risk matrisi + canlıya geçiş sırası
+
+### Uygulanan doğrulamalar
+- User exchange connection key update + revalidate çalıştırıldı (verilen user keyleri ile).
+- Admin hesabında `/api/user/exchange-connections` çağrısı 500 verdi (admin key doğrulama akışı bloklu).
+- Auth refresh doğrulaması yapıldı (`/api/auth/refresh`): `refresh_device_mismatch` tekrar üretildi.
+- Scanner async yarış testi yapıldı: eşzamanlı tetiklerde çoklu job queue kabulü ve uzun running gözlendi.
+- Scanner/frontend UI testi Playwright subagent ile çalıştırıldı (6/6 PASS).
+
+### Önemli bulgular
+- Advisory/blocked reason guard'ları runtime'da aktif (canlıda otomatik kalkmaz; koşullar düzelirse tetiklenmez).
+- Scanner path içinde mock/static JSON okuma bulgusu yok (çekirdek scanner dosyalarında).
+- Lag ölçümü (örnek):
+  - `scanner-engine last-run lag`: ~160 sn bandı (değişken)
+  - `screener row lag`: ~6-7 sn bandı (anlık örnek)
+- Auth persistence kritik bulgu: refresh endpoint 401 `refresh_device_mismatch`.
+- Concurrency/race bulgusu: `run-async` eşzamanlı çağrılarda çoklu queued job kabulü; sample job 24 sn+ running kalabildi.
+- Risk settings endpoint: `GET/PUT /api/user/risk-settings` 500 (şema/serializer uyumsuzluğu devam ediyor).
+
+### Connection readiness özeti (user hesabı)
+- Spot: 1 ready/tradeable, 2 blocked (`exchange_unreachable`)
+- Futures: 3 blocked (ikisi `invalid_key`, biri `exchange_unreachable`)
+
+### Geçiş kararı
+- **NO-GO (şu an)**
+- P0 blocker:
+  1) auth refresh mismatch
+  2) scanner async race/uzun running davranışı
+  3) risk-settings 500
+  4) futures key/readiness tutarsızlığı (invalid_key)
+
 ## 2026-04-10 — Scanner Timeout Çözümü: Hibrit Chunk (Market + Symbol) + Adaptif Timeout
 
 ### Kullanıcı onayıyla uygulanan strateji
