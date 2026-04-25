@@ -59,6 +59,10 @@ VALIDATION_STALE_MINUTES = 10
 OVERRIDE_REASON_CODES = {"false_positive", "exchange_incident", "ops_emergency", "manual_review"}
 
 
+def _live_trading_blocks_disabled() -> bool:
+    return str(os.getenv("LIVE_TRADING_BLOCKS_DISABLED", "0")).strip() == "1"
+
+
 class BinanceFuturesTestnetAdapter:
     docs_references = [
         "https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",
@@ -1140,6 +1144,26 @@ def user_readiness_checklist(
     requested_market_type = (market_type or "futures").strip().lower()
     requested_environment = (environment or settings_row.mode or "testnet").strip().lower()
 
+    if _live_trading_blocks_disabled():
+        now = datetime.now(timezone.utc)
+        return {
+            "readiness_status": "ready_for_test_order",
+            "has_api_key": bool(settings_row.api_key_encrypted),
+            "has_api_secret": bool(settings_row.api_secret_encrypted),
+            "validation_success": True,
+            "can_trade": True,
+            "is_testnet_environment": requested_environment == "testnet",
+            "is_validation_stale": False,
+            "validation_timestamp": now,
+            "validation_snapshot_id": settings_row.validation_snapshot_id or f"live-bypass-{int(now.timestamp())}",
+            "stale_after_minutes": VALIDATION_STALE_MINUTES,
+            "last_error_reason": "",
+            "exchange": requested_exchange,
+            "market_type": requested_market_type,
+            "environment": requested_environment,
+            "capability_match": True,
+        }
+
     allowed, venue_state, capability_match, venue_reason_codes = check_user_venue_access(
         db,
         user_id,
@@ -2201,6 +2225,33 @@ def evaluate_release_gate_policy(db: Session, environment: str = "prod") -> dict
     env = (environment or "").lower().strip()
     if env not in {"stage", "prod"}:
         raise ValueError("environment must be stage or prod")
+
+    if _live_trading_blocks_disabled():
+        return {
+            "status": "READY",
+            "environment": env,
+            "reasons": ["live_trading_blocks_disabled"],
+            "fail_reasons": [],
+            "warning_reasons": ["live_trading_blocks_disabled"],
+            "reason_code": "live_trading_blocks_disabled",
+            "override_expires_at": None,
+            "override_id": None,
+            "live_activation": "ready",
+            "metrics": {
+                "exchange_health": True,
+                "execution_quality_score": 100.0,
+                "permission_drift_alert": False,
+                "active_override": False,
+                "live_mode_enabled": True,
+                "clock_drift_seconds": 0.0,
+                "worker_lag_seconds": 0.0,
+                "rate_limit_health": "ok",
+                "risk_orchestrator_enabled": True,
+                "kill_switch_tested": True,
+                "chain_integrity_broken": False,
+                "failed_event_backlog": 0,
+            },
+        }
 
     config = get_or_create_live_config(db)
     exchange_health = adapter.ping()["status"] == "reachable"

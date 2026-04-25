@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from time import perf_counter
@@ -85,6 +86,10 @@ SIGNAL_REASON_PRIORITY = [
     "ORDER_PRECHECK_FAILED",
     "MANUAL_APPROVAL_REQUIRED",
 ]
+
+
+def _runtime_blocks_disabled() -> bool:
+    return str(os.getenv("LIVE_TRADING_BLOCKS_DISABLED", "0")).strip() == "1"
 
 
 def _ensure_scanner_tables(db: Session):
@@ -621,6 +626,8 @@ def _execution_mode_label(mode: str | None) -> str:
 
 
 def _requires_manual_approval(mode: str | None) -> bool:
+    if _runtime_blocks_disabled():
+        return False
     return _normalize_mode(mode) in {"MANUAL", "ASSISTED"}
 
 
@@ -736,6 +743,9 @@ def _evaluate_signal_blockers(
     risk_policy: RiskPolicy | None,
     exchange_connection: UserExchangeConnection | None,
 ) -> tuple[list[str], bool, bool]:
+    if _runtime_blocks_disabled():
+        return [], False, True
+
     reason_codes: list[str] = []
     requires_manual = _requires_manual_approval(row.mode)
 

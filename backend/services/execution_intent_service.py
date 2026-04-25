@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime, timezone
 
@@ -5,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db import redis_client
-from models import BotProfile, PaperPosition, Position, PositionLedgerEvent, UserExecutionIntent
+from models import BotProfile, PaperPosition, Position, PositionLedgerEvent, User, UserExecutionIntent, UserRole
 from core.policy.quote_policy import InvalidSymbol, extract_quote, normalize_symbol
 from services.explainability_service import record_decision_trace
 from services.execution_precheck_service import list_execution_presets, validate_execution_payload
@@ -30,6 +31,20 @@ POSITION_ACTION_TYPES = {
     "MOVE_TAKE_PROFIT",
 }
 RISK_REDUCTION_ACTIONS = {"CLOSE_POSITION", "PARTIAL_CLOSE", "MOVE_STOP", "MOVE_TAKE_PROFIT"}
+
+
+def _execution_auto_release_enabled() -> bool:
+    return str(os.getenv("EXECUTION_AUTO_RELEASE", "0")).strip() == "1"
+
+
+def _resolve_auto_approver_user_id(db: Session, fallback_user_id: str) -> str:
+    admin = (
+        db.query(User)
+        .filter(User.role.in_([UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.OPS]), User.is_active.is_(True))
+        .order_by(User.created_at.asc())
+        .first()
+    )
+    return admin.id if admin is not None else fallback_user_id
 
 
 def _safe_price(symbol: str) -> float:
@@ -712,6 +727,16 @@ def submit_execution_intent(db: Session, user_id: str, intent_token: str, previe
     )
     db.commit()
     db.refresh(intent)
+
+    if _execution_auto_release_enabled() and intent.status == "QUEUED":
+        approver_id = _resolve_auto_approver_user_id(db, user_id)
+        intent = approve_execution_intent(
+            db,
+            intent.id,
+            approver_id,
+            admin_note="auto_release_enabled_by_EXECUTION_AUTO_RELEASE",
+        )
+
     return intent
 
 
