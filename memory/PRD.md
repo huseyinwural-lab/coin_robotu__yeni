@@ -5719,3 +5719,15 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Sonuç: Backend API testleri PASS (22/22), Frontend UI kontrolleri PASS.
 - Not: Test ajanı middleware streaming ve SQLite timezone uyumluluğu için küçük düzeltmeler uyguladı; dosyalar kontrol edilip korundu.
 
+## Güncelleme — 2026-04-25 (Canlı Sert Mod + Docker Redis/PostgreSQL Host Ayarı)
+
+- `backend/.env` canlı sert mod korunarak güncellendi:
+  - `DATABASE_URL=postgresql+psycopg2://trader:trader@postgres:5432/trading_platform`
+  - `REDIS_URL=redis://redis:6379/0`
+  - `DB_ALLOW_SQLITE_FALLBACK=0`
+  - `REDIS_ALLOW_INMEMORY_FALLBACK=0`
+
+- Testing agent doğrulaması (`/app/test_reports/iteration_145.json`):
+  - Bu preview Kubernetes ortamında `postgres` ve `redis` DNS hostları çözülemediği için backend start bloklandı.
+  - Docker Compose ortamında (servis adları `postgres`, `redis`) bu ayar canlı için doğru yapıdadır.
+
