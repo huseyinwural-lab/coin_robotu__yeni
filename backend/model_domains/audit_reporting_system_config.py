@@ -24,6 +24,42 @@ class AuditLog(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
+
+class UltraLogConfig(Base):
+    __tablename__ = "ultra_log_configs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default="global")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    duration_option: Mapped[str] = mapped_column(String(20), default="1h")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    max_normal_log_mb: Mapped[int] = mapped_column(Integer, default=1024)
+    max_ultra_log_mb: Mapped[int] = mapped_column(Integer, default=512)
+    ultra_log_dir: Mapped[str] = mapped_column(Text, default="")
+    auto_shutdown_reason: Mapped[str] = mapped_column(String(80), default="")
+    updated_by_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class UltraLogEvent(Base):
+    __tablename__ = "ultra_log_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    category: Mapped[str] = mapped_column(String(40), index=True)
+    event_name: Mapped[str] = mapped_column(String(120), index=True)
+    severity: Mapped[str] = mapped_column(String(20), default="info")
+    request_id: Mapped[str | None] = mapped_column(String(120), index=True, nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(120), index=True, nullable=True)
+    path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
+    client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    actor_user_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
 class ExecutionEvent(Base):
     __tablename__ = "execution_events"
 

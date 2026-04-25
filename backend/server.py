@@ -1,7 +1,10 @@
 import asyncio
 import logging
+import time
+import uuid
 
 from fastapi import APIRouter, FastAPI
+from fastapi import Request
 from starlette.middleware.cors import CORSMiddleware
 
 from core.config import settings
@@ -75,6 +78,7 @@ from routers import (
     strategy_templates,
     strategy_domain,
     venues,
+    ultra_logs,
     audit,
 )
 from services.bootstrap import seed_default_admin
@@ -83,6 +87,7 @@ from services.pipeline.runtime import pipeline_runtime
 from services.realtime.socket_gateway import create_socket_app
 from services.state_rebuild_service import run_state_rebuild
 from services.weekly_report_service import run_weekly_report_loop
+from services.ultra_log_service import safe_record_event, summarize_request_body
 
 configure_structured_logging(logging.INFO)
 logger = logging.getLogger(__name__)
@@ -139,6 +144,7 @@ api_router.include_router(admin_universe_router.router)
 api_router.include_router(admin_risk_router.router)
 api_router.include_router(exchange.router)
 api_router.include_router(venues.router)
+api_router.include_router(ultra_logs.router)
 api_router.include_router(audit.router)
 api_router.include_router(market.router)
 api_router.include_router(admin_control.router)
@@ -185,6 +191,101 @@ fastapi_app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@fastapi_app.middleware("http")
+async def ultra_log_http_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    session_id = request.headers.get("x-session-id") or request.cookies.get("session_id")
+    started = time.perf_counter()
+    body = b""
+    content_type = request.headers.get("content-type", "")
+
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        try:
+            body = await request.body()
+
+            async def _receive():
+                return {"type": "http.request", "body": body, "more_body": False}
+
+            request._receive = _receive
+        except Exception:
+            body = b""
+
+    request_summary = summarize_request_body(body, content_type)
+    route = request.url.path
+
+    try:
+        response = await call_next(request)
+        duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        response.headers["x-request-id"] = request_id
+
+        # Consume the response body to avoid streaming issues
+        response_body = b""
+        async for chunk in response.body_iterator:
+            response_body += chunk
+
+        # Record event after response is fully consumed
+        try:
+            safe_record_event(
+                category="http_request",
+                event_name="http_request_completed",
+                severity="info" if response.status_code < 500 else "error",
+                payload={
+                    "request_id": request_id,
+                    "session_id": session_id,
+                    "path": route,
+                    "method": request.method,
+                    "status_code": response.status_code,
+                    "duration_ms": duration_ms,
+                    "query": dict(request.query_params),
+                    "headers": {
+                        "content_type": request.headers.get("content-type", ""),
+                        "user_agent": request.headers.get("user-agent", ""),
+                        "content_length": request.headers.get("content-length", ""),
+                    },
+                    "client_ip": request.client.host if request.client else "",
+                    "body_summary": request_summary,
+                },
+            )
+        except Exception:
+            pass  # Don't let logging failures affect the response
+
+        from starlette.responses import Response
+        return Response(
+            content=response_body,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            media_type=response.media_type,
+        )
+    except Exception as exc:
+        duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        try:
+            safe_record_event(
+                category="http_error",
+                event_name="http_request_failed",
+                severity="error",
+                payload={
+                    "request_id": request_id,
+                    "session_id": session_id,
+                    "path": route,
+                    "method": request.method,
+                    "status_code": 500,
+                    "duration_ms": duration_ms,
+                    "error_type": exc.__class__.__name__,
+                    "error_message": str(exc),
+                    "query": dict(request.query_params),
+                    "headers": {
+                        "content_type": request.headers.get("content-type", ""),
+                        "user_agent": request.headers.get("user-agent", ""),
+                    },
+                    "client_ip": request.client.host if request.client else "",
+                    "body_summary": request_summary,
+                },
+            )
+        except Exception:
+            pass  # Don't let logging failures affect the response
+        raise
 
 
 @fastapi_app.on_event("startup")

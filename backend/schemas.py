@@ -196,6 +196,51 @@ class AuditLogResponse(BaseModel):
     created_at: datetime
 
 
+class UltraLogActivateRequest(BaseModel):
+    duration_option: str
+    max_normal_log_mb: int = Field(default=1024, ge=128, le=10240)
+    max_ultra_log_mb: int = Field(default=512, ge=64, le=5120)
+    ultra_log_dir: str | None = ""
+
+
+class UltraLogDeactivateRequest(BaseModel):
+    reason: str = "manual_deactivated"
+
+
+class UltraLogStatusResponse(BaseModel):
+    enabled: bool
+    duration_option: str
+    started_at: datetime | None
+    expires_at: datetime | None
+    remaining_seconds: int
+    max_normal_log_mb: int
+    max_ultra_log_mb: int
+    normal_log_usage_mb: float
+    ultra_log_usage_mb: float
+    ultra_log_dir: str
+    auto_shutdown_reason: str
+    auto_close_reason: str
+
+
+class UltraLogEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    category: str
+    event_name: str
+    severity: str
+    request_id: str | None
+    session_id: str | None
+    path: str | None
+    method: str | None
+    status_code: int | None
+    duration_ms: float | None
+    client_ip: str | None
+    actor_user_id: str | None
+    payload: dict
+    created_at: datetime
+
+
 class MockOrderRequest(BaseModel):
     bot_profile_id: str
     symbol: str
