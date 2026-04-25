@@ -5604,3 +5604,47 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Son aktif log: `/app/logs/deploy3_mock_stability_20260315_1952.log`
 - Exchange execution akışı kullanıcı tercihi gereği **MOCKED** durumdadır.
 
+## Güncelleme — 2026-04-25 (Admin Binance Live Market Data Key Akışı)
+
+### Kullanıcı Seçimleri (Kesin)
+- Key tipi: **read-only / market_data**
+- Ortam: **LIVE only**
+- Dağıtım modeli: **admin key’den tüm kullanıcılara ortak feed**
+- Aktivasyon: **key kaydedilince otomatik start**
+- UI gereksinimi: yeni key paneli + kayıtlı key listesi, test ifadeleri görünmemeli
+
+### Uygulanan Değişiklikler (Additive, Backward-Compatible)
+- Backend
+  - Yeni servis: `/app/backend/services/admin_market_data_credentials_service.py`
+    - Binance live read-only credential doğrulama
+    - Güvenli şifreleme ile saklama (`external_provider_credentials`)
+    - Otomatik global canlı dağıtım açma (exchange/allowed market/user assignment)
+  - Yeni endpointler: `/app/backend/routers/venues.py`
+    - `GET /api/venues/admin/market-data-keys`
+    - `POST /api/venues/admin/market-data-keys`
+  - Şema ekleri: `/app/backend/schemas.py`
+    - `AdminMarketDataKeySaveRequest`
+    - `AdminMarketDataKeyItemResponse`
+    - `AdminMarketDataKeySummaryResponse`
+
+- Frontend
+  - `/app/frontend/src/pages/AdminExchangesPage.jsx`
+    - Yeni panel: **Yeni Veri Key'i** (API Key, API Secret, Base URL Override, IP/Route Notu, Not)
+    - Yeni tablo: **Kayıtlı Veri Key'leri**
+    - Aktif key badge + canlı dağıtım kullanıcı özeti
+    - Bu yeni market-data-key bölümünde test ifadeleri kaldırıldı, yalnızca live bağlamı gösteriliyor
+
+### Doğrulama
+- Self-test
+  - `GET /api/venues/admin/market-data-keys` → 200
+  - `POST /api/venues/admin/market-data-keys` (invalid demo key) → kontrollü 400 (500 değil)
+- UI smoke
+  - Admin login + `/admin/exchanges` ekranı render doğrulandı
+- Testing agent
+  - Rapor: `/app/test_reports/iteration_141.json`
+  - Sonuç: Backend 100%, Frontend PASS
+  - Yeni key paneli ve tablo PASS, backward compatibility PASS
+
+### Not
+- Preview ortamında Binance key doğrulaması coğrafi kısıt sebebiyle 400 dönebilir; bu beklenen kontrollü hata davranışıdır.
+
