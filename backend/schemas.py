@@ -2575,6 +2575,8 @@ class VenueHealthSummaryResponse(BaseModel):
 
 
 class AdminMarketDataKeySaveRequest(BaseModel):
+    exchange: str
+    market: str
     api_key: str
     api_secret: str
     base_url_override: str = ""

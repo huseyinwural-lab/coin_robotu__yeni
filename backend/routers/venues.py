@@ -518,6 +518,8 @@ def admin_save_market_data_key(
         summary = upsert_market_data_key(
             db,
             {
+                "exchange": payload.exchange,
+                "market": payload.market,
                 "api_key": payload.api_key,
                 "api_secret": payload.api_secret,
                 "base_url_override": payload.base_url_override,
@@ -530,14 +532,14 @@ def admin_save_market_data_key(
 
     create_audit_log(
         db,
-        action="admin_binance_market_data_key_saved",
+        action="admin_market_data_key_saved",
         entity_type="external_provider_credentials",
-        entity_id="binance_market_data_global_live_v1",
+        entity_id=f"{payload.exchange}_{payload.market}_market_data_global_live",
         actor_user_id=current_admin.id,
         actor_role=current_admin.role.value,
         details={
-            "exchange": "binance",
-            "market": "spot",
+            "exchange": payload.exchange,
+            "market": payload.market,
             "purpose": "market_data",
             "scope": "global",
             "environment": "live",

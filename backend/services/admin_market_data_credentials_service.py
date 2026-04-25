@@ -3,11 +3,14 @@ from datetime import datetime, timezone
 
 from core.users.user_exchange_connector import decrypt_exchange_secret, encrypt_exchange_secret, mask_secret
 from models import AllowedMarket, ExchangeRegistry, ExternalProviderCredential, User, UserRole, UserVenueAssignment
+from sqlalchemy import distinct, func
 from services.live_mode_service import adapter
 from services.venue_service import seed_binance_venue_registry
 
 
-BINANCE_MARKET_DATA_PROVIDER = "binance_market_data_global_live_v1"
+MARKET_DATA_PROVIDER_PREFIX = "market_data_global_live"
+SUPPORTED_EXCHANGES = {"binance", "bybit", "okx"}
+SUPPORTED_MARKETS = {"spot", "futures"}
 
 DEFAULT_PAYLOAD = {
     "exchange": "binance",
@@ -30,9 +33,15 @@ DEFAULT_PAYLOAD = {
 
 def _normalize(payload: dict | None) -> dict:
     merged = {**DEFAULT_PAYLOAD, **(payload or {})}
+    exchange = str(merged.get("exchange") or "binance").strip().lower()
+    market = str(merged.get("market") or "spot").strip().lower()
+    if exchange not in SUPPORTED_EXCHANGES:
+        exchange = "binance"
+    if market not in SUPPORTED_MARKETS:
+        market = "spot"
     return {
-        "exchange": str(merged.get("exchange") or "binance").strip().lower(),
-        "market": str(merged.get("market") or "spot").strip().lower(),
+        "exchange": exchange,
+        "market": market,
         "purpose": str(merged.get("purpose") or "market_data").strip().lower(),
         "scope": str(merged.get("scope") or "global").strip().lower(),
         "environment": "live",
@@ -64,20 +73,33 @@ def _read_payload(row: ExternalProviderCredential | None) -> dict:
     return dict(DEFAULT_PAYLOAD)
 
 
-def _row_for_provider(db) -> ExternalProviderCredential:
-    row = db.query(ExternalProviderCredential).filter(ExternalProviderCredential.provider == BINANCE_MARKET_DATA_PROVIDER).first()
+def _provider_for(exchange: str, market: str) -> str:
+    return f"{exchange}_{market}_{MARKET_DATA_PROVIDER_PREFIX}"
+
+
+def _row_for_provider(db, provider: str) -> ExternalProviderCredential:
+    row = db.query(ExternalProviderCredential).filter(ExternalProviderCredential.provider == provider).first()
     if row is None:
-        row = ExternalProviderCredential(provider=BINANCE_MARKET_DATA_PROVIDER)
+        row = ExternalProviderCredential(provider=provider)
         db.add(row)
         db.flush()
     return row
 
 
-def _validate_binance_live_readonly(api_key: str, api_secret: str) -> tuple[bool, str]:
+def _validate_live_readonly(exchange: str, market: str, api_key: str, api_secret: str) -> tuple[bool, str]:
     if not api_key or not api_secret:
         return False, "api_key_and_api_secret_required"
+
+    if exchange != "binance":
+        # Diğer borsalar için credential saklama + canlı aktivasyon akışını destekliyoruz.
+        # Adapter doğrulaması henüz Binance dışı read-only probe içermediğinden skip ediyoruz.
+        return True, "validation_skipped_no_adapter"
+
     try:
-        payload, status_code, _ = adapter.account_probe_spot(api_key, api_secret)
+        if market == "futures":
+            payload, status_code, _ = adapter.account_probe(api_key, api_secret)
+        else:
+            payload, status_code, _ = adapter.account_probe_spot(api_key, api_secret)
     except Exception as exc:
         return False, f"binance_probe_error:{exc}"
 
@@ -91,25 +113,46 @@ def _validate_binance_live_readonly(api_key: str, api_secret: str) -> tuple[bool
     return False, reason
 
 
-def _ensure_global_live_distribution(db) -> dict:
-    seed_binance_venue_registry(db)
+def _ensure_global_live_distribution(db, *, exchange: str, market: str) -> dict:
+    try:
+        if exchange == "binance":
+            seed_binance_venue_registry(db)
+    except Exception:
+        # Registry satırını aşağıda garanti ediyoruz; seed başarısız olsa da akış devam eder.
+        pass
 
-    exchange = db.query(ExchangeRegistry).filter(ExchangeRegistry.exchange_code == "binance").first()
-    if exchange is not None:
-        exchange.status = "active"
-        exchange.supports_live = True
-        exchange.supports_testnet = False
-        exchange.health_status = "healthy"
-        exchange.rate_limit_status = "ok"
-        exchange.updated_at = datetime.now(timezone.utc)
+    exchange_row = db.query(ExchangeRegistry).filter(ExchangeRegistry.exchange_code == exchange).first()
+    if exchange_row is None:
+        exchange_row = ExchangeRegistry(
+            exchange_code=exchange,
+            exchange_name=exchange.upper(),
+            status="active",
+            supported_market_types=[market],
+            supports_testnet=False,
+            supports_live=True,
+            health_status="healthy",
+            rate_limit_status="ok",
+            adapter_version="v1",
+        )
+        db.add(exchange_row)
+    else:
+        exchange_row.status = "active"
+        exchange_row.supports_live = True
+        exchange_row.supports_testnet = False
+        exchange_row.health_status = "healthy"
+        exchange_row.rate_limit_status = "ok"
+        supported = set(exchange_row.supported_market_types or [])
+        supported.add(market)
+        exchange_row.supported_market_types = sorted(supported)
+        exchange_row.updated_at = datetime.now(timezone.utc)
 
     allowed_market = (
         db.query(AllowedMarket)
-        .filter(AllowedMarket.exchange_code == "binance", AllowedMarket.market_type == "spot", AllowedMarket.environment == "live")
+        .filter(AllowedMarket.exchange_code == exchange, AllowedMarket.market_type == market, AllowedMarket.environment == "live")
         .first()
     )
     if allowed_market is None:
-        allowed_market = AllowedMarket(exchange_code="binance", market_type="spot", environment="live", enabled=True)
+        allowed_market = AllowedMarket(exchange_code=exchange, market_type=market, environment="live", enabled=True)
         db.add(allowed_market)
     else:
         allowed_market.enabled = True
@@ -121,18 +164,20 @@ def _ensure_global_live_distribution(db) -> dict:
     for user in users:
         assignment = (
             db.query(UserVenueAssignment)
-            .filter(UserVenueAssignment.user_id == user.id, UserVenueAssignment.exchange_code == "binance")
+            .filter(UserVenueAssignment.user_id == user.id, UserVenueAssignment.exchange_code == exchange)
             .first()
         )
         if assignment is None:
-            assignment = UserVenueAssignment(user_id=user.id, exchange_code="binance")
+            assignment = UserVenueAssignment(user_id=user.id, exchange_code=exchange)
             db.add(assignment)
             created += 1
         else:
             updated += 1
 
-        assignment.spot_allowed = True
-        assignment.futures_allowed = True
+        if market == "spot":
+            assignment.spot_allowed = True
+        if market == "futures":
+            assignment.futures_allowed = True
         assignment.live_allowed = True
         assignment.testnet_allowed = False
         assignment.updated_at = datetime.now(timezone.utc)
@@ -145,9 +190,12 @@ def _ensure_global_live_distribution(db) -> dict:
 
 
 def get_market_data_keys_summary(db) -> dict:
-    row = db.query(ExternalProviderCredential).filter(ExternalProviderCredential.provider == BINANCE_MARKET_DATA_PROVIDER).first()
-    payload = _read_payload(row)
-    has_active = bool(payload.get("status") == "active" and payload.get("api_key") and payload.get("api_secret"))
+    rows = (
+        db.query(ExternalProviderCredential)
+        .filter(ExternalProviderCredential.provider.like(f"%_{MARKET_DATA_PROVIDER_PREFIX}"))
+        .order_by(ExternalProviderCredential.updated_at.desc())
+        .all()
+    )
 
     active_user_count = (
         db.query(User)
@@ -156,21 +204,28 @@ def get_market_data_keys_summary(db) -> dict:
     )
     users_with_live_distribution = (
         db.query(UserVenueAssignment)
-        .filter(UserVenueAssignment.exchange_code == "binance", UserVenueAssignment.live_allowed.is_(True), UserVenueAssignment.spot_allowed.is_(True))
-        .count()
+        .filter(UserVenueAssignment.live_allowed.is_(True), (UserVenueAssignment.spot_allowed.is_(True) | UserVenueAssignment.futures_allowed.is_(True)))
+        .with_entities(func.count(distinct(UserVenueAssignment.user_id)))
+        .scalar()
     )
 
     items = []
-    if row is not None and payload.get("api_key"):
+    has_active = False
+    for row in rows:
+        payload = _read_payload(row)
+        if not payload.get("api_key"):
+            continue
+        is_active = payload.get("status") == "active" and bool(payload.get("api_key") and payload.get("api_secret"))
+        has_active = has_active or is_active
         items.append(
             {
-                "provider": BINANCE_MARKET_DATA_PROVIDER,
+                "provider": row.provider,
                 "exchange": payload.get("exchange") or "binance",
                 "market": payload.get("market") or "spot",
                 "purpose": payload.get("purpose") or "market_data",
                 "scope": payload.get("scope") or "global",
                 "environment": "live",
-                "status": payload.get("status") or "inactive",
+                "status": "active" if is_active else (payload.get("status") or "inactive"),
                 "api_key_masked": mask_secret(payload.get("api_key") or ""),
                 "note": payload.get("note") or "",
                 "base_url_override": payload.get("base_url_override") or "",
@@ -192,13 +247,18 @@ def get_market_data_keys_summary(db) -> dict:
 
 
 def upsert_market_data_key(db, payload: dict) -> dict:
-    row = _row_for_provider(db)
+    incoming = _normalize(payload or {})
+    exchange = incoming.get("exchange") or "binance"
+    market = incoming.get("market") or "spot"
+    provider = _provider_for(exchange, market)
+
+    row = _row_for_provider(db, provider)
     current = _read_payload(row)
-    merged = _normalize({**current, **(payload or {})})
+    merged = _normalize({**current, **incoming})
 
     api_key = merged.get("api_key") or ""
     api_secret = merged.get("api_secret") or ""
-    is_valid, reason = _validate_binance_live_readonly(api_key, api_secret)
+    is_valid, reason = _validate_live_readonly(exchange, market, api_key, api_secret)
     if not is_valid:
         raise ValueError(reason)
 
@@ -211,14 +271,17 @@ def upsert_market_data_key(db, payload: dict) -> dict:
     merged["environment"] = "live"
     merged["scope"] = "global"
     merged["purpose"] = "market_data"
-    merged["market"] = "spot"
-    merged["exchange"] = "binance"
+    merged["market"] = market
+    merged["exchange"] = exchange
     merged["auto_start_enabled"] = True
+
+    if reason == "validation_skipped_no_adapter":
+        merged["note"] = merged.get("note") or "credential_saved_validation_skipped"
 
     row.api_key_encrypted = encrypt_exchange_secret(json.dumps(merged, ensure_ascii=False))
     row.updated_at = datetime.now(timezone.utc)
 
-    distribution = _ensure_global_live_distribution(db)
+    distribution = _ensure_global_live_distribution(db, exchange=exchange, market=market)
     db.commit()
     db.refresh(row)
 

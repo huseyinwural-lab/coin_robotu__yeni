@@ -48,6 +48,8 @@ const assignmentSeedForm = {
 };
 
 const marketDataKeySeedForm = {
+  exchange: "binance",
+  market: "spot",
   api_key: "",
   api_secret: "",
   base_url_override: "",
@@ -301,14 +303,16 @@ export const AdminExchangesPage = () => {
   const saveMarketDataKey = async (event) => {
     event.preventDefault();
     const payload = {
+      exchange: String(marketDataKeyForm.exchange || "").trim().toLowerCase(),
+      market: String(marketDataKeyForm.market || "").trim().toLowerCase(),
       api_key: String(marketDataKeyForm.api_key || "").trim(),
       api_secret: String(marketDataKeyForm.api_secret || "").trim(),
       base_url_override: String(marketDataKeyForm.base_url_override || "").trim(),
       ip_route_note: String(marketDataKeyForm.ip_route_note || "").trim(),
       note: String(marketDataKeyForm.note || "").trim(),
     };
-    if (!payload.api_key || !payload.api_secret) {
-      toast.warning("API Key ve API Secret zorunlu");
+    if (!payload.exchange || !payload.market || !payload.api_key || !payload.api_secret) {
+      toast.warning("Exchange, market, API Key ve API Secret zorunlu");
       return;
     }
     try {
@@ -361,9 +365,34 @@ export const AdminExchangesPage = () => {
         <div className="space-y-3 border border-emerald-800 bg-emerald-950/30 p-4" data-testid="admin-market-data-key-form-panel">
           <p className="text-xs uppercase tracking-wider text-emerald-300" data-testid="admin-market-data-key-form-title">Yeni Veri Key'i</p>
           <div className="rounded border border-emerald-700/70 bg-emerald-950/30 p-3 text-sm text-emerald-200" data-testid="admin-market-data-key-form-context-card">
-            Purpose: <b>market_data</b> · Scope: <b>global</b> · Environment: <b>live</b>
+            Exchange: <b>{marketDataKeyForm.exchange}</b> · Market: <b>{marketDataKeyForm.market}</b> · Purpose: <b>market_data</b> · Scope: <b>global</b> · Environment: <b>live</b>
           </div>
           <form className="space-y-2" onSubmit={saveMarketDataKey} data-testid="admin-market-data-key-form">
+            <div className="grid grid-cols-2 gap-2" data-testid="admin-market-data-key-select-row">
+              <select
+                value={marketDataKeyForm.exchange}
+                onChange={(event) => setMarketDataKeyForm((prev) => ({ ...prev, exchange: event.target.value }))}
+                className="border border-emerald-700 bg-slate-950 px-2 py-2 text-sm text-emerald-100"
+                data-testid="admin-market-data-key-exchange-select"
+              >
+                {Array.from(new Set([...(exchanges || []).map((row) => row.exchange_code), "binance", "bybit", "okx"]))
+                  .filter(Boolean)
+                  .map((exchangeCode) => (
+                    <option key={exchangeCode} value={exchangeCode}>
+                      {exchangeCode}
+                    </option>
+                  ))}
+              </select>
+              <select
+                value={marketDataKeyForm.market}
+                onChange={(event) => setMarketDataKeyForm((prev) => ({ ...prev, market: event.target.value }))}
+                className="border border-emerald-700 bg-slate-950 px-2 py-2 text-sm text-emerald-100"
+                data-testid="admin-market-data-key-market-select"
+              >
+                <option value="spot">spot</option>
+                <option value="futures">futures</option>
+              </select>
+            </div>
             <Input
               value={marketDataKeyForm.api_key}
               onChange={(event) => setMarketDataKeyForm((prev) => ({ ...prev, api_key: event.target.value }))}
