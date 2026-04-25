@@ -8,6 +8,8 @@ from db import get_db
 from deps import get_current_user, require_admin
 from models import AllowedMarket, ExchangeCapability, ExchangeRegistry, User, UserVenueAssignment
 from schemas import (
+    AdminMarketDataKeySaveRequest,
+    AdminMarketDataKeySummaryResponse,
     AllowedMarketCreate,
     AllowedMarketResponse,
     AllowedMarketToggle,
@@ -28,6 +30,7 @@ from services.admin_exchange_credentials_service import (
     get_execution_credentials,
     upsert_execution_credentials,
 )
+from services.admin_market_data_credentials_service import get_market_data_keys_summary, upsert_market_data_key
 from services.exchange_adapter_smoke_service import run_exchange_adapter_smoke
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry, user_allowed_venue_options, venue_health_summary
 
@@ -498,6 +501,52 @@ def admin_adapter_smoke(_: User = Depends(require_admin), db: Session = Depends(
 @router.get("/admin/execution-credentials")
 def admin_get_execution_credentials(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     return get_execution_credentials(db)
+
+
+@router.get("/admin/market-data-keys", response_model=AdminMarketDataKeySummaryResponse)
+def admin_get_market_data_keys(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    return AdminMarketDataKeySummaryResponse(**get_market_data_keys_summary(db))
+
+
+@router.post("/admin/market-data-keys", response_model=AdminMarketDataKeySummaryResponse)
+def admin_save_market_data_key(
+    payload: AdminMarketDataKeySaveRequest,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        summary = upsert_market_data_key(
+            db,
+            {
+                "api_key": payload.api_key,
+                "api_secret": payload.api_secret,
+                "base_url_override": payload.base_url_override,
+                "ip_route_note": payload.ip_route_note,
+                "note": payload.note,
+            },
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    create_audit_log(
+        db,
+        action="admin_binance_market_data_key_saved",
+        entity_type="external_provider_credentials",
+        entity_id="binance_market_data_global_live_v1",
+        actor_user_id=current_admin.id,
+        actor_role=current_admin.role.value,
+        details={
+            "exchange": "binance",
+            "market": "spot",
+            "purpose": "market_data",
+            "scope": "global",
+            "environment": "live",
+            "active_key": summary.get("active_key"),
+            "users_with_live_distribution": summary.get("users_with_live_distribution"),
+            "active_user_count": summary.get("active_user_count"),
+        },
+    )
+    return AdminMarketDataKeySummaryResponse(**summary)
 
 
 @router.patch("/admin/execution-credentials")

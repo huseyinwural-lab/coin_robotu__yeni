@@ -2574,6 +2574,40 @@ class VenueHealthSummaryResponse(BaseModel):
     adapter_error_status: dict[str, str]
 
 
+class AdminMarketDataKeySaveRequest(BaseModel):
+    api_key: str
+    api_secret: str
+    base_url_override: str = ""
+    ip_route_note: str = ""
+    note: str = ""
+
+
+class AdminMarketDataKeyItemResponse(BaseModel):
+    provider: str
+    exchange: str
+    market: str
+    purpose: str
+    scope: str
+    environment: str
+    status: str
+    api_key_masked: str
+    note: str
+    base_url_override: str
+    ip_route_note: str
+    auto_start_enabled: bool
+    last_error: str
+    last_validated_at: str | None
+    activated_at: str | None
+    updated_at: str | None
+
+
+class AdminMarketDataKeySummaryResponse(BaseModel):
+    active_key: bool
+    items: list[AdminMarketDataKeyItemResponse]
+    users_with_live_distribution: int
+    active_user_count: int
+
+
 class ExchangeSettingsUpdateRequest(BaseModel):
     exchange: str = "binance"
     mode: str = "testnet"

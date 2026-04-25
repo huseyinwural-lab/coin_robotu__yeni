@@ -11,8 +11,8 @@ const exchangeSeedForm = {
   status: "active",
   spot: true,
   futures: true,
-  supports_testnet: true,
-  supports_live: false,
+  supports_testnet: false,
+  supports_live: true,
   health_status: "healthy",
   rate_limit_status: "ok",
   adapter_version: "v1",
@@ -23,7 +23,7 @@ const capabilitySeedForm = {
   market_type: "spot",
   supports_spot: true,
   supports_futures: false,
-  supports_test_order: true,
+  supports_test_order: false,
   supports_quote_qty: true,
   supports_reduce_only: false,
   supports_leverage: false,
@@ -34,7 +34,7 @@ const capabilitySeedForm = {
 const allowedMarketSeedForm = {
   exchange_code: "binance",
   market_type: "spot",
-  environment: "testnet",
+  environment: "live",
   enabled: true,
 };
 
@@ -43,16 +43,16 @@ const assignmentSeedForm = {
   exchange_code: "binance",
   spot_allowed: true,
   futures_allowed: true,
-  testnet_allowed: true,
-  live_allowed: false,
+  testnet_allowed: false,
+  live_allowed: true,
 };
 
-const executionCredentialSeedForm = {
-  bybit_api_key: "",
-  bybit_secret: "",
-  okx_api_key: "",
-  okx_secret: "",
-  okx_passphrase: "",
+const marketDataKeySeedForm = {
+  api_key: "",
+  api_secret: "",
+  base_url_override: "",
+  ip_route_note: "",
+  note: "",
 };
 
 const boolLabel = (value) => (value ? "true" : "false");
@@ -65,8 +65,7 @@ export const AdminExchangesPage = () => {
   const [assignments, setAssignments] = useState([]);
   const [approvedUsers, setApprovedUsers] = useState([]);
   const [healthSummary, setHealthSummary] = useState(null);
-  const [executionCredentials, setExecutionCredentials] = useState(null);
-  const [executionValidation, setExecutionValidation] = useState(null);
+  const [marketDataKeySummary, setMarketDataKeySummary] = useState(null);
 
   const [exchangeDrafts, setExchangeDrafts] = useState({});
   const [capabilityDrafts, setCapabilityDrafts] = useState({});
@@ -75,7 +74,7 @@ export const AdminExchangesPage = () => {
   const [capabilityForm, setCapabilityForm] = useState(capabilitySeedForm);
   const [allowedMarketForm, setAllowedMarketForm] = useState(allowedMarketSeedForm);
   const [assignmentForm, setAssignmentForm] = useState(assignmentSeedForm);
-  const [executionCredentialForm, setExecutionCredentialForm] = useState(executionCredentialSeedForm);
+  const [marketDataKeyForm, setMarketDataKeyForm] = useState(marketDataKeySeedForm);
 
   const exchangeCodes = useMemo(() => exchanges.map((item) => item.exchange_code), [exchanges]);
 
@@ -89,7 +88,7 @@ export const AdminExchangesPage = () => {
         assignmentsRes,
         usersRes,
         healthRes,
-        credentialsRes,
+        marketDataKeysRes,
       ] = await Promise.all([
         apiClient.get("/venues/admin/exchanges"),
         apiClient.get("/venues/admin/capabilities"),
@@ -97,7 +96,7 @@ export const AdminExchangesPage = () => {
         apiClient.get("/venues/admin/user-assignments"),
         apiClient.get("/auth/admin/user-approval-requests?status=approved"),
         apiClient.get("/venues/admin/health-summary"),
-        apiClient.get("/venues/admin/execution-credentials"),
+        apiClient.get("/venues/admin/market-data-keys"),
       ]);
 
       const nextExchanges = exchangesRes.data || [];
@@ -109,7 +108,7 @@ export const AdminExchangesPage = () => {
       setAssignments(assignmentsRes.data || []);
       setApprovedUsers(usersRes.data || []);
       setHealthSummary(healthRes.data || null);
-      setExecutionCredentials(credentialsRes.data || null);
+      setMarketDataKeySummary(marketDataKeysRes.data || null);
 
       setExchangeDrafts(
         Object.fromEntries(
@@ -299,32 +298,26 @@ export const AdminExchangesPage = () => {
     }
   };
 
-  const saveExecutionCredentials = async (event) => {
+  const saveMarketDataKey = async (event) => {
     event.preventDefault();
-    const payload = Object.fromEntries(
-      Object.entries(executionCredentialForm).filter(([, value]) => String(value || "").trim().length > 0),
-    );
-    if (Object.keys(payload).length === 0) {
-      toast.warning("Kaydetmek için en az bir credential alanı girin");
+    const payload = {
+      api_key: String(marketDataKeyForm.api_key || "").trim(),
+      api_secret: String(marketDataKeyForm.api_secret || "").trim(),
+      base_url_override: String(marketDataKeyForm.base_url_override || "").trim(),
+      ip_route_note: String(marketDataKeyForm.ip_route_note || "").trim(),
+      note: String(marketDataKeyForm.note || "").trim(),
+    };
+    if (!payload.api_key || !payload.api_secret) {
+      toast.warning("API Key ve API Secret zorunlu");
       return;
     }
     try {
-      const response = await apiClient.patch("/venues/admin/execution-credentials", payload);
-      setExecutionCredentials(response.data || null);
-      setExecutionCredentialForm(executionCredentialSeedForm);
-      toast.success("Exchange execution credential ayarları kaydedildi");
+      const response = await apiClient.post("/venues/admin/market-data-keys", payload);
+      setMarketDataKeySummary(response.data || null);
+      setMarketDataKeyForm(marketDataKeySeedForm);
+      toast.success("Binance live veri key'i kaydedildi ve otomatik aktifleştirildi");
     } catch (error) {
-      toast.error(error?.response?.data?.detail || "Credential ayarları kaydedilemedi");
-    }
-  };
-
-  const runExecutionValidation = async () => {
-    try {
-      const response = await apiClient.post("/venues/admin/execution-validation");
-      setExecutionValidation(response.data || null);
-      toast.success("Execution activation doğrulaması tamamlandı");
-    } catch (error) {
-      toast.error(error?.response?.data?.detail || "Execution validation çalıştırılamadı");
+      toast.error(error?.response?.data?.detail || "Binance live veri key'i kaydedilemedi");
     }
   };
 
@@ -346,7 +339,10 @@ export const AdminExchangesPage = () => {
         </div>
         <div className="border border-slate-800 bg-slate-900 p-3" data-testid="admin-exchange-market-availability-card">
           <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-exchange-market-availability-title">Market Availability</p>
-          {(Object.entries(healthSummary?.market_availability || {})).slice(0, 6).map(([key, value]) => (
+          {(Object.entries(healthSummary?.market_availability || {}))
+            .filter(([key]) => !String(key).toLowerCase().includes(":testnet"))
+            .slice(0, 6)
+            .map(([key, value]) => (
             <p key={key} className="mt-1 text-sm" data-testid={`admin-exchange-market-availability-item-${key.replaceAll(":", "-")}`}>{key}: {boolLabel(value)}</p>
           ))}
         </div>
@@ -361,78 +357,107 @@ export const AdminExchangesPage = () => {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2" data-testid="admin-execution-settings-grid">
-        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-execution-credential-panel">
-          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-execution-credential-title">Admin → Exchange Settings (Execution Activation)</p>
-          <form className="grid gap-2 md:grid-cols-2" onSubmit={saveExecutionCredentials} data-testid="admin-execution-credential-form">
+      <div className="grid gap-4 xl:grid-cols-[380px_1fr]" data-testid="admin-market-data-key-grid">
+        <div className="space-y-3 border border-emerald-800 bg-emerald-950/30 p-4" data-testid="admin-market-data-key-form-panel">
+          <p className="text-xs uppercase tracking-wider text-emerald-300" data-testid="admin-market-data-key-form-title">Yeni Veri Key'i</p>
+          <div className="rounded border border-emerald-700/70 bg-emerald-950/30 p-3 text-sm text-emerald-200" data-testid="admin-market-data-key-form-context-card">
+            Purpose: <b>market_data</b> · Scope: <b>global</b> · Environment: <b>live</b>
+          </div>
+          <form className="space-y-2" onSubmit={saveMarketDataKey} data-testid="admin-market-data-key-form">
             <Input
-              value={executionCredentialForm.bybit_api_key}
-              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_api_key: event.target.value }))}
-              placeholder="bybit_api_key"
-              data-testid="admin-execution-bybit-api-key-input"
+              value={marketDataKeyForm.api_key}
+              onChange={(event) => setMarketDataKeyForm((prev) => ({ ...prev, api_key: event.target.value }))}
+              placeholder="API Key"
+              data-testid="admin-market-data-key-api-key-input"
+              required
             />
             <Input
-              value={executionCredentialForm.bybit_secret}
-              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, bybit_secret: event.target.value }))}
-              placeholder="bybit_secret"
-              data-testid="admin-execution-bybit-secret-input"
+              value={marketDataKeyForm.api_secret}
+              onChange={(event) => setMarketDataKeyForm((prev) => ({ ...prev, api_secret: event.target.value }))}
+              placeholder="API Secret"
+              data-testid="admin-market-data-key-api-secret-input"
+              required
             />
             <Input
-              value={executionCredentialForm.okx_api_key}
-              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_api_key: event.target.value }))}
-              placeholder="okx_api_key"
-              data-testid="admin-execution-okx-api-key-input"
+              value={marketDataKeyForm.base_url_override}
+              onChange={(event) => setMarketDataKeyForm((prev) => ({ ...prev, base_url_override: event.target.value }))}
+              placeholder="Base URL Override (opsiyonel)"
+              data-testid="admin-market-data-key-base-url-input"
             />
             <Input
-              value={executionCredentialForm.okx_secret}
-              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_secret: event.target.value }))}
-              placeholder="okx_secret"
-              data-testid="admin-execution-okx-secret-input"
+              value={marketDataKeyForm.ip_route_note}
+              onChange={(event) => setMarketDataKeyForm((prev) => ({ ...prev, ip_route_note: event.target.value }))}
+              placeholder="IP / Route Notu (opsiyonel)"
+              data-testid="admin-market-data-key-ip-route-note-input"
             />
             <Input
-              value={executionCredentialForm.okx_passphrase}
-              onChange={(event) => setExecutionCredentialForm((prev) => ({ ...prev, okx_passphrase: event.target.value }))}
-              placeholder="okx_passphrase"
-              data-testid="admin-execution-okx-passphrase-input"
+              value={marketDataKeyForm.note}
+              onChange={(event) => setMarketDataKeyForm((prev) => ({ ...prev, note: event.target.value }))}
+              placeholder="Not"
+              data-testid="admin-market-data-key-note-input"
             />
-            <div className="flex items-center gap-2 md:col-span-2" data-testid="admin-execution-credential-actions-row">
-              <Button data-testid="admin-execution-credential-config-update-button">Credential Kaydet</Button>
+            <div className="flex items-center gap-2" data-testid="admin-market-data-key-actions-row">
+              <Button className="bg-emerald-500 text-black hover:bg-emerald-400" data-testid="admin-market-data-key-save-button">Key Kaydet</Button>
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setExecutionCredentialForm(executionCredentialSeedForm)}
-                data-testid="admin-execution-credential-reset-button"
+                onClick={() => setMarketDataKeyForm(marketDataKeySeedForm)}
+                data-testid="admin-market-data-key-reset-button"
               >
                 Formu Temizle
               </Button>
             </div>
           </form>
-
-          <div className="rounded border border-slate-700 p-3 text-sm" data-testid="admin-execution-credential-summary">
-            <p data-testid="admin-execution-has-bybit-credentials">has_bybit_credentials: {boolLabel(Boolean(executionCredentials?.has_bybit_credentials))}</p>
-            <p data-testid="admin-execution-has-okx-credentials">has_okx_credentials: {boolLabel(Boolean(executionCredentials?.has_okx_credentials))}</p>
-            <p data-testid="admin-execution-masked-bybit-key">bybit_api_key: {executionCredentials?.masked?.bybit_api_key || "missing"}</p>
-            <p data-testid="admin-execution-masked-bybit-secret">bybit_secret: {executionCredentials?.masked?.bybit_secret || "missing"}</p>
-            <p data-testid="admin-execution-masked-okx-key">okx_api_key: {executionCredentials?.masked?.okx_api_key || "missing"}</p>
-            <p data-testid="admin-execution-masked-okx-secret">okx_secret: {executionCredentials?.masked?.okx_secret || "missing"}</p>
-            <p data-testid="admin-execution-masked-okx-passphrase">okx_passphrase: {executionCredentials?.masked?.okx_passphrase || "missing"}</p>
-          </div>
+          <p className="text-xs text-emerald-200" data-testid="admin-market-data-key-form-note">
+            Kayıt sonrası key otomatik aktive edilir ve tüm kullanıcılar için canlı veri akışı açılır.
+          </p>
         </div>
 
-        <div className="space-y-3 border border-slate-800 bg-slate-900 p-4" data-testid="admin-execution-validation-panel">
-          <p className="text-xs uppercase tracking-wider text-slate-400" data-testid="admin-execution-validation-title">Execution Activation Validation</p>
-          <Button type="button" onClick={runExecutionValidation} data-testid="admin-execution-validation-apply-button">Validation Çalıştır</Button>
-          <div className="space-y-2 rounded border border-slate-700 p-3 text-sm" data-testid="admin-execution-validation-results">
-            <p data-testid="admin-execution-validation-adapter-smoke">adapter_smoke_test: {executionValidation?.validation?.adapter_smoke_test || "n/a"}</p>
-            <p data-testid="admin-execution-validation-precision">precision_validation: {executionValidation?.validation?.precision_validation || "n/a"}</p>
-            <p data-testid="admin-execution-validation-lot-size">lot_size_validation: {executionValidation?.validation?.lot_size_validation || "n/a"}</p>
-            <p data-testid="admin-execution-validation-submit">order_submit_test: {executionValidation?.validation?.order_submit_test || "n/a"}</p>
-            <p data-testid="admin-execution-validation-cancel">cancel_test: {executionValidation?.validation?.cancel_test || "n/a"}</p>
-            <p data-testid="admin-execution-validation-retry">retry_behavior: {executionValidation?.validation?.retry_behavior || "n/a"}</p>
+        <div className="space-y-3 border border-emerald-800 bg-emerald-950/20 p-4" data-testid="admin-market-data-key-list-panel">
+          <div className="flex items-center justify-between" data-testid="admin-market-data-key-list-header-row">
+            <p className="text-xs uppercase tracking-wider text-emerald-300" data-testid="admin-market-data-key-list-title">Kayıtlı Veri Key'leri</p>
+            {marketDataKeySummary?.active_key ? (
+              <span className="rounded bg-emerald-400/20 px-2 py-1 text-xs text-emerald-200" data-testid="admin-market-data-key-active-badge">aktif key var</span>
+            ) : (
+              <span className="rounded bg-rose-400/20 px-2 py-1 text-xs text-rose-200" data-testid="admin-market-data-key-inactive-badge">aktif key yok</span>
+            )}
           </div>
-          <p className="text-xs text-slate-400" data-testid="admin-execution-validation-note">
-            Not: Credential yoksa execution testleri fail-safe olarak MOCKED döner.
+          <p className="text-xs text-slate-300" data-testid="admin-market-data-key-distribution-summary">
+            canlı dağıtım: {marketDataKeySummary?.users_with_live_distribution || 0} / {marketDataKeySummary?.active_user_count || 0} kullanıcı
           </p>
+          <div className="overflow-auto border border-emerald-700/50" data-testid="admin-market-data-key-list-table-wrap">
+            <table className="min-w-full text-sm" data-testid="admin-market-data-key-list-table">
+              <thead className="bg-emerald-900/30 text-emerald-200">
+                <tr>
+                  <th className="px-3 py-2 text-left">Exchange</th>
+                  <th className="px-3 py-2 text-left">Market</th>
+                  <th className="px-3 py-2 text-left">Purpose</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-left">API Key</th>
+                  <th className="px-3 py-2 text-left">Not</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(marketDataKeySummary?.items || []).length === 0 && (
+                  <tr data-testid="admin-market-data-key-list-empty-row">
+                    <td className="px-3 py-2 text-slate-300" colSpan={6}>Kayıtlı key yok</td>
+                  </tr>
+                )}
+                {(marketDataKeySummary?.items || []).map((item) => (
+                  <tr key={item.provider} className="border-t border-emerald-800/50" data-testid={`admin-market-data-key-list-row-${item.provider}`}>
+                    <td className="px-3 py-2" data-testid={`admin-market-data-key-list-exchange-${item.provider}`}>{item.exchange}</td>
+                    <td className="px-3 py-2" data-testid={`admin-market-data-key-list-market-${item.provider}`}>{item.market}</td>
+                    <td className="px-3 py-2" data-testid={`admin-market-data-key-list-purpose-${item.provider}`}>{item.purpose}</td>
+                    <td className="px-3 py-2" data-testid={`admin-market-data-key-list-status-${item.provider}`}>
+                      <span className="rounded bg-emerald-400/20 px-2 py-1 text-xs text-emerald-200">{item.status}</span>
+                    </td>
+                    <td className="px-3 py-2" data-testid={`admin-market-data-key-list-api-key-${item.provider}`}>{item.api_key_masked}</td>
+                    <td className="px-3 py-2" data-testid={`admin-market-data-key-list-note-${item.provider}`}>{item.note || "credential_saved"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -444,7 +469,6 @@ export const AdminExchangesPage = () => {
             <Input value={exchangeForm.exchange_name} onChange={(event) => setExchangeForm((prev) => ({ ...prev, exchange_name: event.target.value }))} placeholder="exchange_name" data-testid="admin-exchange-create-name-input" required />
             <label className="flex items-center gap-2 text-sm" data-testid="admin-exchange-create-spot-row"><input type="checkbox" checked={exchangeForm.spot} onChange={(event) => setExchangeForm((prev) => ({ ...prev, spot: event.target.checked }))} data-testid="admin-exchange-create-spot-checkbox" />spot</label>
             <label className="flex items-center gap-2 text-sm" data-testid="admin-exchange-create-futures-row"><input type="checkbox" checked={exchangeForm.futures} onChange={(event) => setExchangeForm((prev) => ({ ...prev, futures: event.target.checked }))} data-testid="admin-exchange-create-futures-checkbox" />futures</label>
-            <label className="flex items-center gap-2 text-sm" data-testid="admin-exchange-create-testnet-row"><input type="checkbox" checked={exchangeForm.supports_testnet} onChange={(event) => setExchangeForm((prev) => ({ ...prev, supports_testnet: event.target.checked }))} data-testid="admin-exchange-create-testnet-checkbox" />supports_testnet</label>
             <label className="flex items-center gap-2 text-sm" data-testid="admin-exchange-create-live-row"><input type="checkbox" checked={exchangeForm.supports_live} onChange={(event) => setExchangeForm((prev) => ({ ...prev, supports_live: event.target.checked }))} data-testid="admin-exchange-create-live-checkbox" />supports_live</label>
             <Button className="md:col-span-2 bg-orange-500 text-black hover:bg-orange-600" data-testid="admin-exchange-create-submit-button">Exchange Ekle</Button>
           </form>
@@ -495,7 +519,6 @@ export const AdminExchangesPage = () => {
             {[
               "supports_spot",
               "supports_futures",
-              "supports_test_order",
               "supports_quote_qty",
               "supports_reduce_only",
               "supports_leverage",
@@ -514,7 +537,7 @@ export const AdminExchangesPage = () => {
               <div key={row.id} className="border border-slate-700 p-3" data-testid={`admin-capability-row-${row.id}`}>
                 <p className="text-sm font-semibold" data-testid={`admin-capability-row-title-${row.id}`}>{row.exchange_code}:{row.market_type}</p>
                 <div className="mt-2 grid gap-2 md:grid-cols-2">
-                  {["supports_test_order", "supports_quote_qty", "supports_reduce_only", "supports_leverage", "supports_margin_mode", "supports_hedge_mode"].map((key) => (
+                  {["supports_quote_qty", "supports_reduce_only", "supports_leverage", "supports_margin_mode", "supports_hedge_mode"].map((key) => (
                     <label key={key} className="flex items-center gap-2 text-sm" data-testid={`admin-capability-edit-row-${row.id}-${key}`}>
                       <input
                         type="checkbox"
@@ -548,7 +571,6 @@ export const AdminExchangesPage = () => {
               <option value="futures">futures</option>
             </select>
             <select value={allowedMarketForm.environment} onChange={(event) => setAllowedMarketForm((prev) => ({ ...prev, environment: event.target.value }))} className="border border-slate-600 bg-slate-950 px-2 py-2 text-sm" data-testid="admin-allowed-market-create-environment-select">
-              <option value="testnet">testnet</option>
               <option value="live">live</option>
             </select>
             <label className="flex items-center gap-2 text-sm" data-testid="admin-allowed-market-create-enabled-row">
@@ -586,7 +608,6 @@ export const AdminExchangesPage = () => {
             {[
               ["spot_allowed", "spot_allowed"],
               ["futures_allowed", "futures_allowed"],
-              ["testnet_allowed", "testnet_allowed"],
               ["live_allowed", "live_allowed"],
             ].map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 text-sm" data-testid={`admin-user-assignment-${key}-row`}>
@@ -600,7 +621,7 @@ export const AdminExchangesPage = () => {
             {assignments.map((row) => (
               <div key={row.id} className="border border-slate-700 p-3" data-testid={`admin-user-assignment-row-${row.id}`}>
                 <p className="text-sm" data-testid={`admin-user-assignment-user-${row.id}`}>user_id: {row.user_id}</p>
-                <p className="text-xs text-slate-400" data-testid={`admin-user-assignment-venue-${row.id}`}>{row.exchange_code} · spot={boolLabel(row.spot_allowed)} futures={boolLabel(row.futures_allowed)} testnet={boolLabel(row.testnet_allowed)} live={boolLabel(row.live_allowed)}</p>
+                <p className="text-xs text-slate-400" data-testid={`admin-user-assignment-venue-${row.id}`}>{row.exchange_code} · spot={boolLabel(row.spot_allowed)} futures={boolLabel(row.futures_allowed)} live={boolLabel(row.live_allowed)}</p>
                 <div className="mt-2 flex gap-2">
                   <Button variant="outline" className="border-red-500 text-red-300" onClick={() => deleteAssignment(row.id)} data-testid={`admin-user-assignment-delete-button-${row.id}`}>Sil</Button>
                 </div>
