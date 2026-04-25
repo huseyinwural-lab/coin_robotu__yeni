@@ -5648,3 +5648,31 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 ### Not
 - Preview ortamında Binance key doğrulaması coğrafi kısıt sebebiyle 400 dönebilir; bu beklenen kontrollü hata davranışıdır.
 
+## Güncelleme — 2026-04-25 (Admin Key Paneli: Exchange + Market Seçimi)
+
+### İstek
+- `/admin/exchanges` içindeki veri key paneline **exchange** ve **market** seçimi eklendi.
+- Amaç: sadece Binance/Spot değil; Bybit/OKX ve Spot/Futures ayrımını net göstermek.
+
+### Uygulanan Değişiklikler
+- Backend
+  - `POST /api/venues/admin/market-data-keys` artık `exchange` ve `market` alanlarını zorunlu alıyor.
+  - Provider anahtarı exchange+market bazlı üretildi (`{exchange}_{market}_market_data_global_live`).
+  - Özet endpoint (`GET`) çoklu key satırını dönecek şekilde genişletildi.
+  - Binance için market bazlı doğrulama:
+    - `spot` → spot account probe
+    - `futures` → futures account probe
+  - Bybit/OKX için adapter doğrulaması henüz yoksa kontrollü şekilde persist edilir (validation skip notu).
+
+- Frontend
+  - `/app/frontend/src/pages/AdminExchangesPage.jsx`
+    - Yeni key formuna iki select eklendi:
+      - Exchange: `binance/bybit/okx`
+      - Market: `spot/futures`
+    - Context kartı seçilen exchange/market bilgisini dinamik gösteriyor.
+    - Kayıtlı key tablosu exchange/market kolonlarıyla uyumlu çalışıyor.
+
+### Doğrulama
+- Self-test + testing agent raporu: `/app/test_reports/iteration_142.json`
+- Sonuç: Backend 13/13 PASS, Frontend PASS.
+
