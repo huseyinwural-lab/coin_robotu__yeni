@@ -5676,3 +5676,46 @@ Yeni feature yerine production-hardening kapanış paketi uygulandı:
 - Self-test + testing agent raporu: `/app/test_reports/iteration_142.json`
 - Sonuç: Backend 13/13 PASS, Frontend PASS.
 
+## Güncelleme — 2026-04-25 (Ultra Log Sistemi — Admin Logs Entegrasyonu)
+
+### Kullanıcı Talebi
+- Ultra Log yönetimi **admin panel logs tarafında** olmalı.
+- Kalıcılık modeli: **DB tablosu**.
+- Süre seçenekleri sabit: `1h, 3h, 5h, 8h, 12h, 1d, 3d, 5d, 7d`.
+- Tam sürüm: masking + disk limit + auto shutdown + audit/scanner/execution hook görünürlüğü.
+
+### Uygulanan Değişiklikler
+- Backend veri modeli
+  - Yeni tablolar:
+    - `ultra_log_configs`
+    - `ultra_log_events`
+  - Migration: `/app/backend/migrations/versions/20260317_0051_ultra_log_tables.py`
+
+- Backend servis/endpoint
+  - Yeni servis: `/app/backend/services/ultra_log_service.py`
+    - Süre yönetimi (sabit duration option)
+    - Hassas alan maskeleme (`token/password/secret/api_key/api_secret/authorization/cookie/signature/private_key`)
+    - Request body summary (multipart için içerik yerine boyut)
+    - Dosya yazımı (`backend/logs/ultra_debug/ultra_debug_YYYYMMDD.log`)
+    - Disk limit kontrolü (normal + ultra) ve otomatik kapanma (`duration_expired`, `ultra_size_limit_exceeded`, `normal_size_limit_exceeded`)
+  - Yeni router: `/app/backend/routers/ultra_logs.py`
+    - `GET /api/admin/ultra-log/status`
+    - `POST /api/admin/ultra-log/activate`
+    - `POST /api/admin/ultra-log/deactivate`
+    - `GET /api/admin/ultra-log/events`
+  - Middleware entegrasyonu: `/app/backend/server.py`
+    - HTTP request + error olayları Ultra Log’a akıyor
+  - Audit mirroring: `/app/backend/services/audit_service.py`
+    - Audit eventleri kategori bazlı Ultra Log’a aynalanıyor
+
+- Frontend (Admin Logs)
+  - Güncellendi: `/app/frontend/src/pages/AuditLogsPage.jsx`
+    - Ultra Log kontrol paneli (süre, limitler, dizin, aç/kapat/yenile)
+    - Ultra Log status paneli (aktif/pasif, kalan süre, disk kullanımı, auto close reason)
+    - Ultra event tablosu
+
+### Test ve Durum
+- Testing report: `/app/test_reports/iteration_144.json`
+- Sonuç: Backend API testleri PASS (22/22), Frontend UI kontrolleri PASS.
+- Not: Test ajanı middleware streaming ve SQLite timezone uyumluluğu için küçük düzeltmeler uyguladı; dosyalar kontrol edilip korundu.
+
