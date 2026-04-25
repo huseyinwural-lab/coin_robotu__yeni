@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 import httpx
 from sqlalchemy.orm import Session
 
-from core.config import settings
+from core.config import required_env, settings
 from core.users.user_exchange_connector import (
     decrypt_exchange_secret,
     encrypt_exchange_secret,
@@ -48,10 +48,16 @@ from services.system_alert_service import create_system_alert
 from services.pipeline.cache_store import read_candles
 from services.venue_service import check_user_venue_access, seed_binance_venue_registry
 
-BINANCE_FUTURES_TESTNET_REST = "https://testnet.binancefuture.com"
-BINANCE_FUTURES_TESTNET_WS = "wss://stream.binancefuture.com/ws"
-BINANCE_SPOT_TESTNET_REST = "https://testnet.binance.vision"
-DEFAULT_TEST_SYMBOL = "BTCUSDT"
+BINANCE_FUTURES_REST = required_env("BINANCE_FUTURES_REST_URL")
+BINANCE_FUTURES_WS = required_env("BINANCE_FUTURES_WS_URL")
+BINANCE_SPOT_REST = required_env("BINANCE_SPOT_REST_URL")
+DEFAULT_TRADE_SYMBOL = "BTCUSDT"
+
+# Backward-compat aliases
+BINANCE_FUTURES_TESTNET_REST = BINANCE_FUTURES_REST
+BINANCE_FUTURES_TESTNET_WS = BINANCE_FUTURES_WS
+BINANCE_SPOT_TESTNET_REST = BINANCE_SPOT_REST
+DEFAULT_TEST_SYMBOL = DEFAULT_TRADE_SYMBOL
 MAX_SAFE_POSITION_PCT = 0.1
 MAX_SAFE_LEVERAGE = 1
 MAX_SAFE_NOTIONAL_EXPOSURE = 150
@@ -63,7 +69,7 @@ def _live_trading_blocks_disabled() -> bool:
     return str(os.getenv("LIVE_TRADING_BLOCKS_DISABLED", "0")).strip() == "1"
 
 
-class BinanceFuturesTestnetAdapter:
+class BinanceLiveAdapter:
     docs_references = [
         "https://developers.binance.com/docs/derivatives/usds-margined-futures/general-info",
         "https://developers.binance.com/docs/derivatives/usds-margined-futures/trade/rest-api/New-Order",
@@ -94,7 +100,7 @@ class BinanceFuturesTestnetAdapter:
                 "server_time": payload.get("serverTime"),
                 "rest_url": BINANCE_FUTURES_TESTNET_REST,
                 "ws_url": BINANCE_FUTURES_TESTNET_WS,
-                "message": "Binance Futures Testnet endpoint reachable.",
+                "message": "Binance Futures endpoint reachable.",
             }
         except Exception as exc:
             return {
@@ -427,15 +433,15 @@ def decrypt_secret(raw_encrypted: str) -> str:
 
 
 def resolve_runtime_credentials(api_key: str | None, api_secret: str | None) -> tuple[str | None, str | None, str]:
-    key = (api_key or "").strip() or os.environ.get("BINANCE_TESTNET_API_KEY")
-    secret = (api_secret or "").strip() or os.environ.get("BINANCE_TESTNET_API_SECRET")
+    key = (api_key or "").strip() or os.environ.get("BINANCE_API_KEY")
+    secret = (api_secret or "").strip() or os.environ.get("BINANCE_API_SECRET")
     source = "request" if (api_key or "").strip() or (api_secret or "").strip() else "environment"
     return key, secret, source
 
 
 def _enforce_controlled_limits(config: LiveActivationConfig):
     config.exchange = "binance"
-    config.market_type = "futures_testnet"
+    config.market_type = "futures"
 
     if config.safe_mode_enabled:
         config.max_position_pct = min(config.max_position_pct, MAX_SAFE_POSITION_PCT)
@@ -515,7 +521,7 @@ def _normalize_permissions(account_payload: dict, market_type: str, environment:
         elif market_type == "spot":
             permissions.add("SPOT")
         else:
-            permissions.add("FUTURES" if environment == "testnet" else "SPOT")
+            permissions.add("SPOT")
     if bool(account_payload.get("canDeposit")):
         permissions.add("DEPOSIT")
     if bool(account_payload.get("canWithdraw")):
@@ -558,8 +564,8 @@ def normalize_failure_code(payload: dict | None, status_code: int | None = None,
         return "ip_restricted"
     if "insufficient" in message or "balance" in message:
         return "insufficient_balance"
-    if fallback == "testnet_unreachable" or status_code == 503:
-        return "testnet_unreachable"
+    if fallback == "exchange_unreachable" or status_code == 503:
+        return "exchange_unreachable"
     if status_code and status_code >= 400:
         return "exchange_rejected"
     return "unknown_exchange_error"
@@ -637,8 +643,6 @@ def validate_exchange_credentials_for_user(
     def _validation_hint(reason_codes: list[str]) -> str | None:
         normalized = {str(code).strip().lower() for code in (reason_codes or []) if str(code).strip()}
         if "invalid_key" in normalized:
-            if requested_environment == "testnet":
-                return "API key/secret geçersiz veya mainnet key testnet ortamında kullanılıyor olabilir. Testnet key kullanın ya da environment'i live seçin."
             return "API key/secret geçersiz veya yetkiler yetersiz. Key/secret ve permission seçeneklerini kontrol edin."
         if "missing_trade_permission" in normalized:
             return "API key üzerinde trade yetkisi kapalı. Binance API izinlerinde trade/futures izinlerini açın."
@@ -647,7 +651,7 @@ def validate_exchange_credentials_for_user(
         if "exchange_error_451" in normalized:
             return "Bölgesel erişim kısıtı (451) oluştu. Farklı venue/environment veya uygun endpoint fallback ile doğrulayın."
         if "exchange_error_400" in normalized:
-            return "Exchange 400 hatası alındı: çoğunlukla API key/secret eşleşmiyor veya ortam (testnet/live) key ile uyumsuz. Key çiftini ve environment seçimini birlikte doğrulayın."
+            return "Exchange 400 hatası alındı: çoğunlukla API key/secret eşleşmiyor veya izinler uyumsuz. Key çiftini ve permission ayarlarını doğrulayın."
         if "assignment_required" in normalized:
             return "Venue assignment eksik. Exchange connection profilini varsayılan yapıp tekrar deneyin."
         if "settings_mismatch" in normalized:
@@ -871,7 +875,7 @@ def get_market_ticker(symbol: str = "BTCUSDT") -> dict:
     snapshot = adapter.book_ticker(symbol)
     return {
         "exchange": "binance",
-        "environment": "testnet",
+        "environment": "live",
         "symbol": snapshot["symbol"],
         "bid": snapshot["bid"],
         "ask": snapshot["ask"],
@@ -1142,7 +1146,7 @@ def user_readiness_checklist(
     settings_row = get_or_create_exchange_settings(db, user_id)
     requested_exchange = (exchange or settings_row.exchange or "binance").strip().lower()
     requested_market_type = (market_type or "futures").strip().lower()
-    requested_environment = (environment or settings_row.mode or "testnet").strip().lower()
+    requested_environment = (environment or settings_row.mode or "live").strip().lower()
 
     if _live_trading_blocks_disabled():
         now = datetime.now(timezone.utc)
@@ -1550,8 +1554,8 @@ def run_exchange_test_order_market(
 
     if normalized_exchange != "binance":
         raise ValueError("Sadece binance adaptörü aktif. exchange_rejected")
-    if normalized_environment != "testnet":
-        raise ValueError("Sadece testnet environment destekleniyor. exchange_rejected")
+    if normalized_environment not in {"live", "prod"}:
+        raise ValueError("Sadece live environment destekleniyor. exchange_rejected")
     if normalized_market_type not in {"spot", "futures"}:
         raise ValueError("market_type spot veya futures olmalı")
 
@@ -1570,7 +1574,7 @@ def run_exchange_test_order_market(
             "missing_trade_permission": "permission_denied",
             "ip_restriction": "ip_restricted",
             "insufficient_balance": "insufficient_balance",
-            "exchange_unreachable": "testnet_unreachable",
+            "exchange_unreachable": "exchange_unreachable",
             "stale_validation_snapshot": "stale_validation",
             "settings_mismatch": "stale_validation",
         }
@@ -1665,7 +1669,7 @@ def run_exchange_test_order_market(
                 quote_order_qty=quote_qty,
             )
     except httpx.HTTPError:
-        order_payload = {"msg": "testnet_unreachable"}
+        order_payload = {"msg": "exchange_unreachable"}
         order_status = 503
 
     ack_at = datetime.now(timezone.utc)
@@ -2537,7 +2541,11 @@ def release_gate_view(db: Session, environment: str = "prod") -> dict:
     }
 
 
-adapter = BinanceFuturesTestnetAdapter()
+class BinanceFuturesTestnetAdapter(BinanceLiveAdapter):
+    """Backward compatibility alias. Production endpointler BinanceLiveAdapter üzerinden yönetilir."""
+
+
+adapter = BinanceLiveAdapter()
 
 
 def get_or_create_live_config(db: Session) -> LiveActivationConfig:
@@ -2548,7 +2556,7 @@ def get_or_create_live_config(db: Session) -> LiveActivationConfig:
     config = LiveActivationConfig(
         id="global",
         exchange="binance",
-        market_type="futures_testnet",
+        market_type="futures",
         safe_mode_enabled=True,
         live_mode_enabled=False,
         symbol_whitelist=[],
@@ -2615,8 +2623,8 @@ def build_readiness_report(config: LiveActivationConfig, api_key: str | None = N
             "critical": True,
         },
         {
-            "key": "testnet_endpoint_reachable",
-            "label": "Binance Futures Testnet connectivity",
+            "key": "exchange_endpoint_reachable",
+            "label": "Binance Futures connectivity",
             "status": "pass" if endpoint_probe["status"] == "reachable" else "fail",
             "critical": True,
         },

@@ -52,6 +52,7 @@ const marketDataKeySeedForm = {
   market: "spot",
   api_key: "",
   api_secret: "",
+  api_passphrase: "",
   base_url_override: "",
   ip_route_note: "",
   note: "",
@@ -307,12 +308,17 @@ export const AdminExchangesPage = () => {
       market: String(marketDataKeyForm.market || "").trim().toLowerCase(),
       api_key: String(marketDataKeyForm.api_key || "").trim(),
       api_secret: String(marketDataKeyForm.api_secret || "").trim(),
+      api_passphrase: String(marketDataKeyForm.api_passphrase || "").trim(),
       base_url_override: String(marketDataKeyForm.base_url_override || "").trim(),
       ip_route_note: String(marketDataKeyForm.ip_route_note || "").trim(),
       note: String(marketDataKeyForm.note || "").trim(),
     };
     if (!payload.exchange || !payload.market || !payload.api_key || !payload.api_secret) {
       toast.warning("Exchange, market, API Key ve API Secret zorunlu");
+      return;
+    }
+    if (payload.exchange === "okx" && !payload.api_passphrase) {
+      toast.warning("OKX için API Passphrase zorunlu");
       return;
     }
     try {
@@ -406,6 +412,12 @@ export const AdminExchangesPage = () => {
               placeholder="API Secret"
               data-testid="admin-market-data-key-api-secret-input"
               required
+            />
+            <Input
+              value={marketDataKeyForm.api_passphrase}
+              onChange={(event) => setMarketDataKeyForm((prev) => ({ ...prev, api_passphrase: event.target.value }))}
+              placeholder="API Passphrase (OKX için zorunlu)"
+              data-testid="admin-market-data-key-api-passphrase-input"
             />
             <Input
               value={marketDataKeyForm.base_url_override}

@@ -522,6 +522,7 @@ def admin_save_market_data_key(
                 "market": payload.market,
                 "api_key": payload.api_key,
                 "api_secret": payload.api_secret,
+                "api_passphrase": payload.api_passphrase,
                 "base_url_override": payload.base_url_override,
                 "ip_route_note": payload.ip_route_note,
                 "note": payload.note,

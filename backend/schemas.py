@@ -2579,6 +2579,7 @@ class AdminMarketDataKeySaveRequest(BaseModel):
     market: str
     api_key: str
     api_secret: str
+    api_passphrase: str = ""
     base_url_override: str = ""
     ip_route_note: str = ""
     note: str = ""
@@ -2593,6 +2594,7 @@ class AdminMarketDataKeyItemResponse(BaseModel):
     environment: str
     status: str
     api_key_masked: str
+    has_api_passphrase: bool
     note: str
     base_url_override: str
     ip_route_note: str
@@ -2612,7 +2614,7 @@ class AdminMarketDataKeySummaryResponse(BaseModel):
 
 class ExchangeSettingsUpdateRequest(BaseModel):
     exchange: str = "binance"
-    mode: str = "testnet"
+    mode: str = "live"
     api_key: str
     api_secret: str
 

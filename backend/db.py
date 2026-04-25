@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 import redis
@@ -132,8 +133,11 @@ def _build_engine():
             connection.execute(text("SELECT 1"))
         return primary_engine
     except OperationalError:
-        logger.warning("PostgreSQL unavailable in this runtime, using local SQLite fallback.")
-        return create_engine("sqlite:///./trading_platform_local.db", connect_args={"check_same_thread": False})
+        sqlite_fallback = str(os.environ.get("DB_ALLOW_SQLITE_FALLBACK", "0")).strip() == "1"
+        if sqlite_fallback:
+            logger.warning("PostgreSQL unavailable in this runtime, using local SQLite fallback because DB_ALLOW_SQLITE_FALLBACK=1.")
+            return create_engine("sqlite:///./trading_platform_local.db", connect_args={"check_same_thread": False})
+        raise RuntimeError("PostgreSQL unavailable and DB_ALLOW_SQLITE_FALLBACK is disabled")
 
 
 def _build_redis_client():
@@ -142,8 +146,11 @@ def _build_redis_client():
         client.ping()
         return client
     except redis.exceptions.RedisError:
-        logger.warning("Redis unavailable in this runtime, using in-memory state fallback.")
-        return InMemoryRedis()
+        in_memory_fallback = str(os.environ.get("REDIS_ALLOW_INMEMORY_FALLBACK", "0")).strip() == "1"
+        if in_memory_fallback:
+            logger.warning("Redis unavailable in this runtime, using in-memory state fallback because REDIS_ALLOW_INMEMORY_FALLBACK=1.")
+            return InMemoryRedis()
+        raise RuntimeError("Redis unavailable and REDIS_ALLOW_INMEMORY_FALLBACK is disabled")
 
 
 engine = _build_engine()
